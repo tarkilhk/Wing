@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/results.dart';
+import 'package:analyzer/dart/analysis/utilities.dart';
 import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 import 'package:analyzer/dart/element/element.dart';
@@ -23,6 +24,21 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
   final path = '$root/$owner';
   if (!File(path).existsSync()) {
     throw const FormatException('Missing recent conversation capture owner');
+  }
+  final parsed = parseString(
+    content: File(path).readAsStringSync(),
+    path: path,
+    throwIfDiagnostics: false,
+  );
+  if (parsed.errors.isNotEmpty ||
+      parsed.unit.directives.any(
+        (directive) =>
+            directive is PartDirective ||
+            directive is PartOfDirective ||
+            directive is NamespaceDirective &&
+                directive.configurations.isNotEmpty,
+      )) {
+    throw const FormatException('Unsupported recent capture library');
   }
   final contexts = semanticContextCollection(
     root: root,
@@ -55,6 +71,12 @@ class _GetterReads extends RecursiveAstVisitor<void> {
   @override
   void visitSimpleIdentifier(SimpleIdentifier node) {
     final element = node.element?.baseElement;
+    if (node.name == 'debugNeedsPaint' &&
+        node.inGetterContext() &&
+        !node.inDeclarationContext() &&
+        element == null) {
+      throw const FormatException('Unresolved recent capture paint read');
+    }
     if (node.inGetterContext() &&
         !node.inDeclarationContext() &&
         element is GetterElement &&

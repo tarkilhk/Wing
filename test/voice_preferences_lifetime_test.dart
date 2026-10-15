@@ -58,12 +58,18 @@ void main() {
       expect(device.playing, isNotNull);
       expect(storage.outputWrites, isEmpty);
 
-      tester
-          .widgetList<StudioSelect<AppVoiceProcessing>>(
-            find.byType(StudioSelect<AppVoiceProcessing>),
-          )
-          .firstWhere((field) => field.label == 'Voice output')
-          .onChanged!(AppVoiceProcessing.hermes);
+      final output = find.byWidgetPredicate(
+        (widget) =>
+            widget is StudioSelect<AppVoiceProcessing> &&
+            widget.label == 'Voice output',
+      );
+      await tester.ensureVisible(output);
+      await tester.tap(
+        find.descendant(of: output, matching: find.byType(TextField)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Hermes · server profile').hitTestable().last);
       await tester.pump();
       expect(device.stopStarted.isCompleted, isTrue);
       expect(storage.outputWrites, isEmpty);

@@ -24,7 +24,10 @@ void main() {
     );
     await controller.refresh();
   });
-  tearDown(() => controller.dispose());
+  tearDown(() {
+    controller.dispose();
+    fixture.admin.server.close();
+  });
 
   test(
     'name edit preserves an untouched expired one-shot expression exactly',
@@ -39,13 +42,13 @@ void main() {
         original: controller.task('morning'),
         now: () => now,
       );
+      addTearDown(session.dispose);
       session.setText(TaskEditText.name, 'Renamed');
       expect(await session.save(), TaskEditOutcome.confirmed);
       final write = fixture.admin.requests.singleWhere(
         (request) => request.$1 == 'PUT',
       );
       expect(write.$4!['updates'], {'name': 'Renamed'});
-      session.dispose();
     },
   );
 
@@ -67,6 +70,7 @@ void main() {
           original: controller.task('morning'),
           now: () => now,
         );
+        addTearDown(session.dispose);
         final input = session.datePickerInput;
         final local = DateTime.parse(instant).toLocal();
         expect(input.firstDate, DateTime(2026, 10, 3));
@@ -87,14 +91,13 @@ void main() {
             DateTime(local.year, local.month, local.day),
           );
         }
-        session.dispose();
       }
       final session = ScheduledTaskEditSession(controller, now: () => now);
+      addTearDown(session.dispose);
       final input = session.datePickerInput;
       expect(input.initialDate, input.firstDate);
       expect(input.initialTime, now.toLocal());
       expect(session.state.dirty, false);
-      session.dispose();
     },
   );
 
@@ -102,6 +105,7 @@ void main() {
     'explicit date and time selection commits a validated local instant',
     () async {
       final session = ScheduledTaskEditSession(controller, now: () => now);
+      addTearDown(session.dispose);
       session.setText(TaskEditText.prompt, 'Brief me');
       session.setSchedule(
         session.state.schedule.copyWith(kind: TaskScheduleKind.once),
@@ -123,7 +127,6 @@ void main() {
         DateTime.parse(cached.schedule['run_at'] as String),
         DateTime(2026, 10, 4, 9, 45).toUtc(),
       );
-      session.dispose();
     },
   );
 
@@ -131,6 +134,7 @@ void main() {
     'editing an expired one-shot rejects it using the injected clock',
     () async {
       final session = ScheduledTaskEditSession(controller, now: () => now);
+      addTearDown(session.dispose);
       session.setText(TaskEditText.prompt, 'Brief me');
       session.setSchedule(
         session.state.schedule.copyWith(kind: TaskScheduleKind.once, once: now),
@@ -138,7 +142,6 @@ void main() {
       expect(await session.save(), TaskEditOutcome.invalid);
       expect(session.state.error, 'Choose a future date and time.');
       expect(fixture.mutations, 0);
-      session.dispose();
     },
   );
 
@@ -149,6 +152,7 @@ void main() {
         controller,
         original: controller.task('morning'),
       );
+      addTearDown(session.dispose);
       session.setText(TaskEditText.name, 'My draft');
       fixture.jobs['morning']!['name'] = 'Other client';
       await controller.refresh();
@@ -157,7 +161,6 @@ void main() {
       expect(session.state.name, 'My draft');
       expect(session.state.dirty, true);
       expect(fixture.mutations, 0);
-      session.dispose();
     },
   );
 
@@ -723,6 +726,7 @@ void main() {
         controller,
         original: controller.task('morning'),
       );
+      addTearDown(session.dispose);
       session.setModel(
         const ModelSelection.model(
           ModelChoice(provider: 'anthropic', model: 'claude-sonnet-4-5'),
@@ -732,7 +736,6 @@ void main() {
       expect(await session.save(), TaskEditOutcome.failed);
       expect(session.state.conflicts, ['base_url']);
       expect(fixture.mutations, 0);
-      session.dispose();
     },
   );
 
@@ -745,6 +748,7 @@ void main() {
         controller,
         original: controller.task('morning'),
       );
+      addTearDown(session.dispose);
       await session.load(TaskEditCatalog.delivery);
       session.setDestination('custom-target', false);
       expect(
@@ -768,7 +772,6 @@ void main() {
             .map((choice) => choice.id),
         ['local'],
       );
-      session.dispose();
     },
   );
 
@@ -776,6 +779,7 @@ void main() {
     'canonical template submission applies defaults without invented fields',
     () async {
       final session = ScheduledTaskEditSession(controller);
+      addTearDown(session.dispose);
       await session.load(TaskEditCatalog.blueprints);
       session.setTemplate('morning-brief');
       expect(await session.save(), TaskEditOutcome.confirmed);
@@ -783,7 +787,6 @@ void main() {
         (request) => request.$2 == 'cron/blueprints/instantiate',
       );
       expect(write.$4!['values'], {'time': '08:00', 'deliver': 'local'});
-      session.dispose();
     },
   );
 
@@ -830,12 +833,17 @@ void main() {
 
   test('disposing a route cannot cancel or forget a dispatched save', () async {
     fixture.gate = Completer<void>();
+    final dispatched = Completer<void>();
+    fixture.admin.override = (method, path, query, body) {
+      final response = fixture.send(method, path, query, body);
+      if (method == 'POST' && path == 'cron/jobs') dispatched.complete();
+      return response;
+    };
     final session = ScheduledTaskEditSession(controller);
     session.setText(TaskEditText.prompt, 'Brief me');
     final result = session.save();
-    while (fixture.mutations == 0) {
-      await Future<void>.delayed(Duration.zero);
-    }
+    await dispatched.future;
+    expect(fixture.mutations, 1);
     session.dispose();
     expect(controller.blocked('__create__'), true);
     fixture.gate!.complete();
@@ -849,13 +857,13 @@ void main() {
     () async {
       fixture.mutationError = TimeoutException('held acknowledgement');
       final session = ScheduledTaskEditSession(controller);
+      addTearDown(session.dispose);
       session.setText(TaskEditText.prompt, 'Brief me');
       expect(await session.save(), TaskEditOutcome.uncertain);
       expect(session.state.prompt, 'Brief me');
       expect(session.state.dirty, true);
       expect(await session.save(), TaskEditOutcome.blocked);
       expect(fixture.mutations, 1);
-      session.dispose();
     },
   );
 }

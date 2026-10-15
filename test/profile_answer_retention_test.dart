@@ -296,10 +296,7 @@ void main() {
         attempt < 200 && chat.reading.historyLoading;
         attempt++
       ) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 10)),
-        );
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 10));
       }
       expect(chat.reading.historyLoading, isFalse);
       expect(chat.reading.historyError, isNull);
@@ -510,10 +507,7 @@ void main() {
         attempt < 200 && fixture.chat.reading.historyLoading;
         attempt++
       ) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 10)),
-        );
-        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 10));
       }
       expect(fixture.chat.reading.historyLoading, isFalse);
       expect(fixture.chat.reading.historyError, isNull);

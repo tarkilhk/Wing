@@ -4,6 +4,7 @@ import 'package:wing/core/models/transcript_message.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -496,7 +497,12 @@ void main() {
 
       await controller.refreshHistory(chat);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       for (var refresh = 0; refresh < 2; refresh++) {
@@ -834,44 +840,42 @@ void main() {
     expect(isAnswerPrompt(hidden), isFalse);
   });
 
-  test(
-    'metadata accepts stock maps and ignores encoded or malformed values',
-    () {
-      for (final metadata in [
-        null,
-        '{invalid',
-        '[]',
-        '{"task_count":1}',
-        5,
-        {'task_count': 'three'},
-      ]) {
-        expect(
-          transcriptNoticeText({..._notice(), 'display_metadata': metadata}),
-          'Background agent work finished',
-        );
-      }
+  for (final metadata in [
+    null,
+    '{invalid',
+    '[]',
+    '{"task_count":1}',
+    5,
+    {'task_count': 'three'},
+  ]) {
+    test('malformed metadata $metadata cannot invent a task count', () {
       expect(
-        transcriptNoticeText({
-          ..._notice(),
-          'display_metadata': {'task_count': 1},
-        }),
-        '1 background agent finished',
+        transcriptNoticeText({..._notice(), 'display_metadata': metadata}),
+        'Background agent work finished',
       );
-      for (final entry in {
-        'model_switch': 'Model changed',
-        'personality_switch': 'Personality changed',
-        'auto_continue': 'Resumed interrupted turn',
-      }.entries) {
-        expect(
-          transcriptNoticeText({
-            'display_kind': entry.key,
-            'content': 'private',
-          }),
-          entry.value,
-        );
-      }
-    },
-  );
+    });
+  }
+  test('typed single-task metadata uses the singular completion label', () {
+    expect(
+      transcriptNoticeText({
+        ..._notice(),
+        'display_metadata': {'task_count': 1},
+      }),
+      '1 background agent finished',
+    );
+  });
+  for (final entry in {
+    'model_switch': 'Model changed',
+    'personality_switch': 'Personality changed',
+    'auto_continue': 'Resumed interrupted turn',
+  }.entries) {
+    test('${entry.key} projects its user-facing status', () {
+      expect(
+        transcriptNoticeText({'display_kind': entry.key, 'content': 'private'}),
+        entry.value,
+      );
+    });
+  }
 
   test('single, batch, cron and malformed results use producer boundaries', () {
     expect(

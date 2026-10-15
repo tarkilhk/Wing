@@ -102,6 +102,11 @@ def prepare_owned_android(serial):
                        str((left + right) // 2), str((top + bottom) // 2))
                 waited = True
             elif any(node.get('package') == launcher for node in nodes):
+                device(serial, 'shell', 'settings', 'put', 'secure',
+                       'show_ime_with_hard_keyboard', '1')
+                if device(serial, 'shell', 'settings', 'get', 'secure',
+                          'show_ime_with_hard_keyboard').strip() != '1':
+                    raise RuntimeError('Owned Android must display the software keyboard')
                 return
         except subprocess.SubprocessError:
             pass

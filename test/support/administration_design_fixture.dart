@@ -41,6 +41,16 @@ class AdministrationDesignFixture extends AdministrationFixture {
     Map<String, String> query,
     Map<String, dynamic>? body,
   ) async {
+    final expectedMethod = switch (path) {
+      'ops/doctor' => 'POST',
+      'profiles/personal/description' || 'tools/toolsets/web' => 'PUT',
+      'profiles/personal/soul' when method == 'PUT' => 'PUT',
+      'config' when method == 'PUT' => 'PUT',
+      _ => 'GET',
+    };
+    if (method != expectedMethod) {
+      throw StateError('Unexpected design request $method $path');
+    }
     if (method == 'GET' && path == 'profiles') {
       final result = await super.send(method, path, query, body);
       return {

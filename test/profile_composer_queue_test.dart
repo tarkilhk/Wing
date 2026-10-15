@@ -17,13 +17,6 @@ import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'profile_workspace_controller_test.dart' show Host;
 
-Future<void> until(bool Function() ready) async {
-  for (var i = 0; i < 200 && !ready(); i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 1));
-  }
-  expect(ready(), isTrue);
-}
-
 class _FailingDraftStore extends ComposerDraftStore {
   bool failNextWrite = false;
   bool failNextEmptyQueueWrite = false;
@@ -77,6 +70,21 @@ void main() {
   late ProfileChat chat;
   late Directory cache;
   late AttachmentDraftService attachmentService;
+  Future<void> until(bool Function() ready) async {
+    if (ready()) return;
+    final reached = Completer<void>();
+    void observe() {
+      if (ready() && !reached.isCompleted) reached.complete();
+    }
+
+    controller.addListener(observe);
+    try {
+      await reached.future;
+    } finally {
+      controller.removeListener(observe);
+    }
+  }
+
   ProfileWorkspaceController makeController() => ProfileWorkspaceController(
     access: ConnectionAccess(
       connection: SavedConnection(
@@ -252,6 +260,7 @@ void main() {
       expect(sends(), 1);
       expect(chat.composer.observation.queue, isEmpty);
       final methods = host.calls.map((call) => call.$2).toList();
+      expect(methods, containsAll(['session.resume', 'prompt.submit']));
       expect(
         methods.indexOf('session.resume'),
         lessThan(methods.indexOf('prompt.submit')),
@@ -265,8 +274,9 @@ void main() {
       await controller.queuePrompt(chat, 'First');
       await controller.queuePrompt(chat, 'Second');
       host.promptSubmitDelay = Completer<void>();
+      host.promptSubmitStarted = Completer<void>();
       finish();
-      await until(() => sends() == 1);
+      await host.promptSubmitStarted!.future;
       final snapshot = (await saved())!;
       expect(snapshot.queuePaused, isTrue);
       expect(snapshot.queuedPrompts.map((prompt) => prompt.text), [
@@ -342,6 +352,7 @@ void main() {
       await until(() => sends() == 1 && !chat.composer.observation.draining);
 
       final methods = host.calls.map((call) => call.$2).toList();
+      expect(methods, containsAll(['file.attach', 'prompt.submit']));
       expect(
         methods.indexOf('file.attach'),
         lessThan(methods.indexOf('prompt.submit')),
@@ -532,7 +543,7 @@ void main() {
         }
 
         finish();
-        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await until(() => chat.runtime.execution == ChatExecution.completed);
         expect(sends(), 1);
         final key = chat.key;
         controller.dispose();

@@ -7,8 +7,9 @@ import 'support/host_resources_fixture.dart';
 void main() {
   late HostResourcesFixture fixture;
   late HostResourcesSession resources;
-  var now = DateTime.utc(2026, 10, 7, 6, 32);
+  late DateTime now;
   setUp(() {
+    now = DateTime.utc(2026, 10, 7, 6, 32);
     fixture = HostResourcesFixture();
     resources = HostResourcesSession(fixture.server, now: () => now);
   });

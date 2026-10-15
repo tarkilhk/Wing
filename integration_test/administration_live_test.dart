@@ -1,3 +1,5 @@
+import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/screens/administration/admin_operations_page.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/models/provider_access.dart';
@@ -31,6 +33,7 @@ void main() {
   const port = int.fromEnvironment('HERMES_TEST_PORT');
   const isolated = bool.fromEnvironment('HERMES_ADMIN_DISPOSABLE');
   late AdministrationRepository server;
+  late ServerConnectionStatus serverStatus;
   late ProfileWorkspaceController controller;
   late ProfileAdministration profile;
   final connection = SavedConnection(
@@ -45,11 +48,14 @@ void main() {
   setUpAll(() async {
     expect(isolated, isTrue, reason: 'Requires HERMES_ADMIN_DISPOSABLE=true');
     expect(port, greaterThan(0));
+    serverStatus = ServerConnectionStatus(connection.label);
+    addTearDown(serverStatus.dispose);
     server = AdministrationRepository.forConnection(
       ConnectionAccess(connection: connection, dashboardOAuth: null),
       'admin-verifier',
-      connectionStatus: ServerConnectionStatus(connection.label),
+      connectionStatus: serverStatus,
     );
+    addTearDown(server.close);
     for (final name in ['admin-live-a', 'admin-live-b']) {
       if ((await server.discover()).named(name) == null) {
         await server.ownedMutation(
@@ -64,47 +70,40 @@ void main() {
     }
     profile = server.profile('admin-live-a');
   });
-  tearDownAll(() async {
-    // The launcher removes the isolated home after stopping Hermes. On Windows
-    // an active MCP stderr handle prevents profile deletion until process exit.
-    server.close();
-  });
   late AppPreferences appPreferences;
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     final fixturePreferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(fixturePreferences);
+    addTearDown(appPreferences.dispose);
     controller = ProfileWorkspaceController(
       appPreferences: appPreferences,
       access: ConnectionAccess(connection: connection, dashboardOAuth: null),
       connectionIdentity: 'admin-live-ui',
       preferences: fixturePreferences,
     );
+    addTearDown(controller.dispose);
     await controller.initialize();
     expect(await controller.switchProfile('admin-live-a'), isTrue);
   });
-  tearDown(() {
-    controller.dispose();
-    appPreferences.dispose();
-  });
-
   Future<void> idle(WidgetTester tester) async {
-    for (var i = 0; i < 6; i++) {
+    await tester.pump();
+    bool busy() =>
+        controller.switching ||
+        find
+            .byWidgetPredicate(
+              (widget) => widget is StudioLoadingRegion && widget.busy,
+            )
+            .evaluate()
+            .isNotEmpty;
+    final deadline = tester.binding.clock.now().add(
+      const Duration(seconds: 65),
+    );
+    while (busy() && tester.binding.clock.now().isBefore(deadline)) {
       await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull);
     }
-    final deadline = DateTime.now().add(const Duration(seconds: 65));
-    while ((find.byType(CircularProgressIndicator).evaluate().isNotEmpty ||
-            find.byType(LinearProgressIndicator).evaluate().isNotEmpty ||
-            controller.switching ||
-            find.text('Saving…').evaluate().isNotEmpty ||
-            find.text('Reloading…').evaluate().isNotEmpty) &&
-        DateTime.now().isBefore(deadline) &&
-        find.byType(AlertDialog).evaluate().isEmpty) {
-      await tester.pump(const Duration(milliseconds: 200));
-    }
-    expect(find.byType(CircularProgressIndicator), findsNothing);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    await tester.pump(const Duration(milliseconds: 350));
+    expect(busy(), isFalse, reason: 'Administration action did not settle');
     expect(tester.takeException(), isNull);
   }
 
@@ -143,7 +142,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
   }
 
-  Future<void> tap(WidgetTester tester, String label) async {
+  Future<void> tap(
+    WidgetTester tester,
+    String label, {
+    bool icon = false,
+  }) async {
     if (find.byType(SnackBar).evaluate().isNotEmpty && label != 'Close') {
       final messenger = ScaffoldMessenger.of(
         tester.element(find.byType(SnackBar).first),
@@ -151,7 +154,7 @@ void main() {
       messenger.removeCurrentSnackBar();
       await tester.pumpAndSettle();
     }
-    final target = find.text(label);
+    final target = icon ? find.byTooltip(label) : find.text(label);
     await visible(tester, target);
     await tester.tap(target.last);
     await idle(tester);
@@ -163,6 +166,7 @@ void main() {
   }
 
   Future<void> show(WidgetTester tester) async {
+    addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
@@ -185,9 +189,12 @@ void main() {
     bool Function() condition,
     String reason,
   ) async {
-    final deadline = DateTime.now().add(const Duration(seconds: 90));
-    while (!condition() && DateTime.now().isBefore(deadline)) {
+    final deadline = tester.binding.clock.now().add(
+      const Duration(seconds: 90),
+    );
+    while (!condition() && tester.binding.clock.now().isBefore(deadline)) {
       await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull);
     }
     expect(
       condition(),
@@ -205,7 +212,7 @@ void main() {
     await tap(tester, 'Models and reasoning');
     expect(find.text('Default model'), findsOneWidget);
     await tap(tester, 'Default model');
-    await tap(tester, 'Cancel');
+    await tap(tester, 'Cancel', icon: true);
     await tap(tester, 'Fallback models');
     await back(tester);
     await back(tester);
@@ -220,7 +227,7 @@ void main() {
     await idle(tester);
     await visible(tester, find.text('Retain memories'));
     expect(find.text('Retain memories'), findsOneWidget);
-    await tap(tester, 'Close');
+    await tap(tester, 'Cancel', icon: true);
     await back(tester);
     await tap(tester, 'Skills and tools');
     for (final label in [
@@ -289,6 +296,30 @@ void main() {
         await idle(tester);
         final before = await profile.config();
         final expected = <String, dynamic>{};
+        addTearDown(() async {
+          await tester.pumpWidget(const SizedBox.shrink());
+          final current = await profile.config();
+          final originals = <String, Object?>{
+            for (final key in expected.keys) key: setting(before, key),
+          };
+          final restored = await profile.saveSettings(
+            SettingsEditIntent(
+              baseline: {
+                for (final key in expected.keys) key: setting(current, key),
+              },
+              desired: originals,
+            ),
+            canDispatch: () => true,
+            onDispatched: () {},
+          );
+          for (final entry in originals.entries) {
+            expect(
+              setting(restored, entry.key),
+              entry.value,
+              reason: 'Restore ${entry.key} for independent live tests',
+            );
+          }
+        });
         final schema = (await profile.read('config/schema'))['fields'] as Map;
         for (final item in group.value) {
           if (!schema.containsKey(item.key) &&
@@ -309,24 +340,34 @@ void main() {
               await tap(tester, value);
               expected[item.key] = value;
             default:
-              final value = switch (item.kind) {
+              final Object value = switch (item.kind) {
                 AdminFieldKind.integer =>
-                  ((old is num ? old.toInt() : 10) + 1).toString(),
-                AdminFieldKind.decimal => old == 0.6 ? '0.7' : '0.6',
-                AdminFieldKind.lines => 'echo admin-live-qa',
+                  item.key == 'delegation.child_timeout_seconds' && old == 0
+                      ? 30
+                      : (old is num
+                                ? old.toInt()
+                                : (item.minimum ?? 10).toInt()) +
+                            1,
+                AdminFieldKind.decimal => old == 0.6 ? 0.7 : 0.6,
+                AdminFieldKind.lines => <String>['echo admin-live-qa'],
                 _ => 'admin-live-qa',
               };
+              expect(
+                item.validate(value),
+                isNull,
+                reason: '${item.key} must use a valid alternate value',
+              );
               await visible(tester, field(item.label));
-              await tester.enterText(field(item.label), value);
-              expected[item.key] = switch (item.kind) {
-                AdminFieldKind.integer => int.parse(value),
-                AdminFieldKind.decimal => double.parse(value),
-                AdminFieldKind.lines => [value],
-                _ => value,
-              };
+              await tester.enterText(field(item.label), item.format(value));
+              expected[item.key] = value;
           }
         }
-        await tap(tester, 'Save');
+        expect(
+          expected,
+          isNotEmpty,
+          reason: '${group.key} exposed no editable fields',
+        );
+        await tap(tester, 'Save changes', icon: true);
         expect(
           find.textContaining('Defaults saved'),
           findsOneWidget,
@@ -362,7 +403,8 @@ void main() {
           ),
           value,
         );
-        await tap(tester, 'Continue');
+        await tester.tap(find.byKey(const ValueKey('profile-name-save')));
+        await idle(tester);
       }
 
       await tap(tester, 'Create profile');
@@ -372,7 +414,7 @@ void main() {
       await idle(tester);
       await tap(tester, 'Rename');
       await name('admin-live-renamed');
-      await tap(tester, 'Rename');
+      await tap(tester, 'Rename', icon: true);
       expect((await server.discover()).named('admin-live-renamed'), isNotNull);
       await tester.tap(find.byTooltip('Manage admin-live-renamed'));
       await idle(tester);
@@ -383,7 +425,7 @@ void main() {
         await tester.tap(find.byTooltip('Manage $value'));
         await idle(tester);
         await tap(tester, 'Delete');
-        await tap(tester, 'Delete profile');
+        await tap(tester, 'Delete profile', icon: true);
         expect((await server.discover()).named(value), isNull);
       }
       await tap(tester, 'admin-live-b');
@@ -431,7 +473,7 @@ void main() {
     await tap(tester, 'Access and connectors');
     await tap(tester, 'MCP connectors');
     await tap(tester, 'Reconnect MCP tools');
-    await tap(tester, 'Reconnect');
+    await tap(tester, 'Reconnect tools', icon: true);
     expect(find.text('MCP tools reconnected.'), findsOneWidget);
   });
 
@@ -460,8 +502,7 @@ void main() {
           field('New credential'),
           'admin-qa-not-a-real-credential',
         );
-        await tap(tester, 'Save credential');
-        if (shared) await tap(tester, 'Save');
+        await tap(tester, 'Save credential', icon: true);
         final owner = shared ? server.profile('default') : profile;
         expect(
           (await owner.read('env'))['OPENROUTER_API_KEY']['is_set'],
@@ -475,7 +516,7 @@ void main() {
         );
         await tap(tester, 'OPENROUTER_API_KEY');
         await tap(tester, 'Remove stored credential');
-        await tap(tester, 'Remove');
+        await tap(tester, 'Remove', icon: true);
         expect(
           (await owner.read('env'))['OPENROUTER_API_KEY']['is_set'],
           isFalse,
@@ -508,19 +549,19 @@ void main() {
     await tap(tester, 'Order by recorded usage');
     await tap(tester, 'admin-live-skill');
     expect(find.text('Origin: agent'), findsOneWidget);
-    await tap(tester, 'Edit instructions');
+    await tap(tester, 'Edit instructions', icon: true);
     const revised = '$original\nVerified on the emulator.\n';
     await tester.enterText(field('Instructions'), revised);
-    await tap(tester, 'Save');
+    await tap(tester, 'Save skill', icon: true);
     expect(
       (await profile.read('skills/content', {
         'name': 'admin-live-skill',
       }))['content'],
       revised,
     );
-    await tap(tester, 'Close');
-    await tap(tester, 'Archive skill');
-    await tap(tester, 'Archive');
+    await tap(tester, 'Cancel', icon: true);
+    await tap(tester, 'Archive skill', icon: true);
+    await tap(tester, 'Archive', icon: true);
     expect(
       administrationRows(
         (await profile.read('skills'))['data'],
@@ -568,7 +609,7 @@ void main() {
     );
     await tap(tester, 'admin-live-mcp');
     await tap(tester, 'Test connection');
-    await tap(tester, 'Test');
+    await tap(tester, 'Test', icon: true);
     await until(
       tester,
       () => find.textContaining('Test succeeded').evaluate().isNotEmpty,
@@ -577,7 +618,7 @@ void main() {
     expect(find.textContaining('Test succeeded'), findsOneWidget);
     expect(find.text('admin_echo'), findsOneWidget);
     await tap(tester, 'Remove connector');
-    await tap(tester, 'Remove');
+    await tap(tester, 'Remove', icon: true);
     expect(
       administrationRows((await profile.read('mcp/servers'))['servers']),
       isEmpty,
@@ -598,6 +639,11 @@ void main() {
       final route = options.firstWhere((r) => r['slug'] == 'opencode-free');
       final models = (route['models'] as List).cast<String>();
       final currentModel = (await profile.read('model/info'))['model'];
+      expect(
+        models.length,
+        greaterThanOrEqualTo(2),
+        reason: 'Two models are required to exercise fallback ordering',
+      );
       final model = models.firstWhere((value) => value != currentModel);
       final group = find.byKey(
         const Key('profile-model-provider-opencode-free'),
@@ -618,40 +664,51 @@ void main() {
         'default model save closes',
       );
       expect((await profile.read('model/info'))['model'], model);
-      if (find.text('Reasoning and speed').evaluate().isNotEmpty) {
+      expect(
+        find.text('Reasoning and speed'),
+        findsOneWidget,
+        reason: 'QA model must expose reasoning settings for this journey',
+      );
+      {
         await tap(tester, 'Reasoning and speed');
         await tester.tap(find.byType(DropdownButtonFormField<String>).first);
         await idle(tester);
         await tap(tester, 'low');
-        await tap(tester, 'Save');
+        await tap(tester, 'Save changes', icon: true);
         expect(
           setting(await profile.config(), 'agent.reasoning_effort'),
           'low',
         );
-        await tap(tester, 'Close');
+        await tap(tester, 'Cancel', icon: true);
       }
       final tasks = administrationRows(
         (await profile.read('model/auxiliary'))['tasks'],
       );
+      expect(tasks, isNotEmpty);
       await tap(tester, (tasks.first['task'] as String).replaceAll('_', ' '));
       await tester.enterText(field('Search models'), model);
       await idle(tester);
       await tap(tester, model);
+      await tap(tester, 'Set helper model', icon: true);
       final assigned = administrationRows(
         (await profile.read('model/auxiliary'))['tasks'],
       ).singleWhere((r) => r['task'] == tasks.first['task']);
       expect(assigned['model'], model);
       expect(assigned['provider'], 'opencode-free');
-      for (final task in tasks) {
+      for (final task in tasks.where(
+        (row) =>
+            row['provider'] != 'auto' || row['task'] == tasks.first['task'],
+      )) {
         await tap(tester, (task['task'] as String).replaceAll('_', ' '));
         await tap(tester, 'Automatic');
+        await tap(tester, 'Set helper model', icon: true);
         final after = administrationRows(
           (await profile.read('model/auxiliary'))['tasks'],
         ).singleWhere((r) => r['task'] == task['task']);
         expect(after['provider'], 'auto');
       }
       await tap(tester, 'Reset all helper models');
-      await tap(tester, 'Reset all');
+      await tap(tester, 'Reset all', icon: true);
       expect(
         administrationRows(
           (await profile.read('model/auxiliary'))['tasks'],
@@ -660,10 +717,11 @@ void main() {
       );
       await tap(tester, 'Fallback models');
       for (final selected in models.take(2)) {
-        await tap(tester, 'Add fallback');
+        await tap(tester, 'Add fallback', icon: true);
         await tester.enterText(field('Search models'), selected);
         await idle(tester);
         await tap(tester, selected);
+        await tap(tester, 'Add fallback', icon: true);
         await until(
           tester,
           () => find.text(selected).evaluate().isNotEmpty,
@@ -706,7 +764,7 @@ void main() {
         find.byKey(const Key('profile-soul-field')),
         'Disposable QA identity.',
       );
-      await tap(tester, 'Save');
+      await tap(tester, 'Save changes', icon: true);
       await until(
         tester,
         () => find
@@ -730,14 +788,18 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('administration-health')));
       await idle(tester);
       for (final label in ['Doctor', 'Security audit']) {
-        await tap(tester, 'Run $label');
-        await tap(tester, 'Run');
+        await tap(tester, label);
+        await tap(tester, 'Run', icon: true);
         await until(
           tester,
           () =>
-              find.text('Running').evaluate().isEmpty &&
-              (find.textContaining('Completed').evaluate().isNotEmpty ||
-                  find.textContaining('Failed').evaluate().isNotEmpty),
+              find.byType(AdminActionPage).evaluate().isNotEmpty &&
+              tester
+                  .widget<AdminActionPage>(find.byType(AdminActionPage))
+                  .operation
+                  .state
+                  .observation
+                  .terminal,
           '$label terminal action state',
         );
         await back(tester);
@@ -756,12 +818,13 @@ void main() {
     final reportedTools = administrationRows(
       (await profile.read('tools/toolsets'))['data'],
     ).map((row) => row['name']).toSet();
-    expect(selectedTools.split(',').any(reportedTools.contains), isTrue);
+    expect(
+      reportedTools,
+      containsAll(selectedTools.split(',')),
+      reason:
+          'Every requested toolset must be available in the disposable fixture',
+    );
     for (final tool in selectedTools.split(',')) {
-      if (!reportedTools.contains(tool)) {
-        debugPrint('Backend does not expose toolset: $tool');
-        continue;
-      }
       await tester.pumpWidget(
         MaterialApp(
           key: ValueKey(tool),
@@ -795,6 +858,7 @@ void main() {
         () => find.text('Refresh readiness').evaluate().isNotEmpty,
         '$tool setup loaded',
       );
+      expect(rows, isNotEmpty, reason: '$tool returned no provider choices');
       final setupOnly = const {
         'x_search',
         'homeassistant',
@@ -898,6 +962,7 @@ void main() {
         if (catalog['has_models'] == true && models.isNotEmpty) {
           final model = models.first;
           await tap(tester, '${model['display'] ?? model['id']}');
+          await tap(tester, 'Save tool model', icon: true);
           expect(
             (await profile.read('tools/toolsets/$tool/models', {
               'provider': row['name'] as String,
@@ -923,7 +988,7 @@ void main() {
     await visible(tester, field('Recognition language'));
     await tester.enterText(field('Recognition language'), 'en');
     await tap(tester, 'Automatic speech');
-    await tap(tester, 'Save');
+    await tap(tester, 'Save changes', icon: true);
     expect(setting(await profile.config(), 'stt.language'), 'en');
     expect(setting(await profile.config(), 'voice.auto_tts'), isTrue);
   });
@@ -936,8 +1001,8 @@ void main() {
       await tap(tester, 'Skill Hub');
       await tap(tester, 'agent-merge-conflict-arbiter');
       expect(find.text('Skill preview'), findsOneWidget);
-      await tap(tester, 'Install');
-      await tap(tester, 'Install');
+      await tap(tester, 'Install skill', icon: true);
+      await tap(tester, 'Install', icon: true);
       await until(
         tester,
         () =>
@@ -955,7 +1020,7 @@ void main() {
       await back(tester);
       await back(tester);
       await tap(tester, 'Update installed Hub skills');
-      await tap(tester, 'Update skills');
+      await tap(tester, 'Update skills', icon: true);
       await until(
         tester,
         () =>
@@ -973,8 +1038,8 @@ void main() {
       );
       await idle(tester);
       await tap(tester, 'agent-merge-conflict-arbiter');
-      await tap(tester, 'Uninstall Hub skill');
-      await tap(tester, 'Uninstall');
+      await tap(tester, 'Uninstall Hub skill', icon: true);
+      await tap(tester, 'Uninstall', icon: true);
       await until(
         tester,
         () =>
@@ -1087,7 +1152,7 @@ void main() {
       expect(find.text('Status: pending'), findsOneWidget);
       await tap(tester, 'Check status');
       expect(find.text('Status: pending'), findsOneWidget);
-      await tap(tester, 'Cancel sign-in');
+      await tap(tester, 'Cancel sign-in', icon: true);
       await until(
         tester,
         () => find.byType(AdminProviderSignIn).evaluate().isEmpty,

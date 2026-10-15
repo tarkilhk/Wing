@@ -19,7 +19,6 @@ class _PluginsFixture {
     'status': 'disabled',
   };
   bool loseReadback = false, unknownReceipt = false, invalid = false;
-  int connects = 0;
   Completer<void>? connected, release;
   late final AdministrationRepository server = AdministrationRepository(
     connectionId: http.id,
@@ -37,8 +36,7 @@ class _PluginsFixture {
     get: (_, _) async => throw StateError('Unexpected gateway HTTP read'),
     discover: () => server.discover(),
     connect: () async {
-      connects++;
-      if (connects == 3 && release != null) {
+      if (release != null && !connected!.isCompleted) {
         connected!.complete();
         await release!.future;
       }

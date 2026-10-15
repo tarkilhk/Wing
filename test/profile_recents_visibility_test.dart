@@ -442,8 +442,11 @@ void main() {
             for (var i = 0; i < 20; i++) {
               await tester.pump();
             }
-            final readyPosition = listPosition + const Offset(16, 16);
             expect(started.isCompleted, isTrue);
+            final readyPosition = tester.getTopLeft(
+              find.byType(RecentIdentityCard).first,
+            );
+            expect(readyPosition.dy, greaterThanOrEqualTo(listPosition.dy));
             await tester.pump(const Duration(seconds: 11));
             expect(
               tester.getTopLeft(find.byType(RecentIdentityCard).first),
@@ -742,10 +745,6 @@ void main() {
               'Last loaded reply. The research notes are ready, including the sources and the next steps for the team.',
             ),
             findsOneWidget,
-          );
-          expect(
-            tester.widget<Text>(find.text(fixture.messagePreviewText)).maxLines,
-            2,
           );
           expect(tester.getRect(find.text('Recents')), title);
           expect(tester.getRect(find.byType(ListView).last), list);

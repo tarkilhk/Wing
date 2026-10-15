@@ -371,21 +371,18 @@ void main() {
     );
   });
 
-  test(
-    'PNG rejects short inflation, oversized canvas, and unsupported bit depth',
-    () {
-      for (final bytes in [
-        _png(1, 1, [0, 0]),
-        _png(65535, 65535, [0]),
-        _png(1, 1, [0, 0, 0, 0, 0], bits: 4),
-      ]) {
-        expect(
-          () => inspectAttachmentImage(bytes),
-          throwsA(isA<AttachmentImageException>()),
-        );
-      }
-    },
-  );
+  for (final (fault, bytes) in [
+    ('short inflation', _png(1, 1, [0, 0])),
+    ('oversized canvas', _png(65535, 65535, [0])),
+    ('unsupported bit depth', _png(1, 1, [0, 0, 0, 0, 0], bits: 4)),
+  ]) {
+    test('PNG rejects $fault', () {
+      expect(
+        () => inspectAttachmentImage(bytes),
+        throwsA(isA<AttachmentImageException>()),
+      );
+    });
+  }
 
   test('16-bit PNG charges and decodes its actual sample width', () async {
     final bytes = _png(1, 1, [0, 255, 255, 0, 0, 0, 0, 255, 255], bits: 16);
@@ -501,7 +498,7 @@ void main() {
   );
 
   test(
-    'worker reads only bounded file bytes and closes the source handle',
+    'worker reads valid file bytes and rejects oversized file input',
     () async {
       final dir = await Directory.systemTemp.createTemp('wing-image-worker-');
       try {

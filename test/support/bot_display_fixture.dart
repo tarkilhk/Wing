@@ -3,6 +3,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:wing/core/services/bot_display_client.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'bots_fixture.dart';
@@ -40,14 +41,23 @@ class DisplayPeer {
   }
 
   void accept(Uint8List bytes) {
-    sent.add(bytes);
+    sent.add(Uint8List.fromList(bytes));
     if (phase == 0) {
+      if (!listEquals(bytes, ascii.encode('RFB 003.008\n'))) {
+        throw StateError('Invalid RFB client version');
+      }
       phase++;
       add([1, 1]);
     } else if (phase == 1) {
+      if (!listEquals(bytes, [1])) {
+        throw StateError('Invalid RFB authentication selection');
+      }
       phase++;
       add([0, 0, 0, 0]);
     } else if (phase == 2) {
+      if (!listEquals(bytes, [1])) {
+        throw StateError('RFB viewer must share the display');
+      }
       phase++;
       final init = ByteData(24)
         ..setUint16(0, width)
@@ -105,7 +115,11 @@ class DisplayFixture {
       releases++;
     },
     read: (profile, method, params) async {
-      calls.add((profile, method, params));
+      calls.add((
+        profile,
+        method,
+        Map<String, dynamic>.from(jsonDecode(jsonEncode(params))),
+      ));
       if (method == 'display.status') {
         await statusWait?.future;
         if (failStatus) throw StateError('Offline');
@@ -125,7 +139,11 @@ class DisplayFixture {
       if (method == 'display.lease.acquire') await beforeAcquire?.future;
       if (!canDispatch()) throw StateError('Retired');
       onDispatched();
-      calls.add((profile, method, params));
+      calls.add((
+        profile,
+        method,
+        Map<String, dynamic>.from(jsonDecode(jsonEncode(params))),
+      ));
       if (method == 'display.lease.acquire') {
         await acquireWait?.future;
         holder = 'human';

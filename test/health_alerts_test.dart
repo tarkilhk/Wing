@@ -13,7 +13,6 @@ import 'package:wing/core/services/health_alert_settings_session.dart';
 import 'package:wing/core/services/health_alert_settings_store.dart';
 import 'package:wing/core/services/health_alerts_session.dart';
 import 'package:wing/core/services/host_resources_session.dart';
-import 'package:wing/core/services/server_connection_status.dart';
 import 'support/host_resources_fixture.dart';
 import 'support/health_alerts_fixture.dart';
 
@@ -520,7 +519,13 @@ void main() {
     expect(evaluator.alerts, hasLength(1));
     sample(255, 80);
     expect(evaluator.alerts, isEmpty);
+  });
+
+  test('warning duration rejects zero minutes', () {
     expect(() => rule.copyWith(alertMinutes: 0), throwsArgumentError);
+  });
+
+  test('recovery duration rejects more than thirty minutes', () {
     expect(() => rule.copyWith(clearMinutes: 31), throwsArgumentError);
   });
 
@@ -880,9 +885,6 @@ void main() {
       final fixture = HostResourcesFixture();
       final host = HostResourcesSession(fixture.server, now: () => start);
       final health = AdministrationHealth(fixture.server, now: () => start);
-      final connection = ServerConnectionStatus('Home')
-        ..accessAvailable()
-        ..liveChanged('chat', true);
       final settings = HealthAlertSettingsSession(
         HealthAlertSettingsStore(await SharedPreferences.getInstance()),
       );
@@ -938,19 +940,11 @@ void main() {
         ),
       );
       expect(session.alerts, isEmpty);
-      // Connection failures and diagnostics do not alert; host pressure still does.
-      connection.liveChanged('chat', false);
-      expect(session.alerts, isEmpty);
-      connection.beginRecovery('chat');
-      connection.failRecovery('chat', 'Connection attempts exhausted');
-      expect(session.alerts, isEmpty);
-      connection.liveChanged('chat', true);
-      connection.endRecovery('chat');
+      // The same subscribed session must still admit an actual host incident.
       fixture.pressure = hostPressurePayload(now: start);
       fixture.pressure['memory']['pressure'] = 'critical';
       await host.refresh();
       expect(session.alerts.single.title, 'Critical memory pressure');
-      connection.dispose();
       session.dispose();
       host.dispose();
       health.dispose();

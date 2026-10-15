@@ -136,7 +136,7 @@ void main() {
     expect(decodeToolPayload('[1,2]'), [1, 2]);
   });
 
-  test('activity requests and receipts preserve current stock tool facts', () {
+  test('patch receipts preserve requested replacement and reported diff', () {
     const diff = '--- a/report.py\n+++ b/report.py\n@@ -1 +1 @@\n-old\n+new';
     final patch = completed(
       'patch',
@@ -151,6 +151,9 @@ void main() {
     expect(patch.request.map((b) => b.text), ['old', '']);
     expect(patch.response.single.label, 'Reported diff');
     expect(patch.response.single.text, diff);
+  });
+
+  test('patch failures expose the actual error', () {
     final failed = completed(
       'patch',
       {'error': 'No match found'},
@@ -162,6 +165,9 @@ void main() {
     );
     expect(failed.outcome, ToolCallOutcome.error);
     expect(failed.activityDetails.response.map((b) => b.label), ['Error']);
+  });
+
+  test('write receipts preserve content and verification', () {
     final write = completed(
       'write_file',
       {'bytes_written': 4, 'verified': true},
@@ -173,33 +179,41 @@ void main() {
     expect(write.outcome, ToolCallOutcome.success);
   });
 
+  test('file receipts retain exact text and reported limits', () {
+    const content = '21|# Heading\n22|  **literal**\n';
+    final read = completed(
+      'read_file',
+      {
+        'content': content,
+        'total_lines': 80,
+        'file_size': 912,
+        'truncated': true,
+        'next_offset': 23,
+      },
+      args: {'path': '/workspace/report.py', 'offset': 21, 'limit': 2},
+    ).activityDetails;
+    expect(read.response.single.text, content);
+    expect(read.request, isEmpty);
+    expect(read.headerFacts, ['Offset: 21', 'Limit: 2']);
+    expect(
+      read.resourceFor('/workspace/report.py')?.path,
+      '/workspace/report.py',
+    );
+    expect(read.resourceFor('javascript:alert(1)'), isNull);
+    expect(read.resourceFor('data:image/png;base64,AA=='), isNull);
+    expect(read.resourceFor('https://user:password@example.org/x'), isNull);
+    expect(read.response.single.numberedLines, isTrue);
+    expect(read.response.single.markdown, isFalse);
+    expect(read.metadata, [
+      'Total lines: 80',
+      'Partial file returned',
+      'Next offset: 23',
+    ]);
+  });
+
   test(
-    'file receipts and console output keep exact text and reported limits',
+    'numbered Markdown exposes a clean document without changing raw text',
     () {
-      const content = '21|# Heading\n22|  **literal**\n';
-      final read = completed(
-        'read_file',
-        {
-          'content': content,
-          'total_lines': 80,
-          'file_size': 912,
-          'truncated': true,
-          'next_offset': 23,
-        },
-        args: {'path': '/workspace/report.py', 'offset': 21, 'limit': 2},
-      ).activityDetails;
-      expect(read.response.single.text, content);
-      expect(read.request, isEmpty);
-      expect(read.headerFacts, ['Offset: 21', 'Limit: 2']);
-      expect(
-        read.resourceFor('/workspace/report.py')?.path,
-        '/workspace/report.py',
-      );
-      expect(read.resourceFor('javascript:alert(1)'), isNull);
-      expect(read.resourceFor('data:image/png;base64,AA=='), isNull);
-      expect(read.resourceFor('https://user:password@example.org/x'), isNull);
-      expect(read.response.single.numberedLines, isTrue);
-      expect(read.response.single.markdown, isFalse);
       const numberedMarkdown = '21|# Report\n22|\n23|**Ready**';
       final markdownRead = completed(
         'read_file',
@@ -210,35 +224,39 @@ void main() {
       expect(markdownRead.markdown, isTrue);
       expect(markdownRead.documentText, '# Report\n\n**Ready**');
       expect(markdownRead.text, numberedMarkdown);
-      expect(read.metadata, [
-        'Total lines: 80',
-        'Partial file returned',
-        'Next offset: 23',
-      ]);
-      final code = completed(
-        'execute_code',
-        {'output': '**literal**\n  exact\n', 'status': 'success'},
-        args: {'code': 'print("exact")'},
-      ).activityDetails;
-      expect(code.response.single.markdown, isFalse);
-      expect(code.response.single.text, '**literal**\n  exact\n');
-      expect(code.exitCode, isNull);
-      expect(
-        completed('terminal', {
-          'exit_code': 2,
-          'stdout': '',
-        }).activityDetails.exitCode,
-        2,
-      );
-      expect(
-        completed('read_file', {
-          'content': '',
-          'total_lines': 0,
-        }).activityDetails.response.single.text,
-        '',
-      );
     },
   );
+
+  test('code output preserves literal text without inventing an exit code', () {
+    final code = completed(
+      'execute_code',
+      {'output': '**literal**\n  exact\n', 'status': 'success'},
+      args: {'code': 'print("exact")'},
+    ).activityDetails;
+    expect(code.response.single.markdown, isFalse);
+    expect(code.response.single.text, '**literal**\n  exact\n');
+    expect(code.exitCode, isNull);
+  });
+
+  test('terminal receipt retains a nonzero exit code', () {
+    expect(
+      completed('terminal', {
+        'exit_code': 2,
+        'stdout': '',
+      }).activityDetails.exitCode,
+      2,
+    );
+  });
+
+  test('empty file receipts preserve the empty result', () {
+    expect(
+      completed('read_file', {
+        'content': '',
+        'total_lines': 0,
+      }).activityDetails.response.single.text,
+      '',
+    );
+  });
 
   test('native vision is an image receipt rather than invented analysis', () {
     final receipt = completed(
@@ -262,6 +280,9 @@ void main() {
     expect(receipt.response, isEmpty);
     expect(receipt.receiptStatus, isNull);
     expect(receipt.response.any((b) => b.label == 'Analysis'), isFalse);
+  });
+
+  test('generated image receipts retain their resource target', () {
     final generated = completed('image_generate', {
       'image': '/workspace/generated.png',
     }).activityDetails;
@@ -291,7 +312,7 @@ void main() {
     }
   });
 
-  test('structured search and unknown tool data remain readable', () {
+  test('structured file search preserves the matching line', () {
     final search = completed(
       'search_files',
       {
@@ -307,6 +328,9 @@ void main() {
     expect(search.metadata, ['Reported rows: 1']);
     expect(search.response.single.text, '9|hello');
     expect(search.response.single.copyText, 'hello');
+  });
+
+  test('unknown connector messages remain readable', () {
     final other = completed(
       'connector_query',
       {
@@ -468,6 +492,12 @@ void main() {
       expect(search.subtitle, 'gmail fetch emails');
       expect(search.activityDetails.request.single.text, query);
       expect(search.arguments, contains(r'\n'));
+    },
+  );
+
+  test(
+    'clarification subtitles normalize lines while preserving the question',
+    () {
       final question = completed(
         'clarify',
         {
@@ -604,16 +634,19 @@ void main() {
         'Failed operation: 2',
         'Operations attempted before failure: 1',
       ]);
-      expect(
-        completed('tool_call', {
-          'content': [
-            {'type': 'text', 'text': ' \n '},
-          ],
-        }).activityDetails.response,
-        isEmpty,
-      );
     },
   );
+
+  test('blank tool text produces no empty response block', () {
+    expect(
+      completed('tool_call', {
+        'content': [
+          {'type': 'text', 'text': ' \n '},
+        ],
+      }).activityDetails.response,
+      isEmpty,
+    );
+  });
 
   test('search intent options are quiet and dense receipts group by file', () {
     const dense =
@@ -689,18 +722,21 @@ void main() {
       expect(receipt.response.single.copyable, isFalse);
       expect(call.result, contains('No linter for .md'));
       expect(call.result, contains('dirs_created'));
-      final failedCheck = completed('patch', {
-        'lint': {'status': 'error', 'output': 'report.py:7: invalid syntax'},
-        '_warning': 'Some edits could not be verified',
-      }).activityDetails;
-      expect(failedCheck.metadata, isEmpty);
-      expect(failedCheck.response.map((b) => b.text), [
-        'Syntax check failed.',
-        'report.py:7: invalid syntax',
-        'Some edits could not be verified',
-      ]);
     },
   );
+
+  test('patch receipts expose failed syntax checks and warnings', () {
+    final failedCheck = completed('patch', {
+      'lint': {'status': 'error', 'output': 'report.py:7: invalid syntax'},
+      '_warning': 'Some edits could not be verified',
+    }).activityDetails;
+    expect(failedCheck.metadata, isEmpty);
+    expect(failedCheck.response.map((b) => b.text), [
+      'Syntax check failed.',
+      'report.py:7: invalid syntax',
+      'Some edits could not be verified',
+    ]);
+  });
 
   test('terminal controls are quiet and literal output remains reusable', () {
     final call = completed(
@@ -758,38 +794,39 @@ void main() {
     expect(call.result, contains('_transport'));
   });
 
-  test(
-    'completion is not evidence of success; actual errors and reuse are readable',
-    () {
-      expect(
-        completed('terminal', {'exit_code': 7}).status,
-        'Exited with code 7',
-      );
-      expect(
-        completed('terminal', {'error': true}).outcome,
-        ToolCallOutcome.error,
-      );
-      expect(
-        completed('read_file', {'content': 'text'}).outcome,
-        ToolCallOutcome.completed,
-      );
-      expect(
-        completed('skill_view', {
-          'success': true,
-          'status': 'unchanged',
-        }).status,
-        'Unchanged',
-      );
-      expect(
-        completed('web_extract', {
-          'results': [
-            {'title': '404 Error', 'url': 'https://example.org'},
-          ],
-        }).outcome,
-        ToolCallOutcome.warning,
-      );
-    },
-  );
+  for (final (name, result, outcome) in [
+    ('terminal', <String, Object?>{'error': true}, ToolCallOutcome.error),
+    (
+      'read_file',
+      <String, Object?>{'content': 'text'},
+      ToolCallOutcome.completed,
+    ),
+    (
+      'web_extract',
+      <String, Object?>{
+        'results': [
+          {'title': '404 Error', 'url': 'https://example.org'},
+        ],
+      },
+      ToolCallOutcome.warning,
+    ),
+  ]) {
+    test('$name outcome follows its receipt evidence', () {
+      expect(completed(name, result).outcome, outcome);
+    });
+  }
+  test('unchanged skill receipt retains its status', () {
+    expect(
+      completed('skill_view', {'success': true, 'status': 'unchanged'}).status,
+      'Unchanged',
+    );
+  });
+  test('terminal failure reports the actual exit code', () {
+    expect(
+      completed('terminal', {'exit_code': 7}).status,
+      'Exited with code 7',
+    );
+  });
 
   test('failed receipts take precedence over separately received warnings', () {
     for (final (name, result, warning) in [
@@ -896,58 +933,58 @@ void main() {
     }
   });
 
-  test(
-    'structured text content and web sources remain readable across tools',
-    () {
-      final bridge = completed(
-        'tool_call',
-        {
-          'results': [
-            {
-              'index': 0,
-              'name': 'connectors__calendar__CREATE_EVENT',
-              'error': {
-                'code': 'PROVIDER_ERROR',
-                'message': 'The event could not be created.',
-              },
+  test('connector bridge exposes the nested provider error', () {
+    final bridge = completed(
+      'tool_call',
+      {
+        'results': [
+          {
+            'index': 0,
+            'name': 'connectors__calendar__CREATE_EVENT',
+            'error': {
+              'code': 'PROVIDER_ERROR',
+              'message': 'The event could not be created.',
             },
-          ],
-          'success_count': 0,
-          'error_count': 1,
-          'total_count': 1,
-        },
-        args: {
-          'calls': [
-            {
-              'name': 'connectors__calendar__CREATE_EVENT',
-              'arguments': {'title': 'Lunch'},
-            },
-          ],
-        },
-      );
-      expect(bridge.outcome, ToolCallOutcome.error);
-      expect(
-        bridge.activityDetails.response.single.text,
-        'The event could not be created.',
-      );
-      final search = completed('web_search', {
-        'data': {
-          'web': [
-            {
-              'title': 'Mileage FAQ',
-              'url': 'https://example.org/faq',
-              'description': 'Unlimited mileage',
-            },
-          ],
-        },
-      });
-      expect(search.activityDetails.response.single.label, 'Mileage FAQ');
-      expect(
-        search.activityDetails.response.single.text,
-        contains('Unlimited mileage'),
-      );
-    },
-  );
+          },
+        ],
+        'success_count': 0,
+        'error_count': 1,
+        'total_count': 1,
+      },
+      args: {
+        'calls': [
+          {
+            'name': 'connectors__calendar__CREATE_EVENT',
+            'arguments': {'title': 'Lunch'},
+          },
+        ],
+      },
+    );
+    expect(bridge.outcome, ToolCallOutcome.error);
+    expect(
+      bridge.activityDetails.response.single.text,
+      'The event could not be created.',
+    );
+  });
+
+  test('web search preserves source title and description', () {
+    final search = completed('web_search', {
+      'data': {
+        'web': [
+          {
+            'title': 'Mileage FAQ',
+            'url': 'https://example.org/faq',
+            'description': 'Unlimited mileage',
+          },
+        ],
+      },
+    });
+    expect(search.activityDetails.response.single.label, 'Mileage FAQ');
+    expect(
+      search.activityDetails.response.single.text,
+      contains('Unlimited mileage'),
+    );
+  });
 
   test('command output preserves indentation and literal Markdown markers', () {
     const stdout =
@@ -1114,6 +1151,7 @@ void main() {
         'name': 'web_search',
         'duration_s': 2.4,
       });
+      expect(runtime.observation.toolActivities, hasLength(2));
       expect(
         runtime.observation.toolActivities.every(
           (tool) => tool.startedAt == null,

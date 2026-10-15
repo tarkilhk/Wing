@@ -835,6 +835,10 @@ Future<void> _run(List<String> args) async {
       status: 2,
     ),
   ];
+  final cliExits = <String, Set<int>>{
+    'source': {},
+    if (compiled != null) 'aot': {},
+  };
   final workspace = Workspace();
   for (final fixture in cases) {
     workspace.load(fixture);
@@ -899,6 +903,7 @@ Future<void> _run(List<String> args) async {
             result.exitCode == fixture.status,
             '${fixture.name}: CLI ${result.exitCode} ${result.stdout}${result.stderr}',
           );
+          cliExits[prefix.isEmpty ? 'aot' : 'source']!.add(result.exitCode);
           if (fixture.status == 1) {
             final output = jsonDecode(result.stdout as String) as Map;
             require(
@@ -940,6 +945,10 @@ Future<void> _run(List<String> args) async {
       workspace.close();
     }
   }
+  require(
+    cliExits.values.every((exits) => exits.containsAll({0, 1, 2})),
+    'Every enabled CLI mode must prove rejection, acceptance and input failure',
+  );
   await _cacheTransitions(sdk, compiled);
   stdout.writeln(
     '${cases.length} colour view cases + 10 reused-cache transitions; actual source${compiled == null ? '' : '/fresh-AOT'} CLI1/0/2 and invalidSDK2; dual mandatory SDK proof',
@@ -1116,7 +1125,9 @@ Future<void> _cacheTransitions(String sdk, String? compiled) async {
         );
         require(
           expected == 0
-              ? '${result.stdout}'.contains('"findings":[]')
+              ? ((jsonDecode(result.stdout as String) as Map)['findings']
+                        as List)
+                    .isEmpty
               : '${result.stderr}'.contains('[${rule.id} INPUT]'),
           '$label actual CLI diagnostic',
         );
@@ -1208,7 +1219,9 @@ Future<void> _cacheTransitions(String sdk, String? compiled) async {
         '--json',
       ]);
       require(
-        result.exitCode == 0 && '${result.stdout}'.contains('"findings":[]'),
+        result.exitCode == 0 &&
+            ((jsonDecode(result.stdout as String) as Map)['findings'] as List)
+                .isEmpty,
         'corrupt-summary actual CLI: ${result.stdout}${result.stderr}',
       );
     }

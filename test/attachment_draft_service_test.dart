@@ -69,37 +69,43 @@ void main() {
   }
 
   group('file-backed drafts and limits', () {
-    test(
-      'generic selection copies into private cache without model bytes',
-      () async {
-        final source = File(
-          '${sandbox.path}${Platform.pathSeparator}report.txt',
-        );
-        await source.writeAsString('synthetic report');
+    test('generic selection copies into private cache', () async {
+      final source = File('${sandbox.path}${Platform.pathSeparator}report.txt');
+      await source.writeAsString('synthetic report');
 
-        final draft = await service.prepareGenericFile(
-          sourcePath: source.path,
-          displayName: 'report.txt',
-          mediaType: 'text/plain',
-          existingDrafts: const [],
-        );
+      final draft = await service.prepareGenericFile(
+        sourcePath: source.path,
+        displayName: 'report.txt',
+        mediaType: 'text/plain',
+        existingDrafts: const [],
+      );
 
-        expect(draft.cachedPath, isNot(source.path));
-        expect(await File(draft.cachedPath).readAsString(), 'synthetic report');
-        expect(draft.byteLength, await source.length());
-        expect(draft.kind, AttachmentDraftKind.genericFile);
-        expect(draft.mediaType, 'text/plain');
+      expect(draft.cachedPath, isNot(source.path));
+      expect(await File(draft.cachedPath).readAsString(), 'synthetic report');
+      expect(draft.byteLength, await source.length());
+      expect(draft.kind, AttachmentDraftKind.genericFile);
+      expect(draft.mediaType, 'text/plain');
 
-        final modelSource = await File(
-          'lib/core/models/attachment_draft.dart',
-        ).readAsString();
-        expect(modelSource, isNot(contains('Uint8List')));
-        expect(modelSource, isNot(contains('dataUrl')));
+      await service.removeCachedFile(draft);
+      expect(await File(draft.cachedPath).exists(), isFalse);
+    });
 
-        await service.removeCachedFile(draft);
-        expect(await File(draft.cachedPath).exists(), isFalse);
-      },
-    );
+    test('upload reads the cached file when the upload begins', () async {
+      final draft = await cachedDraft('current.txt');
+      await File(draft.cachedPath).writeAsString('updated cached payload');
+      String? submittedData;
+      await service.uploadSequential(
+        drafts: [draft],
+        upload: ({required draft, required dataUrl}) async {
+          submittedData = dataUrl;
+          return const AttachmentUploadReceipt(refText: '@file:current.txt');
+        },
+      );
+      expect(
+        submittedData,
+        'data:application/octet-stream;base64,${base64Encode(utf8.encode('updated cached payload'))}',
+      );
+    });
 
     test('accepts 40 items and rejects item 41', () async {
       final source = File('${sandbox.path}/item.txt');
@@ -374,8 +380,15 @@ void main() {
         var active = 0;
         var maxActive = 0;
         var promptSubmitCalls = 0;
+        final entered = List.generate(3, (_) => Completer<void>());
+        final release = List.generate(3, (_) => Completer<void>());
+        addTearDown(() {
+          for (final gate in release) {
+            if (!gate.isCompleted) gate.complete();
+          }
+        });
         final coordinator = AttachmentDraftSendCoordinator(service);
-        await coordinator.uploadThenSubmit(
+        final sending = coordinator.uploadThenSubmit(
           drafts: drafts,
           upload: ({required draft, required dataUrl}) async {
             active++;
@@ -385,7 +398,9 @@ void main() {
               dataUrl,
               startsWith('data:application/octet-stream;base64,'),
             );
-            await Future<void>.delayed(const Duration(milliseconds: 5));
+            final index = calls.length - 1;
+            entered[index].complete();
+            await release[index].future;
             active--;
             return AttachmentUploadReceipt(refText: '@file:${draft.name}');
           },
@@ -401,6 +416,14 @@ void main() {
           },
         );
 
+        for (var index = 0; index < drafts.length; index++) {
+          await entered[index].future;
+          expect(calls, drafts.take(index + 1).map((draft) => draft.name));
+          expect(active, 1);
+          expect(promptSubmitCalls, 0);
+          release[index].complete();
+        }
+        await sending;
         expect(calls, ['first.txt', 'third.txt', 'second.txt']);
         expect(maxActive, 1);
         expect(promptSubmitCalls, 1);
@@ -439,7 +462,10 @@ void main() {
     test('attached state is saved before ordinary cache cleanup', () async {
       final draft = await cachedDraft('ordered.txt');
       final allowSave = Completer<void>();
-      var savingAttachedState = false;
+      final savingAttachedState = Completer<void>();
+      addTearDown(() {
+        if (!allowSave.isCompleted) allowSave.complete();
+      });
 
       final sending = AttachmentDraftSendCoordinator(service).uploadThenSubmit(
         drafts: [draft],
@@ -447,16 +473,13 @@ void main() {
             const AttachmentUploadReceipt(refText: '@file:ordered.txt'),
         onChanged: (changed) async {
           if (changed.status != AttachmentDraftStatus.attached) return;
-          savingAttachedState = true;
           expect(await File(changed.cachedPath).exists(), isTrue);
+          savingAttachedState.complete();
           await allowSave.future;
         },
         submitPrompt: (_) async {},
       );
-      for (var i = 0; i < 100 && !savingAttachedState; i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-      }
-      expect(savingAttachedState, isTrue);
+      await savingAttachedState.future;
       expect(await File(draft.cachedPath).exists(), isTrue);
 
       allowSave.complete();

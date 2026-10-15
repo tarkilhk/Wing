@@ -50,16 +50,24 @@ class _PresentationHost extends ProfileHistoryFixture {
   List<Map<String, dynamic>> historyRows(String profile, String id) => rows;
 }
 
-Future<void> _historyFinished(ProfileChat chat) async {
-  final deadline = DateTime.now().add(const Duration(seconds: 3));
-  while (chat.reading.historyLoading && DateTime.now().isBefore(deadline)) {
-    await Future<void>.delayed(const Duration(milliseconds: 1));
+Future<void> _historyFinished(
+  ProfileWorkspaceController controller,
+  ProfileChat chat,
+) async {
+  if (!chat.reading.historyLoading) return;
+  final finished = Completer<void>();
+  void observe() {
+    if (!chat.reading.historyLoading && !finished.isCompleted) {
+      finished.complete();
+    }
   }
-  expect(
-    chat.reading.historyLoading,
-    isFalse,
-    reason: 'History must finish promptly',
-  );
+
+  controller.addListener(observe);
+  try {
+    await finished.future;
+  } finally {
+    controller.removeListener(observe);
+  }
 }
 
 void main() {
@@ -329,7 +337,7 @@ void main() {
       );
       expect(chat.reading.streamingMessage, isNull);
       gate.complete();
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.messages.last['id'], 2);
       expect(
@@ -362,7 +370,7 @@ void main() {
       'text': 'New answer',
       'persisted_turn': receipt(2, complete: false),
     });
-    await _historyFinished(chat);
+    await _historyFinished(controller, chat);
     expect(chat.reading.historyError, isNull);
     expect(chat.reading.historySessionId, 'new-chat');
     expect(chat.reading.messages.single['id'], 2);
@@ -397,7 +405,7 @@ void main() {
         'text': 'Repeated answer',
         'persisted_turn': receipt(3),
       });
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(
         chat.reading.messagePresentationId(chat.reading.messages.first),
         same(oldToken),
@@ -430,7 +438,7 @@ void main() {
           'final_assistant_row_id': 2,
         },
       });
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.messages.single['id'], 2);
       expect(
@@ -492,7 +500,7 @@ void main() {
         same(token),
       );
       gate.complete();
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.messages.map((row) => row['content']), [
         'Let me look.',
@@ -543,7 +551,7 @@ void main() {
           same(token),
         );
         gate.complete();
-        await _historyFinished(chat);
+        await _historyFinished(controller, chat);
         expect(chat.reading.historyError, isNull);
         expect(chat.reading.messages, hasLength(1));
         expect(chat.reading.messages.single['id'], 2);
@@ -584,7 +592,7 @@ void main() {
         chat.reading.messages.single,
       );
       gate.complete();
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.messages.single['id'], 2);
       expect(
@@ -622,7 +630,7 @@ void main() {
         same(token),
       );
       gate.complete();
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.messages.single['content'], 'Here is the answer.');
       expect(
@@ -661,7 +669,7 @@ void main() {
       same(token),
     );
     gate.complete();
-    await _historyFinished(chat);
+    await _historyFinished(controller, chat);
     expect(chat.reading.messages, hasLength(1));
     expect(chat.reading.messages.single['id'], 2);
     expect(
@@ -697,7 +705,7 @@ void main() {
         isNot(same(oldToken)),
       );
       gate.complete();
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
     },
   );
 
@@ -716,8 +724,9 @@ void main() {
         'text': 'Saved answer',
         'persisted_turn': receipt(2),
       });
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(chat.reading.historyError, isNull);
+      expect(chat.reading.messages, isNotEmpty);
       expect(chat.reading.messages.every((row) => row['id'] != 2), isTrue);
       host.rows = [
         ...host.rows,
@@ -743,7 +752,7 @@ void main() {
         final token = chat.reading.messagePresentationId(live);
         host.failHistory = true;
         emit('message.complete', {'status': status, 'text': 'Partial answer'});
-        await _historyFinished(chat);
+        await _historyFinished(controller, chat);
         expect(live, retainedLive);
         expect(
           chat.reading.messagePresentationId(chat.reading.messages.single),
@@ -783,7 +792,7 @@ void main() {
         same(token),
       );
       gate.complete();
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.messages.single['id'], 2);
       // No preceding durable boundary or receipt proves this row's identity.
@@ -809,7 +818,7 @@ void main() {
         {'id': 11, 'role': 'assistant', 'content': 'Same body'},
       ];
       emit('message.complete', {'status': 'complete', 'text': 'Same body'});
-      await _historyFinished(chat);
+      await _historyFinished(controller, chat);
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.historySessionId, 'rotated-chat');
       expect(chat.reading.messages.last['id'], 11);

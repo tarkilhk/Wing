@@ -2,6 +2,7 @@ import 'package:analyzer/dart/ast/ast.dart';
 import 'package:analyzer/dart/ast/visitor.dart';
 
 import '../cli.dart';
+import '../flutter_widget_identity.dart' show flutterNameIsLocallyBound;
 import '../model.dart';
 
 const id = 'ARCH_LOADING_FAMILY';
@@ -179,8 +180,12 @@ class _References extends RecursiveAstVisitor<void> {
           symbol == 'ChatWorkingBorder' &&
               path != desktopChatRows &&
               path != 'lib/core/widgets/chat_working_border.dart');
-  void inspect(String name, String? prefix, int offset) {
-    if (!namespace.names.contains(name)) return;
+  void inspect(AstNode node, String name, String? prefix, int offset) {
+    if (!namespace.names.contains(name) ||
+        ((node is! NamedType || node.parent is ConstructorName) &&
+            flutterNameIsLocallyBound(node, prefix ?? name))) {
+      return;
+    }
     if (forbidden(namespace.symbol(path, name, prefix: prefix))) {
       offsets.add(offset);
     }
@@ -189,14 +194,21 @@ class _References extends RecursiveAstVisitor<void> {
   @override
   void visitNamedType(NamedType node) {
     if (node.name.lexeme == 'page' &&
+        !flutterNameIsLocallyBound(
+          node,
+          node.importPrefix?.name.lexeme ?? '',
+        ) &&
         node.importPrefix != null &&
         namespace.symbol(path, node.importPrefix!.name.lexeme) ==
             'StudioLoading') {
       offsets.add(node.offset);
     }
-    if (node.parent case ConstructorName(
-      name: final name?,
-    ) when name.name == 'page') {
+    if (node.parent case ConstructorName(name: final name?)
+        when name.name == 'page' &&
+            !flutterNameIsLocallyBound(
+              node,
+              node.importPrefix?.name.lexeme ?? node.name.lexeme,
+            )) {
       if (namespace.symbol(
             path,
             node.name.lexeme,
@@ -206,7 +218,12 @@ class _References extends RecursiveAstVisitor<void> {
         offsets.add(node.offset);
       }
     }
-    inspect(node.name.lexeme, node.importPrefix?.name.lexeme, node.offset);
+    inspect(
+      node,
+      node.name.lexeme,
+      node.importPrefix?.name.lexeme,
+      node.offset,
+    );
     super.visitNamedType(node);
   }
 
@@ -220,6 +237,7 @@ class _References extends RecursiveAstVisitor<void> {
         _ => (null, null),
       };
       if (name.$1 != null &&
+          !flutterNameIsLocallyBound(node, name.$2 ?? name.$1!) &&
           namespace.symbol(path, name.$1!, prefix: name.$2) ==
               'StudioLoading') {
         offsets.add(node.offset);
@@ -233,8 +251,10 @@ class _References extends RecursiveAstVisitor<void> {
     if (node.propertyName.name == 'page') {
       final target = node.target;
       if (target is SimpleIdentifier &&
+              !flutterNameIsLocallyBound(node, target.name) &&
               namespace.symbol(path, target.name) == 'StudioLoading' ||
           target is PrefixedIdentifier &&
+              !flutterNameIsLocallyBound(node, target.prefix.name) &&
               namespace.symbol(
                     path,
                     target.identifier.name,
@@ -253,24 +273,26 @@ class _References extends RecursiveAstVisitor<void> {
       identifier: final member,
       prefix: final target,
     ) when member.name == 'page' && identical(member, node)) {
-      if (namespace.symbol(path, target.name) == 'StudioLoading') {
+      if (!flutterNameIsLocallyBound(node, target.name) &&
+          namespace.symbol(path, target.name) == 'StudioLoading') {
         offsets.add(node.parent!.offset);
       }
     }
     if (node.inDeclarationContext()) return;
     final parent = node.parent;
     if (parent is PrefixedIdentifier && identical(parent.identifier, node)) {
-      inspect(node.name, parent.prefix.name, parent.offset);
+      inspect(node, node.name, parent.prefix.name, parent.offset);
     } else if (parent is MethodInvocation &&
         identical(parent.methodName, node)) {
       final target = parent.target;
       inspect(
+        node,
         node.name,
         target is SimpleIdentifier ? target.name : null,
         parent.offset,
       );
     } else {
-      inspect(node.name, null, node.offset);
+      inspect(node, node.name, null, node.offset);
     }
     super.visitSimpleIdentifier(node);
   }

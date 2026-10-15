@@ -251,6 +251,11 @@
       "feature": "profiles",
       "library": "lib/core/models/hermes_profile.dart"
     },
+    "lib/core/models/hermes_question.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/hermes_question.dart"
+    },
     "lib/core/models/host_resources.dart": {
       "role": "domain",
       "feature": "host-resources",
@@ -495,6 +500,16 @@
       "role": "domain",
       "feature": "conversation",
       "library": "lib/core/models/transcript_notice.dart"
+    },
+    "lib/core/models/transcript_position.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/transcript_position.dart"
+    },
+    "lib/core/models/transcript_presentation.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/transcript_presentation.dart"
     },
     "lib/core/models/transcript_reader.dart": {
       "role": "domain",
@@ -1071,6 +1086,11 @@
       "feature": "conversation",
       "library": "lib/core/services/authenticated_web_socket.dart"
     },
+    "lib/core/services/backend_update_channels.dart": {
+      "role": "data",
+      "feature": "versions-updates",
+      "library": "lib/core/services/backend_update_channels.dart"
+    },
     "lib/core/services/backend_update_controller.dart": {
       "role": "application",
       "feature": "versions-updates",
@@ -1186,6 +1206,16 @@
       "feature": "conversation",
       "library": "lib/core/services/chat_runtime.dart"
     },
+    "lib/core/services/chat_runtime_questions.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/chat_runtime.dart"
+    },
+    "lib/core/services/chat_transcript_events.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/chat_transcript_events.dart"
+    },
     "lib/core/services/completion_diagnostics.dart": {
       "role": "utility",
       "feature": "performance-tooling",
@@ -1250,6 +1280,11 @@
       "role": "application",
       "feature": "connections",
       "library": "lib/core/services/connection_setup_session.dart"
+    },
+    "lib/core/services/conversation_reading_memory.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/conversation_reading_memory.dart"
     },
     "lib/core/services/dashboard_authentication.dart": {
       "role": "application",
@@ -1340,6 +1375,11 @@
       "role": "application",
       "feature": "cloud-access",
       "library": "lib/core/services/hermes_cloud.dart"
+    },
+    "lib/core/services/hermes_question_history.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/hermes_question_history.dart"
     },
     "lib/core/services/hermes_voice.dart": {
       "role": "data",
@@ -1681,6 +1721,11 @@
       "feature": "administration-skills-tools",
       "library": "lib/core/services/skill_reader_session.dart"
     },
+    "lib/core/services/subagent_timeline_session.dart": {
+      "role": "application",
+      "feature": "chat-activity",
+      "library": "lib/core/services/subagent_timeline_session.dart"
+    },
     "lib/core/services/transcript_reading.dart": {
       "role": "application",
       "feature": "conversation",
@@ -2016,6 +2061,11 @@
       "feature": "chat-activity",
       "library": "lib/core/widgets/context_ring.dart"
     },
+    "lib/core/widgets/conversation_activity.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/conversation_activity.dart"
+    },
     "lib/core/widgets/conversation_activity_status.dart": {
       "role": "view",
       "feature": "chat-activity",
@@ -2085,6 +2135,11 @@
       "role": "view",
       "feature": "administration-health",
       "library": "lib/core/widgets/health_alerts/health_alerts_scope.dart"
+    },
+    "lib/core/widgets/hermes_question_card.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/hermes_question_card.dart"
     },
     "lib/core/widgets/image_paste_menu.dart": {
       "role": "view",
@@ -2175,6 +2230,16 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/profile_goal_panel.dart"
+    },
+    "lib/core/widgets/profile_live_execution.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/profile_live_execution.dart"
+    },
+    "lib/core/widgets/profile_live_work_dock.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/profile_live_work_dock.dart"
     },
     "lib/core/widgets/profile_message.dart": {
       "role": "view",
@@ -2291,6 +2356,11 @@
       "feature": "conversation",
       "library": "lib/core/widgets/scroll_capture_viewport.dart"
     },
+    "lib/core/widgets/selection_viewport.dart": {
+      "role": "view",
+      "feature": "app-shell",
+      "library": "lib/core/widgets/selection_viewport.dart"
+    },
     "lib/core/widgets/server_connection_label.dart": {
       "role": "view",
       "feature": "connections",
@@ -2360,6 +2430,11 @@
       "role": "view",
       "feature": "ui-foundations",
       "library": "lib/core/widgets/studio_task_marker.dart"
+    },
+    "lib/core/widgets/subagent_timeline.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/subagent_timeline.dart"
     },
     "lib/core/widgets/support_wing_section.dart": {
       "role": "view",
@@ -2445,76 +2520,6 @@
       "role": "view",
       "feature": "app-shell",
       "library": "lib/main.dart"
-    },
-    "lib/core/widgets/profile_live_execution.dart": {
-      "role": "view",
-      "feature": "chat-activity",
-      "library": "lib/core/widgets/profile_live_execution.dart"
-    },
-    "lib/core/widgets/profile_live_work_dock.dart": {
-      "role": "view",
-      "feature": "chat-activity",
-      "library": "lib/core/widgets/profile_live_work_dock.dart"
-    },
-    "lib/core/services/backend_update_channels.dart": {
-      "role": "data",
-      "feature": "versions-updates",
-      "library": "lib/core/services/backend_update_channels.dart"
-    },
-    "lib/core/services/chat_transcript_events.dart": {
-      "role": "application",
-      "feature": "conversation",
-      "library": "lib/core/services/chat_transcript_events.dart"
-    },
-    "lib/core/widgets/conversation_activity.dart": {
-      "role": "view",
-      "feature": "chat-activity",
-      "library": "lib/core/widgets/conversation_activity.dart"
-    },
-    "lib/core/models/transcript_presentation.dart": {
-      "role": "domain",
-      "feature": "conversation",
-      "library": "lib/core/models/transcript_presentation.dart"
-    },
-    "lib/core/services/subagent_timeline_session.dart": {
-      "role": "application",
-      "feature": "chat-activity",
-      "library": "lib/core/services/subagent_timeline_session.dart"
-    },
-    "lib/core/widgets/subagent_timeline.dart": {
-      "role": "view",
-      "feature": "chat-activity",
-      "library": "lib/core/widgets/subagent_timeline.dart"
-    },
-    "lib/core/models/transcript_position.dart": {
-      "role": "domain",
-      "feature": "conversation",
-      "library": "lib/core/models/transcript_position.dart"
-    },
-    "lib/core/services/conversation_reading_memory.dart": {
-      "role": "application",
-      "feature": "conversation",
-      "library": "lib/core/services/conversation_reading_memory.dart"
-    },
-    "lib/core/models/hermes_question.dart": {
-      "role": "domain",
-      "feature": "conversation",
-      "library": "lib/core/models/hermes_question.dart"
-    },
-    "lib/core/services/hermes_question_history.dart": {
-      "role": "application",
-      "feature": "conversation",
-      "library": "lib/core/services/hermes_question_history.dart"
-    },
-    "lib/core/widgets/hermes_question_card.dart": {
-      "role": "view",
-      "feature": "conversation",
-      "library": "lib/core/widgets/hermes_question_card.dart"
-    },
-    "lib/core/widgets/selection_viewport.dart": {
-      "role": "view",
-      "feature": "app-shell",
-      "library": "lib/core/widgets/selection_viewport.dart"
     }
   }
 }

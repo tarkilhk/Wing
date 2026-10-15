@@ -26,10 +26,17 @@ Future<void> waitForChatDeletionCleanup(
 
 Future<void> filterChatsToProfile(WidgetTester tester, String name) async {
   final filter = find.byKey(const ValueKey('chat-filter-profile'));
-  if (filter.evaluate().isEmpty) return;
+  expect(
+    filter,
+    findsOneWidget,
+    reason: 'The requested profile filter must exist',
+  );
+  await tester.ensureVisible(filter);
+  expect(filter.hitTestable(), findsOneWidget);
   await tester.tap(filter);
   await tester.pumpAndSettle();
   final choice = find.byKey(ValueKey('chat-menu-$name'));
+  expect(choice.hitTestable(), findsOneWidget);
   await tester.tap(choice);
   await tester.pumpAndSettle();
   await tester.tap(find.byTooltip('Close filters'));

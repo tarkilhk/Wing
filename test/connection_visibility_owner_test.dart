@@ -121,7 +121,8 @@ void main() {
       expect(
         requests.every(
           (request) =>
-              request['exclude_sources'] == 'cron,tool,subagent,kanban,oneshot,bot_room',
+              request['exclude_sources'] ==
+              'cron,tool,subagent,kanban,oneshot,bot_room',
         ),
         isTrue,
       );

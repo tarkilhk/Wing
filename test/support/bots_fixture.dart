@@ -246,7 +246,10 @@ class BotsFixture {
         'next_offset': null,
       },
       'groups.state' => {
-        'room': {...room, 'latest_seq': events.length},
+        'room': {
+          ...room,
+          'latest_seq': events.isEmpty ? 0 : events.last['seq'] as int,
+        },
         'driver_status': {
           'working': false,
           'blocked': pending.isNotEmpty,
@@ -335,7 +338,7 @@ class BotsFixture {
         if (!events.any((event) => event['event_id'] == wireId)) {
           events.add({
             'room_id': params['room_id'],
-            'seq': events.length + 1,
+            'seq': (events.isEmpty ? 0 : events.last['seq'] as int) + 1,
             'event_id': wireId,
             'kind': 'message.user',
             'created_at': 1791756000.0 + events.length,

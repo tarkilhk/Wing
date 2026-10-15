@@ -71,21 +71,21 @@ void main() {
         attachments: const [],
       );
 
-  test(
-    'empty composer creates nothing; unchanged record does no platform work',
-    () async {
-      await write('target', '');
-      expect(platform.operations, isEmpty);
-      expect(preferences.getKeys(), isEmpty);
-      expect(store.revision, 0);
-      await write('target', 'First character');
-      final revision = store.revision;
-      platform.operations.clear();
-      await write('target', 'First character');
-      expect(platform.operations, isEmpty);
-      expect(store.revision, revision);
-    },
-  );
+  test('empty composer creates no stored record', () async {
+    await write('target', '');
+    expect(platform.operations, isEmpty);
+    expect(preferences.getKeys(), isEmpty);
+    expect(store.revision, 0);
+  });
+
+  test('unchanged record does no platform work', () async {
+    await write('target', 'First character');
+    final revision = store.revision;
+    platform.operations.clear();
+    await write('target', 'First character');
+    expect(platform.operations, isEmpty);
+    expect(store.revision, revision);
+  });
 
   test(
     'editing and deleting touch only one record despite unrelated large or corrupt records',

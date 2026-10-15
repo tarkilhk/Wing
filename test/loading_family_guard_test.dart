@@ -87,6 +87,27 @@ Object examples() => [LinearProgressIndicator(), CupertinoActivityIndicator(), R
     addTearDown(workspace.dispose);
     expect(loading.check(workspace.snapshot), isEmpty);
   });
+  for (final body in [
+    'Object build(Function StudioLoading) => StudioLoading();',
+    'Object build(dynamic studio) => studio.StudioLoading();',
+    'Object build(dynamic StudioLoading) => StudioLoading.page();',
+    'Object build() { Object StudioLoading() => 0; return StudioLoading(); }',
+  ]) {
+    test('accepts locally bound loading name: $body', () {
+      final workspace = FixtureWorkspace({
+        'files': {
+          loading.owner: {'role': 'presentation', 'source': declarations},
+          'lib/view.dart': {
+            'role': 'view',
+            'source':
+                "import 'package:wing/core/widgets/studio_loading.dart';\nimport 'package:wing/core/widgets/studio_loading.dart' as studio;\n$body",
+          },
+        },
+      });
+      addTearDown(workspace.dispose);
+      expect(loading.check(workspace.snapshot), isEmpty);
+    });
+  }
   test('rejects constructor aliases and tearoffs', () {
     final workspace = fixture(
       'Pulse()',

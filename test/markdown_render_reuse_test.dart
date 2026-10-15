@@ -144,7 +144,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(calls, ['new', 'new download']);
       } else {
-        original.onTapLink!('Report', '/srv/report.md', '');
+        await tester.tap(find.text('Report', findRichText: true));
         await tester.pump();
         await tester.settleMarkdown();
         expect(calls, ['new']);

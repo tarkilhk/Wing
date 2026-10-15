@@ -64,7 +64,9 @@ class _UpdateHost {
         },
         'hermes/update/check' => pendingCheck?.future ?? checkResponse,
         'hermes/update/receipt' => receiptResponse,
-        _ => pendingStatus?.future ?? statusResponse,
+        'actions/hermes-update/status' =>
+          pendingStatus?.future ?? statusResponse,
+        _ => throw StateError('Unexpected update read: $endpoint'),
       };
     },
     ownedPut: source.put,
@@ -429,63 +431,38 @@ void main() {
     expect(controller.message, isNot(contains('private backend detail')));
   });
 
-  test('correlated action status proves terminal outcomes', () async {
-    final host = _UpdateHost();
-    final controller = await _started(host);
-    addTearDown(controller.dispose);
-
-    host.statusResponse = {
-      'name': 'hermes-update',
-      'running': false,
-      'pid': 41,
-      'exit_code': 0,
-      'lines': <String>[],
-      'action_id': 'action-1',
-    };
-    host.receiptResponse = {
-      ...host.receiptResponse,
-      'receipt': {
-        ...host.receiptResponse['receipt'] as Map,
-        'outcome': 'partial',
-      },
-    };
-    await controller.refreshStatus();
-    expect(controller.phase, BackendUpdatePhase.partial);
-    expect(host.reads.last.$1, 'hermes/update/receipt');
-    expect(host.reads.last.$2, {'profile': 'work'});
-
-    host.receiptResponse = {
-      ...host.receiptResponse,
-      'receipt': {
-        ...host.receiptResponse['receipt'] as Map,
-        'outcome': 'refused',
-      },
-    };
-    await controller.refreshStatus();
-    expect(controller.phase, BackendUpdatePhase.refused);
-
-    host.statusResponse = {...host.statusResponse, 'exit_code': 1};
-    host.receiptResponse = {
-      ...host.receiptResponse,
-      'receipt': {
-        ...host.receiptResponse['receipt'] as Map,
-        'outcome': 'failed',
-      },
-    };
-    await controller.refreshStatus();
-    expect(controller.phase, BackendUpdatePhase.failed);
-
-    host.statusResponse = {...host.statusResponse, 'exit_code': 0};
-    host.receiptResponse = {
-      ...host.receiptResponse,
-      'receipt': {
-        ...host.receiptResponse['receipt'] as Map,
-        'outcome': 'success',
-      },
-    };
-    await controller.refreshStatus();
-    expect(controller.phase, BackendUpdatePhase.succeeded);
-  });
+  for (final (outcome, phase, exitCode) in [
+    ('partial', BackendUpdatePhase.partial, 0),
+    ('refused', BackendUpdatePhase.refused, 0),
+    ('failed', BackendUpdatePhase.failed, 1),
+    ('success', BackendUpdatePhase.succeeded, 0),
+  ]) {
+    test('correlated $outcome receipt proves its terminal outcome', () async {
+      final host = _UpdateHost();
+      final controller = await _started(host);
+      addTearDown(controller.dispose);
+      host.statusResponse = {
+        'name': 'hermes-update',
+        'running': false,
+        'pid': 41,
+        'exit_code': exitCode,
+        'lines': <String>[],
+        'action_id': 'action-1',
+      };
+      host.receiptResponse = {
+        ...host.receiptResponse,
+        'receipt': {
+          ...host.receiptResponse['receipt'] as Map,
+          'outcome': outcome,
+        },
+      };
+      await controller.refreshStatus();
+      expect(controller.phase, phase);
+      expect(controller.requestOutstanding, isFalse);
+      expect(host.reads.last.$1, 'hermes/update/receipt');
+      expect(host.reads.last.$2, {'profile': 'work'});
+    });
+  }
 
   test(
     'same process exit stays conservative and old receipt cannot confirm',
@@ -618,18 +595,24 @@ void main() {
     },
   );
 
-  test(
-    'malformed acknowledgement stays unknown and blocks another post',
-    () async {
-      final host = _UpdateHost()
-        ..postResponse = {
-          'name': 'hermes-update',
-          'pid': 41,
-          'action_id': 'action-1',
-        };
+  for (final (defect, acknowledgement) in <(String, Map<String, dynamic>)>[
+    (
+      'missing acceptance',
+      {'name': 'hermes-update', 'pid': 41, 'action_id': 'action-1'},
+    ),
+    (
+      'wrong action name',
+      {'ok': true, 'name': 'update', 'pid': 41, 'action_id': 'action-1'},
+    ),
+    (
+      'missing action identity',
+      {'ok': true, 'name': 'hermes-update', 'pid': 41},
+    ),
+  ]) {
+    test('$defect acknowledgement stays unknown and prevents replay', () async {
+      final host = _UpdateHost()..postResponse = acknowledgement;
       final controller = BackendUpdateController(host.gateway);
       addTearDown(controller.dispose);
-
       expect(
         await controller.startUpdate(
           approvedChannel: host.source.approved,
@@ -647,43 +630,8 @@ void main() {
         isFalse,
       );
       expect(host.posts, hasLength(1));
-
-      final wrongHost = _UpdateHost()
-        ..postResponse = {
-          'ok': true,
-          'name': 'update',
-          'pid': 41,
-          'action_id': 'action-1',
-        };
-      final wrongController = BackendUpdateController(wrongHost.gateway);
-      addTearDown(wrongController.dispose);
-      expect(
-        await wrongController.startUpdate(
-          approvedChannel: wrongHost.source.approved,
-          canDispatch: () => true,
-        ),
-        isFalse,
-      );
-      expect(wrongController.phase, BackendUpdatePhase.unknown);
-      expect(wrongController.requestOutstanding, isTrue);
-
-      final missingIdentityHost = _UpdateHost()
-        ..postResponse = {'ok': true, 'name': 'hermes-update', 'pid': 41};
-      final missingIdentityController = BackendUpdateController(
-        missingIdentityHost.gateway,
-      );
-      addTearDown(missingIdentityController.dispose);
-      expect(
-        await missingIdentityController.startUpdate(
-          approvedChannel: missingIdentityHost.source.approved,
-          canDispatch: () => true,
-        ),
-        isFalse,
-      );
-      expect(missingIdentityController.phase, BackendUpdatePhase.unknown);
-      expect(missingIdentityController.requestOutstanding, isTrue);
-    },
-  );
+    });
+  }
 
   test(
     'lost acknowledgement is unknown and is not retried automatically',

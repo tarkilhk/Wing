@@ -28,7 +28,9 @@ void main() {
               jsonEncode({
                 'jsonrpc': '2.0',
                 'id': rpc['id'],
-                'result': {'ok': true},
+                'result': rpc['method'] == 'session.list'
+                    ? {'sessions': []}
+                    : {'ok': true},
               }),
             );
           });
@@ -89,7 +91,7 @@ void main() {
       };
       await sockets.last.close();
       await interrupted.future.timeout(const Duration(seconds: 5));
-      expect(await chat.call('session.list'), {'ok': true});
+      expect(await chat.call('session.list'), {'sessions': []});
       expect(status.live, ConnectionAvailability.available);
       expect(status.phase, ServerConnectionPhase.connected);
 

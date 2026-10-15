@@ -180,6 +180,7 @@ class ProfileGateway {
     String method,
     Map<String, dynamic> params,
   ) async {
+    final generation = _connectionGeneration;
     final command = const {'command.dispatch', 'slash.exec'}.contains(method);
     final elapsed = Stopwatch()..start();
     try {
@@ -205,7 +206,10 @@ class ProfileGateway {
           (failure is TimeoutException ||
               failure is JsonRpcError && failure.reason == 'request_timeout');
       // A slow command is not evidence that its event socket is disconnected.
-      if (!commandTimedOut && isTemporaryWorkspaceFailure(failure)) {
+      if (!_closed &&
+          generation == _connectionGeneration &&
+          !commandTimedOut &&
+          isTemporaryWorkspaceFailure(failure)) {
         disconnect();
         _liveChanged(false);
         onConnectionChanged?.call(false);
@@ -221,14 +225,16 @@ class ProfileGateway {
   final ScopedOwnedPost? _ownedPut;
   final Future<void> Function() _connect;
   final void Function() _close;
-  final void Function() disconnect;
+  final void Function() _disconnect;
   final Future<ProfileDiscovery> Function() _discover;
   ServerConnectionStatus? connectionStatus;
   // Administration RPC sockets do not carry chat updates and are not recovered
   // by the workspace. Their lifetime must not determine live chat availability.
   bool reportsLiveChat = true;
+  bool _closed = false;
+  int _connectionGeneration = 0;
   void _liveChanged(bool connected) {
-    if (reportsLiveChat) {
+    if (!_closed && reportsLiveChat) {
       connectionStatus?.liveChanged(scope.profileName, connected);
     }
   }
@@ -307,7 +313,7 @@ class ProfileGateway {
        _ownedPut = ownedPut,
        _connect = connect ?? _nothing,
        _close = close ?? _noop,
-       disconnect = disconnect ?? _noop;
+       _disconnect = disconnect ?? _noop;
 
   static Future<void> _nothing() async {}
   static void _noop() {}
@@ -339,11 +345,39 @@ class ProfileGateway {
     }
     WsClient? socket;
     WsClient? openingSocket;
-    var closed = false;
     var connected = false;
     Future<void>? connecting;
     late final ProfileGateway gateway;
+    Map<String, dynamic> decodeResult(
+      String method,
+      Map<String, dynamic> envelope,
+    ) {
+      final error = envelope['error'];
+      if (error is Map) {
+        throw JsonRpcError.fromGateway(
+          method,
+          error,
+          fallbackMessage: 'Gateway request failed',
+        );
+      }
+      final result = envelope['result'];
+      if (result is! Map) throw const FormatException('Missing RPC result');
+      return Map<String, dynamic>.from(result);
+    }
+
     Future<void> open() async {
+      final openingGeneration = gateway._connectionGeneration;
+      void requireCurrent() {
+        if (gateway._closed) throw StateError('Gateway is closed');
+        if (openingGeneration != gateway._connectionGeneration) {
+          throw JsonRpcError(
+            'connect',
+            'Connection retired during profile setup',
+            reason: 'connection_closed',
+          );
+        }
+      }
+
       logConnectionDiagnostic(
         'gateway.credentials_requested',
         details: {
@@ -356,7 +390,7 @@ class ProfileGateway {
                 dashboard.gatewayCredentials,
               ) ??
               dashboard.gatewayCredentials());
-      if (closed) throw StateError('Gateway is closed');
+      requireCurrent();
       logConnectionDiagnostic(
         'gateway.credentials_ready',
         details: {
@@ -375,14 +409,25 @@ class ProfileGateway {
         },
       );
       openingSocket = candidate;
-      candidate.onStreamEvent = (event) => gateway.onEvent?.call(event);
+      candidate.onStreamEvent = (event) {
+        if (!gateway._closed &&
+            openingGeneration == gateway._connectionGeneration) {
+          gateway.onEvent?.call(event);
+        }
+      };
       candidate.onConnectionChanged = (value) {
+        if (openingGeneration != gateway._connectionGeneration ||
+            gateway._closed) {
+          return;
+        }
         if (!identical(socket, candidate) &&
             !identical(openingSocket, candidate)) {
           return;
         }
+        // The transport opening does not yet admit this profile's reads.
+        if (value) return;
         connected = value;
-        if (!value && !closed && identical(socket, candidate)) {
+        if (!value && identical(socket, candidate)) {
           gateway._liveChanged(false);
         }
         gateway.onConnectionChanged?.call(value);
@@ -390,8 +435,28 @@ class ProfileGateway {
       try {
         await candidate.connect();
         await candidate.waitForGatewayReady();
-        if (closed) throw StateError('Gateway is closed');
+        // Stock Hermes creates a fresh profile's store through its gateway
+        // owner, not through REST browsing. Complete a bounded scoped read
+        // before callers can browse that profile's sessions over HTTP.
+        final listing = decodeResult(
+          'session.list',
+          await candidate.send('session.list', {
+            'profile': scope.profileName,
+            'limit': 1,
+          }),
+        );
+        if (listing['sessions'] is! List) {
+          throw const FormatException('Missing profile session listing');
+        }
+        requireCurrent();
         socket = candidate;
+        connected = true;
+        try {
+          gateway.onConnectionChanged?.call(true);
+        } catch (_) {
+          // Observers cannot turn an admitted socket into setup failure.
+        }
+        requireCurrent();
       } catch (_) {
         candidate.close();
         rethrow;
@@ -416,7 +481,8 @@ class ProfileGateway {
                 'PATCH',
                 endpoint,
                 body: body,
-                canDispatch: () => !closed && dispatchAllowed && canDispatch(),
+                canDispatch: () =>
+                    !gateway._closed && dispatchAllowed && canDispatch(),
                 onDispatched: onDispatched,
               )
               .timeout(const Duration(seconds: 20));
@@ -438,7 +504,8 @@ class ProfileGateway {
                     )
                     .toString(),
                 body: const {},
-                canDispatch: () => !closed && dispatchAllowed && canDispatch(),
+                canDispatch: () =>
+                    !gateway._closed && dispatchAllowed && canDispatch(),
                 onDispatched: onDispatched,
               )
               .timeout(const Duration(seconds: 20));
@@ -451,7 +518,7 @@ class ProfileGateway {
           .timeout(const Duration(seconds: 30)),
       ownedPost: (endpoint, body, canDispatch, onDispatched) async {
         var dispatchAllowed = true;
-        bool active() => !closed && dispatchAllowed && canDispatch();
+        bool active() => !gateway._closed && dispatchAllowed && canDispatch();
         try {
           return await dashboard
               .apiWriteOwned(
@@ -468,7 +535,7 @@ class ProfileGateway {
       },
       ownedPut: (endpoint, body, canDispatch, onDispatched) async {
         var dispatchAllowed = true;
-        bool active() => !closed && dispatchAllowed && canDispatch();
+        bool active() => !gateway._closed && dispatchAllowed && canDispatch();
         try {
           return await dashboard
               .apiWriteOwned(
@@ -502,17 +569,7 @@ class ProfileGateway {
             _ => const Duration(seconds: 30),
           },
         );
-        final error = envelope['error'];
-        if (error is Map) {
-          throw JsonRpcError.fromGateway(
-            method,
-            error,
-            fallbackMessage: 'Gateway request failed',
-          );
-        }
-        final result = envelope['result'];
-        if (result is! Map) throw const FormatException('Missing RPC result');
-        return Map<String, dynamic>.from(result);
+        return decodeResult(method, envelope);
       },
       discover: () => ProfilesRepository(dashboard.apiGet).discover(),
       connect: () =>
@@ -530,12 +587,14 @@ class ProfileGateway {
                 })()),
       disconnect: () {
         final previous = socket;
+        final opening = openingSocket;
         socket = null;
+        openingSocket = null;
         connected = false;
+        opening?.close();
         previous?.close();
       },
       close: () {
-        closed = true;
         openingSocket?.close();
         socket?.close();
         if (ownsDashboard) dashboard.close();
@@ -545,8 +604,18 @@ class ProfileGateway {
   }
 
   Future<void> connect() async {
+    if (_closed) throw StateError('Gateway is closed');
+    final generation = _connectionGeneration;
     try {
       await _connect();
+      if (_closed) throw StateError('Gateway is closed');
+      if (generation != _connectionGeneration) {
+        throw JsonRpcError(
+          'connect',
+          'Connection retired during profile setup',
+          reason: 'connection_closed',
+        );
+      }
       _liveChanged(true);
     } catch (failure, stack) {
       logConnectionDiagnostic(
@@ -559,12 +628,20 @@ class ProfileGateway {
         error: failure,
         stackTrace: stack,
       );
-      _liveChanged(false);
+      if (generation == _connectionGeneration) _liveChanged(false);
       rethrow;
     }
   }
 
+  void disconnect() {
+    _connectionGeneration++;
+    _disconnect();
+  }
+
   void close() {
+    if (_closed) return;
+    _closed = true;
+    _connectionGeneration++;
     modelCatalog.close();
     _close();
     if (reportsLiveChat) connectionStatus?.forgetLive(scope.profileName);

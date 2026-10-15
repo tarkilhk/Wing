@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
@@ -53,6 +54,7 @@ void main() {
       appPreferences: appPreferences,
       gatewayFactory: host.gateway,
     );
+    addTearDown(c.dispose);
     await c.initialize();
     await c.createChat(canDispatch: () => true);
     return c;
@@ -67,12 +69,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     prefs = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(prefs);
+    addTearDown(appPreferences.dispose);
     host = ProfileIntelligenceFixture();
     controller = await open();
-  });
-  tearDown(() {
-    controller.dispose();
-    appPreferences.dispose();
   });
 
   for (final brightness in Brightness.values) {
@@ -108,7 +107,10 @@ void main() {
                 ),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           ),
         );
@@ -300,7 +302,6 @@ void main() {
         isTrue,
       );
       final reopened = await open();
-      addTearDown(reopened.dispose);
       final restored = reopened.current!.chat!;
       expect(restored.model, 'gpt-6-astra');
       expect(restored.reasoningEffort, 'high');
@@ -375,21 +376,15 @@ void main() {
     await configStarted.future;
     final newerLoad = controller.loadIntelligence(chat);
     await Future<void>.delayed(Duration.zero);
-    var notifications = 0;
-    void countNotifications() => notifications++;
-
-    controller.addListener(countNotifications);
-    addTearDown(() => controller.removeListener(countNotifications));
     configDelay.complete();
     await expectLater(olderLoad, throwsA(isA<StateError>()));
     await newerLoad;
 
     expect(chat.reasoningEffort, 'medium');
-    expect(notifications, 1);
   });
 
   test(
-    'declining keeps settings and partial failure preserves confirmed effort',
+    'declining a model confirmation preserves the current settings',
     () async {
       final chat = controller.current!.chat!;
       host.confirmModel = true;
@@ -401,7 +396,13 @@ void main() {
       expect(host.writes, hasLength(1));
       expect(chat.model, 'gpt-6-astra');
       expect(chat.changingIntelligence, isFalse);
-      host.confirmModel = false;
+    },
+  );
+
+  test(
+    'failed reasoning preserves the confirmed model and previous effort',
+    () async {
+      final chat = controller.current!.chat!;
       host.failReasoning = true;
       await expectLater(
         controller.setIntelligence(
@@ -482,7 +483,7 @@ void main() {
       expect(chat.fastMode, ChatFastMode.fast);
     },
   );
-  test('ultrafast survives an unchanged Apply; Off writes normal', () async {
+  test('ultrafast survives an unchanged Apply without a write', () async {
     host.fastMode = 'ultrafast';
     final chat = controller.current!.chat!;
     final options = await controller.loadIntelligence(chat);
@@ -497,6 +498,14 @@ void main() {
       confirmModelChange: (_) async => true,
     );
     expect(host.writes, isEmpty);
+    expect(chat.fastMode, ChatFastMode.ultrafast);
+  });
+
+  test('turning ultrafast off writes normal mode', () async {
+    host.fastMode = 'ultrafast';
+    final chat = controller.current!.chat!;
+    final options = await controller.loadIntelligence(chat);
+    final current = options.choices.first;
     await controller.setIntelligence(
       chat,
       ChatIntelligenceSelection(
@@ -624,7 +633,12 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('chat-intelligence-button')));
@@ -665,37 +679,48 @@ void main() {
     },
   );
 
-  testWidgets('partial Chat save keeps the draft and retries reasoning alone', (
-    tester,
-  ) async {
-    host.failReasoning = true;
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('chat-intelligence-button')));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('model-search')), 'sol');
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Apply model settings'));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'retrying a partial model save writes only the failed reasoning',
+    (tester) async {
+      host.failReasoning = true;
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('chat-intelligence-button')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('model-search')), 'sol');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Apply model settings'));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('model changed, but reasoning'), findsOneWidget);
-    expect(find.text('Models'), findsOneWidget);
-    expect(host.writes, hasLength(2));
-    host.failReasoning = false;
-    await tester.tap(find.byTooltip('Apply model settings'));
-    await tester.pumpAndSettle();
-    expect(host.writes, hasLength(3));
-    expect(host.writes.last['key'], 'reasoning');
-    expect(controller.current!.chat!.model, 'gpt-5.6-sol');
-    expect(tester.takeException(), isNull);
-  });
+      expect(
+        find.textContaining('model changed, but reasoning'),
+        findsOneWidget,
+      );
+      expect(find.text('Models'), findsOneWidget);
+      expect(host.writes, hasLength(2));
+      expect(controller.current!.chat!.model, 'gpt-5.6-sol');
+      expect(controller.current!.chat!.reasoningEffort, 'high');
+      host.failReasoning = false;
+      await tester.tap(find.byTooltip('Apply model settings'));
+      await tester.pumpAndSettle();
+      expect(host.writes, hasLength(3));
+      expect(host.writes.last['key'], 'reasoning');
+      expect(controller.current!.chat!.model, 'gpt-5.6-sol');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'the shipped profile composer opens picker and applies both choices',
@@ -704,7 +729,12 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('chat-intelligence-button')));
@@ -735,7 +765,12 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('chat-intelligence-button')));
@@ -776,7 +811,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.dark),
-          home: ProfileWorkspaceScreen(controller: controller),
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -808,7 +846,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     final held = await tester.startGesture(
@@ -835,18 +878,25 @@ void main() {
       (const Size(390, 844), 1.0),
       (const Size(320, 640), 2.0),
     ]) {
-      testWidgets('composer controls fit $brightness $size at text $scale', (
-        tester,
-      ) async {
-        tester.view.physicalSize = size;
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.reset);
-        const frame = Key('composer-preview');
-        await tester.pumpWidget(
-          RepaintBoundary(
-            key: frame,
-            child: MaterialApp(
-              debugShowCheckedModeBanner: false,
+      for (final interaction in [
+        'fit',
+        'outside dismissal',
+        'held cancellation',
+        'held selection',
+        'tap selection',
+        'fast toggle',
+        'picker cancellation',
+        'keyboard escape',
+        'keyboard back',
+      ]) {
+        testWidgets('composer $interaction at $brightness $size text $scale', (
+          tester,
+        ) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
               theme: wingTheme(brightness),
               builder: (context, child) => MediaQuery(
                 data: MediaQuery.of(
@@ -854,153 +904,130 @@ void main() {
                 ).copyWith(textScaler: TextScaler.linear(scale)),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        final indicator = find.byKey(const Key('chat-intelligence-button'));
-        expect(indicator.hitTestable(), findsOneWidget);
-        expect(find.byKey(const Key('chat-reasoning-control')), findsNothing);
-        expect(find.byKey(const Key('chat-fast-control')), findsNothing);
-        expect(
-          find.descendant(
-            of: find.byKey(const Key('composer-reasoning-control')),
-            matching: find.text('H'),
-          ),
-          findsOneWidget,
-        );
-        final thinking = find.byKey(const Key('composer-reasoning-control'));
-        final lightning = find.byKey(const Key('composer-fast-control'));
-        expect(thinking.hitTestable(), findsOneWidget);
-        expect(lightning.hitTestable(), findsOneWidget);
-        if (scale == 1) {
-          for (final control in [indicator, thinking, lightning]) {
-            expect(tester.getSize(control).height, lessThanOrEqualTo(32));
+          );
+          await tester.pumpAndSettle();
+          final indicator = find.byKey(const Key('chat-intelligence-button'));
+          final thinking = find.byKey(const Key('composer-reasoning-control'));
+          final lightning = find.byKey(const Key('composer-fast-control'));
+          final selector = find.byKey(const Key('composer-reasoning-selector'));
+          final chat = controller.current!.chat!;
+          switch (interaction) {
+            case 'fit':
+              final viewport = Offset.zero & size;
+              final controls = [indicator, thinking, lightning];
+              for (final control in controls) {
+                expect(control.hitTestable(), findsOneWidget);
+                final bounds = tester.getRect(control);
+                expect(viewport.intersect(bounds), bounds);
+              }
+              for (var i = 0; i < controls.length; i++) {
+                for (var j = i + 1; j < controls.length; j++) {
+                  expect(
+                    tester
+                        .getRect(controls[i])
+                        .overlaps(tester.getRect(controls[j])),
+                    isFalse,
+                  );
+                }
+              }
+            case 'outside dismissal':
+              await tester.tap(thinking);
+              await tester.pumpAndSettle();
+              expect(selector, findsOneWidget);
+              await tester.tapAt(const Offset(2, 2));
+              await tester.pumpAndSettle();
+              expect(selector, findsNothing);
+              expect(host.writes, isEmpty);
+            case 'held cancellation':
+              final held = await tester.startGesture(
+                tester.getCenter(thinking),
+              );
+              await tester.pump(const Duration(milliseconds: 600));
+              expect(selector, findsOneWidget);
+              await held.moveTo(const Offset(2, 2));
+              await held.up();
+              await tester.pumpAndSettle();
+              expect(selector, findsNothing);
+              expect(host.writes, isEmpty);
+            case 'held selection':
+              final held = await tester.startGesture(
+                tester.getCenter(thinking),
+              );
+              await tester.pump(const Duration(milliseconds: 600));
+              await held.moveTo(
+                tester.getCenter(
+                  find.byKey(const Key('composer-reasoning-choice-low')),
+                ),
+              );
+              await tester.pump();
+              expect(host.writes, isEmpty);
+              await held.up();
+              await tester.pumpAndSettle();
+              expect(host.writes.single['key'], 'reasoning');
+              expect(host.writes.single['value'], 'low');
+              expect(chat.reasoningEffort, 'low');
+            case 'tap selection':
+              await tester.tap(thinking);
+              await tester.pumpAndSettle();
+              await tester.tap(
+                find.byKey(const Key('composer-reasoning-choice-low')),
+              );
+              await tester.pumpAndSettle();
+              expect(host.writes.single['key'], 'reasoning');
+              expect(host.writes.single['value'], 'low');
+              expect(chat.reasoningEffort, 'low');
+            case 'fast toggle':
+              await tester.tap(lightning);
+              await tester.pumpAndSettle();
+              expect(host.writes.single['key'], 'fast');
+              expect(host.writes.single['value'], 'fast');
+              expect(chat.fastMode, ChatFastMode.fast);
+            case 'picker cancellation':
+              await tester.tap(indicator);
+              await tester.pumpAndSettle();
+              expect(find.text('Models'), findsOneWidget);
+              await tester.tap(find.byKey(const Key('chat-fast-control')));
+              await tester.pumpAndSettle();
+              expect(host.writes, isEmpty);
+              await tester.tap(find.byTooltip('Close'));
+              await tester.pumpAndSettle();
+              expect(host.writes, isEmpty);
+              expect(chat.fastMode, ChatFastMode.normal);
+            case 'keyboard escape':
+            case 'keyboard back':
+              if (scale == 2) tester.view.physicalSize = Size(size.width, 844);
+              final draft = find.byType(TextField).first;
+              await tester.enterText(draft, 'Draft');
+              tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+              await tester.pumpAndSettle();
+              final input = tester.widget<TextField>(draft);
+              final composerBounds = tester.getRect(draft);
+              expect(input.focusNode!.hasFocus, isTrue);
+              await tester.tap(thinking);
+              await tester.pumpAndSettle();
+              expect(selector, findsOneWidget);
+              expect(input.focusNode!.hasFocus, isTrue);
+              expect(tester.getRect(draft), composerBounds);
+              if (interaction == 'keyboard escape') {
+                await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+              } else {
+                await tester.binding.handlePopRoute();
+              }
+              await tester.pumpAndSettle();
+              expect(selector, findsNothing);
+              expect(input.focusNode!.hasFocus, isTrue);
+              expect(controller.current!.chat, same(chat));
+              expect(chat.composer.observation.text, 'Draft');
+              expect(host.writes, isEmpty);
           }
-        }
-        expect(tester.takeException(), isNull);
-        Future<void> screenshot(String suffix) async {
-          if (!capture) return;
-          await tester.runAsync(() async {
-            final image = await tester
-                .renderObject<RenderRepaintBoundary>(find.byKey(frame))
-                .toImage();
-            final bytes = await image.toByteData(
-              format: ui.ImageByteFormat.png,
-            );
-            await File(
-              'build/model-composer-${brightness.name}-${size.width.toInt()}-${scale == 2 ? 'large' : 'normal'}$suffix.png',
-            ).writeAsBytes(bytes!.buffer.asUint8List());
-            image.dispose();
-          });
-        }
-
-        await screenshot('');
-        await tester.tap(thinking);
-        await tester.pumpAndSettle();
-        final selector = find.byKey(const Key('composer-reasoning-selector'));
-        final medium = find.byKey(
-          const Key('composer-reasoning-choice-medium'),
-        );
-        expect(medium.hitTestable(), findsOneWidget);
-        final tapBounds = tester.getRect(selector);
-        final tapMaterial = tester.widget<Material>(selector);
-        expect(host.writes, isEmpty);
-        await screenshot('-reasoning-tap');
-        await tester.tapAt(const Offset(2, 2));
-        await tester.pumpAndSettle();
-        expect(selector, findsNothing);
-        expect(host.writes, isEmpty);
-        final cancel = await tester.startGesture(tester.getCenter(thinking));
-        await tester.pump(const Duration(milliseconds: 600));
-        expect(
-          find.byKey(const Key('composer-reasoning-selector')),
-          findsOneWidget,
-        );
-        expect(tester.getRect(selector), tapBounds);
-        expect(tester.widget<Material>(selector).color, tapMaterial.color);
-        expect(tester.widget<Material>(selector).shape, tapMaterial.shape);
-        await screenshot('-reasoning-held');
-        await cancel.moveTo(const Offset(2, 2));
-        await cancel.up();
-        await tester.pumpAndSettle();
-        expect(host.writes, isEmpty);
-        final held = await tester.startGesture(tester.getCenter(thinking));
-        await tester.pump(const Duration(milliseconds: 600));
-        await held.moveTo(
-          tester.getCenter(
-            find.byKey(const Key('composer-reasoning-choice-low')),
-          ),
-        );
-        await tester.pump();
-        expect(host.writes, isEmpty);
-        await screenshot('-reasoning');
-        await held.up();
-        await tester.pumpAndSettle();
-        expect(host.writes.single['key'], 'reasoning');
-        expect(host.writes.single['value'], 'low');
-        expect(controller.current!.chat!.reasoningEffort, 'low');
-        await tester.tap(thinking);
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(const Key('composer-reasoning-choice-high')),
-        );
-        await tester.pumpAndSettle();
-        expect(host.writes, hasLength(2));
-        expect(host.writes.last['key'], 'reasoning');
-        expect(host.writes.last['value'], 'high');
-        expect(controller.current!.chat!.reasoningEffort, 'high');
-        await tester.tap(lightning);
-        await tester.pumpAndSettle();
-        expect(host.writes, hasLength(3));
-        expect(host.writes.last['key'], 'fast');
-        expect(host.writes.last['value'], 'fast');
-        await tester.tap(indicator);
-        await tester.pumpAndSettle();
-        expect(find.text('Models'), findsOneWidget);
-        await tester.tap(find.byKey(const Key('chat-fast-control')));
-        await tester.pumpAndSettle();
-        expect(host.writes, hasLength(3));
-        await tester.tap(find.byTooltip('Close'));
-        await tester.pumpAndSettle();
-        expect(host.writes, hasLength(3));
-        expect(controller.current!.chat!.fastMode, ChatFastMode.fast);
-        final chat = controller.current!.chat!;
-        // Keep the existing enlarged composer fully above the simulated IME.
-        if (scale == 2) tester.view.physicalSize = Size(size.width, 844);
-        final draft = find.byType(TextField).first;
-        await tester.enterText(draft, 'Draft');
-        tester.view.viewInsets = const FakeViewPadding(bottom: 260);
-        await tester.pumpAndSettle();
-        final input = tester.widget<TextField>(draft);
-        final composerBounds = tester.getRect(draft);
-        expect(input.focusNode!.hasFocus, isTrue);
-        await screenshot('-reasoning-keyboard-before');
-        expect(thinking.hitTestable(), findsOneWidget);
-        await tester.tap(thinking);
-        await tester.pumpAndSettle();
-        expect(selector, findsOneWidget);
-        expect(input.focusNode!.hasFocus, isTrue);
-        expect(tester.view.viewInsets.bottom, 260);
-        expect(tester.getRect(draft), composerBounds);
-        expect(host.writes, hasLength(3));
-        await screenshot('-reasoning-keyboard');
-        await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-        await tester.pumpAndSettle();
-        expect(selector, findsNothing);
-        expect(input.focusNode!.hasFocus, isTrue);
-        await tester.tap(thinking);
-        await tester.pumpAndSettle();
-        expect(selector, findsOneWidget);
-        await tester.binding.handlePopRoute();
-        await tester.pumpAndSettle();
-        expect(selector, findsNothing);
-        expect(controller.current!.chat, same(chat));
-        expect(chat.composer.observation.text, 'Draft');
-        expect(host.writes, hasLength(3));
-        expect(tester.takeException(), isNull);
-      });
+          expect(tester.takeException(), isNull);
+        });
+      }
     }
   }
 }

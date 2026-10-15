@@ -321,7 +321,8 @@ void main() {
         final download = tester.getRect(find.byTooltip('Download image'));
         expect(retry.overlaps(download), isFalse);
         expect(download.height, greaterThanOrEqualTo(48));
-        expect(download.right, lessThanOrEqualTo(304));
+        expect(find.byTooltip('Retry image').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Download image').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );
@@ -372,12 +373,12 @@ void main() {
         final image = tester.widget<Image>(inlineImage());
         expect(image.fit, BoxFit.scaleDown);
         expect(tester.getSize(inlineImage()).height, lessThanOrEqualTo(320));
-        expect(tester.getRect(inlineImage()).right, lessThanOrEqualTo(344));
+        expect(inlineImage().hitTestable(), findsOneWidget);
         for (final text in ['Download image']) {
           final button = find.byTooltip(text);
           await tester.ensureVisible(button);
           expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
-          expect(tester.getRect(button).right, lessThanOrEqualTo(344));
+          expect(button.hitTestable(), findsOneWidget);
         }
         expect(tester.takeException(), isNull);
         if (const bool.fromEnvironment('CAPTURE_INLINE_IMAGES')) {

@@ -206,11 +206,13 @@ void main() {
     fixture.profiles.add(profile);
     var profileReads = 0, catalogReads = 0, assetReads = 0;
     final heldProfiles = Completer<void>();
+    final profilesStarted = Completer<void>();
     fixture.readHook = (_, method, _) async {
       if (method == 'groups.list') catalogReads++;
       if (method == 'profiles.get_asset') assetReads++;
       if (method != 'profiles.list') return null;
       profileReads++;
+      if (!profilesStarted.isCompleted) profilesStarted.complete();
       await heldProfiles.future;
       return {
         'profiles': fixture.profiles,
@@ -225,7 +227,7 @@ void main() {
     addTearDown(owner.dispose);
     owner.setVisible(true);
     final initial = owner.refresh();
-    await Future<void>.delayed(Duration.zero);
+    await profilesStarted.future;
     expect(profileReads, 1, reason: 'Catalog joins the held status roster');
     heldProfiles.complete();
     await initial;
@@ -272,11 +274,15 @@ void main() {
     () async {
       final fixture = BotsFixture();
       final held = Completer<void>();
+      final started = Completer<void>();
       var reads = 0;
       fixture.readHook = (_, method, _) async {
         if (method != 'profiles.list') return null;
         final profiles = jsonDecode(jsonEncode(fixture.profiles));
-        if (++reads == 1) await held.future;
+        if (++reads == 1) {
+          started.complete();
+          await held.future;
+        }
         return {
           'profiles': profiles,
           'bot_mode_protocol': true,
@@ -284,7 +290,7 @@ void main() {
         };
       };
       final old = fixture.repository.bots();
-      await Future<void>.delayed(Duration.zero);
+      await started.future;
       fixture.profiles.add(BotsFixture.profile('newbot', 'New bot'));
       final fresh = await fixture.repository.bots();
       expect(fresh.map((bot) => bot.profile.name), contains('newbot'));
@@ -305,6 +311,7 @@ void main() {
         final fixture = BotsFixture();
         _append(fixture, 1);
         final administration = AdministrationFixture();
+        addTearDown(administration.server.close);
         var collision = false;
         administration.rpcOverride = (method, params) async {
           if (method == 'session.active_list') {

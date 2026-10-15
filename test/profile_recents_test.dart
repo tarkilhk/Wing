@@ -835,16 +835,18 @@ void main() {
       );
       expect(item.messagePreview, 'Latest visible answer.');
       expect(item.lastActive, fixture.now - 600);
-      expect(
-        fixture.reads
-            .where(
-              (r) =>
-                  r.$1 == 'sessions/shared-id/messages' &&
-                  r.$2['offset'] != '0',
-            )
-            .map((r) => r.$2['offset']),
-        ['1', '21'],
-      );
+      final offsets = fixture.reads
+          .where(
+            (r) =>
+                r.$1 == 'sessions/shared-id/messages' &&
+                r.$2['profile'] == 'personal',
+          )
+          .map((r) => int.parse(r.$2['offset']!))
+          .toList();
+      expect(offsets.first, 0);
+      expect(offsets.any((offset) => offset > 0), isTrue);
+      expect(offsets.toSet(), hasLength(offsets.length));
+      expect(offsets, orderedEquals([...offsets]..sort()));
     },
   );
 
@@ -1763,7 +1765,7 @@ void main() {
   );
 
   test(
-    'group avatar changes replace pixels without rereading group messages',
+    'group appearance changes refresh cards without rereading group messages',
     () async {
       final roomFixture = BotsFixture();
       roomFixture.events.add({

@@ -2,6 +2,7 @@ import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
@@ -164,7 +165,10 @@ void main() {
             ).copyWith(textScaler: TextScaler.linear(scale)),
             child: child!,
           ),
-          home: ProfileWorkspaceScreen(controller: controller),
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => []),
+          ),
         ),
       ),
     );

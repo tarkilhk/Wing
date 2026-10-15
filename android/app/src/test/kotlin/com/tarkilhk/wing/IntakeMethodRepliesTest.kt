@@ -34,14 +34,10 @@ class IntakeMethodRepliesTest {
         val outcomes = mutableListOf<String>()
         val reply = owner.register { outcomes.add("cancelled") }
         assertTrue(reply.admit())
-        var queuedContent = true
-
-        queuedContent = false // The intake actor durably removed this exact item.
         reply.complete { outcomes.add("acknowledged") }
         owner.retire()
         main.drain()
 
-        assertFalse(queuedContent)
         assertEquals(listOf("acknowledged"), outcomes)
     }
 

@@ -13,63 +13,69 @@ import 'support/administration_fixture.dart';
 import 'support/administration_operation_fixture.dart';
 
 void main() {
-  testWidgets(
-    'pending section and operation use accessible progress without captions',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: AdminHealthSectionHeading(
-              title: 'Profile',
-              checkedAt: null,
-              checking: true,
-              incomplete: false,
-              refresh: const StudioLoading(label: 'Refreshing profile status'),
-            ),
+  testWidgets('pending section uses accessible progress without a caption', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AdminHealthSectionHeading(
+            title: 'Profile',
+            checkedAt: null,
+            checking: true,
+            incomplete: false,
+            refresh: const StudioLoading(label: 'Refreshing profile status'),
           ),
         ),
-      );
-      expect(find.text('Checking…'), findsNothing);
-      expect(
-        find.bySemanticsLabel('Refreshing profile status'),
-        findsOneWidget,
-      );
-      final fixture = AdministrationFixture();
-      addTearDown(fixture.server.close);
-      final gate = Completer<Map<String, dynamic>>();
-      fixture.override = (_, _, _, _) => gate.future;
-      final operation = AdministrationOperationSession(
-        fixture.server,
-        const AdministrationAction('doctor', 7),
-      );
-      addTearDown(operation.dispose);
-      final reading = operation.refresh();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: AdminActionPage(
-            operation: operation,
-            title: 'Doctor',
-            scope: 'Test host',
-          ),
+      ),
+    );
+    expect(find.text('Checking…'), findsNothing);
+    expect(find.bySemanticsLabel('Refreshing profile status'), findsOneWidget);
+  });
+
+  testWidgets('pending operation exposes progress until its read completes', (
+    tester,
+  ) async {
+    final fixture = AdministrationFixture();
+    addTearDown(fixture.server.close);
+    final gate = Completer<Map<String, dynamic>>();
+    addTearDown(() {
+      if (!gate.isCompleted) {
+        gate.complete({'running': false, 'lines': <String>[]});
+      }
+    });
+    fixture.override = (_, _, _, _) => gate.future;
+    final operation = AdministrationOperationSession(
+      fixture.server,
+      const AdministrationAction('doctor', 7),
+    );
+    addTearDown(operation.dispose);
+    final reading = operation.refresh();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AdminActionPage(
+          operation: operation,
+          title: 'Doctor',
+          scope: 'Test host',
         ),
-      );
-      await tester.pump();
-      expect(find.text('Checking operation…'), findsNothing);
-      expect(find.byType(StudioLoading), findsOneWidget);
-      expect(find.bySemanticsLabel('Checking operation'), findsOneWidget);
-      gate.complete({
-        'name': 'doctor',
-        'pid': 7,
-        'running': false,
-        'exit_code': 0,
-        'lines': <String>[],
-      });
-      await reading;
-      await tester.pumpAndSettle();
-      expect(find.byType(StudioLoading), findsNothing);
-      expect(tester.takeException(), isNull);
-    },
-  );
+      ),
+    );
+    await tester.pump();
+    expect(find.text('Checking operation…'), findsNothing);
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.bySemanticsLabel('Checking operation'), findsOneWidget);
+    gate.complete({
+      'name': 'doctor',
+      'pid': 7,
+      'running': false,
+      'exit_code': 0,
+      'lines': <String>[],
+    });
+    await reading;
+    await tester.pumpAndSettle();
+    expect(find.byType(StudioLoading), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final kind in AdministrationDiagnostic.values) {
     for (final replacementPid in [null, 8]) {
@@ -303,6 +309,8 @@ void main() {
       (tester) async {
         final fixture = AdministrationFixture();
         final health = AdministrationHealth(fixture.server);
+        addTearDown(fixture.server.close);
+        addTearDown(health.dispose);
         var failRead = false;
         fixture.override = (method, path, query, body) async => switch (path) {
           'profiles/active' => {'current': 'default'},
@@ -401,7 +409,6 @@ void main() {
         expect(fixture.requests.where((r) => r.$1 == 'POST'), hasLength(1));
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
-        health.dispose();
       },
     );
   }

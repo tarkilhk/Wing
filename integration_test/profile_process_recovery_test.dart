@@ -15,7 +15,7 @@ import 'package:wing/core/services/profile_connection_identity.dart';
 
 /// Opt-in, one real prompt per RECOVERY_RUN_ID. Install with adb install -r.
 /// After READY_FOR_PROCESS_STOP, force-stop and relaunch the SAME APK. After
-/// RESTORED_INPUT, answer PROCESS_RECOVERY_QA through the app's Reply dialog.
+/// RESTORED_INPUT, answer PROCESS_RECOVERY_QA through the inline input card.
 /// The saved target prevents a restart from ever submitting the prompt again.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized()
@@ -132,19 +132,19 @@ void main() {
       expect(restored.runtime.questions, isNotNull);
       await controller.openSession(target);
       await tester.pumpAndSettle();
-      expect(find.text('Reply'), findsOneWidget);
+      expect(find.byKey(const Key('clarify-other-field')), findsOneWidget);
       expect(find.text('What is the recovery marker?'), findsOneWidget);
       debugPrint(
-        '[recovery-qa] RESTORED_INPUT: answer PROCESS_RECOVERY_QA through the Reply dialog.',
+        '[recovery-qa] RESTORED_INPUT: answer PROCESS_RECOVERY_QA through the inline input card.',
       );
       if (autoAnswer) {
-        await tester.tap(find.text('Reply'));
-        await tester.pumpAndSettle();
         await tester.enterText(
-          find.widgetWithText(TextField, 'Answer'),
+          find.byKey(const Key('clarify-other-field')),
           'PROCESS_RECOVERY_QA',
         );
-        await tester.tap(find.text('Continue'));
+        final confirm = find.byTooltip('Confirm answer and continue');
+        await tester.ensureVisible(confirm);
+        await tester.tap(confirm);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
       }

@@ -251,107 +251,107 @@ void main() {
     }
   });
 
-  testWidgets('five-profile bar scrolls and exposes named selection', (
-    tester,
-  ) async {
-    SharedPreferences.setMockInitialValues({});
-    final owner = AppPreferences(await SharedPreferences.getInstance());
-    addTearDown(owner.dispose);
-    ProfileColorsSession createColors() => ProfileColorsSession(
-      preferences: owner,
-      connectionIdentity: 'connection-a',
-    );
-    final semantics = tester.ensureSemantics();
-    String? selected;
-    final opened = <String>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: wingTheme(Brightness.dark),
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.topLeft,
-            child: SizedBox(
-              width: 144,
-              child: StatefulBuilder(
-                builder: (context, setState) => ChatProfileBar(
-                  onOpenBotChat: opened.add,
-                  createColors: createColors,
-                  profiles: [
-                    for (var i = 0; i < 12; i++)
-                      HermesProfile(
-                        name: 'profile-${i.toString().padLeft(2, '0')}',
+  testWidgets(
+    'scrolling profile choices preserves selection when opening Bot chat',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final owner = AppPreferences(await SharedPreferences.getInstance());
+      addTearDown(owner.dispose);
+      ProfileColorsSession createColors() => ProfileColorsSession(
+        preferences: owner,
+        connectionIdentity: 'connection-a',
+      );
+      final semantics = tester.ensureSemantics();
+      String? selected;
+      final opened = <String>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topLeft,
+              child: SizedBox(
+                width: 144,
+                child: StatefulBuilder(
+                  builder: (context, setState) => ChatProfileBar(
+                    onOpenBotChat: opened.add,
+                    createColors: createColors,
+                    profiles: [
+                      for (var i = 0; i < 12; i++)
+                        HermesProfile(
+                          name: 'profile-${i.toString().padLeft(2, '0')}',
+                        ),
+                      const HermesProfile(name: 'aaa'),
+                      const HermesProfile(
+                        name: 'default',
+                        displayName: 'Zebra',
+                        isDefault: true,
                       ),
-                    const HermesProfile(name: 'aaa'),
-                    const HermesProfile(
-                      name: 'default',
-                      displayName: 'Zebra',
-                      isDefault: true,
-                    ),
-                  ],
-                  selectedProfiles: {if (selected != null) selected!},
-                  onSelected: (name) => setState(() => selected = name),
+                    ],
+                    selectedProfiles: {if (selected != null) selected!},
+                    onSelected: (name) => setState(() => selected = name),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    final bar = find.byKey(const ValueKey('chat-profile-scroll'));
-    final last = find.byKey(const ValueKey('chat-profile-profile-11'));
-    expect(tester.getSize(bar), const Size(120, 48));
-    expect(
-      tester.getTopLeft(find.byKey(const ValueKey('chat-profile-default'))).dx,
-      lessThan(
-        tester.getTopLeft(find.byKey(const ValueKey('chat-profile-aaa'))).dx,
-      ),
-    );
-    expect(
-      find.byKey(const ValueKey('chat-profile-profile-02')).hitTestable(),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('chat-profile-profile-03')).hitTestable(),
-      findsNothing,
-    );
-    expect(last.hitTestable(), findsNothing);
-    await tester.drag(bar, const Offset(-600, 0));
-    await tester.pumpAndSettle();
-    await tester.tap(last);
-    await tester.pumpAndSettle();
-    expect(selected, 'profile-11');
-    expect(
-      tester.getSemantics(find.bySemanticsLabel('profile-11')),
-      matchesSemantics(
-        label: 'profile-11',
-        hint: 'Clear profile filter. Long press to open Bot chat',
-        isButton: true,
-        isSelected: true,
-        hasSelectedState: true,
-        hasTapAction: true,
-        hasLongPressAction: true,
-      ),
-    );
-    await tester.longPress(last);
-    await tester.pumpAndSettle();
-    expect(opened, ['profile-11']);
-    expect(selected, 'profile-11');
-    await tester.drag(bar, const Offset(600, 0));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const ValueKey('chat-profile-profile-00')).hitTestable(),
-      findsOneWidget,
-    );
-    expect(tester.getSize(bar), const Size(120, 48));
-    final home = find.byKey(const ValueKey('chat-profile-default'));
-    expect(
-      find.descendant(of: home, matching: find.byIcon(Icons.home_outlined)),
-      findsOneWidget,
-    );
-    await tester.longPress(home);
-    await tester.pumpAndSettle();
-    expect(opened, ['profile-11', 'default']);
-    expect(selected, 'profile-11');
-    semantics.dispose();
-  });
+      );
+      final bar = find.byKey(const ValueKey('chat-profile-scroll'));
+      final last = find.byKey(const ValueKey('chat-profile-profile-11'));
+      final barBounds = tester.getRect(bar);
+      expect(barBounds.height, greaterThanOrEqualTo(48));
+      expect(
+        tester
+            .getTopLeft(find.byKey(const ValueKey('chat-profile-default')))
+            .dx,
+        lessThan(
+          tester.getTopLeft(find.byKey(const ValueKey('chat-profile-aaa'))).dx,
+        ),
+      );
+      expect(
+        find.byKey(const ValueKey('chat-profile-default')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(last.hitTestable(), findsNothing);
+      await tester.drag(bar, const Offset(-600, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(last);
+      await tester.pumpAndSettle();
+      expect(selected, 'profile-11');
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('profile-11')),
+        matchesSemantics(
+          label: 'profile-11',
+          hint: 'Clear profile filter. Long press to open Bot chat',
+          isButton: true,
+          isSelected: true,
+          hasSelectedState: true,
+          hasTapAction: true,
+          hasLongPressAction: true,
+        ),
+      );
+      await tester.longPress(last);
+      await tester.pumpAndSettle();
+      expect(opened, ['profile-11']);
+      expect(selected, 'profile-11');
+      await tester.drag(bar, const Offset(600, 0));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('chat-profile-profile-00')).hitTestable(),
+        findsOneWidget,
+      );
+      expect(tester.getRect(bar), barBounds);
+      final home = find.byKey(const ValueKey('chat-profile-default'));
+      expect(
+        find.descendant(of: home, matching: find.byIcon(Icons.home_outlined)),
+        findsOneWidget,
+      );
+      await tester.longPress(home);
+      await tester.pumpAndSettle();
+      expect(opened, ['profile-11', 'default']);
+      expect(selected, 'profile-11');
+      semantics.dispose();
+    },
+  );
 }

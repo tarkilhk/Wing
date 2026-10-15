@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'dart:async';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/profile_supervision_session.dart';
@@ -264,9 +265,7 @@ void main() {
     );
   });
 
-  testWidgets('confirms one-based removal and clearing all criteria', (
-    tester,
-  ) async {
+  testWidgets('confirms one-based criterion removal', (tester) async {
     await showPanel(tester);
     await tester.ensureVisible(find.byTooltip('Remove criterion 2'));
     await tester.pumpAndSettle();
@@ -290,7 +289,10 @@ void main() {
     );
     expect(remove.$2['args'], {'index': 2});
     expect(find.text('Verify'), findsNothing);
+  });
 
+  testWidgets('confirms clearing all criteria', (tester) async {
+    await showPanel(tester);
     await tester.ensureVisible(find.byTooltip('Clear criteria'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Clear criteria').last);
@@ -308,7 +310,7 @@ void main() {
     expect(clear.$2['args'], isEmpty);
   });
 
-  testWidgets('does not remove or clear criteria changed during confirmation', (
+  testWidgets('does not remove a criterion changed during confirmation', (
     tester,
   ) async {
     await showPanel(tester);
@@ -335,7 +337,12 @@ void main() {
     );
     await tester.tap(find.byTooltip('Close criteria notice'));
     await tester.pumpAndSettle();
+  });
 
+  testWidgets('does not clear criteria changed during confirmation', (
+    tester,
+  ) async {
+    await showPanel(tester);
     await tester.ensureVisible(find.byTooltip('Clear criteria'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Clear criteria').last);
@@ -420,7 +427,12 @@ void main() {
   ) async {
     await supervision.refreshWork();
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Goal'), findsNothing);

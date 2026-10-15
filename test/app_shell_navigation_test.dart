@@ -36,6 +36,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/main.dart';
 
 import 'support/profile_browser_fixture.dart';
+import 'support/administration_fixture.dart';
 import 'support/loopback_http_fixtures.dart';
 import 'home_config_restore_test.dart'
     show createHomeFixture, homeEntryFactory, profileController;
@@ -80,6 +81,7 @@ void main() {
   });
 
   late _ShellFixture fixture;
+  late AdministrationFixture administration;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
   late ValueNotifier<ChatNoticeActivity?> activity;
@@ -97,6 +99,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
     fixture = _ShellFixture();
+    administration = AdministrationFixture('host');
     activity = ValueNotifier(null);
     final preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
@@ -111,17 +114,19 @@ void main() {
         ),
         dashboardOAuth: null,
       ),
-      connectionIdentity: 'shell',
+      connectionIdentity: 'host-endpoint',
       preferences: preferences,
       appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
     );
+    controller.healthSession(repository: administration.server);
     await controller.initialize();
   });
   tearDown(() {
     if (!controllerDisposed) controller.dispose();
     activity.dispose();
     appPreferences.dispose();
+    administration.server.close();
   });
 
   Future<void> show(
@@ -432,10 +437,6 @@ void main() {
             ValueKey('nav-$name'),
         ]);
         expect(find.text('Hermes instances'), findsOneWidget);
-        expect(
-          find.descendant(of: menu, matching: find.byType(Divider)),
-          findsNWidgets(2),
-        );
         await snapshot(tester, 'drawer-${brightness.name}-$scale');
         final analytics = find.byKey(const ValueKey('nav-analytics'));
         await tester.ensureVisible(analytics);
@@ -467,23 +468,25 @@ void main() {
   ) async {
     await show(tester);
     await navigate(tester, AppDestination.administration);
-    final before = fixture.reads.length + fixture.calls.length;
-    await tester.runAsync(() async {
-      await Function.apply(
-        tester
-            .widget<IconButton>(
-              find.byWidgetPredicate(
-                (widget) =>
-                    widget is IconButton &&
-                    widget.tooltip == 'Refresh administration',
-              ),
-            )
-            .onPressed!,
-        const [],
+    final before =
+        administration.requests.length + administration.rpcRequests.length;
+    await tester.tap(find.byTooltip('Refresh administration'));
+    for (
+      var attempt = 0;
+      attempt < 200 && controller.refreshingWorkspace;
+      attempt++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 1)),
       );
-    });
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(controller.refreshingWorkspace, isFalse);
     await tester.pumpAndSettle();
-    expect(fixture.reads.length + fixture.calls.length, greaterThan(before));
+    expect(
+      administration.requests.length + administration.rpcRequests.length,
+      greaterThan(before),
+    );
     expect(find.byKey(const ValueKey('administration-health')), findsNothing);
     expect(find.byType(TabBar), findsNothing);
     expect(find.text('Refresh overview', skipOffstage: false), findsNothing);

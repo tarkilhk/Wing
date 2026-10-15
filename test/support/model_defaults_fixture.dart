@@ -104,6 +104,9 @@ class ModelDefaultsFixture extends AdministrationFixture {
     Map<String, String> query,
     Map<String, dynamic>? body,
   ) async {
+    if (method != (path == 'model/set' ? 'POST' : 'GET')) {
+      throw StateError('Unexpected helper request $method $path');
+    }
     if (path == 'profiles') {
       if (membership != null) {
         if (!membershipEntered.isCompleted) membershipEntered.complete();

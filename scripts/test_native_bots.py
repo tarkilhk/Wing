@@ -15,6 +15,20 @@ STAGE = "code_cache/wing-bots-stage.json"
 ACK = "code_cache/wing-bots-ack"
 
 
+def require_completed_cases(records, name=None):
+    expected = {
+        f'{theme}-{size}-complete'
+        for theme in ('dark', 'light')
+        for size in ('normal', 'large')
+        if name is None or re.search(name, f'Android Bots {theme}-{size}')
+    }
+    completed = [r['name'] for r in records if r['name'].endswith('-complete')]
+    if not expected or set(completed) != expected or len(completed) != len(expected):
+        raise RuntimeError(
+            f'Native Bots acceptance incomplete: expected {sorted(expected)}, got {completed}')
+    return completed
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", required=True)
@@ -154,8 +168,8 @@ def main():
                 print(log.read_text()[-10000:], flush=True)
                 raise RuntimeError("Native Bots test failed: " + str(log))
         process = None
+        receipt["completed_cases"] = require_completed_cases(records, args.name)
         receipt["result"] = "passed"
-        receipt["completed_cases"] = [r["name"] for r in records if r["name"].endswith("complete")]
         print(log.read_text()[-1800:], flush=True)
     finally:
         if process is not None and process.poll() is None:

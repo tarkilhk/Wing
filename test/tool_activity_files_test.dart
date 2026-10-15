@@ -80,7 +80,8 @@ void main() {
             body: SingleChildScrollView(
               child: ToolActivityDetailsView(
                 call: completed,
-                onOpenResource: (_) async {
+                onOpenResource: (resource) async {
+                  expect(resource.path, '/work/actual.txt');
                   opened = true;
                 },
                 onShareResource: (resource) async {
@@ -97,6 +98,9 @@ void main() {
       await tester.tap(find.byTooltip('Share file'));
       await tester.pump();
       expect(shared, isTrue);
+      await tester.tap(find.byTooltip('Preview file'));
+      await tester.pump();
+      expect(opened, isTrue);
     });
 
     test(
@@ -190,21 +194,24 @@ void main() {
           'Next offset: 24',
         ]),
       );
-      final empty = project(
-        'read_file',
-        {'path': '/work/empty.txt'},
-        {
-          'content': '',
-          'file_size': 0,
-          'total_lines': 0,
-          'hint': 'File is empty (0 bytes).',
-        },
-      );
-      expect(empty.response.first.text, '');
-      expect(empty.response.first.copyable, isFalse);
-      expect(empty.response.last.text, 'File is empty (0 bytes).');
     },
   );
+
+  test('empty file receipt is deliberate and not copyable', () {
+    final empty = project(
+      'read_file',
+      {'path': '/work/empty.txt'},
+      {
+        'content': '',
+        'file_size': 0,
+        'total_lines': 0,
+        'hint': 'File is empty (0 bytes).',
+      },
+    );
+    expect(empty.response.first.text, '');
+    expect(empty.response.first.copyable, isFalse);
+    expect(empty.response.last.text, 'File is empty (0 bytes).');
+  });
 
   test(
     'read omissions, no-content stubs and explicit refusals remain distinct',
@@ -232,21 +239,24 @@ void main() {
             .every((b) => !b.copyable),
         isTrue,
       );
-      final unchanged = project(
-        'read_file',
-        {'path': '/work/file.txt'},
-        {
-          'status': 'unchanged',
-          'content_returned': false,
-          'dedup': true,
-          'message': 'Reuse the earlier receipt.',
-        },
-      );
-      expect(unchanged.receiptStatus, 'Unchanged');
-      expect(unchanged.response.single.copyable, isFalse);
-      expect(unchanged.metadata, ['Unchanged; no content returned']);
     },
   );
+
+  test('unchanged read receipt does not invent returned content', () {
+    final unchanged = project(
+      'read_file',
+      {'path': '/work/file.txt'},
+      {
+        'status': 'unchanged',
+        'content_returned': false,
+        'dedup': true,
+        'message': 'Reuse the earlier receipt.',
+      },
+    );
+    expect(unchanged.receiptStatus, 'Unchanged');
+    expect(unchanged.response.single.copyable, isFalse);
+    expect(unchanged.metadata, ['Unchanged; no content returned']);
+  });
 
   test('failed reads and special files have no current-file actions', () {
     final failed = project(
@@ -263,6 +273,9 @@ void main() {
     expect(failed.resourceTarget, isNull);
     expect(failed.metadata, isEmpty);
     expect(failed.receiptState, ToolReceiptState.error);
+  });
+
+  test('special file refusal has no current-file action', () {
     final special = project(
       'read_file',
       {'path': '/work/input.pipe'},
@@ -292,6 +305,9 @@ void main() {
     expect(written.request.single.copyable, isTrue);
     expect(written.metadata, ['Content hash verified']);
     expect(written.response, isEmpty);
+  });
+
+  test('empty write does not invent verification', () {
     final unknownVerification = project(
       'write_file',
       {'path': '/work/file.txt', 'content': ''},
@@ -300,19 +316,25 @@ void main() {
     expect(unknownVerification.metadata, ['Wrote an empty file']);
     expect(unknownVerification.resourceTarget, '/work/file.txt');
     expect(unknownVerification.request.single.copyable, isFalse);
-    final refusal = project(
-      'write_file',
-      {'path': '/work/file.txt', 'content': 'requested'},
-      {
-        'bytes_written': 0,
-        'stale_write_blocked': true,
-        'error': 'The file was NOT modified.',
-      },
-    );
-    expect(refusal.request.single.text, 'requested');
-    expect(refusal.resourceTarget, isNull);
-    expect(refusal.receiptState, ToolReceiptState.error);
   });
+
+  test(
+    'refused write retains requested source without a current-file action',
+    () {
+      final refusal = project(
+        'write_file',
+        {'path': '/work/file.txt', 'content': 'requested'},
+        {
+          'bytes_written': 0,
+          'stale_write_blocked': true,
+          'error': 'The file was NOT modified.',
+        },
+      );
+      expect(refusal.request.single.text, 'requested');
+      expect(refusal.resourceTarget, isNull);
+      expect(refusal.receiptState, ToolReceiptState.error);
+    },
+  );
 
   test('patch successful receipt admits the actual surviving destination', () {
     final changed = project(
@@ -325,6 +347,9 @@ void main() {
       },
     );
     expect(changed.resourceTarget, '/work/actual.py');
+  });
+
+  test('deleted patch destination has no current-file action', () {
     final deleted = project(
       'patch',
       {'path': '/work/actual.py'},
@@ -335,12 +360,18 @@ void main() {
     );
     expect(deleted.resourceTarget, isNull);
     expect(deleted.response.single.resourceTarget, isNull);
+  });
+
+  test('failed patch has no current-file action', () {
     final failed = project(
       'patch',
       {'path': '/work/actual.py'},
       {'success': false, 'error': 'No change was applied.'},
     );
     expect(failed.resourceTarget, isNull);
+  });
+
+  test('created then deleted patch file has no current-file action', () {
     final createdThenDeleted = project(
       'patch',
       {'mode': 'patch', 'patch': 'Requested patch'},
@@ -513,31 +544,34 @@ void main() {
         '/work/app.py\n/work/directory',
       );
       expect(files.response.every((b) => b.resourceTarget == null), isTrue);
-      final counts = project(
-        'search_files',
-        {'pattern': 'name', 'output_mode': 'count'},
-        {
-          'total_count': 5,
-          'counts': {'/work/a.py': 2, '/work/b.py': 3},
-        },
-      );
-      expect(counts.response.map((b) => b.facts.single), [
-        'Reported matches: 2',
-        'Reported matches: 3',
-      ]);
-      expect(
-        counts.response.every((b) => b.text.isEmpty && !b.copyable),
-        isTrue,
-      );
-      final failed = project(
-        'search_files',
-        {'pattern': '['},
-        {'total_count': 0, 'error': 'Invalid regex'},
-      );
-      expect(failed.metadata, isEmpty);
-      expect(failed.response.single.label, 'Error');
     },
   );
+
+  test('count search reports counts without inventing content', () {
+    final counts = project(
+      'search_files',
+      {'pattern': 'name', 'output_mode': 'count'},
+      {
+        'total_count': 5,
+        'counts': {'/work/a.py': 2, '/work/b.py': 3},
+      },
+    );
+    expect(counts.response.map((b) => b.facts.single), [
+      'Reported matches: 2',
+      'Reported matches: 3',
+    ]);
+    expect(counts.response.every((b) => b.text.isEmpty && !b.copyable), isTrue);
+  });
+
+  test('failed search does not present reported match counts', () {
+    final failed = project(
+      'search_files',
+      {'pattern': '['},
+      {'total_count': 0, 'error': 'Invalid regex'},
+    );
+    expect(failed.metadata, isEmpty);
+    expect(failed.response.single.label, 'Error');
+  });
 
   test('unknown bookkeeping never gains generic main-card blocks', () {
     final read = project(

@@ -6,6 +6,10 @@ import '../tools/architecture/dart_sdk.dart';
 import '../tools/architecture/rules/required_quality_gates.dart';
 
 const qaCommand = "python3 -m unittest discover -s tools/qa -p 'test_*.py' -v";
+const fixtureDependencyCommand =
+    'python3 -m pip install -r tools/fake_gateway/requirements.txt';
+const fixtureTransportCommand =
+    'python3 -m unittest tools.fake_gateway.test_fixture_boundaries -v';
 const sourceCommand = 'python3 scripts/check_commit_linters.py --dart-only';
 const boundSourceCommand =
     '$sourceCommand --baseline-reference "build/architecture-baseline-reference.json"';
@@ -28,6 +32,7 @@ const notificationBoundaryCommand =
 const notificationFixtureCommand =
     'python3 tools/architecture/native_notification/prove_boundary.py';
 const notificationDeviceCommand = 'python3 tools/qa/run_notification_gate.py';
+const androidJourneyCommand = 'python3 scripts/test_journeys.py';
 const declarationBoundaryCommand =
     'python3 tools/architecture/native_notification/retired_declaration.py';
 const declarationFixtureCommand =
@@ -38,6 +43,7 @@ const allBranchPushTriggers = '''on:
       - '**'
 ''';
 const nativeCommands = [
+  androidJourneyCommand,
   notificationBoundaryCommand,
   notificationFixtureCommand,
   declarationBoundaryCommand,
@@ -58,6 +64,7 @@ const fixtureCommands = [
   'dart run tools/architecture/tests/retired_answer_versions_namespace_test.dart',
 ];
 final independentCommands = [
+  fixtureTransportCommand,
   notificationDeviceCommand,
   ...fixtureCommands,
   'python3 tools/architecture/rules/authored_census.py',
@@ -108,6 +115,44 @@ void main() {
   test('normal mandatory QA and architecture gates are accepted', () {
     expect(checkRequiredQualityGates(root), isEmpty);
   });
+
+  test('transport fixture tests require their dependency setup first', () {
+    final file = File('${root.path}/.github/workflows/pr-quality.yml');
+    const setup =
+        '      - name: Fixture dependencies\n'
+        '        run: $fixtureDependencyCommand\n';
+    final original = file.readAsStringSync();
+    expect(original, contains(setup));
+    file.writeAsStringSync(original.replaceFirst(setup, '') + setup);
+    expect(
+      checkRequiredQualityGates(root),
+      contains(contains('transport-fixture')),
+    );
+  });
+
+  for (final workflow in ['pr-quality.yml', 'release.yml']) {
+    for (final replacement in [
+      'echo Android journeys skipped',
+      '$androidJourneyCommand || true',
+      'echo "$androidJourneyCommand"',
+    ]) {
+      test(
+        '$workflow rejects substituted Android journey gate: $replacement',
+        () async {
+          final file = File('${root.path}/.github/workflows/$workflow');
+          file.writeAsStringSync(
+            file.readAsStringSync().replaceFirst(
+              'run: $androidJourneyCommand',
+              'run: $replacement',
+            ),
+          );
+          final result = await runCli();
+          expect(result.exitCode, 1);
+          expect(result.stderr, contains('android-journeys'));
+        },
+      );
+    }
+  }
 
   test(
     'real notification shade gate cannot be omitted or soft-failed',
@@ -698,6 +743,8 @@ jobs:
           $qa
       - name: Source contracts
         run: ${item.$1 == 'pr-quality.yml' ? boundSourceCommand : sourceCommand}
+      - name: Fixture dependencies
+        run: $fixtureDependencyCommand
 ${independentCommands.where((command) => item.$1 == 'release.yml' || !fixtureCommands.contains(command) || command.contains('workspace_search_owner_test.dart')).map((command) => '      - name: Independent production guard\n        run: $command').join('\n')}
       - name: Host tests
         ${item.$1 == 'pr-quality.yml' ? 'env:\n          TEST_BASE_REF: $testBaseRef' : '# exhaustive release'}

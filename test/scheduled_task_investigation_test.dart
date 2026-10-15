@@ -51,6 +51,7 @@ class _Fixture {
     final prefs = await SharedPreferences.getInstance();
     tasks.jobs['morning']!['last_error'] = _error;
     final stock = AdministrationFixture();
+    addTearDown(stock.server.close);
     tasks.admin.override = (method, path, query, body) =>
         path.startsWith('cron/') || path == 'platforms'
         ? tasks.send(method, path, query, body)
@@ -178,7 +179,9 @@ class _Fixture {
 
   void dispose() {
     workspace.dispose();
+    workspace.appPreferences.dispose();
     controller.dispose();
+    tasks.admin.server.close();
   }
 }
 
@@ -311,7 +314,7 @@ void main() {
       !preparing(tester);
 
   testWidgets(
-    'Ask enters the destination immediately, targets its profile and clears project',
+    'Ask enters the destination while creation is held, targets its profile and clears project',
     (tester) async {
       await fixture.workspace.switchProfile('work');
       await fixture.workspace.selectProject(
@@ -321,6 +324,8 @@ void main() {
       await pump(tester);
       expect(find.byType(AdminAskHermesButton), findsOneWidget);
       await tester.tap(find.text('Ask personal'));
+      // Let the departing MaterialPageRoute finish its reverse transition.
+      // Backend creation remains held; it cannot make navigation pass.
       await tester.pumpAndSettle();
       expect(find.byType(AdminScheduledTaskDetailPage), findsNothing);
       expect(find.text('New chat'), findsOneWidget);
@@ -555,6 +560,7 @@ void main() {
       MaterialApp(theme: wingTheme(Brightness.dark), home: fixture.page()),
     );
     await tester.pumpAndSettle();
+    expect(find.text('Morning briefing'), findsOneWidget);
     expect(find.text('Ask personal'), findsNothing);
     expect(find.byTooltip('Copy task error'), findsNothing);
     await tester.pumpWidget(const SizedBox());

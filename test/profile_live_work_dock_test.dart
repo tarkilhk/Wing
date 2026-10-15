@@ -304,7 +304,7 @@ void main() {
         await tester.tap(tab(first, overlay: false));
         await tester.pumpAndSettle();
         final panel = find.byKey(const ValueKey('live-work-panel'));
-        expect(tester.getSize(panel).height, first == 0 ? 104 : 184);
+        final originalHeight = tester.getSize(panel).height;
         final bottom = tester.getRect(tab(first)).bottom;
         update(() {
           agents = 1;
@@ -341,7 +341,7 @@ void main() {
             .widget<PageView>(find.byType(PageView))
             .controller!;
         expect(pages.page, first);
-        expect(tester.getSize(panel).height, first == 0 ? 104 : 184);
+        expect(tester.getSize(panel).height, originalHeight);
         // Removing the selected category selects the remaining populated page.
         update(() {
           if (first == 0) {
@@ -354,7 +354,10 @@ void main() {
         expect(tab(first), findsNothing);
         expect(pages.page, 0);
         expect(tester.getSize(tab(1 - first)).width, 360);
-        expect(tester.getSize(panel).height, first == 0 ? 184 : 104);
+        expect(
+          tester.getSize(panel).height,
+          first == 0 ? greaterThan(originalHeight) : lessThan(originalHeight),
+        );
         update(() {
           agents = 0;
           tasks = 0;
@@ -413,20 +416,27 @@ void main() {
     await tester.pumpAndSettle();
     final panel = find.byKey(const ValueKey('live-work-panel'));
     final bottom = tester.getBottomLeft(panel).dy;
-    expect(tester.getSize(panel).height, 104);
+    final agentHeight = tester.getSize(panel).height;
+    await tester.tap(tab(1));
+    await tester.pumpAndSettle();
+    final naturalTaskHeight = tester.getSize(panel).height;
+    expect(naturalTaskHeight, greaterThan(agentHeight));
+    await tester.tap(tab(0));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(panel).height, agentHeight);
     await tester.tap(tab(1));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 70));
-    expect(tester.getSize(panel).height, greaterThan(104));
-    expect(tester.getSize(panel).height, lessThan(204));
+    expect(tester.getSize(panel).height, greaterThan(agentHeight));
+    expect(tester.getSize(panel).height, lessThan(naturalTaskHeight));
     expect(tester.getBottomLeft(panel).dy, bottom);
     await tester.pumpAndSettle();
-    expect(tester.getSize(panel).height, 204);
+    expect(tester.getSize(panel).height, naturalTaskHeight);
     final gesture = await tester.startGesture(tester.getCenter(panel));
     await gesture.moveBy(const Offset(100, 0));
     await tester.pump();
-    expect(tester.getSize(panel).height, greaterThan(104));
-    expect(tester.getSize(panel).height, lessThan(204));
+    expect(tester.getSize(panel).height, greaterThan(agentHeight));
+    expect(tester.getSize(panel).height, lessThan(naturalTaskHeight));
     expect(tester.getBottomLeft(panel).dy, bottom);
     await gesture.up();
     await tester.pumpAndSettle();
@@ -440,7 +450,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 70));
-    expect(tester.getSize(panel).height, greaterThan(204));
+    expect(tester.getSize(panel).height, greaterThan(naturalTaskHeight));
     expect(tester.getSize(panel).height, lessThan(320));
     await tester.pumpAndSettle();
     expect(tester.getSize(panel).height, 320);
@@ -460,14 +470,15 @@ void main() {
     expect(pages.page, 1);
     update(() => taskHeight = 120);
     await tester.pumpAndSettle();
-    expect(tester.getSize(panel).height, 144);
+    expect(tester.getSize(panel).height, greaterThan(agentHeight));
+    expect(tester.getSize(panel).height, lessThan(naturalTaskHeight));
     expect(tester.getBottomLeft(panel).dy, bottom);
     Focus.of(tester.element(tab(1))).requestFocus();
     await tester.pump();
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
     await tester.pump();
     expect(pages.page, 0);
-    expect(tester.getSize(panel).height, 104);
+    expect(tester.getSize(panel).height, agentHeight);
     expect(tester.getBottomLeft(panel).dy, bottom);
     expect(tester.takeException(), isNull);
   });

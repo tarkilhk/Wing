@@ -48,6 +48,17 @@ void main() {
               advertised.complete();
               return;
             }
+            if (method == 'session.list') {
+              expect(params, {'profile': 'a', 'limit': 1});
+              socket.add(
+                jsonEncode({
+                  'jsonrpc': '2.0',
+                  'id': frame['id'],
+                  'result': {'sessions': []},
+                }),
+              );
+              return;
+            }
             replies.add(frame);
             // Upstream contracts/prompt_voice.py: neither reply is session-scoped.
             final allowed = method == 'clarify.lock'

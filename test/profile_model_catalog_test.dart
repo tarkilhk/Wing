@@ -25,14 +25,18 @@ void main() {
   );
   test('closing during public rate enrichment fences publication', () async {
     final held = Completer<ModelsDevPrices>();
+    final pricingEntered = Completer<void>();
     final owner = ProfileModelCatalog(
       scope: scope,
       read: ({required refresh, required explicitOnly}) async =>
           payload('example'),
-      apiPricing: ({refresh = false}) => held.future,
+      apiPricing: ({refresh = false}) {
+        pricingEntered.complete();
+        return held.future;
+      },
     );
     final pending = expectLater(owner.load(), throwsStateError);
-    await Future<void>.delayed(Duration.zero);
+    await pricingEntered.future;
     owner.close();
     held.complete(ModelsDevPrices({}));
     await pending;
@@ -43,6 +47,7 @@ void main() {
     'refresh supersedes old rate enrichment as well as backend reads',
     () async {
       final held = <Completer<ModelsDevPrices>>[];
+      final entered = [Completer<void>(), Completer<void>()];
       final owner = ProfileModelCatalog(
         scope: scope,
         read: ({required refresh, required explicitOnly}) async =>
@@ -50,13 +55,14 @@ void main() {
         apiPricing: ({refresh = false}) {
           final next = Completer<ModelsDevPrices>();
           held.add(next);
+          entered[held.length - 1].complete();
           return next.future;
         },
       );
       final old = expectLater(owner.load(), throwsStateError);
-      await Future<void>.delayed(Duration.zero);
+      await entered[0].future;
       final fresh = owner.load(refresh: true);
-      await Future<void>.delayed(Duration.zero);
+      await entered[1].future;
       final rates = ModelsDevPrices.fromJson({
         'openai': {
           'models': {

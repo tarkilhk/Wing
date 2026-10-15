@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Native smoke test for notification_revamp_device.dart, isolated emulator only."""
+# Optimization would remove the verdict assertions below.
+if not __debug__:
+    raise RuntimeError("Native acceptance requires Python assertions; remove -O/PYTHONOPTIMIZE")
+
 import argparse
 import json
 import os
@@ -13,6 +17,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 PACKAGE = 'com.tarkilhk.wing.notificationqa'
+LOCAL_PORT = 18766
 SERIAL = 'emulator-5556'
 _fixture_http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -23,7 +28,7 @@ def adb(*args):
 
 
 def state(path='/', data=None):
-    request = urllib.request.Request('http://127.0.0.1:18766' + path,
+    request = urllib.request.Request(f'http://127.0.0.1:{LOCAL_PORT}' + path,
         data=None if data is None else json.dumps(data).encode(),
         headers={'Content-Type': 'application/json'})
     return json.load(_fixture_http.open(request, timeout=5))
@@ -47,6 +52,74 @@ def nodes():
     if 'dumped to:' not in captured:
         raise ValueError('Android UI hierarchy is unavailable; discard the previous capture')
     return list(ET.fromstring(adb('shell', 'cat', '/sdcard/wing-notification-ui.xml')).iter('node'))
+
+
+def notification_card(shown, title):
+    """Identify one current System UI conversation card, never adjacent text."""
+    cards = []
+    for node in shown:
+        if node.get('resource-id') != 'com.android.systemui:id/expandableNotificationRow':
+            continue
+        children = list(node.iter('node'))
+        if (any(child.get('resource-id') == 'android:id/app_name_text'
+                and child.get('text') == 'Wing Dev' for child in children)
+                and any(child.get('resource-id') in {'android:id/title', 'android:id/conversation_text'}
+                        and child.get('text') == title for child in children)):
+            cards.append(node)
+    assert len(cards) <= 1, f'More than one native notification for {title!r}'
+    return cards[0] if cards else None
+
+
+def notification_text_matches(card, required=(), forbidden=()):
+    # Include accessibility labels: a private preview must not leak there either.
+    text = ' '.join(' '.join(node.get(field, '').split())
+                    for node in card.iter('node') for field in ('text', 'content-desc'))
+    return (all(re.search(r'(?<!\w)' + re.escape(value) + r'(?!\w)', text)
+                for value in required)
+            and not any(value.casefold() in text.casefold() for value in forbidden))
+
+
+def tap_notification_node(node):
+    bounds = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
+    assert len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1], \
+        'Native notification target has no reachable bounds'
+    adb('shell', 'input', 'tap', str((bounds[0] + bounds[2]) // 2),
+        str((bounds[1] + bounds[3]) // 2))
+
+
+def shown_notification(title, *, expanded, required=(), forbidden=()):
+    """Observe the requested collapsed/expanded card through real Android controls."""
+    shade(expand=False)
+    def located():
+        current = notification_card(nodes(), title)
+        return [current] if current is not None else None
+
+    card = until(located, f'Native notification for {title!r} is not visible')[0]
+
+    def expansion_control(current):
+        controls = [node for node in current.iter('node')
+                    if node.get('resource-id') == 'android:id/expand_button']
+        assert len(controls) == 1, 'Notification has no unique expansion control'
+        assert controls[0].get('enabled') == 'true', 'Notification expansion is disabled'
+        return controls[0]
+
+    expected = 'Collapse' if expanded else 'Expand'
+    control = expansion_control(card)
+    if control.get('content-desc') != expected:
+        assert control.get('content-desc') == ('Expand' if expanded else 'Collapse'), \
+            'Notification expansion state is unknown'
+        tap_notification_node(control)
+
+    def rendered():
+        current = notification_card(nodes(), title)
+        if current is None:
+            return None
+        if expansion_control(current).get('content-desc') != expected:
+            return None
+        return [current] if notification_text_matches(current, required, forbidden) else None
+
+    return until(rendered, f'{title!r} did not show the required '
+                 f'{"expanded" if expanded else "collapsed"} notification content')[0]
 
 
 def tap(resource=None, text=None):
@@ -292,7 +365,6 @@ def check_group_approval_rendering(output):
 
 def reset_fixture():
     assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
-    adb('forward', 'tcp:18766', 'tcp:18766')
     adb('shell', 'pm', 'clear', PACKAGE)
     adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
     # This journey assumes background monitoring was enabled during onboarding.
@@ -339,6 +411,18 @@ def check_monitoring_taps(output):
     print('PASS: monitoring taps open the single chat/group or Recents for multiple chats', flush=True)
 
 
+def wait_for_approval_choices():
+    labels = ('Approve once', 'Approve for session', 'Always approve', 'Reject')
+
+    def visible_choices():
+        shown = nodes()
+        return all(any(label in (node.get('text'), node.get('content-desc'))
+                       and node.get('enabled') == 'true'
+                       for node in shown) for label in labels)
+
+    until(visible_choices, 'Review did not expose all enabled approval choices')
+
+
 def run(output, tap_only=False):
     reset_fixture()
     # Keep the production work lease alive while its loopback QA control
@@ -374,9 +458,10 @@ def run(output, tap_only=False):
     print('PASS: failed submission retains notification and request', flush=True)
     state('/fail', {'enabled': False})
     tap(text='Review')
-    until(lambda: any('Always allow' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Review did not expose approval choices')
-    assert any('Allow for session' in (n.get('text'), n.get('content-desc')) for n in nodes())
-    assert len(state()['decisions']) == 2, 'Review submitted a decision'
+    wait_for_approval_choices()
+    reviewed = state()
+    assert len(reviewed['decisions']) == 2, 'Review submitted a decision'
+    assert reviewed['pending'][0]['request_id'] == 'qa-2', 'Review changed the pending owner'
     screenshot(output / 'approval-review-choices.png')
     print('PASS: Review opens the owning request with Session/Always choices without submitting', flush=True)
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
@@ -449,6 +534,7 @@ def check_direct_actions(output):
     print('PASS: Once and Deny complete without another confirmation', flush=True)
     long_command = 'echo ' + 'long-command-argument-' * 50
     state('/approval', {'command': long_command})
+    pending_request = state()['pending'][0]['request_id']
     before = len(state()['decisions'])
     for night in ('no', 'yes'):
         for scale in ('1.0', '2.0'):
@@ -460,8 +546,10 @@ def check_direct_actions(output):
             assert notification_actions(shown) == {'review', 'deny'}
             screenshot(output / f"truncated-{'dark' if night == 'yes' else 'light'}-{scale}.png")
     tap(text='Review')
-    until(lambda: any('Allow once' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Review did not open command choices')
-    assert len(state()['decisions']) == before, 'Review submitted a decision'
+    wait_for_approval_choices()
+    reviewed = state()
+    assert len(reviewed['decisions']) == before, 'Review submitted a decision'
+    assert reviewed['pending'][0]['request_id'] == pending_request, 'Review changed the pending owner'
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     shade()
@@ -513,7 +601,6 @@ def check_recents_visibility(output):
     """Exercise real notification PendingIntents with absent and existing app tasks."""
     assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
     assert adb('shell', 'getprop', 'ro.kernel.qemu').strip() == '1', 'Requires an emulator'
-    adb('forward', 'tcp:18766', 'tcp:18766')
     adb('shell', 'am', 'force-stop', PACKAGE)
     adb('shell', 'pm', 'clear', PACKAGE)
     adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
@@ -601,6 +688,9 @@ if __name__ == '__main__':
                         help='Check shade dismissal with held history and native group approval rendering')
     args = parser.parse_args()
     SERIAL = args.serial
+    if not SERIAL.startswith('emulator-'):
+        parser.error('Use a disposable emulator, never a phone')
+    LOCAL_PORT = int(adb('forward', 'tcp:0', 'tcp:18766').strip())
     try:
         if args.recents_only:
             check_recents_visibility(args.output)
@@ -609,6 +699,8 @@ if __name__ == '__main__':
             if not args.tap_only:
                 check_recents_visibility(args.output)
     finally:
-        if SERIAL.startswith('emulator-'):
+        try:
             adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
             adb('shell', 'cmd', 'uimode', 'night', 'no')
+        finally:
+            adb('forward', '--remove', f'tcp:{LOCAL_PORT}')

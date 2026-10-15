@@ -17,6 +17,7 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
       final fixture = ScheduledTasksFixture();
+      addTearDown(fixture.admin.server.close);
       final taskPreferences = await SharedPreferences.getInstance();
       await tester.pumpWidget(
         MaterialApp(
@@ -65,8 +66,8 @@ void main() {
         'Prepare a daily summary.',
       );
       await tester.pumpAndSettle();
-      expect(find.text('Create task').hitTestable(), findsOneWidget);
-      await tester.tap(find.text('Create task'));
+      expect(find.byTooltip('Create task').hitTestable(), findsOneWidget);
+      await tester.tap(find.byTooltip('Create task'));
       await tester.pumpAndSettle();
       expect(
         fixture.jobs.values.any((j) => j['name'] == 'Android acceptance'),

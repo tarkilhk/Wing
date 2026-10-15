@@ -227,8 +227,9 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(field('profile-description-field'), findsOneWidget);
-    expect(field('profile-soul-field'), findsOneWidget);
+    for (final key in ['profile-description-field', 'profile-soul-field']) {
+      expect(tester.widget<TextField>(field(key)).controller!.text, isEmpty);
+    }
     expect(
       fixture.calls.where((call) => call.$1.startsWith('profiles/work/')),
       hasLength(2),
@@ -276,7 +277,11 @@ void main() {
     await tester.enterText(field('profile-soul-field'), 'Phone edit');
     await tester.ensureVisible(find.byTooltip('Save changes'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Save changes'), findsOneWidget);
+    expect(find.byTooltip('Save changes').hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Save changes'));
+    await tester.pumpAndSettle();
+    expect(fixture.soul, 'Phone edit');
+    expect(result, isTrue);
     expect(tester.takeException(), isNull);
   });
 

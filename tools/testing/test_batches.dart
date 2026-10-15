@@ -364,9 +364,13 @@ bool _registration(Statement statement) {
     });
   }
   if (statement is Block) return statement.statements.every(_registration);
-  if (statement is ForStatement) return _registration(statement.body);
+  if (statement is ForStatement) {
+    return !_executesCallback(statement.forLoopParts) &&
+        _registration(statement.body);
+  }
   if (statement is IfStatement) {
-    return _registration(statement.thenStatement) &&
+    return !_executesCallback(statement.expression) &&
+        _registration(statement.thenStatement) &&
         (statement.elseStatement == null ||
             _registration(statement.elseStatement!));
   }
@@ -388,6 +392,14 @@ bool _registration(Statement statement) {
         'tearDownAll',
       }.contains(expression.methodName.name);
 }
+
+// Registration bodies alone do not establish isolation: control expressions run
+// while all imported mains register in the same isolate, before test teardown.
+bool _executesCallback(AstNode node) =>
+    node is MethodInvocation ||
+    node is FunctionExpressionInvocation ||
+    node is InstanceCreationExpression ||
+    node.childEntities.whereType<AstNode>().any(_executesCallback);
 
 String _literal(String value) => jsonEncode(value).replaceAll(r'$', r'\$');
 

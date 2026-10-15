@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -257,7 +258,12 @@ void main() {
     fixture.event('personal', chat.runtime.runtimeId, {'text': summary});
     expect(chat.reading.messages.single['content'], 'review:$summary');
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Activity'));
@@ -486,7 +492,12 @@ void main() {
       expect(chat.reading.messages.single['role'], 'system');
       expect(chat.reading.messages.single['timestamp'], 401.625);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.text('Memory and skills review'), findsNothing);
@@ -540,7 +551,12 @@ void main() {
 
     await controller.openSession(owner.key);
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -559,35 +575,41 @@ void main() {
     expect(find.byType(BottomSheet), findsNothing);
   });
 
-  test(
-    'ignores malformed summaries and keeps only the newest bounded set',
-    () async {
+  for (final entry in <String, Map<String, dynamic>>{
+    'missing': {},
+    'blank': {'text': '   '},
+    'number': {'text': 7},
+    'list': {
+      'text': ['review'],
+    },
+    'object': {
+      'text': {'summary': 'review'},
+    },
+  }.entries) {
+    test('ignores ${entry.key} review summary', () async {
       final scope = controller.current!.scope;
       await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
       final chat = controller.current!.chat!;
+      fixture.event('personal', chat.runtime.runtimeId, entry.value);
+      expect(chat.reviewNotices, isEmpty);
+      expect(chat.reading.messages.where(isLocalReviewMessage), isEmpty);
+    });
+  }
 
-      fixture.event('personal', chat.runtime.runtimeId, const {});
-      fixture.event('personal', chat.runtime.runtimeId, {'text': '   '});
-      fixture.event('personal', chat.runtime.runtimeId, {'text': 7});
-      fixture.event('personal', chat.runtime.runtimeId, {
-        'text': ['review'],
-      });
-      fixture.event('personal', chat.runtime.runtimeId, {
-        'text': {'summary': 'review'},
-      });
-      fixture.event('personal', chat.runtime.runtimeId, {'text': 'Review 0'});
-      for (var i = 0; i <= 20; i++) {
-        fixture.event('personal', chat.runtime.runtimeId, {
-          'text': 'Review $i',
-        });
-      }
+  test('keeps only the newest bounded review set', () async {
+    final scope = controller.current!.scope;
+    await controller.openSession(ProfileSessionKey(scope, 'chat-0'));
+    final chat = controller.current!.chat!;
+    fixture.event('personal', chat.runtime.runtimeId, {'text': 'Review 0'});
+    for (var i = 0; i <= 20; i++) {
+      fixture.event('personal', chat.runtime.runtimeId, {'text': 'Review $i'});
+    }
 
-      expect(chat.reviewNotices, hasLength(20));
-      expect(chat.reviewNotices.first.text, 'Review 1');
-      expect(chat.reviewNotices.last.text, 'Review 20');
-      expect(chat.reading.messages.where(isLocalReviewMessage), hasLength(20));
-    },
-  );
+    expect(chat.reviewNotices, hasLength(20));
+    expect(chat.reviewNotices.first.text, 'Review 1');
+    expect(chat.reviewNotices.last.text, 'Review 20');
+    expect(chat.reading.messages.where(isLocalReviewMessage), hasLength(20));
+  });
 
   test(
     'refresh retains review position and excludes it from history offsets',
@@ -702,12 +724,18 @@ void main() {
     await tester.tap(find.byIcon(Icons.lightbulb_outline));
     await tester.pumpAndSettle();
     expect(find.text('Reported changes'), findsOneWidget);
+    final section = tester.widget<ActivityDetailSection>(
+      find.byType(ActivityDetailSection),
+    );
+    expect(section.block.copyText, text);
     final scrolls = tester.stateList<ScrollableState>(find.byType(Scrollable));
     final scroll = scrolls.firstWhere(
       (state) => state.position.maxScrollExtent > 0,
     );
     scroll.position.jumpTo(scroll.position.maxScrollExtent);
     await tester.pump();
+    expect(scroll.position.pixels, greaterThan(0));
+    expect(scroll.position.pixels, scroll.position.maxScrollExtent);
     expect(tester.takeException(), isNull);
   });
 

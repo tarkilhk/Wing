@@ -13,6 +13,7 @@ import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -180,7 +181,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                   child: child!,
                 ),
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           );
           for (var i = 0; i < 8; i++) {
@@ -276,7 +280,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                     child: child!,
                   ),
                 ),
-                home: ProfileWorkspaceScreen(controller: controller),
+                home: ProfileWorkspaceScreen(
+                  controller: controller,
+                  createBotsSession: () => BotsSession((_) async => const []),
+                ),
               ),
             );
             for (var i = 0; i < 8; i++) {
@@ -294,6 +301,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               await tester.pump(const Duration(milliseconds: 100));
               if (host.calls.any((call) => call.$2 == 'file.attach')) break;
             }
+            expect(
+              host.calls.where((call) => call.$2 == 'file.attach'),
+              hasLength(1),
+            );
             expect(chat.runtime.execution, ChatExecution.submitting);
             expect(find.text('Sending message…'), findsNothing);
             expect(find.text('Saving queue…'), findsNothing);
@@ -369,7 +380,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                   child: child!,
                 ),
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           );
           for (var i = 0; i < 8; i++) {
@@ -414,7 +428,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                   child: child!,
                 ),
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           );
           for (var i = 0; i < 8; i++) {
@@ -436,7 +453,23 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           await tester.pump(const Duration(milliseconds: 300));
           expect(find.text('Activity · 1 tool'), findsOneWidget);
           expect(find.text('Timeline'), findsNothing);
-          await tester.openLiveActivity();
+          final activity = find.byKey(const ValueKey('live-activity'));
+          final expand = find.descendant(
+            of: activity,
+            matching: find.byIcon(Icons.keyboard_arrow_right_rounded),
+          );
+          await tester.ensureVisible(expand);
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(expand.hitTestable(), findsOneWidget);
+          await tester.tap(expand);
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+            find.descendant(
+              of: activity,
+              matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
+            ),
+            findsOneWidget,
+          );
           expect(find.text('Timeline'), findsOneWidget);
           expect(find.byType(StudioLoading), findsOneWidget);
           expect(find.byIcon(Icons.terminal_rounded), findsWidgets);
@@ -478,7 +511,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ],
     });
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -494,7 +532,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     runtime.beginRecovery();
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Inspect the active result'), findsOneWidget);
@@ -608,7 +651,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                 data: MediaQueryData(textScaler: TextScaler.linear(scale)),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           ),
         );
@@ -663,47 +709,49 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(tester.binding.transientCallbackCount, 0);
   });
 
-  test(
-    'idle and cancelled hide while other status messages remain available',
-    () {
-      for (final status in [
-        ChatExecution.idle,
-        ChatExecution.completed,
-        ChatExecution.cancelled,
-      ]) {
-        switch (status) {
-          case ChatExecution.idle:
-            runtime.resetCompleted();
-          case ChatExecution.completed:
-            runtime.completeTurn(failed: false, cancelled: false, error: null);
-          case ChatExecution.cancelled:
-            runtime.completeTurn(failed: false, cancelled: true, error: null);
-          default:
-            throw StateError('Unexpected fixture execution');
-        }
-        expect(label(), isNull);
+  for (final status in [
+    ChatExecution.idle,
+    ChatExecution.completed,
+    ChatExecution.cancelled,
+  ]) {
+    test('$status has no active-work label', () {
+      switch (status) {
+        case ChatExecution.idle:
+          runtime.resetCompleted();
+        case ChatExecution.completed:
+          runtime.completeTurn(failed: false, cancelled: false, error: null);
+        case ChatExecution.cancelled:
+          runtime.completeTurn(failed: false, cancelled: true, error: null);
+        default:
+          throw StateError('Unexpected fixture execution');
       }
-      runtime.reportError('History failed');
-      expect(label(), 'History needs attention');
-      runtime.reportError(null);
-      runtime.beginCommand();
-      expect(label(), 'Running command…');
-      runtime.finishCommand();
-      host.event('a', 'subagent.start', {'subagent_id': 'child'});
-      expect(label(), 'Waiting for 1 subagent…');
-      for (final entry in {
-        ChatExecution.submitting: null,
-        ChatExecution.failed: 'Something went wrong',
-      }.entries) {
-        if (entry.key == ChatExecution.submitting) {
-          runtime.beginTurn(submitting: true);
-        } else {
-          runtime.failTurn('Turn failed');
-        }
-        expect(label(), entry.value);
-      }
-    },
-  );
+      expect(label(), isNull);
+    });
+  }
+  test('history failure asks for attention until recovered', () {
+    runtime.reportError('History failed');
+    expect(label(), 'History needs attention');
+    runtime.reportError(null);
+    expect(label(), isNull);
+  });
+  test('command execution reports work until it finishes', () {
+    runtime.beginCommand();
+    expect(label(), 'Running command…');
+    runtime.finishCommand();
+    expect(label(), isNull);
+  });
+  test('unfinished child work stays visible after the main turn is idle', () {
+    host.event('a', 'subagent.start', {'subagent_id': 'child'});
+    expect(label(), 'Waiting for 1 subagent…');
+  });
+  test('submission feedback is reserved for the shared header', () {
+    runtime.beginTurn(submitting: true);
+    expect(label(), isNull);
+  });
+  test('failed turn has its own recovery status', () {
+    runtime.failTurn('Turn failed');
+    expect(label(), 'Something went wrong');
+  });
 
   testWidgets('activity expands and fades, then fully collapses on cancel', (
     tester,
@@ -978,7 +1026,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     );
     host.event('a', 'message.start');
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(milliseconds: 100));
@@ -1000,7 +1053,13 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(tester.getTopLeft(status), position);
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     await tester.pump();
-    expect(tester.getBottomLeft(composer).dy, lessThanOrEqualTo(500));
+    expect(
+      tester.getBottomLeft(composer).dy,
+      lessThanOrEqualTo(
+        (tester.view.physicalSize.height - tester.view.viewInsets.bottom) /
+            tester.view.devicePixelRatio,
+      ),
+    );
     expect(
       tester.getBottomLeft(status).dy,
       lessThanOrEqualTo(tester.getTopLeft(composer).dy),

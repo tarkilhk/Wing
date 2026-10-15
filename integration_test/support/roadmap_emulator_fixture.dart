@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/ws_client.dart';
 
 import '../../test/support/profile_history_fixture.dart';
+import '../../test/support/backend_update_channel_fixture.dart';
 
 /// In-memory gateway data for the roadmap emulator suite.
 ///
@@ -11,6 +14,9 @@ import '../../test/support/profile_history_fixture.dart';
 /// are the production implementations, but this fixture cannot reach a Hermes
 /// host or submit work to a model.
 class RoadmapEmulatorFixture extends ProfileHistoryFixture {
+  final updateSource = BackendUpdateChannelFixture();
+  Completer<void>? branchGate;
+  Completer<void>? branchEntered;
   final gateways = <String, Set<ProfileGateway>>{};
   final configWrites = <Map<String, dynamic>>[];
   final approvalResponses = <Map<String, dynamic>>[];
@@ -86,6 +92,32 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         base.close();
       },
       get: (path, query) async {
+        if (path == 'profiles') {
+          return {
+            'profiles': [
+              {
+                'name': scope.profileName,
+                'path': BackendUpdateChannelFixture.home,
+              },
+            ],
+          };
+        }
+        final metadata = updateSource.read(path, query);
+        if (metadata != null) return metadata;
+        if (path == 'files') {
+          final directory = query['path'] ?? '/srv';
+          if (!const {'/srv', '/srv/wing'}.contains(directory)) {
+            throw StateError('Unexpected roadmap directory: $directory');
+          }
+          return {
+            'path': directory,
+            'parent': directory == '/srv' ? null : '/srv',
+            'entries': [
+              if (directory == '/srv')
+                {'name': 'wing', 'path': '/srv/wing', 'is_directory': true},
+            ],
+          };
+        }
         if (path == 'analytics/usage') {
           administrationReads.add((path, Map<String, String>.from(query)));
           final today = DateTime.now().toUtc();
@@ -125,16 +157,21 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         if (path == 'hermes/update/check') {
           administrationReads.add((path, Map<String, String>.from(query)));
           updateCheckCount++;
+          updateSource.fetchedAt++;
           return {
             'current_version': '1.2.3',
-            'install_method': 'pipx',
+            'install_method': 'git',
             'behind': updateAvailable ? 2 : 0,
             'update_available': updateAvailable,
             'can_apply': true,
           };
         }
         if (path == 'health') {
-          return {'ok': true, 'version': '1.2.3'};
+          return {
+            'ok': true,
+            'version': '1.2.3',
+            'commit': BackendUpdateChannelFixture.currentSha,
+          };
         }
         if (path == 'model/info') {
           return {'model': 'gpt-6-astra', 'provider': 'openai-codex'};
@@ -162,7 +199,26 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         }
         return {'ok': true, ...body};
       },
-      post: (path, body) async {
+      ownedPost: (path, body, canDispatch, onDispatched) async {
+        if (!canDispatch()) {
+          throw DashboardRequestNotSentException(
+            StateError('Journey action retired'),
+          );
+        }
+        onDispatched();
+        if (path == 'files/mkdir?profile=${scope.profileName}') {
+          if (body['path'] != '/srv/wing') {
+            throw StateError('Unexpected roadmap mkdir: $body');
+          }
+          return {
+            'ok': true,
+            'path': '/srv/wing',
+            'entry': {'path': '/srv/wing', 'is_directory': true},
+          };
+        }
+        if (path != 'hermes/update?profile=${scope.profileName}') {
+          throw StateError('Unexpected roadmap mutation: $path');
+        }
         backendUpdatePosts.add((path, Map<String, dynamic>.from(body)));
         return {
           'ok': true,
@@ -255,16 +311,20 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             };
           case 'projects.create':
             projectCreates.add(Map<String, dynamic>.from(params));
-            createdProjects.putIfAbsent(scope.profileName, () => []).add({
+            final project = <String, dynamic>{
               'id': 'roadmap-created',
               'name': params['name'],
               'label': params['name'],
               'path': params['primary_path'],
+              'primary_path': params['primary_path'],
+              'color': params['color'],
+              'icon': params['icon'],
               'lastActive': now + 1,
-            });
-            return {
-              'project': {'id': 'roadmap-created'},
             };
+            createdProjects
+                .putIfAbsent(scope.profileName, () => [])
+                .add(project);
+            return {'project': Map<String, dynamic>.from(project)};
           case 'projects.update':
             projectUpdates.add(Map<String, dynamic>.from(params));
             final project = createdProjects[scope.profileName]!.singleWhere(
@@ -376,6 +436,10 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               method,
               Map<String, dynamic>.from(params),
             ));
+            if (branchGate != null) {
+              branchEntered!.complete();
+              await branchGate!.future;
+            }
             final source = answerRuntimes[params['session_id']]!;
             final child = 'roadmap-branch-${++_nextAnswerChild}';
             final copied = _answerHistory(scope.profileName, source)
@@ -633,7 +697,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
     diagnosticPosts.add((path, Map<String, dynamic>.from(body)));
     final name = path.substring(4);
     final pid = diagnosticPids[name] = ++_nextDiagnosticPid;
-    return {'name': name, 'pid': pid};
+    return {'ok': true, 'name': name, 'pid': pid};
   }
 
   Map<String, dynamic> readDiagnosticStatus(
@@ -651,6 +715,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
     final pid = diagnosticPids[name];
     if (pid == null) throw StateError('Diagnostic was not started');
     return {
+      'name': name,
       'pid': pid,
       'running': false,
       'exit_code': 0,

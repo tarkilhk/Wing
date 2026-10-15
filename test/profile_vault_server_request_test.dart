@@ -1,3 +1,4 @@
+import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -92,6 +93,10 @@ void main() {
           },
         });
         expect(find.text('Save login for Example'), findsOneWidget);
+        final pending = chat.reading.questionHistory!.questions.single;
+        expect(pending.requestId, 'srq-vault-test');
+        expect(pending.kind, HermesQuestionKind.secureInput);
+        expect(pending.status, HermesQuestionStatus.pending);
         final password = find.byKey(const Key('sensitive-prompt-password'));
         expect(tester.widget<TextField>(password).obscureText, isTrue);
         expect(tester.widget<TextField>(password).enableSuggestions, isFalse);
@@ -123,7 +128,13 @@ void main() {
             host.calls.where((call) => call.$2 == 'request.answer'),
             isEmpty,
           );
-          expect(chat.runtime.error, contains('expired'));
+          final expired = chat.reading.questionHistory!.questions.single;
+          expect(expired.id, pending.id);
+          expect(expired.timestamp, pending.timestamp);
+          expect(expired.description, pending.description);
+          expect(expired.status, HermesQuestionStatus.expired);
+          expect(find.text('Hermes question - Expired'), findsOneWidget);
+          expect(chat.runtime.error, isNull);
         } else {
           final button = find.byKey(
             Key(
@@ -161,6 +172,13 @@ void main() {
         );
         expect(
           chat.reading.messages.toString(),
+          isNot(contains('dummy-vault-password')),
+        );
+        expect(
+          jsonEncode([
+            for (final question in chat.reading.questionHistory!.questions)
+              question.toJson(),
+          ]),
           isNot(contains('dummy-vault-password')),
         );
         expect(

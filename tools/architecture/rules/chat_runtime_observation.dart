@@ -13,6 +13,7 @@ import '../semantic_context.dart';
 const id = 'ARCH_CHAT_RUNTIME_OBSERVATION';
 const owner = 'lib/core/services/profile_workspace_controller.dart';
 const runtime = 'lib/core/services/chat_runtime.dart';
+const runtimeQuestions = 'lib/core/services/chat_runtime_questions.dart';
 const model = 'lib/core/models/chat_runtime.dart';
 const stored = {
   'ChatApproval': {
@@ -79,6 +80,7 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
   final root = directory.resolveSymbolicLinksSync();
   final units = <String, CompilationUnit>{};
   final lines = <String, int Function(int)>{};
+  var hasRuntimeQuestions = false;
   for (final path in [owner, runtime, model]) {
     final file = File('$root/$path');
     final parsed = parseString(
@@ -91,12 +93,52 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
           (node) =>
               node is PartOfDirective ||
               node is NamespaceDirective && node.configurations.isNotEmpty ||
-              path != owner && node is PartDirective,
+              path != owner &&
+                  node is PartDirective &&
+                  !(path == runtime &&
+                      node.uri.stringValue == 'chat_runtime_questions.dart'),
         )) {
       throw FormatException('$path: invalid or unsupported canonical unit');
     }
     units[path] = parsed.unit;
     lines[path] = (offset) => parsed.lineInfo.getLocation(offset).lineNumber;
+    if (path == runtime) {
+      final parts = parsed.unit.directives.whereType<PartDirective>().toList();
+      if (parts.length > 1) {
+        throw const FormatException('Duplicate canonical runtime part');
+      }
+      hasRuntimeQuestions = parts.isNotEmpty;
+    }
+  }
+  if (hasRuntimeQuestions) {
+    final file = File('$root/$runtimeQuestions');
+    final parsed = parseString(
+      content: file.readAsStringSync(),
+      path: file.path,
+      throwIfDiagnostics: false,
+    );
+    final directives = parsed.unit.directives;
+    final declarations = parsed.unit.declarations;
+    if (parsed.errors.isNotEmpty ||
+        directives.length != 1 ||
+        directives.single is! PartOfDirective ||
+        (directives.single as PartOfDirective).uri?.stringValue !=
+            'chat_runtime.dart' ||
+        declarations.length != 1 ||
+        declarations.single is! ExtensionDeclaration) {
+      throw const FormatException('Invalid canonical runtime questions part');
+    }
+    final extension = declarations.single as ExtensionDeclaration;
+    if (extension.name?.lexeme != '_RuntimeQuestions' ||
+        extension.typeParameters != null ||
+        extension.body.members.any(
+          (member) =>
+              member is! MethodDeclaration ||
+              member.isStatic ||
+              !member.name.lexeme.startsWith('_'),
+        )) {
+      throw const FormatException('Unsupported runtime questions surface');
+    }
   }
   _class(units[runtime]!, 'ChatRuntime', runtime);
   final chat = _class(units[owner]!, 'ProfileChat', owner);
@@ -167,6 +209,33 @@ Future<List<Finding>> check(Directory directory, {String? sdkPath}) async {
     cacheNamespace: 'chat-runtime-observation',
   );
   try {
+    if (hasRuntimeQuestions) {
+      final execution = await contexts
+          .contextFor('$root/$owner')
+          .currentSession
+          .getResolvedLibrary('$root/$runtime');
+      if (execution is! ResolvedLibraryResult ||
+          execution.units.map((unit) => unit.path).toSet().length != 2 ||
+          !execution.units.any(
+            (unit) => unit.path == '$root/$runtimeQuestions',
+          )) {
+        throw const FormatException('Cannot resolve canonical runtime part');
+      }
+      final part = execution.units.singleWhere(
+        (unit) => unit.path == '$root/$runtimeQuestions',
+      );
+      final extension = part.unit.declarations.single as ExtensionDeclaration;
+      if (!_canonical(
+        extension.onClause?.extendedType.type,
+        root,
+        runtime,
+        'ChatRuntime',
+      )) {
+        throw const FormatException(
+          'Runtime questions target is not canonical',
+        );
+      }
+    }
     final result = await contexts
         .contextFor('$root/$owner')
         .currentSession

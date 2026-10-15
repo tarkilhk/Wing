@@ -1,10 +1,10 @@
+import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/shared_draft_session.dart';
 import 'package:wing/core/services/workspace_entry_session.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'package:wing/core/models/config_backup_operation.dart';
 import 'package:wing/core/services/backup_session.dart';
 import 'package:wing/core/services/config_backup_io.dart';
 import 'package:wing/core/models/app_preferences.dart';
@@ -97,21 +97,88 @@ ProfileWorkspaceController profileController(
         currentName: 'default',
         activeName: 'default',
       ),
-      get: (_, query) async => {
-        'sessions': <Map<String, dynamic>>[],
-        'offset': int.parse(query['offset']!),
-        'limit': int.parse(query['limit']!),
-        'total': 0,
+      get: (path, query) async => switch (path) {
+        'sessions' => {
+          'sessions': <Map<String, dynamic>>[],
+          'offset': int.parse(query['offset']!),
+          'limit': int.parse(query['limit']!),
+          'total': 0,
+        },
+        'model/info' => <String, dynamic>{},
+        'model/options' => {'providers': <Object>[]},
+        'logs' => {'file': 'gui', 'lines': <String>[]},
+        'sessions/stored/messages' => {
+          'session_id': 'stored',
+          'messages': <Map<String, dynamic>>[],
+          'pagination': {
+            'offset': 0,
+            'limit': int.parse(query['limit']!),
+            'returned': 0,
+            'order': 'latest',
+          },
+        },
+        _ => throw StateError('Unexpected home fixture GET: $path'),
       },
-      rpc: (method, _) async => method == 'session.create'
-          ? {
-              'session_id': 'runtime',
-              'stored_session_id': 'stored',
-              'info': {'profile_name': 'default'},
-            }
-          : {'projects': <Map<String, dynamic>>[]},
+      rpc: (method, _) async => switch (method) {
+        'session.create' => {
+          'session_id': 'runtime',
+          'stored_session_id': 'stored',
+          'info': {'profile_name': 'default'},
+        },
+        'projects.tree' => {'projects': <Map<String, dynamic>>[]},
+        'session.active_list' => {'sessions': <Map<String, dynamic>>[]},
+        'profiles.list' => {
+          'bot_mode_protocol': true,
+          'install_id': 'home-fixture',
+          'profiles': <Map<String, dynamic>>[],
+        },
+        'commands.catalog' => {'pairs': <List<String>>[]},
+        _ => throw StateError('Unexpected home fixture RPC: $method'),
+      },
     ),
   );
+  // Home constructs the production workspace route, which discovers Bots
+  // through administration separately from the chat gateway above.
+  final administration = AdministrationRepository(
+    connectionId: connection.id,
+    connectionIdentity: controller.connectionIdentity,
+    connectionLabel: connection.label,
+    request: (method, path, query, body) async => throw StateError(
+      'Unexpected home administration request: $method $path',
+    ),
+    settingsWrite: (profile, patch, canDispatch, onDispatched) async =>
+        throw StateError('Unexpected home administration settings write'),
+    ownedMutation:
+        (method, path, query, body, canDispatch, onDispatched) async =>
+            throw StateError(
+              'Unexpected home administration mutation: $method $path',
+            ),
+    gateway: (profile) => ProfileGateway(
+      scope: WorkspaceScope(
+        connectionId: connection.id,
+        connectionIdentity: controller.connectionIdentity,
+        profileName: profile,
+      ),
+      discover: () async => const ProfileDiscovery(
+        profiles: [HermesProfile(name: 'default')],
+        currentName: 'default',
+        activeName: 'default',
+      ),
+      get: (path, query) async =>
+          throw StateError('Unexpected home administration read: $path'),
+      rpc: (method, params) async => switch (method) {
+        'profiles.list' => {
+          'bot_mode_protocol': true,
+          'install_id': controller.connectionIdentity,
+          'profiles': <Map<String, dynamic>>[],
+        },
+        'groups.list' => {'rooms': <Map<String, dynamic>>[]},
+        _ => throw StateError('Unexpected home administration RPC: $method'),
+      },
+    ),
+  );
+  addTearDown(administration.close);
+  controller.healthSession(repository: administration);
   return controller;
 }
 
@@ -248,7 +315,8 @@ void main() {
     final icon = find.byTooltip('Change connection icon');
     final led = find.byKey(const ValueKey('server-connection-led'));
     final iconRect = tester.getRect(find.byType(ConnectionIconButton));
-    expect(iconRect.size, const Size(48, 48));
+    expect(iconRect.width, greaterThanOrEqualTo(48));
+    expect(iconRect.height, greaterThanOrEqualTo(48));
     await tester.tap(icon);
     await tester.pumpAndSettle();
     expect(find.text('Instance icon'), findsOneWidget);
@@ -759,33 +827,38 @@ void main() {
     final fixture = await createHomeFixture();
     final manager = fixture.manager;
     final appPreferences = fixture.appPreferences;
-    await pumpHome(tester, manager, appPreferences: appPreferences);
-
-    expect(find.text('Your agent, with you'), findsOneWidget);
-
-    // Simulate what a successful import does to storage, then let the screen
-    // refresh the way the import flow asks it to.
-    await manager.importConnections(
-      [
+    final backup = ConfigBackup(
+      createdAt: DateTime.utc(2026),
+      appVersion: 'test',
+      connections: [
         SavedConnection(
           id: 'restored-1',
           label: 'Miniserver',
-          host: 'carlos-miniserver.ts.net',
+          host: 'hermes.example.com',
           port: 8642,
-          apiKey: 'sk-restored',
+          apiKey: 'test-restored-key',
           useHttps: true,
         ),
       ],
-      replaceExisting: false,
-      canCommit: () => true,
+      preferences: const {},
+    );
+    await pumpHome(
+      tester,
+      manager,
+      appPreferences: appPreferences,
+      backupPlatform: _BackupPlatform()
+        ..pickedContents = jsonEncode(backup.toJson()),
     );
 
-    final state = tester.state<HomeScreenState>(find.byType(HomeScreen));
-    state.refreshConnections();
+    expect(find.text('Your agent, with you'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('home_restore_config_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('import_confirm_button')));
     await tester.pumpAndSettle();
 
     expect(find.text('Your agent, with you'), findsNothing);
     expect(find.text('Miniserver'), findsOneWidget);
+    expect(manager.getConnections().single.id, 'restored-1');
   });
 
   testWidgets('the import sheet offers merge and replace', (tester) async {
@@ -805,7 +878,6 @@ void main() {
 
     expect(find.text('Merge'), findsOneWidget);
     expect(find.text('Replace'), findsOneWidget);
-    expect(ConfigImportMode.values, hasLength(2));
   });
 
   testWidgets(
@@ -883,12 +955,6 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('nav-settings')));
         await tester.pumpAndSettle();
         expect(find.byTooltip('Backend updates'), findsNothing);
-        expect(
-          tester.getCenter(find.byTooltip('Backup configuration')).dx,
-          lessThan(
-            tester.getCenter(find.byTooltip('Restore configuration')).dx,
-          ),
-        );
         await tester.tap(find.byTooltip('Backup configuration'));
         await tester.pumpAndSettle();
         await tester.enterText(

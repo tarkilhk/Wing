@@ -619,6 +619,28 @@ void main() {
             'missing' || 'failed' => tokens.danger,
             _ => Theme.of(tester.element(row)).colorScheme.onSurfaceVariant,
           });
+          expect(
+            find.text(switch (state) {
+              'checking' => 'Checking access…',
+              'ready' => 'Access is set up',
+              'different' => 'Selected model access unconfirmed',
+              'missing' => 'Credentials missing',
+              'failed' => 'Provider check failed',
+              'offline' || 'incomplete' => 'Check incomplete',
+              _ => 'Credentials not checked',
+            }),
+            findsOneWidget,
+          );
+          if (state == 'model-loading') {
+            expect(find.text('Loading model…'), findsOneWidget);
+          } else if (state == 'model-unavailable') {
+            expect(find.text('Model unavailable'), findsOneWidget);
+          } else if (state == 'model-stale') {
+            expect(
+              find.text('Last known model; refresh failed.'),
+              findsOneWidget,
+            );
+          }
           await snapshot(tester, name);
           expect(tester.takeException(), isNull);
           await tester.ensureVisible(

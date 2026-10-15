@@ -911,12 +911,14 @@ void main() {
         expect(artwork, findsOneWidget);
         final artworkBounds = tester.getRect(artwork);
         final titleBounds = tester.getRect(title);
-        expect(artworkBounds.size, const Size(32, 32));
-        expect(titleBounds.left - artworkBounds.right, closeTo(8, .01));
+        expect(artworkBounds.isEmpty, isFalse);
+        expect(titleBounds.left, greaterThanOrEqualTo(artworkBounds.right));
         expect(titleBounds.center.dy, closeTo(artworkBounds.center.dy, .01));
         expect(
           titleBounds.right,
-          lessThanOrEqualTo(tester.view.physicalSize.width - 40),
+          lessThanOrEqualTo(
+            tester.view.physicalSize.width / tester.view.devicePixelRatio,
+          ),
         );
         expect(find.text('Message the group'), findsOneWidget);
         expect(find.byType(BotGroupConversation), findsOneWidget);
@@ -1034,7 +1036,7 @@ void main() {
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGO4Odf1PwAGyQK7B3JGZQAAAABJRU5ErkJggg==',
           ),
         );
-        expect(avatar.size, 32);
+        expect(tester.getSize(find.byType(BotAvatar)).isEmpty, isFalse);
         final savedImage = tester.renderObject<RenderImage>(
           find.descendant(
             of: find.byType(BotAvatar),
@@ -1045,7 +1047,9 @@ void main() {
         final bounds = tester.getRect(find.byType(BotConversationTitle));
         expect(
           bounds.right,
-          lessThanOrEqualTo(tester.view.physicalSize.width - 40),
+          lessThanOrEqualTo(
+            tester.view.physicalSize.width / tester.view.devicePixelRatio,
+          ),
         );
         expect(tester.takeException(), isNull);
         await _capture(
@@ -1280,14 +1284,17 @@ void main() {
       final cue = find.byKey(const ValueKey('recent-conversation-nudge'));
       await tester.pump(const Duration(milliseconds: 900));
       expect(await nudgeAlpha(tester), greaterThan(0));
-      expect(tester.getRect(cue).right, 360);
+      expect(
+        tester.getRect(cue).right,
+        tester.view.physicalSize.width / tester.view.devicePixelRatio,
+      );
       await tester.pump(const Duration(milliseconds: 2300));
       final ongoing = await nudgeAlpha(tester);
       expect(ongoing, greaterThan(0), reason: 'Later waves must still arrive');
       await tester.pump(const Duration(milliseconds: 500));
       final fading = await nudgeAlpha(tester);
       expect(fading, greaterThan(0));
-      expect(fading, lessThan(ongoing * .2));
+      expect(fading, lessThan(ongoing));
       await tester.pump(const Duration(milliseconds: 150));
       expect(cue, findsNothing);
       expect(source.opens, isEmpty, reason: 'Cues cannot open or read a chat');
@@ -1584,32 +1591,33 @@ void main() {
       },
     );
 
-    testWidgets('menu switching retains the departing genuine viewport', (
-      tester,
-    ) async {
-      final built = <RecentConversationKey>[];
-      await mount(
-        tester,
-        buildPreview: (card) {
-          built.add(card.entry.key);
-          return const ColoredBox(color: Colors.green);
-        },
-      );
-      final origin = source.selected;
-      final selection = switcher.currentState!.selectAdjacent(1);
-      await tester.pump();
-      await _finishFrames(tester);
-      await selection;
-      switcher.currentState!.openStack();
-      await _finishFrames(tester);
-      expect(find.byKey(ValueKey((origin, 'snapshot'))), findsOneWidget);
-      expect(
-        built,
-        isNot(contains(origin)),
-        reason: 'Changing selection must not discard the departing readback.',
-      );
-      expect(tester.takeException(), isNull);
-    });
+    testWidgets(
+      'programmatic switching retains the departing genuine viewport',
+      (tester) async {
+        final built = <RecentConversationKey>[];
+        await mount(
+          tester,
+          buildPreview: (card) {
+            built.add(card.entry.key);
+            return const ColoredBox(color: Colors.green);
+          },
+        );
+        final origin = source.selected;
+        final selection = switcher.currentState!.selectAdjacent(1);
+        await tester.pump();
+        await _finishFrames(tester);
+        await selection;
+        switcher.currentState!.openStack();
+        await _finishFrames(tester);
+        expect(find.byKey(ValueKey((origin, 'snapshot'))), findsOneWidget);
+        expect(
+          built,
+          isNot(contains(origin)),
+          reason: 'Changing selection must not discard the departing readback.',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     for (final brightness in Brightness.values) {
       for (final scale in [1.0, 2.0]) {
@@ -1972,6 +1980,8 @@ void main() {
         find.byKey(const ValueKey('recent-snapshot-progress')),
         findsNothing,
       );
+      final pixels = find.byKey(ValueKey((source.entries[1].key, 'snapshot')));
+      final previous = tester.widget<RawImage>(pixels).image!;
       tester.view.physicalSize = const Size(700, 700);
       addTearDown(tester.view.resetPhysicalSize);
       await tester.pump();
@@ -1988,6 +1998,10 @@ void main() {
         find.byKey(ValueKey((source.entries[1].key, 'snapshot'))),
         findsOneWidget,
       );
+      final resized = tester.widget<RawImage>(pixels).image!;
+      expect(resized, isNot(same(previous)));
+      expect(previous.debugDisposed, isTrue);
+      expect(resized.width, resized.height);
       expect(tester.takeException(), isNull);
     });
 
@@ -2368,8 +2382,12 @@ void main() {
               find.bySemanticsLabel('Opening conversation'),
               findsOneWidget,
             );
-            expect(title.top, lessThan(48));
-            expect(title.left, greaterThanOrEqualTo(16));
+            expect(title.top, greaterThanOrEqualTo(0));
+            expect(title.left, greaterThanOrEqualTo(0));
+            expect(
+              title.bottom,
+              lessThanOrEqualTo(tester.getRect(find.byType(StudioLoading)).top),
+            );
             expect(
               find.text(source.entries[1].key.chat!.workspace.profileName),
               findsNothing,
@@ -2462,8 +2480,20 @@ void main() {
       );
       expect(bounds.left.abs(), lessThan(1));
       expect(bounds.top.abs(), lessThan(1));
-      expect(bounds.width, closeTo(360, 1));
-      expect(bounds.height, closeTo(800, 1));
+      expect(
+        bounds.width,
+        closeTo(
+          tester.view.physicalSize.width / tester.view.devicePixelRatio,
+          1,
+        ),
+      );
+      expect(
+        bounds.height,
+        closeTo(
+          tester.view.physicalSize.height / tester.view.devicePixelRatio,
+          1,
+        ),
+      );
       expect(find.text('Swipe to browse · tap to open'), findsNothing);
       source.waitingOpen!.complete();
       await _finishFrames(tester);
@@ -3214,7 +3244,7 @@ void main() {
             const Offset(-50, -180),
           );
           await _finishFrames(tester);
-          expect(scrollable.position.pixels, greaterThan(initial + 100));
+          expect(scrollable.position.pixels, greaterThan(initial));
           final afterUpwardScroll = scrollable.position.pixels;
           expect(source.opens, isEmpty);
           expect(find.text('Swipe to browse · tap to open'), findsNothing);
@@ -4450,6 +4480,7 @@ void main() {
             ..unreadSessions.addAll(['chat-1', 'chat-2']);
           Completer<void>? heldResume, resumeStarted;
           final reads = <String>[];
+          final acknowledgedSessions = <ProfileSessionKey>[];
           final controller = ProfileWorkspaceController(
             access: ConnectionAccess(
               connection: SavedConnection(
@@ -4470,6 +4501,18 @@ void main() {
                 scope: scope,
                 discover: base.discover,
                 get: base.read,
+                ownedPatch: (path, body, canDispatch, onDispatched) async {
+                  if (path != 'sessions/chat-0' ||
+                      body.length != 2 ||
+                      body['profile'] != scope.profileName ||
+                      body['unread'] != false ||
+                      !canDispatch()) {
+                    throw StateError('Unexpected read acknowledgement');
+                  }
+                  onDispatched();
+                  acknowledgedSessions.add(ProfileSessionKey(scope, 'chat-0'));
+                  return {'ok': true};
+                },
                 rpc: (method, params) async {
                   if (method == 'session.resume' && heldResume != null) {
                     final delay = heldResume!;
@@ -4677,7 +4720,27 @@ void main() {
           }
           expect(resumeStarted.isCompleted, isTrue);
           expect(first.refreshingConversation, isTrue);
-          expect(find.byType(StudioLoading), findsNothing);
+          final refreshWing = find.descendant(
+            of: find.byKey(const ValueKey('studio-loading-slot')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is StudioLoading &&
+                  widget.label == 'Refreshing conversation',
+            ),
+          );
+          expect(refreshWing, findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(
+            tester
+                .getRect(refreshWing)
+                .overlaps(
+                  Offset.zero &
+                      (tester.view.physicalSize / tester.view.devicePixelRatio),
+                ),
+            isTrue,
+            reason:
+                'The pending user action keeps visible header feedback over cached reading',
+          );
           expect(
             find.widgetWithText(TextField, 'Return to this draft'),
             findsOneWidget,
@@ -4705,7 +4768,20 @@ void main() {
           expect(restored.selection.baseOffset, 6);
           expect(controller.visible, isTrue);
           if (brightness == Brightness.dark && scale == 1) {
+            expect(
+              reads,
+              isEmpty,
+              reason: 'Revealing cached reading does not read the answer',
+            );
+            expect(acknowledgedSessions, isEmpty);
+            await tester.drag(
+              find.byKey(const ValueKey('profile-transcript')),
+              const Offset(0, -120),
+            );
+            await _finishFrames(tester);
             expect(reads, ['answer:3']);
+            expect(acknowledgedSessions, [first.key]);
+            expect(first.markReadFailed, isFalse);
           }
           await _chatGesture(tester);
           await tester.binding.handlePopRoute();

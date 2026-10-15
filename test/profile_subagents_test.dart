@@ -293,52 +293,55 @@ void main() {
     },
   );
 
-  test(
-    'list rejects newer events while tail ignores unrelated progress',
-    () async {
-      host.pendingList = Completer<Map<String, dynamic>>();
-      final list = controller.refreshSubagents(chat);
-      host.event('a', 'subagent.start', {
-        'subagent_id': 'child',
-        'goal': 'Live child',
-      });
-      host.pendingList!.complete({
-        'subagents': [
-          {'subagent_id': 'old', 'goal': 'Old child', 'status': 'running'},
-        ],
-      });
-      await list;
-      expect(chat.subagents.map((item) => item.id), ['child']);
+  test('late roster cannot replace newer events', () async {
+    host.pendingList = Completer<Map<String, dynamic>>();
+    final list = controller.refreshSubagents(chat);
+    host.event('a', 'subagent.start', {
+      'subagent_id': 'child',
+      'goal': 'Live child',
+    });
+    host.pendingList!.complete({
+      'subagents': [
+        {'subagent_id': 'old', 'goal': 'Old child', 'status': 'running'},
+      ],
+    });
+    await list;
+    expect(chat.subagents.map((item) => item.id), ['child']);
+  });
 
-      host.pendingTail = Completer<Map<String, dynamic>>();
-      final tail = controller.loadSubagentTail(chat, 'child');
-      host.event('a', 'subagent.progress', {
-        'subagent_id': 'other',
-        'text': 'Unrelated progress',
-      });
-      host.pendingTail!.complete({
-        'subagent_id': 'child',
-        'available': true,
-        'text': 'older tail',
-        'truncated': false,
-      });
-      expect((await tail)?.text, 'older tail');
+  test('tail ignores unrelated subagent progress', () async {
+    host.event('a', 'subagent.start', {'subagent_id': 'child'});
+    host.pendingTail = Completer<Map<String, dynamic>>();
+    final tail = controller.loadSubagentTail(chat, 'child');
+    host.event('a', 'subagent.progress', {
+      'subagent_id': 'other',
+      'text': 'Unrelated progress',
+    });
+    host.pendingTail!.complete({
+      'subagent_id': 'child',
+      'available': true,
+      'text': 'older tail',
+      'truncated': false,
+    });
+    expect((await tail)?.text, 'older tail');
+  });
 
-      host.pendingTail = Completer<Map<String, dynamic>>();
-      final staleTail = controller.loadSubagentTail(chat, 'child');
-      host.event('a', 'subagent.complete', {
-        'subagent_id': 'child',
-        'status': 'completed',
-      });
-      host.pendingTail!.complete({
-        'subagent_id': 'child',
-        'available': true,
-        'text': 'pre-completion tail',
-        'truncated': false,
-      });
-      expect(await staleTail, isNull);
-    },
-  );
+  test('completion invalidates a pending tail for that subagent', () async {
+    host.event('a', 'subagent.start', {'subagent_id': 'child'});
+    host.pendingTail = Completer<Map<String, dynamic>>();
+    final staleTail = controller.loadSubagentTail(chat, 'child');
+    host.event('a', 'subagent.complete', {
+      'subagent_id': 'child',
+      'status': 'completed',
+    });
+    host.pendingTail!.complete({
+      'subagent_id': 'child',
+      'available': true,
+      'text': 'pre-completion tail',
+      'truncated': false,
+    });
+    expect(await staleTail, isNull);
+  });
 
   test(
     'completion before interrupt acknowledgement preserves acceptance',
@@ -433,7 +436,7 @@ void main() {
     },
   );
 
-  test('controls stay scoped and accept only exact acknowledgements', () async {
+  test('tail read enforces the text resource budget', () async {
     host.event('a', 'subagent.start', {
       'subagent_id': 'child',
       'goal': 'Owned child',
@@ -447,7 +450,10 @@ void main() {
     final clipped = await controller.loadSubagentTail(chat, 'child');
     expect(clipped!.text, hasLength(GatewaySubagentTail.maxTextLength));
     expect(clipped.truncated, isTrue);
+  });
 
+  test('steer trims the instruction and sends exact scoped identity', () async {
+    host.event('a', 'subagent.start', {'subagent_id': 'child'});
     expect(
       await controller.steerSubagent(
         chat,
@@ -463,7 +469,10 @@ void main() {
       'text': 'redirect',
       'profile': 'a',
     });
+  });
 
+  test('rejected steer is not accepted', () async {
+    host.event('a', 'subagent.start', {'subagent_id': 'child'});
     host.steerResponse = {'status': 'rejected'};
     expect(
       await controller.steerSubagent(
@@ -474,6 +483,10 @@ void main() {
       ),
       isFalse,
     );
+  });
+
+  test('interrupt rejects acknowledgement for another child', () async {
+    host.event('a', 'subagent.start', {'subagent_id': 'child'});
     host.interruptResponse = {'found': true, 'subagent_id': 'other'};
     expect(
       await controller.interruptSubagent(
@@ -483,7 +496,10 @@ void main() {
       ),
       isFalse,
     );
+  });
 
+  test('accepted steer retains originating profile after navigation', () async {
+    host.event('a', 'subagent.start', {'subagent_id': 'child'});
     host.pendingControl = Completer<Map<String, dynamic>>();
     final scoped = controller.steerSubagent(
       chat,
@@ -495,18 +511,27 @@ void main() {
     host.pendingControl!.complete({'status': 'queued', 'subagent_id': 'child'});
     expect(await scoped, isTrue);
     expect(host.calls.lastWhere((call) => call.$2 == 'subagent.steer').$1, 'a');
-
-    host.pendingControl = Completer<Map<String, dynamic>>();
-    final late = controller.steerSubagent(
-      chat,
-      'child',
-      'late',
-      canDispatch: () => true,
-    );
-    host.runtimeForResume['a'] = 'replacement-runtime';
-    await controller.openSession(chat.key);
-    host.pendingControl!.complete({'status': 'queued', 'subagent_id': 'child'});
-    expect(await late, isFalse);
-    expect(host.calls.last.$1, 'a');
   });
+
+  test(
+    'late steer acknowledgement cannot affect replacement runtime',
+    () async {
+      host.event('a', 'subagent.start', {'subagent_id': 'child'});
+      host.pendingControl = Completer<Map<String, dynamic>>();
+      final late = controller.steerSubagent(
+        chat,
+        'child',
+        'late',
+        canDispatch: () => true,
+      );
+      host.runtimeForResume['a'] = 'replacement-runtime';
+      await controller.openSession(chat.key);
+      host.pendingControl!.complete({
+        'status': 'queued',
+        'subagent_id': 'child',
+      });
+      expect(await late, isFalse);
+      expect(host.calls.last.$1, 'a');
+    },
+  );
 }

@@ -31,10 +31,13 @@ Future<void> captureFormFamily(WidgetTester tester, String name) async {
   );
   await tester.runAsync(() async {
     final image = await boundary.toImage(pixelRatio: 1);
-    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-    final file = File('build/design-previews/form-actions/site/$name.png');
-    file.parent.createSync(recursive: true);
-    await file.writeAsBytes(bytes!.buffer.asUint8List());
-    image.dispose();
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      final file = File('build/design-previews/form-actions/site/$name.png');
+      file.parent.createSync(recursive: true);
+      await file.writeAsBytes(bytes!.buffer.asUint8List());
+    } finally {
+      image.dispose();
+    }
   });
 }

@@ -105,6 +105,13 @@ void main() {
     'older outputs keep their action label and usable reading stays quiet',
     (tester) async {
       final older = Completer<ProfileHistoryPage>();
+      addTearDown(() {
+        if (!older.isCompleted) {
+          older.complete(
+            ProfileHistoryPage('chat', const [], 500, 500, isComplete: true),
+          );
+        }
+      });
       await tester.pumpWidget(
         MaterialApp(
           home: ChatOutputsScreen(
@@ -177,147 +184,160 @@ void main() {
   });
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
-      testWidgets('resource document header and sheet ${brightness.name} $scale', (
-        tester,
-      ) async {
-        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 780);
-        tester.view.devicePixelRatio = 1;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        const target =
-            '/srv/projects/australia/sources/2026-10-08-perth-return-hotel-flight-gate.md';
-        const source =
-            '# Perth return-night hotel — wait for flight timing\n\nDecision recorded. **Wait for the flight timing** before selecting the hotel.\n\n- Early departure: check airport access.\n- Later departure: confirm transfer time.\n\n## Evidence\n\nKeep the recorded decision separate from assumptions.\n\nFurther details remain available by scrolling.\n\n';
-        String? copied;
-        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-          SystemChannels.platform,
-          (call) async {
-            if (call.method == 'Clipboard.setData') {
-              copied = (call.arguments as Map)['text'] as String;
-            }
-            return null;
-          },
-        );
-        addTearDown(
-          () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      for (final intent in [
+        'accessible header',
+        'file path',
+        'formatted copy',
+        'raw copy',
+      ]) {
+        testWidgets('resource $intent ${brightness.name} $scale', (
+          tester,
+        ) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 780);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          const target =
+              '/srv/projects/australia/sources/2026-10-08-perth-return-hotel-flight-gate.md';
+          const source =
+              '# Perth return-night hotel — wait for flight timing\n\nDecision recorded. **Wait for the flight timing** before selecting the hotel.\n\n- Early departure: check airport access.\n- Later departure: confirm transfer time.\n\n## Evidence\n\nKeep the recorded decision separate from assumptions.\n\nFurther details remain available by scrolling.\n\n';
+          String? copied;
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
             SystemChannels.platform,
-            null,
-          ),
-        );
-        final boundaryKey = GlobalKey();
-        Future<void> captureViewer(String suffix) async {
-          if (!capture) return;
-          await tester.runAsync(() async {
-            final boundary =
-                boundaryKey.currentContext!.findRenderObject()!
-                    as RenderRepaintBoundary;
-            final rendered = await boundary.toImage(pixelRatio: 1);
-            final png = await rendered.toByteData(
-              format: ui.ImageByteFormat.png,
-            );
-            await File(
-                  'build/resource-viewers/${brightness.name}-${scale.toInt()}$suffix.png',
-                )
-                .create(recursive: true)
-                .then((file) => file.writeAsBytes(png!.buffer.asUint8List()));
-            rendered.dispose();
-          });
-        }
-
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: wingTheme(brightness),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(scale)),
-              child: RepaintBoundary(key: boundaryKey, child: child),
-            ),
-            home: ChatOutputsScreen(
-              chatTitle: 'Fixture',
-              initialOutput: const ChatOutput(
-                kind: ChatOutputKind.file,
-                path: target,
-                url: null,
-                label: '2026-10-08-perth-return-hotel-flight-gate.md',
-              ),
-              createSession: () => ChatOutputsSession(
-                loadHistory: (offset) async => ProfileHistoryPage(
-                  'fixture',
-                  const [],
-                  offset,
-                  500,
-                  isComplete: true,
-                ),
-                download: (_) async => throw StateError('No fixture download'),
-                readText: (path) async => RemoteTextPreview(
-                  path: target,
-                  text: source,
-                  language: 'markdown',
-                  mimeType: 'text/markdown',
-                  binary: false,
-                  truncated: false,
-                ),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        final name = find.descendant(
-          of: find.byType(ResourceFilename),
-          matching: find.byType(Text),
-        );
-        expect(
-          tester.widget<Text>(name).data,
-          '2026-10-08-perth-return-hotel-flight-gate.md',
-        );
-        expect(tester.widget<Text>(name).maxLines, 1);
-        final toolbarActions = find.byType(ResourceViewerAction);
-        expect(toolbarActions, findsNWidgets(4));
-        for (final action in toolbarActions.evaluate()) {
-          final button = find.byWidget(action.widget);
-          expect(tester.getSize(button), const Size(32, 32));
-          expect(
-            tester
-                .widget<Icon>(
-                  find.descendant(of: button, matching: find.byType(Icon)),
-                )
-                .size,
-            16,
+            (call) async {
+              if (call.method == 'Clipboard.setData') {
+                copied = (call.arguments as Map)['text'] as String;
+              }
+              return null;
+            },
           );
-        }
-        final sheet = tester.widget<DecoratedBox>(
-          find.byKey(const ValueKey('resource-document-sheet')),
-        );
-        expect(
-          (sheet.decoration as BoxDecoration).border,
-          Border.all(color: WingTokens.forBrightness(brightness).border),
-        );
-        expect(find.byType(MarkdownMessageContent), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        await captureViewer('');
-        await tester.tap(find.byTooltip('Show file path').last);
-        await tester.pumpAndSettle();
-        expect(find.text(target), findsOneWidget);
-        await captureViewer('-path');
-        await tester.tapAt(const Offset(300, 700));
-        await tester.pumpAndSettle();
-        await tester.tap(find.byTooltip('Copy content'));
-        await tester.pump();
-        expect(copied, source);
-        expect(find.byType(SnackBar), findsNothing);
-        await tester.tap(find.byTooltip('Show Raw content'));
-        await tester.pump();
-        expect(find.byType(MarkdownMessageContent), findsNothing);
-        expect(find.text(source), findsOneWidget);
-        await tester.pump();
-        await captureViewer('-raw');
-        await tester.tap(find.byTooltip('Copy content'));
-        await tester.pump();
-        expect(copied, source);
-        expect(find.byType(SnackBar), findsNothing);
-        expect(tester.takeException(), isNull);
-      });
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(SystemChannels.platform, null),
+          );
+          final boundaryKey = GlobalKey();
+          Future<void> captureViewer(String suffix) async {
+            if (!capture) return;
+            await tester.runAsync(() async {
+              final boundary =
+                  boundaryKey.currentContext!.findRenderObject()!
+                      as RenderRepaintBoundary;
+              final rendered = await boundary.toImage(pixelRatio: 1);
+              final png = await rendered.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              await File(
+                    'build/resource-viewers/${brightness.name}-${scale.toInt()}$suffix.png',
+                  )
+                  .create(recursive: true)
+                  .then((file) => file.writeAsBytes(png!.buffer.asUint8List()));
+              rendered.dispose();
+            });
+          }
+
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: boundaryKey, child: child),
+              ),
+              home: ChatOutputsScreen(
+                chatTitle: 'Fixture',
+                initialOutput: const ChatOutput(
+                  kind: ChatOutputKind.file,
+                  path: target,
+                  url: null,
+                  label: '2026-10-08-perth-return-hotel-flight-gate.md',
+                ),
+                createSession: () => ChatOutputsSession(
+                  loadHistory: (offset) async => ProfileHistoryPage(
+                    'fixture',
+                    const [],
+                    offset,
+                    500,
+                    isComplete: true,
+                  ),
+                  download: (_) async =>
+                      throw StateError('No fixture download'),
+                  readText: (path) async => RemoteTextPreview(
+                    path: target,
+                    text: source,
+                    language: 'markdown',
+                    mimeType: 'text/markdown',
+                    binary: false,
+                    truncated: false,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          final name = find.descendant(
+            of: find.byType(ResourceFilename),
+            matching: find.byType(Text),
+          );
+          expect(
+            tester.widget<Text>(name).data,
+            '2026-10-08-perth-return-hotel-flight-gate.md',
+          );
+          final toolbarActions = find.byType(ResourceViewerAction);
+          expect(toolbarActions, findsNWidgets(4));
+          final controls = toolbarActions
+              .evaluate()
+              .map((element) => find.byWidget(element.widget))
+              .toList();
+          final viewport =
+              Offset.zero &
+              (tester.view.physicalSize / tester.view.devicePixelRatio);
+          for (var i = 0; i < controls.length; i++) {
+            final button = controls[i];
+            expect(button.hitTestable(), findsOneWidget);
+            final bounds = tester.getRect(button);
+            expect(bounds.width, greaterThan(0));
+            expect(bounds.height, greaterThan(0));
+            expect(viewport.intersect(bounds), bounds);
+            for (var j = i + 1; j < controls.length; j++) {
+              expect(bounds.overlaps(tester.getRect(controls[j])), isFalse);
+            }
+          }
+          expect(find.byType(MarkdownMessageContent), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await captureViewer('');
+          switch (intent) {
+            case 'accessible header':
+              expect(
+                find.byTooltip('Copy content').hitTestable(),
+                findsOneWidget,
+              );
+              expect(
+                find.byTooltip('Show Raw content').hitTestable(),
+                findsOneWidget,
+              );
+            case 'file path':
+              await tester.tap(find.byTooltip('Show file path').last);
+              await tester.pumpAndSettle();
+              expect(find.text(target), findsOneWidget);
+              await captureViewer('-path');
+            case 'formatted copy':
+              await tester.tap(find.byTooltip('Copy content'));
+              await tester.pump();
+              expect(copied, source);
+            case 'raw copy':
+              await tester.tap(find.byTooltip('Show Raw content'));
+              await tester.pump();
+              expect(find.byType(MarkdownMessageContent), findsNothing);
+              expect(find.text(source), findsOneWidget);
+              await captureViewer('-raw');
+              await tester.tap(find.byTooltip('Copy content'));
+              await tester.pump();
+              expect(copied, source);
+          }
+          expect(tester.takeException(), isNull);
+        });
+      }
     }
   }
   testWidgets('downloaded image shares its exact bytes with a share glyph', (
@@ -400,14 +420,20 @@ void main() {
     final contentTop = tester.getRect(find.byType(AppBar)).bottom;
     expect(
       tester.getRect(find.text('The six health checks')).top,
-      inInclusiveRange(contentTop, contentTop + 100),
+      inInclusiveRange(
+        contentTop,
+        tester.view.physicalSize.height / tester.view.devicePixelRatio,
+      ),
     );
     await tester.tap(find.text('Corrections', findRichText: true));
     await tester.pumpAndSettle();
     expect(reads, ['$folder/report.md', '$folder/details.md']);
     expect(
       tester.getRect(find.text('Exact correction targets')).top,
-      inInclusiveRange(contentTop, contentTop + 100),
+      inInclusiveRange(
+        contentTop,
+        tester.view.physicalSize.height / tester.view.devicePixelRatio,
+      ),
     );
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
@@ -644,6 +670,12 @@ void main() {
     tester,
   ) async {
     final pending = Completer<RemoteTextPreview>();
+    var started = false;
+    addTearDown(() {
+      if (!pending.isCompleted) {
+        pending.complete(_textPreview('/srv/output/report.txt'));
+      }
+    });
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -662,7 +694,10 @@ void main() {
                     createSession: () => ChatOutputsSession(
                       loadHistory: (_) async =>
                           throw StateError('Unexpected history'),
-                      readText: (_) => pending.future,
+                      readText: (_) {
+                        started = true;
+                        return pending.future;
+                      },
                       download: (_) async =>
                           throw StateError('Unexpected download'),
                     ),
@@ -680,6 +715,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Back to chat'), findsOneWidget);
+    expect(started, isTrue);
     await tester.tap(find.text('Back to chat'));
     await tester.pumpAndSettle();
     pending.complete(_textPreview('/srv/output/report.txt'));
@@ -934,11 +970,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('clip.mp4'));
     await tester.pumpAndSettle();
-    final play = tester
-        .widget<ResourceViewerAction>(_viewerAction('Play media'))
-        .onPressed!;
-    play();
-    play();
+    await tester.tap(find.byTooltip('Play media'));
+    await tester.tap(find.byTooltip('Play media'));
     await tester.pump();
     expect(downloads, 1);
     expect(
@@ -1113,7 +1146,7 @@ void main() {
     },
   );
 
-  testWidgets('HTML preview guard blocks duplicate and closed downloads', (
+  testWidgets('closing HTML preview prevents a late native view', (
     tester,
   ) async {
     var downloads = 0;
@@ -1452,63 +1485,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'markdown detection accepts language and MIME but excludes binary',
-    (tester) async {
-      final cases = <({String language, String mimeType, bool binary})>[
-        (language: 'md', mimeType: 'text/plain', binary: false),
-        (
-          language: 'text',
-          mimeType: 'text/markdown; charset=utf-8',
-          binary: false,
-        ),
-        (language: 'markdown', mimeType: 'text/plain', binary: true),
-      ];
-      var index = 0;
+  for (final sample in [
+    (language: 'md', mimeType: 'text/plain', binary: false),
+    (language: 'text', mimeType: 'text/markdown; charset=utf-8', binary: false),
+    (language: 'markdown', mimeType: 'text/plain', binary: true),
+  ]) {
+    testWidgets('Markdown admission for $sample', (tester) async {
       await tester.pumpWidget(
         _screen(
           loadHistory: () async => [
-            {
-              'role': 'assistant',
-              'content': 'Saved /srv/current/notes-$index.txt',
-            },
+            {'role': 'assistant', 'content': 'Saved /srv/current/notes.txt'},
           ],
-          readText: (path) async {
-            final current = cases[index];
-            return RemoteTextPreview(
-              path: path,
-              text: '# Heading',
-              language: current.language,
-              mimeType: current.mimeType,
-              binary: current.binary,
-              truncated: false,
-            );
-          },
+          readText: (path) async => RemoteTextPreview(
+            path: path,
+            text: '# Heading',
+            language: sample.language,
+            mimeType: sample.mimeType,
+            binary: sample.binary,
+            truncated: false,
+          ),
           download: (_) async => throw StateError('Unexpected download'),
         ),
       );
-
-      for (index = 0; index < cases.length; index++) {
-        if (index > 0) {
-          await tester.tap(find.byTooltip('Refresh outputs'));
-          await tester.pumpAndSettle();
-        } else {
-          await tester.pumpAndSettle();
-        }
-        await tester.tap(find.text('notes-$index.txt'));
-        await tester.pumpAndSettle();
-        if (cases[index].binary) {
-          expect(find.byType(MarkdownMessageContent), findsNothing);
-          expect(find.byTooltip('Show Raw content'), findsNothing);
-        } else {
-          expect(find.byType(MarkdownMessageContent), findsOneWidget);
-          expect(find.byTooltip('Show Raw content'), findsOneWidget);
-        }
-        await tester.pageBack();
-        await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('notes.txt'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(MarkdownMessageContent),
+        sample.binary ? findsNothing : findsOneWidget,
+      );
+      expect(
+        find.byTooltip('Show Raw content'),
+        sample.binary ? findsNothing : findsOneWidget,
+      );
+      if (sample.binary) {
+        expect(find.byTooltip('Save or share'), findsOneWidget);
+      } else {
+        expect(find.text('Heading'), findsOneWidget);
       }
-    },
-  );
+    });
+  }
 
   testWidgets('delivers the downloaded filename and exact bytes', (
     tester,

@@ -51,6 +51,7 @@ void main() {
       preferences: preferences,
       appPreferences: appPreferences,
     );
+    addTearDown(result.dispose);
     await result.initialize();
     await result.switchProfile('android-qa-a');
     expect(result.error, isNull);
@@ -67,6 +68,7 @@ void main() {
     final deadline = DateTime.now().add(Duration(seconds: seconds));
     while (!condition() && DateTime.now().isBefore(deadline)) {
       await tester.pump(const Duration(milliseconds: 200));
+      expect(tester.takeException(), isNull);
     }
     expect(condition(), isTrue, reason: diagnostic?.call());
   }
@@ -98,6 +100,13 @@ void main() {
       onDispatched: (_) {},
     );
     expect(
+      result.fields.keys,
+      containsAll([
+        ProfileIdentityField.description,
+        ProfileIdentityField.soul,
+      ]),
+    );
+    expect(
       result.fields.values.every(
         (field) =>
             field.disposition == ProfileIdentityWriteDisposition.confirmed ||
@@ -127,44 +136,37 @@ void main() {
       Object? cleanupFailure;
       try {
         await verifier.connect();
-        final folders = await workspace.current!.gateway
-            .discoverProjectFolders();
-        expect(
-          folders,
-          isNotEmpty,
-          reason: 'Hermes must expose one disposable repository root',
-        );
+        final folder = await verifier.files.directory(null);
+        expect(folder.path, isNotEmpty);
         await tester.pumpWidget(
           MaterialApp(home: ProfileWorkspaceScreen(controller: workspace)),
         );
         await tester.pumpAndSettle();
 
-        await tester.tap(find.byTooltip('Workspace options'));
+        await tester.tap(find.byTooltip('Chat list options'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('New project'));
         await tester.pumpAndSettle();
         await tester.enterText(
-          find.descendant(
-            of: find.byType(AlertDialog),
-            matching: find.byType(TextField),
-          ),
+          find.byKey(const ValueKey('project-name-field')),
           initialName,
         );
-        await tester.pump();
-        final nameContinue = find.widgetWithText(TextButton, 'Continue');
-        expect(tester.widget<TextButton>(nameContinue).onPressed, isNotNull);
-        await tester.tap(nameContinue);
+        await tester.tap(find.byKey(const ValueKey('project-choose-folder')));
+        await until(
+          tester,
+          () => find
+              .byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton &&
+                    widget.tooltip == 'Use this folder' &&
+                    widget.onPressed != null,
+              )
+              .evaluate()
+              .isNotEmpty,
+        );
+        await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
         await tester.pumpAndSettle();
-        await tester.enterText(
-          find.byKey(const ValueKey('project-folder-path')),
-          folders.first.path,
-        );
-        await tester.pump();
-        final folderContinue = find.byKey(
-          const ValueKey('project-folder-continue'),
-        );
-        expect(tester.widget<TextButton>(folderContinue).onPressed, isNotNull);
-        await tester.tap(folderContinue);
+        await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
         await until(
           tester,
           () =>
@@ -206,63 +208,50 @@ void main() {
         createdId = created['id'] as String;
         expect(
           created['primary_path'].toString().replaceAll('\\', '/'),
-          folders.first.path.replaceAll('\\', '/'),
+          folder.path.replaceAll('\\', '/'),
         );
 
         Finder actions() => find.descendant(
-          of: find.byKey(ValueKey('project-$createdId')),
+          of: find.byKey(ValueKey('project-android-qa-a-$createdId')),
           matching: find.byTooltip('Project actions'),
         );
         await tester.tap(actions());
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const ValueKey('project-action-rename')));
+        await tester.tap(
+          find.byKey(const ValueKey('project-action-editProject')),
+        );
         await tester.pumpAndSettle();
         await tester.enterText(
           find.byKey(const ValueKey('project-name-field')),
           renamed,
         );
-        await tester.tap(find.byKey(const ValueKey('project-rename-save')));
-        await until(
-          tester,
-          () =>
-              find
-                  .byKey(const ValueKey('project-rename-save'))
-                  .evaluate()
-                  .isEmpty &&
-              workspace.current!.projects.any(
-                (row) => row['id'] == createdId && row['name'] == renamed,
-              ),
-        );
-        await tester.pumpAndSettle();
-
-        await tester.tap(actions());
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(const ValueKey('project-action-appearance')),
-        );
-        await tester.pumpAndSettle();
         await tester.ensureVisible(
           find.byKey(const ValueKey('project-color-9')),
         );
         await tester.tap(find.byKey(const ValueKey('project-color-9')));
+        await tester.tap(find.byKey(const ValueKey('project-choose-icon')));
+        await tester.pumpAndSettle();
         await tester.ensureVisible(
           find.byKey(const ValueKey('project-icon-rocket')),
         );
         await tester.tap(find.byKey(const ValueKey('project-icon-rocket')));
+        await tester.tap(find.byTooltip('Use selected icon'));
+        await tester.pumpAndSettle();
         await tester.ensureVisible(
-          find.byKey(const ValueKey('project-appearance-save')),
+          find.byKey(const ValueKey('project-edit-confirm')),
         );
-        await tester.tap(find.byKey(const ValueKey('project-appearance-save')));
+        await tester.tap(find.byKey(const ValueKey('project-edit-confirm')));
         await until(
           tester,
           () =>
               find
-                  .byKey(const ValueKey('project-appearance-save'))
+                  .byKey(const ValueKey('project-edit-confirm'))
                   .evaluate()
                   .isEmpty &&
               workspace.current!.projects.any(
                 (row) =>
                     row['id'] == createdId &&
+                    row['name'] == renamed &&
                     row['color'] == 'hsl(270 68% 58%)' &&
                     row['icon'] == 'rocket',
               ),
@@ -276,7 +265,7 @@ void main() {
         expect(reloaded['icon'], 'rocket');
         expect(
           reloaded['primary_path'].toString().replaceAll('\\', '/'),
-          folders.first.path.replaceAll('\\', '/'),
+          folder.path.replaceAll('\\', '/'),
         );
 
         await tester.tap(actions());
@@ -310,11 +299,18 @@ void main() {
               await verifier.deleteProject(id, canDispatch: () => true);
             }
           }
+          expect(
+            (await verifier.projects()).where(
+              (row) => row['name'] == initialName || row['name'] == renamed,
+            ),
+            isEmpty,
+            reason: 'Nonce-owned projects must be removed after cleanup',
+          );
         } catch (error) {
           cleanupFailure = error;
         } finally {
+          await tester.pumpWidget(const SizedBox.shrink());
           verifier.close();
-          workspace.dispose();
         }
         if (cleanupFailure != null) {
           fail('Project live cleanup failed: $cleanupFailure');
@@ -385,8 +381,8 @@ void main() {
           find.byKey(const ValueKey('profile-soul-field')),
           soul,
         );
-        await tester.ensureVisible(find.text('Save'));
-        await tester.tap(find.text('Save'));
+        await tester.ensureVisible(find.byTooltip('Save changes'));
+        await tester.tap(find.byTooltip('Save changes'));
         await until(
           tester,
           () => find

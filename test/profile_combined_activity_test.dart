@@ -432,7 +432,10 @@ void main() {
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
           child: child!,
         ),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -615,8 +618,12 @@ void main() {
   test('screen opening retires an overtaken profile read', () async {
     final fixture = BotsFixture();
     final gate = Completer<Map<String, dynamic>?>();
-    fixture.readHook = (_, method, _) =>
-        method == 'profiles.list' ? gate.future : Future.value(null);
+    final started = Completer<void>();
+    fixture.readHook = (_, method, _) {
+      if (method != 'profiles.list') return Future.value(null);
+      started.complete();
+      return gate.future;
+    };
     final session = BotsSession((_) async => [fixture.repository]);
     addTearDown(session.dispose);
     var current = true;
@@ -628,7 +635,7 @@ void main() {
       ),
       canUse: () => current,
     );
-    await Future<void>.delayed(Duration.zero);
+    await started.future;
     current = false;
     gate.complete(null);
     expect(await opening, isNull);

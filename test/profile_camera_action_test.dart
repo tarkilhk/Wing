@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -42,6 +43,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
           controller: controller,
           onCapturePhoto: (target) async {
             started.complete(target);

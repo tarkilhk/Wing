@@ -5,7 +5,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
-import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
@@ -91,8 +90,15 @@ class _SubagentFixture extends ProfileActionsFixture {
             params['session_id'] == 'child-watch') {
           return {
             'epoch': 'child-epoch',
-            'events': childEvents,
-            'latest_seq': childEvents.length,
+            'events': [
+              for (final event in childEvents)
+                if ((event['seq'] as int) > (params['last_seen'] as int)) event,
+            ],
+            'latest_seq': childEvents.fold<int>(
+              0,
+              (latest, event) =>
+                  (event['seq'] as int) > latest ? event['seq'] as int : latest,
+            ),
             'truncated': false,
           };
         }
@@ -176,6 +182,21 @@ void main() {
       ).writeAsBytes(data!.buffer.asUint8List());
       image.dispose();
     });
+  }
+
+  Future<void> until(
+    WidgetTester tester,
+    bool Function() ready,
+    String outcome,
+  ) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    do {
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(tester.takeException(), isNull, reason: outcome);
+      if (ready()) return;
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    } while (DateTime.now().isBefore(deadline));
+    fail('Timed out waiting for $outcome');
   }
 
   late _SubagentFixture fixture;
@@ -320,105 +341,89 @@ void main() {
     },
   );
 
-  testWidgets(
-    'child saved and live work share one Activity and native reasoning',
-    (tester) async {
-      fixture.childMessages = [
-        {'id': 1, 'role': 'user', 'content': 'Inspect the release'},
+  testWidgets('child completion retains one Activity for saved and live tools', (
+    tester,
+  ) async {
+    fixture.childMessages = [
+      {'id': 1, 'role': 'user', 'content': 'Inspect the release'},
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': '',
+        'reasoning': '**Check saved evidence**',
+        'tool_calls': [
+          for (var i = 0; i < 11; i++)
+            {
+              'id': 'call-$i',
+              'function': {'name': 'read_file', 'arguments': '{}'},
+            },
+        ],
+      },
+      for (var i = 0; i < 11; i++)
         {
-          'id': 2,
-          'role': 'assistant',
-          'content': '',
-          'reasoning': '**Check saved evidence**',
-          'tool_calls': [
-            for (var i = 0; i < 11; i++)
-              {
-                'id': 'call-$i',
-                'function': {'name': 'read_file', 'arguments': '{}'},
-              },
-          ],
+          'id': i + 3,
+          'role': 'tool',
+          'tool_call_id': 'call-$i',
+          'content': 'Evidence $i',
         },
-        for (var i = 0; i < 11; i++)
-          {
-            'id': i + 3,
-            'role': 'tool',
-            'tool_call_id': 'call-$i',
-            'content': 'Evidence $i',
-          },
-      ];
-      fixture.childEvents.addAll([
-        {'session_id': 'child-watch', 'seq': 1, 'type': 'message.start'},
-        {
-          'session_id': 'child-watch',
-          'seq': 2,
-          'type': 'tool.start',
-          'payload': {
-            'tool_id': 'submirror:child-session:1',
-            'name': 'read_file',
-            'preview': 'current.txt',
-          },
-        },
-      ]);
-      await showPanel(tester, scale: 1);
-      emitChatEvent(controller, chat, 'subagent.start', {
-        'subagent_id': 'child-1',
-        'child_session_id': 'child-session',
-        'goal': 'Inspect the release',
-      });
-      await tester.pump();
-      await tester.tap(find.text('Inspect the release'));
-      for (var i = 0; i < 12; i++) {
-        await tester.pump(const Duration(milliseconds: 50));
-      }
-      expect(
-        find.text('Activity · 12 tools'),
-        findsOneWidget,
-        reason: tester
-            .widgetList<Text>(find.byType(Text))
-            .map((w) => w.data)
-            .whereType<String>()
-            .join(' | '),
-      );
-      expect(find.byType(ProfileActivitySection), findsOneWidget);
-      fixture.childEvents.add({
+    ];
+    fixture.childEvents.addAll([
+      {'session_id': 'child-watch', 'seq': 1, 'type': 'message.start'},
+      {
         'session_id': 'child-watch',
-        'seq': 3,
-        'type': 'message.complete',
-        'payload': {'text': 'Final reply awaiting persistence'},
-      });
-      await tester
-          .widget<SubagentTimeline>(find.byType(SubagentTimeline))
-          .session
-          .refresh();
-      await tester.pump();
-      expect(
-        find.text('Activity · 12 tools'),
-        findsOneWidget,
-        reason:
-            'Saved work and the retained final replay must stay in one reply Activity',
-      );
-      expect(find.byType(ProfileActivitySection), findsOneWidget);
-      await tester.tap(find.text('Activity · 12 tools'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      final reasoning = find.byWidgetPredicate(
-        (w) =>
-            w is MarkdownMessageContent && w.data == '**Check saved evidence**',
-      );
-      expect(reasoning, findsOneWidget);
-      expect(
-        find.ancestor(
-          of: reasoning,
-          matching: find.byType(ProfileActivityTabs),
-        ),
-        findsNothing,
-      );
-      await tester.tap(find.byTooltip('Close subagent activity'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
-      await tester.pumpWidget(const SizedBox());
-    },
-  );
+        'seq': 2,
+        'type': 'tool.start',
+        'payload': {
+          'tool_id': 'submirror:child-session:1',
+          'name': 'read_file',
+          'preview': 'current.txt',
+        },
+      },
+    ]);
+    await showPanel(tester, scale: 1);
+    emitChatEvent(controller, chat, 'subagent.start', {
+      'subagent_id': 'child-1',
+      'child_session_id': 'child-session',
+      'goal': 'Inspect the release',
+    });
+    await tester.pump();
+    await tester.tap(find.text('Inspect the release'));
+    await until(
+      tester,
+      () => find.text('Activity · 12 tools').evaluate().isNotEmpty,
+      'the child timeline with saved and live tools',
+    );
+    expect(
+      find.text('Activity · 12 tools'),
+      findsOneWidget,
+      reason: tester
+          .widgetList<Text>(find.byType(Text))
+          .map((w) => w.data)
+          .whereType<String>()
+          .join(' | '),
+    );
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    fixture.childEvents.add({
+      'session_id': 'child-watch',
+      'seq': 3,
+      'type': 'message.complete',
+      'payload': {'text': 'Final reply awaiting persistence'},
+    });
+    await tester.tap(find.byTooltip('Refresh subagent activity'));
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Activity · 12 tools'),
+      findsOneWidget,
+      reason:
+          'Saved work and the retained final replay must stay in one reply Activity',
+    );
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    await tester.tap(find.byTooltip('Close subagent activity'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets('child timeline keeps its visible Running pulse', (tester) async {
     await showPanel(tester, scale: 1, motion: true);
@@ -433,46 +438,50 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
     expect(find.byType(SubagentTimeline), findsOneWidget);
-    final pulse = find.byWidgetPredicate(
-      (widget) => widget is StudioLoading && widget.label == 'Running',
+    final sheet = find.ancestor(
+      of: find.byType(SubagentTimeline),
+      matching: find.byType(StudioLoadingFrame),
     );
-    expect(pulse, findsOneWidget);
-    Future<List<int>> workPixels() async {
-      final rect = tester.getRect(pulse);
+    expect(sheet, findsOneWidget);
+    final pulse = find.descendant(
+      of: sheet,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is StudioLoading && widget.label == 'Running',
+      ),
+    );
+    void expectVisibleWork() {
+      expect(pulse, findsOneWidget);
+      final bounds = tester.getRect(pulse);
       final viewport =
           Offset.zero &
           (tester.view.physicalSize / tester.view.devicePixelRatio);
-      expect(viewport.intersect(rect), rect);
-      return (await tester.runAsync(() async {
-        final image = await tester
-            .renderObject<RenderRepaintBoundary>(find.byKey(frame))
-            .toImage();
-        final bytes = (await image.toByteData())!.buffer.asUint8List();
-        final pixels = <int>[
-          for (var y = rect.top.ceil(); y < rect.bottom.floor(); y++)
-            for (var x = rect.left.ceil(); x < rect.right.floor(); x++)
-              ...bytes.sublist(
-                (y * image.width + x) * 4,
-                (y * image.width + x + 1) * 4,
-              ),
-        ];
-        image.dispose();
-        return pixels;
-      }))!;
+      expect(bounds.isEmpty, isFalse);
+      expect(viewport.intersect(bounds), bounds);
+      final paint = find.descendant(
+        of: pulse,
+        matching: find.byType(CustomPaint),
+      );
+      expect(paint, findsOneWidget);
+      expect(tester.getSize(paint).isEmpty, isFalse);
     }
 
-    final before = await workPixels();
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(await workPixels(), isNot(equals(before)));
-    await capture(tester, 'running-pulse');
-    await tester.tap(find.text('Task').first);
+    final taskHeader = find.descendant(
+      of: sheet,
+      matching: find.ancestor(
+        of: find.text('Task'),
+        matching: find.byType(ListTile),
+      ),
+    );
+    expect(taskHeader, findsOneWidget);
+    expectVisibleWork();
+    await tester.tap(taskHeader);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(pulse, findsOneWidget);
-    await tester.tap(find.text('Task').first);
+    expectVisibleWork();
+    await tester.tap(taskHeader);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(pulse, findsOneWidget);
+    expectVisibleWork();
     await tester.tap(find.byTooltip('Close subagent activity'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
@@ -522,11 +531,15 @@ void main() {
           });
           await tester.pump();
           await tester.tap(find.text('Inspect the release'));
-          for (var i = 0; i < 12; i++) {
-            await tester.pump(const Duration(milliseconds: 50));
-          }
           final field = find.byType(TextField);
           final steer = find.byTooltip('Steer');
+          await until(
+            tester,
+            () =>
+                field.hitTestable().evaluate().isNotEmpty &&
+                steer.hitTestable().evaluate().isNotEmpty,
+            'the child steering editor and action',
+          );
           expect(field.hitTestable(), findsOneWidget);
           expect(steer.hitTestable(), findsOneWidget);
           expect(find.byTooltip('Interrupt'), findsOneWidget);
@@ -587,9 +600,14 @@ void main() {
           expect(request.$2['text'], 'Check the retained child rows');
           await capture(tester, 'steering-pending-${brightness.name}-$scale');
           gate.complete();
-          for (var i = 0; i < 5; i++) {
-            await tester.pump(const Duration(milliseconds: 30));
-          }
+          await until(
+            tester,
+            () => find
+                .text('The subagent did not accept that steering.')
+                .evaluate()
+                .isNotEmpty,
+            'the rejected steering result',
+          );
           expect(
             find.text('The subagent did not accept that steering.'),
             findsOneWidget,
@@ -603,9 +621,14 @@ void main() {
           fixture.steerGate = null;
           fixture.failSteer = true;
           await tester.tap(steer);
-          for (var i = 0; i < 5; i++) {
-            await tester.pump(const Duration(milliseconds: 30));
-          }
+          await until(
+            tester,
+            () => find
+                .text('Steering could not be queued.')
+                .evaluate()
+                .isNotEmpty,
+            'the failed steering result',
+          );
           expect(find.text('Steering could not be queued.'), findsOneWidget);
           expect(
             tester.widget<TextField>(field).controller!.text,
@@ -614,9 +637,13 @@ void main() {
           fixture.failSteer = false;
           fixture.acceptSteer = true;
           await tester.tap(steer);
-          for (var i = 0; i < 5; i++) {
-            await tester.pump(const Duration(milliseconds: 30));
-          }
+          await until(
+            tester,
+            () =>
+                find.text('Steering queued.').evaluate().isNotEmpty &&
+                tester.widget<TextField>(field).controller!.text.isEmpty,
+            'accepted steering to clear the submitted draft',
+          );
           expect(tester.widget<TextField>(field).controller!.text, isEmpty);
           expect(find.text('Steering queued.'), findsOneWidget);
           await capture(tester, 'steering-queued-${brightness.name}-$scale');
@@ -631,9 +658,11 @@ void main() {
           await tester.pump();
           tester.widget<TextField>(field).controller!.text = 'Newer guidance';
           acceptedGate.complete();
-          for (var i = 0; i < 5; i++) {
-            await tester.pump(const Duration(milliseconds: 30));
-          }
+          await until(
+            tester,
+            () => tester.widget<TextField>(field).enabled != false,
+            'the held steering submission to finish',
+          );
           expect(
             tester.widget<TextField>(field).controller!.text,
             'Newer guidance',

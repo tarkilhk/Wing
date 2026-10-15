@@ -108,6 +108,21 @@ fun checkBoundedQueues(text: String): List<Pair<Int, String>> {
         val poolNames = file.importDirectives.filter {
             it.importedFqName?.asString() == "java.util.concurrent.ThreadPoolExecutor"
         }.map { it.aliasName ?: "ThreadPoolExecutor" }.toSet() + "ThreadPoolExecutor"
+        val unsafeHandlers = setOf("CallerRunsPolicy", "DiscardPolicy", "DiscardOldestPolicy")
+        val importedHandlers = file.importDirectives.filter {
+            it.importedFqName?.asString() in unsafeHandlers.map { name ->
+                "java.util.concurrent.ThreadPoolExecutor.$name"
+            }
+        }.map { it.aliasName ?: it.importedFqName!!.shortName().asString() }.toSet()
+        fun unsafeHandler(call: KtCallExpression): Boolean {
+            val name = call.calleeExpression?.text
+            val qualified = (call.parent as? KtDotQualifiedExpression)
+                ?.takeIf { it.selectorExpression === call }
+            return if (qualified == null) name in importedHandlers
+            else name in unsafeHandlers &&
+                (qualified.receiverExpression.text in poolNames ||
+                    qualified.receiverExpression.text == "java.util.concurrent.ThreadPoolExecutor")
+        }
         for (call in calls) {
             val name = call.calleeExpression?.text
             val receiver = (call.parent as? KtDotQualifiedExpression)?.receiverExpression?.text
@@ -119,6 +134,13 @@ fun checkBoundedQueues(text: String): List<Pair<Int, String>> {
             val minimum = integer(args.getOrNull(0))
             val maximum = integer(args.getOrNull(1))
             val queue = args.getOrNull(4) as? KtCallExpression
+            // The sixth Java argument may be a RejectedExecutionHandler, not
+            // just a ThreadFactory. Seven-argument rejection alone misses it.
+            val sixth = args.getOrNull(5)
+            val unsafeSixth = sixth != null &&
+                (listOfNotNull(sixth as? KtCallExpression) +
+                    PsiTreeUtil.findChildrenOfType(sixth, KtCallExpression::class.java))
+                    .any(::unsafeHandler)
             val capacity = queue?.valueArguments?.singleOrNull()?.getArgumentExpression()
             var bound = integer(capacity)
             if (bound == null && capacity is KtNameReferenceExpression) {
@@ -139,7 +161,8 @@ fun checkBoundedQueues(text: String): List<Pair<Int, String>> {
                 }
             }
             if (minimum !in 1..2 || maximum !in 1..2 || maximum!! < minimum!! ||
-                queue?.calleeExpression?.text !in queueNames || bound !in 1..32 || args.size > 6) fail(call)
+                queue?.calleeExpression?.text !in queueNames || bound !in 1..32 ||
+                args.size > 6 || unsafeSixth) fail(call)
         }
         return findings.distinct().sortedBy { it.first }
     } finally { Disposer.dispose(disposable) }

@@ -1,4 +1,5 @@
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
 import 'dart:convert';
@@ -84,7 +85,10 @@ void main() {
                 ).copyWith(textScaler: TextScaler.linear(scale)),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           ),
         );
@@ -100,6 +104,55 @@ void main() {
             of: find.byType(SlashCommandSuggestions),
             matching: find.byType(ListView),
           );
+          final trace = <Map<String, Object?>>[];
+          Map<String, Object?> observe() {
+            List<Map<String, Object?>> boxes(Finder finder) => [
+              for (final element in finder.evaluate())
+                if (element.findRenderObject() case final RenderBox box
+                    when box.attached && box.hasSize)
+                  {
+                    'origin': box.localToGlobal(Offset.zero).toString(),
+                    'size': box.size.toString(),
+                  },
+            ];
+            final scrollables = <Element>{
+              ...find
+                  .descendant(of: list, matching: find.byType(Scrollable))
+                  .evaluate(),
+              ...find
+                  .ancestor(of: list, matching: find.byType(Scrollable))
+                  .evaluate(),
+            };
+            return {
+              'itemMounted': item.evaluate().length,
+              'itemHitTestable': item.hitTestable().evaluate().length,
+              'itemBoxes': boxes(item),
+              'listBoxes': boxes(list),
+              'outerBoxes': boxes(
+                find.ancestor(
+                  of: list,
+                  matching: find.byType(SingleChildScrollView),
+                ),
+              ),
+              'scrolls': [
+                for (final element in scrollables)
+                  if ((element as StatefulElement).state
+                      case final ScrollableState state)
+                    {
+                      'axis': state.position.axisDirection.name,
+                      'pixels': state.position.pixels,
+                      'min': state.position.minScrollExtent,
+                      'max': state.position.maxScrollExtent,
+                      'viewport': state.position.viewportDimension,
+                    },
+              ],
+              'draft': chat.composer.observation.displayedText,
+              'keyboardBottom': tester.view.viewInsets.bottom,
+              'physicalSize': tester.view.physicalSize.toString(),
+              'pixelRatio': tester.view.devicePixelRatio,
+            };
+          }
+
           for (
             var i = 0;
             i < 15 && item.hitTestable().evaluate().isEmpty;
@@ -114,10 +167,35 @@ void main() {
             final visible = tester
                 .getRect(list)
                 .intersect(tester.getRect(viewport));
-            await tester.dragFrom(visible.center, const Offset(0, -80));
+            final inner = tester
+                .state<ScrollableState>(
+                  find.descendant(of: list, matching: find.byType(Scrollable)),
+                )
+                .position;
+            // At the list's end, its final item can still be clipped by the
+            // outer composer viewport. Drag the visible suggestion header to
+            // scroll that outer surface, as a user would, rather than sending
+            // another gesture to the already exhausted inner list.
+            final outerRect = tester.getRect(viewport);
+            final header = Rect.fromLTRB(
+              outerRect.left,
+              outerRect.top,
+              outerRect.right,
+              tester.getRect(list).top,
+            );
+            final dragStart = inner.extentAfter == 0 && header.height > 0
+                ? header.center
+                : visible.center;
+            trace.add({...observe(), 'dragStart': dragStart.toString()});
+            await tester.dragFrom(dragStart, const Offset(0, -80));
             await frames();
           }
-          expect(item.hitTestable(), findsOneWidget);
+          if (item.hitTestable().evaluate().isEmpty) trace.add(observe());
+          expect(
+            item.hitTestable(),
+            findsOneWidget,
+            reason: trace.isEmpty ? null : jsonEncode(trace),
+          );
         }
 
         await frames();

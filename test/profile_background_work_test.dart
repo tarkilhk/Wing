@@ -243,35 +243,41 @@ void main() {
     expect(chat.sideQuestionDeliveries, hasLength(3));
   });
 
-  test('resume restores tasks and malformed snapshots clear them', () async {
-    host.sideTasks = {
-      'retention': 'live_session',
-      'tasks': [
-        {
-          'task_id': 'recovered',
-          'kind': 'btw',
-          'prompt': 'Recovered question',
-          'prompt_truncated': false,
-          'status': 'running',
-          'result': null,
-          'result_truncated': false,
-        },
-      ],
-    };
-    await controller.reconnect(chat.key.workspace);
-    expect(chat.sideQuestionDeliveries.single.taskId, 'recovered');
-    expect(chat.runtime.blocksTurnAdmission, isTrue);
-    expect(chat.runtime.execution, ChatExecution.running);
+  for (final clearKind in ['empty resume', 'malformed event']) {
+    test('resumed tasks are cleared by $clearKind', () async {
+      host.sideTasks = {
+        'retention': 'live_session',
+        'tasks': [
+          {
+            'task_id': 'recovered',
+            'kind': 'btw',
+            'prompt': 'Recovered question',
+            'prompt_truncated': false,
+            'status': 'running',
+            'result': null,
+            'result_truncated': false,
+          },
+        ],
+      };
+      await controller.reconnect(chat.key.workspace);
+      expect(chat.sideQuestionDeliveries.single.taskId, 'recovered');
+      expect(chat.runtime.blocksTurnAdmission, isTrue);
+      expect(chat.runtime.execution, ChatExecution.running);
 
-    host.sideTasks = const {'retention': 'live_session', 'tasks': <Object>[]};
-    await controller.reconnect(chat.key.workspace);
-    expect(chat.sideQuestionDeliveries, isEmpty);
-
-    host.event('a', 'session.info', {
-      'side_tasks': {'retention': 'wrong', 'tasks': <Object>[]},
+      if (clearKind == 'empty resume') {
+        host.sideTasks = const {
+          'retention': 'live_session',
+          'tasks': <Object>[],
+        };
+        await controller.reconnect(chat.key.workspace);
+      } else {
+        host.event('a', 'session.info', {
+          'side_tasks': {'retention': 'wrong', 'tasks': <Object>[]},
+        });
+      }
+      expect(chat.sideQuestionDeliveries, isEmpty);
     });
-    expect(chat.sideQuestionDeliveries, isEmpty);
-  });
+  }
 
   test(
     'same-runtime resume preserves side-task cards when the field is absent',
@@ -312,107 +318,94 @@ void main() {
     },
   );
 
-  test(
-    'stop validates the acknowledgement and refreshes the exited row',
-    () async {
+  for (final (name, response, accepted) in [
+    (
+      'confirmed stop',
+      <String, dynamic>{'status': 'killed', 'session_id': 'bg-1'},
+      true,
+    ),
+    (
+      'server rejection',
+      <String, dynamic>{'status': 'error', 'session_id': 'bg-1'},
+      false,
+    ),
+    (
+      'already exited',
+      <String, dynamic>{'status': 'already_exited', 'exit_code': 0},
+      true,
+    ),
+    (
+      'different process acknowledgement',
+      <String, dynamic>{
+        'status': 'already_exited',
+        'session_id': 'another-process',
+      },
+      false,
+    ),
+  ]) {
+    test('stop handles $name without inventing completion', () async {
       host.listResponse = {
         'processes': [_process('bg-1', 'running')],
       };
       await controller.refreshProcesses(chat);
+      host.killResponse = response;
       host.listResponse = {
         'processes': [_process('bg-1', 'exited')],
       };
-
       expect(
         await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
-        isTrue,
+        accepted,
       );
-      expect(chat.processes.single.status, GatewayProcessStatus.exited);
+      expect(
+        chat.processes.single.status,
+        accepted ? GatewayProcessStatus.exited : GatewayProcessStatus.running,
+      );
       expect(host.calls.where((call) => call.$2 == 'process.kill').single.$3, {
         'session_id': 'a-runtime',
         'process_id': 'bg-1',
         'profile': 'a',
       });
+      if (!accepted) expect(chat.processesError, isNotNull);
+    });
+  }
 
-      host.listResponse = {
-        'processes': [_process('bg-1', 'running')],
-      };
-      await controller.refreshProcesses(chat);
-      host.killResponse = {'status': 'error', 'session_id': 'bg-1'};
-      expect(
-        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
-        isFalse,
-      );
-      expect(chat.processes.single.isRunning, isTrue);
-      expect(chat.processesError, contains('did not confirm'));
+  test('stop remains single-flight across a list refresh', () async {
+    host.listResponse = {
+      'processes': [_process('bg-1', 'running')],
+    };
+    await controller.refreshProcesses(chat);
+    final pending = host.pendingKill = Completer<Map<String, dynamic>>();
+    final first = controller.stopProcess(chat, 'bg-1', canDispatch: () => true);
+    expect(
+      await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
+      isFalse,
+    );
 
-      host.killResponse = {'status': 'already_exited', 'exit_code': 0};
-      host.listResponse = {
-        'processes': [_process('bg-1', 'exited')],
-      };
-      expect(
-        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
-        isTrue,
-      );
+    await controller.refreshProcesses(chat);
+    host.listResponse = {
+      'processes': [_process('bg-1', 'exited')],
+    };
+    pending.complete({'status': 'killed', 'session_id': 'bg-1'});
+    expect(await first, isTrue);
+  });
 
-      host.listResponse = {
-        'processes': [_process('bg-1', 'running')],
-      };
-      await controller.refreshProcesses(chat);
-      host.killResponse = {
-        'status': 'already_exited',
-        'session_id': 'another-process',
-      };
-      expect(
-        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
-        isFalse,
-      );
-    },
-  );
+  test('late stop acknowledgement cannot affect replacement runtime', () async {
+    host.listResponse = {
+      'processes': [_process('bg-1', 'running')],
+    };
+    await controller.refreshProcesses(chat);
+    final scopedPending = host.pendingKill = Completer<Map<String, dynamic>>();
+    final scoped = controller.stopProcess(
+      chat,
+      'bg-1',
+      canDispatch: () => true,
+    );
 
-  test(
-    'stop is single-flight, survives a list refresh, and stays scoped',
-    () async {
-      host.listResponse = {
-        'processes': [_process('bg-1', 'running')],
-      };
-      await controller.refreshProcesses(chat);
-      final pending = host.pendingKill = Completer<Map<String, dynamic>>();
-      final first = controller.stopProcess(
-        chat,
-        'bg-1',
-        canDispatch: () => true,
-      );
-      expect(
-        await controller.stopProcess(chat, 'bg-1', canDispatch: () => true),
-        isFalse,
-      );
-
-      await controller.refreshProcesses(chat);
-      host.listResponse = {
-        'processes': [_process('bg-1', 'exited')],
-      };
-      pending.complete({'status': 'killed', 'session_id': 'bg-1'});
-      expect(await first, isTrue);
-
-      host.listResponse = {
-        'processes': [_process('bg-1', 'running')],
-      };
-      await controller.refreshProcesses(chat);
-      final scopedPending = host.pendingKill =
-          Completer<Map<String, dynamic>>();
-      final scoped = controller.stopProcess(
-        chat,
-        'bg-1',
-        canDispatch: () => true,
-      );
-
-      host.runtimeForResume['a'] = 'replacement-runtime';
-      await controller.openSession(chat.key);
-      scopedPending.complete({'status': 'killed', 'session_id': 'bg-1'});
-      expect(await scoped, isFalse);
-    },
-  );
+    host.runtimeForResume['a'] = 'replacement-runtime';
+    await controller.openSession(chat.key);
+    scopedPending.complete({'status': 'killed', 'session_id': 'bg-1'});
+    expect(await scoped, isFalse);
+  });
 
   test(
     'dismissed exited rows stay hidden only while the server reports them',

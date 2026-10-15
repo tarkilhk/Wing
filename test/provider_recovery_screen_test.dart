@@ -40,6 +40,7 @@ void main() {
   bool offline = false;
   setUp(() {
     fixture = AdministrationFixture('Claw');
+    addTearDown(fixture.server.close);
     observation = claude();
     offline = false;
     fixture.override = (method, path, query, body) async {
@@ -224,6 +225,10 @@ void main() {
     await show(tester, detail());
     await tester.tap(find.text('Renew access'));
     await tester.pumpAndSettle();
+    expect(
+      find.text('Renewal was not confirmed. Check status.'),
+      findsOneWidget,
+    );
     expect(find.text('Access token expired'), findsOneWidget);
     expect(find.text('Sign-in options'), findsOneWidget);
     await shot(tester, 'renewal-failed');
@@ -250,10 +255,18 @@ void main() {
     'renewal loading disables other actions without duplicate submission',
     (tester) async {
       final gate = Completer<String>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete('anthropic (0 credentials):\n');
+      });
       fixture.consoleOverride = (_, _, {confirm = false}) => gate.future;
       await show(tester, detail());
       await tester.tap(find.text('Renew access'));
       await tester.pump();
+      final progress = find.descendant(
+        of: find.widgetWithText(FilledButton, 'Renew access'),
+        matching: find.byType(CircularProgressIndicator),
+      );
+      expect(progress, findsOneWidget);
       expect(
         tester
             .widget<OutlinedButton>(
@@ -262,9 +275,15 @@ void main() {
             .onPressed,
         isNull,
       );
+      await tester.tap(find.text('Renew access'));
+      await tester.tap(find.text('Sign-in options'));
+      await tester.pump(const Duration(seconds: 2));
+      expect(progress, findsOneWidget);
+      expect(fixture.consoleRequests, hasLength(1));
       await shot(tester, 'renewal-loading');
       gate.complete('anthropic (0 credentials):\n');
       await tester.pumpAndSettle();
+      expect(progress, findsNothing);
       expect(fixture.consoleRequests.length, 1);
     },
   );

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -242,7 +243,10 @@ void main() {
                 ),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                createBotsSession: () => BotsSession((_) async => const []),
+                controller: controller,
+              ),
             ),
           ),
         );

@@ -18,18 +18,21 @@ def check(root: Path) -> list[str]:
     failures = []
     if (directory / f"{MODULE}.py").exists():
         failures.append(f"{DIRECTORY}/{MODULE}.py {ID}: remove the retired ledger")
-    for path in sorted(directory.glob("*.py")):
+    for path in sorted(directory.rglob("*.py")):
         tree = ast.parse(path.read_text())
         for node in ast.walk(tree):
             canonical = {MODULE, f"tools.fake_gateway.{MODULE}"}
             retired_import = isinstance(node, ast.Import) and any(
                 alias.name in canonical for alias in node.names)
             if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if node.level:
+                    package = path.relative_to(root).parent.parts
+                    keep = len(package) - node.level + 1
+                    module = '.'.join((*package[:max(0, keep)], module)).rstrip('.')
                 retired_import = (
-                    (node.level == 0 and node.module in canonical)
-                    or (node.level == 1 and node.module == MODULE)
-                    or ((node.level == 1 and node.module is None
-                         or node.level == 0 and node.module == "tools.fake_gateway")
+                    module in canonical
+                    or (module == "tools.fake_gateway"
                         and any(alias.name == MODULE for alias in node.names))
                 )
             if retired_import:

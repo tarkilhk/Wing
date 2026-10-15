@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+# This executable probe uses assertions as its verdict; optimization must never
+# turn a run into an unchecked success.
+if not __debug__:
+    raise RuntimeError("Run the gateway contract probe without Python optimization")
+
 import argparse
 import asyncio
 import base64

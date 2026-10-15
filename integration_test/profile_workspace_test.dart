@@ -110,6 +110,9 @@ void main() {
       final directory = await getTemporaryDirectory();
       final attachment = File('${directory.path}/android-qa.txt');
       await attachment.writeAsString('ANDROID_PROFILE_QA');
+      addTearDown(() async {
+        if (await attachment.exists()) await attachment.delete();
+      });
       await controller.addAttachments(a, [
         (path: attachment.path, name: 'android-qa.txt'),
       ]);
@@ -191,7 +194,6 @@ void main() {
       debugPrint(
         '[connection-qa] PASS: edited endpoint isolated; old session rejected; original owner preserved.',
       );
-      await attachment.delete();
     },
     timeout: const Timeout(Duration(minutes: 5)),
   );

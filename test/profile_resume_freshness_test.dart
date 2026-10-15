@@ -118,15 +118,15 @@ void main() {
     host
       ..resumeStarted = Completer<void>()
       ..resumeDelay = delay;
-    bool? opened;
-    final selection = visit
-        .select(RecentConversationKey.chat(chat.key))
-        .then((value) => opened = value);
+    final selection = visit.select(RecentConversationKey.chat(chat.key));
     await host.resumeStarted!.future;
-    await Future<void>.delayed(Duration.zero);
+    expect(
+      await selection,
+      isTrue,
+      reason: 'Retained history must not wait for the held resume RPC.',
+    );
     expect(controller.current!.chat, same(chat));
     expect(chat.reading.messages.single['content'], 'a completed');
-    expect(opened, isTrue, reason: 'Retained history must not wait for RPC');
     expect(chat.refreshingConversation, isTrue);
     expect(chat.runtime.opening, isTrue);
     host
@@ -137,7 +137,6 @@ void main() {
         {'id': 2, 'role': 'assistant', 'content': 'New server reply'},
       ];
     delay.complete();
-    await selection;
     await host.heldHistoryStarted!.future;
     expect(chat.refreshingConversation, isTrue);
     expect(chat.reading.messages, hasLength(1));

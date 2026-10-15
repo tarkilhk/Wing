@@ -43,54 +43,77 @@ void main() {
     expect(await rule.check(Directory.current), isEmpty);
   });
 
+  late Directory root;
+  late File target;
+  setUp(() {
+    root = Directory.systemTemp.createTempSync('wing-capture-guard-');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final original = File('.dart_tool/package_config.json').absolute;
+    final config = jsonDecode(original.readAsStringSync()) as Map;
+    target = File('${root.path}/${rule.owner}');
+    target.parent.createSync(recursive: true);
+    final fixtureConfig = File('${root.path}/.dart_tool/package_config.json');
+    fixtureConfig.parent.createSync(recursive: true);
+    fixtureConfig.writeAsStringSync(
+      jsonEncode({
+        ...config,
+        'packages': [
+          for (final package in config['packages'] as List)
+            {
+              ...package as Map,
+              'rootUri': package['name'] == 'wing'
+                  ? root.uri.toString()
+                  : original.uri.resolve(package['rootUri']).toString(),
+            },
+        ],
+      }),
+    );
+  });
+
+  test('resolved Flutter reads report every unsafe capture location', () async {
+    target.writeAsStringSync(_invalid);
+    final findings = await rule.check(root);
+    expect(findings, hasLength(4));
+    expect(findings.map((finding) => finding.id).toSet(), {rule.id});
+    expect(findings.map((finding) => finding.file).toSet(), {rule.owner});
+    expect(findings.map((finding) => finding.line).toSet(), {3, 4, 5, 7});
+    final result = await _cli(root);
+    expect(result.exitCode, 1, reason: _output(result));
+    expect(result.stdout, contains(rule.id));
+  });
+
   test(
-    'resolved Flutter reads fail while asserts and unrelated getters pass',
+    'assert-only Flutter reads and unrelated getters are admitted',
     () async {
-      final root = Directory.systemTemp.createTempSync('wing-capture-guard-');
-      addTearDown(() => root.deleteSync(recursive: true));
-      final original = File('.dart_tool/package_config.json').absolute;
-      final config = jsonDecode(original.readAsStringSync()) as Map;
-      final target = File('${root.path}/${rule.owner}');
-      target.parent.createSync(recursive: true);
-      final fixtureConfig = File('${root.path}/.dart_tool/package_config.json');
-      fixtureConfig.parent.createSync(recursive: true);
-      fixtureConfig.writeAsStringSync(
-        jsonEncode({
-          ...config,
-          'packages': [
-            for (final package in config['packages'] as List)
-              {
-                ...package as Map,
-                'rootUri': package['name'] == 'wing'
-                    ? root.uri.toString()
-                    : original.uri.resolve(package['rootUri']).toString(),
-              },
-          ],
-        }),
-      );
-
-      target.writeAsStringSync(_invalid);
-      final findings = await rule.check(root);
-      expect(findings, hasLength(4));
-      expect(findings.map((finding) => finding.id).toSet(), {rule.id});
-      expect(findings.map((finding) => finding.file).toSet(), {rule.owner});
-      expect(findings.map((finding) => finding.line).toSet(), {3, 4, 5, 7});
-      final invalidCli = await _cli(root);
-      expect(invalidCli.exitCode, 1, reason: _output(invalidCli));
-      expect(invalidCli.stdout, contains(rule.id));
-
       target.writeAsStringSync(_valid);
       expect(await rule.check(root), isEmpty);
-      final validCli = await _cli(root);
-      expect(validCli.exitCode, 0, reason: _output(validCli));
-
-      target.deleteSync();
-      final inputCli = await _cli(root);
-      expect(inputCli.exitCode, 2, reason: _output(inputCli));
-      expect(inputCli.stderr, contains('${rule.id} INPUT'));
+      final result = await _cli(root);
+      expect(result.exitCode, 0, reason: _output(result));
     },
-    timeout: const Timeout(Duration(minutes: 2)),
   );
+
+  for (final fixture in <String, String?>{
+    'missing owner': null,
+    'unresolved paint read':
+        'bool capture(Unknown value) => value.debugNeedsPaint;',
+    'dynamic paint read':
+        'bool capture(dynamic value) => value.debugNeedsPaint;',
+    'malformed owner': 'class Capture {',
+    'uninspected part': "part 'capture_part.dart';",
+    'conditional capture namespace':
+        "import 'a.dart' if (dart.library.io) 'b.dart';",
+  }.entries) {
+    test(
+      '${fixture.key} fails input rather than certifying capture safety',
+      () async {
+        if (fixture.value case final source?) target.writeAsStringSync(source);
+        await expectLater(rule.check(root), throwsFormatException);
+        final result = await _cli(root);
+        expect(result.exitCode, 2, reason: _output(result));
+        expect(result.stderr, contains('${rule.id} INPUT'));
+      },
+    );
+  }
 }
 
 Future<ProcessResult> _cli(Directory root) => Process.run('dart', [

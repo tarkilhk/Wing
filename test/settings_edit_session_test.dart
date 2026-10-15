@@ -6,9 +6,26 @@ import 'package:wing/core/models/settings_edit.dart';
 import 'package:wing/core/services/settings_edit_session.dart';
 import 'support/administration_fixture.dart';
 
+class _SettingsFixture extends AdministrationFixture {
+  final writeStarted = Completer<void>();
+
+  @override
+  Future<Map<String, dynamic>> send(
+    String method,
+    String path,
+    Map<String, String> query,
+    Map<String, dynamic>? body,
+  ) {
+    if (method == 'PUT' && path == 'config' && !writeStarted.isCompleted) {
+      writeStarted.complete();
+    }
+    return super.send(method, path, query, body);
+  }
+}
+
 void main() {
-  AdministrationFixture stockFixture() {
-    final fixture = AdministrationFixture();
+  _SettingsFixture stockFixture() {
+    final fixture = _SettingsFixture();
     // Stock JSON objects accept null and heterogeneous values. Dart literals
     // otherwise infer narrow nested map types that cannot model those responses.
     for (final entry in fixture.configs.entries.toList()) {
@@ -92,9 +109,7 @@ void main() {
       var notifications = 0;
       session.addListener(() => notifications++);
       final result = session.save();
-      while (writes(fixture) == 0) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await fixture.writeStarted.future;
       session.dispose();
       final before = notifications;
       fixture.writeGate!.complete();

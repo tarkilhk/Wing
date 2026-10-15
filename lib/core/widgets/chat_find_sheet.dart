@@ -69,9 +69,8 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
           child: SafeArea(
             child: SizedBox(
               height: MediaQuery.sizeOf(context).height * .78,
-              child: StudioLoadingRegion(
-                available: state.hasLoadedMessages,
-                busy: state.loading && state.hasLoadedMessages,
+              child: StudioPageLoading(
+                active: state.loading && state.hasLoadedMessages,
                 label: 'Searching messages',
                 child: Column(
                   children: [

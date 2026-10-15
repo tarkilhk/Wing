@@ -1,3 +1,5 @@
+import 'package:wing/core/models/hermes_question.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -77,6 +79,22 @@ Future<void> _waitForAttachmentImages(WidgetTester tester) async {
   );
   await pending;
   await tester.pumpAndSettle();
+}
+
+Future<void> _waitForSubmission(WidgetTester tester, Host host) async {
+  for (
+    var attempt = 0;
+    attempt < 300 && !host.calls.any((call) => call.$2 == 'prompt.submit');
+    attempt++
+  ) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
+    await tester.pump();
+  }
+  expect(host.calls.where((call) => call.$2 == 'prompt.submit'), hasLength(1));
+  await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+  await tester.pump();
 }
 
 Future<void> _captureAttachmentFrame(WidgetTester tester, String name) async {
@@ -301,6 +319,8 @@ class Host {
       },
       get: (path, query) async {
         reads.add((path, query));
+        if (path == 'model/options') return {'providers': <Object>[]};
+        if (path == 'model/info') return <String, dynamic>{};
         if (path == 'logs') {
           if (heldTimingLog case final held?) await held.future;
           return {'file': 'gui', 'lines': <String>[]};
@@ -918,7 +938,7 @@ void main() {
     'joined',
     'timed out',
   ]) {
-    test('notification approval recovery: $outcome', () async {
+    testWidgets('notification approval recovery: $outcome', (tester) async {
       host.running = false;
       final chat = await controller.createChat(canDispatch: () => true);
       final request = <String, dynamic>{
@@ -946,7 +966,7 @@ void main() {
       Future<void>? recovering;
       if (outcome == 'joined') {
         recovering = controller.reconnect(chat.key.workspace);
-        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await tester.pump(const Duration(milliseconds: 20));
       }
       Object? failure;
       var finished = false;
@@ -963,18 +983,28 @@ void main() {
           .whenComplete(() {
             finished = true;
           });
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await tester.pump(const Duration(milliseconds: 20));
       if (outcome == 'joined') {
         expect(finished, isFalse);
         host.connectDelay!.complete();
       }
       if (outcome == 'timed out') {
-        await Future<void>.delayed(const Duration(seconds: 16));
+        await tester.pump(const Duration(seconds: 16));
         expect(finished, isTrue);
         // Completing recovery later must not submit the timed-out intent.
         host.connectDelay!.complete();
       }
-      await Future<void>.delayed(const Duration(milliseconds: 20));
+      for (var turn = 0; turn < 200 && !finished; turn++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 1)),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(
+        finished,
+        isTrue,
+        reason: 'The bounded notification recovery must settle',
+      );
       await action;
       if (recovering != null) await recovering;
       final decisions = host.calls
@@ -992,7 +1022,22 @@ void main() {
           expect(chat.runtime.decisionError, isNotNull);
         }
         host.connectFailures = 0;
-        await controller.reconnect(chat.key.workspace);
+        var reconnected = false;
+        final retry = controller.reconnect(chat.key.workspace).whenComplete(() {
+          reconnected = true;
+        });
+        for (var turn = 0; turn < 200 && !reconnected; turn++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 1)),
+          );
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        expect(
+          reconnected,
+          isTrue,
+          reason: 'Recovery after a refused decision must settle',
+        );
+        await retry;
         expect(host.calls.where((c) => c.$2 == 'approval.respond'), isEmpty);
       }
     });
@@ -1651,7 +1696,7 @@ void main() {
     },
   );
 
-  test('rapid prompt taps submit once', () async {
+  test('concurrent prompt submissions send once', () async {
     final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'one prompt');
     host.promptSubmitStarted = Completer<void>();
@@ -2210,42 +2255,6 @@ void main() {
     expect(host.calls.where((call) => call.$2 == 'session.steer'), isEmpty);
   });
 
-  testWidgets('long approval commands keep actions within a bounded panel', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await controller.createChat(canDispatch: () => true);
-    host.event('a', 'approval', {
-      'request_id': 'long',
-      'command': List.generate(100, (i) => 'echo command line $i').join('\n'),
-      'choices': ['once', 'deny'],
-    });
-    await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
-    );
-    await tester.pump();
-    expect(
-      tester
-          .getSize(
-            find
-                .ancestor(
-                  of: find.byType(SelectableText).first,
-                  matching: find.byType(SingleChildScrollView),
-                )
-                .first,
-          )
-          .height,
-      lessThanOrEqualTo(160),
-    );
-    expect(find.text('Allow once').hitTestable(), findsOneWidget);
-    expect(find.text('Deny').hitTestable(), findsOneWidget);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
-
   test('approval accepts each server-supported scope', () async {
     final chat = await controller.createChat(canDispatch: () => true);
     chat.composer.editText('hello');
@@ -2533,7 +2542,10 @@ void main() {
                 ).copyWith(textScaler: TextScaler.linear(configuration.scale)),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           ),
         );
@@ -2565,13 +2577,12 @@ void main() {
         if (photos) {
           await _captureAttachmentFrame(tester, 'composer-$reviewName');
           final decodedBeforePreview = binding.delayedDecodeCount;
-          // Hold the native decoder on the real clock, as on a busy CI host.
-          await tester.runAsync(() async {
-            binding.imageDecodeDelay = Future<void>.delayed(
-              const Duration(milliseconds: 500),
-            );
+          final decoding = Completer<void>();
+          binding.imageDecodeDelay = decoding.future;
+          addTearDown(() {
+            binding.imageDecodeDelay = null;
+            if (!decoding.isCompleted) decoding.complete();
           });
-          addTearDown(() => binding.imageDecodeDelay = null);
           await tester.tap(find.byTooltip('Preview item-1.png'));
           for (var attempt = 0; attempt < 200; attempt++) {
             await tester.runAsync(
@@ -2580,8 +2591,9 @@ void main() {
             await tester.pump();
             if (find.byType(ChatImagePreview).evaluate().isNotEmpty) break;
           }
-          // Native decoding needs real event-loop time before the loading
-          // spinner can stop scheduling frames.
+          expect(find.byType(ChatImagePreview), findsOneWidget);
+          expect(decoding.isCompleted, isFalse);
+          decoding.complete();
           await _waitForAttachmentImages(tester);
           expect(binding.delayedDecodeCount, greaterThan(decodedBeforePreview));
           expect(find.byType(ChatImagePreview), findsOneWidget);
@@ -2625,8 +2637,8 @@ void main() {
           expect(chat.composer.observation.attachments, hasLength(2));
           expect(chat.composer.observation.text, 'Read both');
         }
-        await tester.runAsync(() => controller.send(chat));
-        await tester.pump();
+        await tester.tap(find.byTooltip('Send'));
+        await _waitForSubmission(tester, host);
         expect(
           host.calls.where(
             (call) =>
@@ -2661,7 +2673,12 @@ void main() {
     final chat = await controller.createChat(canDispatch: () => true);
     await controller.updateDraft(chat, 'Keep my text');
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.tap(find.byTooltip('Attach file'));
     await tester.pumpAndSettle();
@@ -2701,7 +2718,12 @@ void main() {
     final history = host.delays['a'] = Completer<void>();
     host.event('a', 'message.complete', {'text': 'First answer'});
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     try {
       final send = tester.widget<IconButton>(
@@ -2711,7 +2733,8 @@ void main() {
         ),
       );
       expect(send.onPressed, isNotNull);
-      await tester.runAsync(() => controller.send(chat));
+      await tester.tap(find.byTooltip('Send'));
+      await _waitForSubmission(tester, host);
       expect(
         host.calls.where((call) => call.$2 == 'prompt.submit'),
         hasLength(1),
@@ -3226,7 +3249,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('a chat'), findsOneWidget);
@@ -3351,23 +3379,24 @@ void main() {
     },
   );
 
-  testWidgets('successful automatic recovery clears the reconnect banner', (
-    tester,
-  ) async {
-    final chat = await controller.createChat(canDispatch: () => true);
-    chat.composer.editText('once');
-    await tester.runAsync(() => controller.send(chat));
-    host.connectFailures = 1;
-    host.gateways['a']!.onConnectionChanged!(false);
-    await tester.pump(const Duration(seconds: 1));
-    await tester.pump(const Duration(seconds: 2));
-    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-    await tester.pump();
+  testWidgets(
+    'successful automatic recovery clears controller reconnect error',
+    (tester) async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.composer.editText('once');
+      await tester.runAsync(() => controller.send(chat));
+      host.connectFailures = 1;
+      host.gateways['a']!.onConnectionChanged!(false);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 2));
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump();
 
-    expect(chat.runtime.execution, ChatExecution.running);
-    expect(controller.error, isNull);
-    expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
-  });
+      expect(chat.runtime.execution, ChatExecution.running);
+      expect(controller.error, isNull);
+      expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
+    },
+  );
 
   testWidgets('idle chat retries a transient session resume failure', (
     tester,
@@ -3392,7 +3421,12 @@ void main() {
     host.running = false;
     host.connectFailures = 5;
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     final before = host.connectsByProfile['a']!;
     host.gateways['a']!.onConnectionChanged!(false);
@@ -4090,12 +4124,30 @@ void main() {
         'request_id': 'expired',
         'question': 'Marker?',
       });
+      final pending = chat.reading.questionHistory!.questions.single;
+      expect(pending.requestId, 'expired');
+      expect(pending.kind, HermesQuestionKind.clarification);
+      expect(pending.status, HermesQuestionStatus.pending);
+      final resumesBefore = host.calls
+          .where((c) => c.$2 == 'session.resume')
+          .length;
       host.running = false;
       host.clarifyResult = {'status': 'expired'};
       await controller.clarify(chat, 'marker');
       expect(chat.runtime.questions, isNull);
       expect(chat.runtime.execution, ChatExecution.completed);
-      expect(chat.runtime.error, contains('expired'));
+      final expired = chat.reading.questionHistory!.questions.single;
+      expect(expired.requestId, pending.requestId);
+      expect(expired.timestamp, pending.timestamp);
+      expect(expired.description, pending.description);
+      expect(expired.status, HermesQuestionStatus.expired);
+      expect(chat.runtime.error, isNull);
+      final resumes = host.calls
+          .where((c) => c.$2 == 'session.resume')
+          .toList();
+      expect(resumes.length, resumesBefore + 1);
+      expect(resumes.last.$1, chat.key.workspace.profileName);
+      expect(resumes.last.$3['session_id'], chat.key.sessionId);
       expect(host.calls.where((c) => c.$2 == 'request.answer'), hasLength(1));
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     },

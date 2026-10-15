@@ -6,25 +6,38 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/widgets/composer_action_settings.dart';
 
 void main() {
-  testWidgets('Steer is the default and a new choice survives reopening', (
+  testWidgets('Steer is selected when no preference has been saved', (
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
-    final preferences = await SharedPreferences.getInstance();
-    final owner = AppPreferences(preferences);
+    final owner = AppPreferences(await SharedPreferences.getInstance());
     addTearDown(owner.dispose);
-    Future<void> show() => tester.pumpWidget(
+    await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(body: ComposerActionSettings(preferences: owner)),
       ),
     );
-    await show();
     expect(
       tester
           .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Steer'))
           .selected,
       isTrue,
     );
+  });
+
+  testWidgets('a chosen action survives reconstructing its preference owner', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    var owner = AppPreferences(preferences);
+    addTearDown(() => owner.dispose());
+    Future<void> show() => tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: ComposerActionSettings(preferences: owner)),
+      ),
+    );
+    await show();
     await tester.tap(find.widgetWithText(ChoiceChip, 'Queue'));
     await tester.pumpAndSettle();
     expect(
@@ -32,6 +45,8 @@ void main() {
       'queue',
     );
     await tester.pumpWidget(const SizedBox());
+    owner.dispose();
+    owner = AppPreferences(await SharedPreferences.getInstance());
     await show();
     expect(
       tester

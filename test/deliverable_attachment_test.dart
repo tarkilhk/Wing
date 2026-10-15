@@ -1,4 +1,3 @@
-import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'dart:async';
@@ -263,14 +262,24 @@ void main() {
   testWidgets('repeated file references and table links remain usable', (
     tester,
   ) async {
+    final opened = <String>[];
     await tester.pumpMarkdownWidget(
       message(
         '[First](/srv/report.md) and [Again](/srv/report.md)\n\n'
         '| Report |\n| --- |\n| [Read](/srv/report.md) |',
-        open: (_) async {},
+        open: (output) async => opened.add(output.path!),
       ),
     );
     expect(find.byType(DeliverableAttachment), findsNWidgets(3));
+    for (final action in find.byTooltip('Open preview').evaluate().toList()) {
+      final target = find.byElementPredicate(
+        (element) => identical(element, action),
+      );
+      await tester.ensureVisible(target);
+      await tester.tap(target);
+      await tester.pumpAndSettle();
+    }
+    expect(opened, ['/srv/report.md', '/srv/report.md', '/srv/report.md']);
     expect(tester.takeException(), isNull);
   });
 
@@ -301,14 +310,14 @@ void main() {
       expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
       await tester.tap(find.byTooltip('Open preview'));
       await tester.pump();
-      expect(find.byType(StudioLoading), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(tester.widget<IconButton>(previewButton).onPressed, isNull);
       previewPending.complete();
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Download'));
       await tester.pump();
-      expect(find.byIcon(Icons.download_outlined), findsOneWidget);
-      expect(find.byType(StudioLoading), findsNothing);
+      expect(find.byIcon(Icons.download_outlined), findsNothing);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
       expect(tester.getRect(find.byTooltip('Download')), downloadBefore);
       await tester.tap(find.byTooltip('Download'));
       expect(calls, 1);
@@ -347,6 +356,7 @@ void main() {
       );
       await tester.tap(find.byTooltip('Download'));
       await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
       await tester.pumpMarkdownWidget(message('MEDIA:/srv/another.md'));
       pending.complete(true);
       await tester.pumpAndSettle();
@@ -355,6 +365,81 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'failed preview retains its action and retries with visible progress',
+    (tester) async {
+      var pending = Completer<void>();
+      addTearDown(() {
+        if (!pending.isCompleted) pending.complete();
+      });
+      var calls = 0;
+      await tester.pumpMarkdownWidget(
+        message(
+          'MEDIA:$reportPath',
+          open: (_) {
+            calls++;
+            return pending.future;
+          },
+        ),
+      );
+      final action = find.byTooltip('Open preview');
+      final before = tester.getRect(action);
+      await tester.tap(action);
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(tester.getRect(action), before);
+      pending.completeError(const DashboardHttpException(403, 'fs/download'));
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.textContaining('Hermes denied access'), findsOneWidget);
+      pending = Completer<void>();
+      await tester.tap(action);
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.textContaining('Hermes denied access'), findsNothing);
+      expect(calls, 2);
+      pending.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('image download shows progress until completion', (tester) async {
+    final pending = Completer<bool>();
+    addTearDown(() {
+      if (!pending.isCompleted) pending.complete(false);
+    });
+    var calls = 0;
+    await tester.pumpMarkdownWidget(
+      message(
+        'MEDIA:/srv/image.png',
+        download: (output) {
+          expect(output.path, '/srv/image.png');
+          calls++;
+          return pending.future;
+        },
+      ),
+    );
+    await tester.tap(find.byTooltip('Download image'));
+    await tester.pump();
+    final action = find.byTooltip('Saving image');
+    expect(
+      find.descendant(
+        of: action,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(action);
+    expect(calls, 1);
+    pending.complete(true);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Download image'), findsOneWidget);
+    expect(find.byTooltip('Saving image'), findsNothing);
+    expect(find.text('File saved'), findsOneWidget);
+  });
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
@@ -365,13 +450,20 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final boundary = GlobalKey();
+        var pending = Completer<void>();
+        addTearDown(() {
+          if (!pending.isCompleted) pending.complete();
+        });
+        var openCalls = 0;
+        var downloadCalls = 0;
         await tester.pumpMarkdownWidget(
           MaterialApp(
             theme: wingTheme(brightness),
             builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(scale)),
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                disableAnimations: scale == 2,
+              ),
               child: child!,
             ),
             home: RepaintBoundary(
@@ -386,8 +478,15 @@ void main() {
                       'content':
                           'The visual report is ready:\n\n$htmlReportPath\n\nOpen it to explore the charts and tables.',
                     }),
-                    onOpenRemoteFile: (_) async {},
-                    onDownloadRemoteFile: (_) async => true,
+                    onOpenRemoteFile: (_) async {
+                      openCalls++;
+                      await pending.future;
+                    },
+                    onDownloadRemoteFile: (_) async {
+                      downloadCalls++;
+                      await pending.future;
+                      return false;
+                    },
                   ),
                 ),
               ),
@@ -400,9 +499,15 @@ void main() {
           expect(tester.getSize(button).height, greaterThanOrEqualTo(48));
           expect(tester.getSize(button).width, greaterThanOrEqualTo(48));
           expect(find.text(action), findsNothing);
-          expect(tester.getRect(button).right, lessThanOrEqualTo(304));
+          expect(button.hitTestable(), findsOneWidget);
         }
+        await tester.tap(find.byTooltip('Download'));
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.tap(find.byTooltip('Download'));
+        expect(downloadCalls, 1);
         expect(tester.takeException(), isNull);
+        await tester.pump(const Duration(milliseconds: 250));
         if (const bool.fromEnvironment('CAPTURE_DELIVERABLES')) {
           await tester.runAsync(() async {
             final image =
@@ -418,6 +523,19 @@ void main() {
             image.dispose();
           });
         }
+        pending.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        pending = Completer<void>();
+        await tester.tap(find.byTooltip('Open preview'));
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        await tester.tap(find.byTooltip('Open preview'));
+        expect(openCalls, 1);
+        await tester.pumpWidget(const SizedBox());
+        pending.complete();
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
       });
     }
   }

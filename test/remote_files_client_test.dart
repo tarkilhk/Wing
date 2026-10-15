@@ -31,12 +31,16 @@ void main() {
 
   DashboardClient dashboardWith(
     Future<http.Response> Function(http.Request request) handler,
-  ) => DashboardClient(
-    host: 'hermes.local',
-    port: 9119,
-    proxied: true,
-    httpClient: MockClient(handler),
-  );
+  ) {
+    final dashboard = DashboardClient(
+      host: 'hermes.local',
+      port: 9119,
+      proxied: true,
+      httpClient: MockClient(handler),
+    );
+    addTearDown(dashboard.close);
+    return dashboard;
+  }
 
   test('owned file access keeps the original profile and saved chat', () async {
     final requests = <http.Request>[];
@@ -87,7 +91,6 @@ void main() {
       'profile': 'original-profile',
       'session_id': 'original-chat',
     });
-    client.close();
   });
 
   test('relative preview refuses an unavailable session directory', () async {
@@ -108,7 +111,6 @@ void main() {
       throwsA(isA<DashboardHttpException>()),
     );
     expect(requests, 1);
-    client.close();
   });
 
   test('reads a text preview with language and truncation metadata', () async {
@@ -141,7 +143,6 @@ void main() {
     expect(preview.text, 'void main() {}');
     expect(preview.language, 'dart');
     expect(preview.truncated, isTrue);
-    client.close();
   });
 
   test('downloads bytes with the server filename', () async {
@@ -166,7 +167,6 @@ void main() {
 
     expect(download.filename, 'report.pdf');
     expect(download.bytes, [1, 2, 3]);
-    client.close();
   });
 
   test('download rejects a declared body above the mobile limit', () async {
@@ -183,7 +183,6 @@ void main() {
       ),
       throwsA(isA<DashboardResponseTooLargeException>()),
     );
-    client.close();
   });
 
   test('download also bounds a chunked body without a declared size', () async {
@@ -193,6 +192,7 @@ void main() {
       proxied: true,
       httpClient: _StreamingClient(),
     );
+    addTearDown(dashboard.close);
     final client = RemoteFilesClient(dashboard: dashboard, maxDownloadBytes: 2);
 
     await expectLater(
@@ -203,7 +203,6 @@ void main() {
       ),
       throwsA(isA<DashboardResponseTooLargeException>()),
     );
-    client.close();
   });
 
   test('download reduces encoded server filenames to a basename', () async {
@@ -226,29 +225,33 @@ void main() {
     );
 
     expect(download.filename, 'report one.pdf');
-    client.close();
   });
 
-  test('file reads require both chat owner fields', () async {
-    final dashboard = dashboardWith((_) async => http.Response('{}', 200));
-    final client = RemoteFilesClient(dashboard: dashboard);
-
-    await expectLater(
-      client.readText(
-        '/srv/project/report.md',
-        profileName: '',
-        storedSessionId: 'chat-7',
-      ),
-      throwsArgumentError,
-    );
-    await expectLater(
-      client.download(
-        '/srv/project/report.md',
-        profileName: 'writer',
-        storedSessionId: '',
-      ),
-      throwsArgumentError,
-    );
-    client.close();
-  });
+  for (final operation in ['preview', 'download']) {
+    for (final missing in ['profile', 'session']) {
+      test('$operation refuses missing $missing before network I/O', () async {
+        final requests = <http.Request>[];
+        final dashboard = dashboardWith((request) async {
+          requests.add(request);
+          return http.Response('{}', 200);
+        });
+        final client = RemoteFilesClient(dashboard: dashboard);
+        final profile = missing == 'profile' ? '' : 'writer';
+        final session = missing == 'session' ? '' : 'chat-7';
+        final result = operation == 'preview'
+            ? client.readText(
+                '/srv/project/report.md',
+                profileName: profile,
+                storedSessionId: session,
+              )
+            : client.download(
+                '/srv/project/report.md',
+                profileName: profile,
+                storedSessionId: session,
+              );
+        await expectLater(result, throwsArgumentError);
+        expect(requests, isEmpty);
+      });
+    }
+  }
 }

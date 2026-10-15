@@ -123,40 +123,46 @@ void main() {
     },
   );
 
+  test('type has one exact copy for identical redacted payload', () {
+    final redacted = project(
+      'browser_type',
+      {'ref': '@e1', 'text': '[REDACTED]'},
+      {'success': true, 'typed': '[REDACTED]', 'element': '@e1'},
+    );
+    expect(redacted.request.single.copyText, '[REDACTED]');
+    expect(redacted.request.single.copyable, isTrue);
+    expect(redacted.response.single.text, 'Entered text in @e1.');
+    expect(redacted.response.single.copyable, isFalse);
+  });
   test(
-    'type has one exact copy for identical redacted payload and explicit clear receipt',
+    'type preserves separately redacted output when it differs from input',
     () {
-      final redacted = project(
-        'browser_type',
-        {'ref': '@e1', 'text': '[REDACTED]'},
-        {'success': true, 'typed': '[REDACTED]', 'element': '@e1'},
-      );
-      expect(redacted.request.single.copyText, '[REDACTED]');
-      expect(redacted.request.single.copyable, isTrue);
-      expect(redacted.response.single.text, 'Entered text in @e1.');
-      expect(redacted.response.single.copyable, isFalse);
       final different = project(
         'browser_type',
         {'ref': '@e1', 'text': 'supplied text'},
         {'success': true, 'typed': '[REDACTED]', 'element': '@e1'},
       );
       expect(different.response.first.copyText, '[REDACTED]');
-      final clear = project(
-        'browser_type',
-        {'ref': '@e1', 'text': ''},
-        {'success': true, 'typed': '', 'element': '@e1'},
-      );
-      expect(clear.request.single.copyable, isFalse);
-      expect(clear.response.single.text, 'Cleared @e1.');
-      final failed = project(
-        'browser_type',
-        {'ref': '@e1', 'text': ''},
-        {'success': false, 'typed': '', 'error': 'Field missing.'},
-      );
-      expect(failed.response.map((block) => block.text), ['Field missing.']);
-      expect(failed.metadata, isEmpty);
     },
   );
+  test('type exposes an explicit clear receipt without fabricated copy', () {
+    final clear = project(
+      'browser_type',
+      {'ref': '@e1', 'text': ''},
+      {'success': true, 'typed': '', 'element': '@e1'},
+    );
+    expect(clear.request.single.copyable, isFalse);
+    expect(clear.response.single.text, 'Cleared @e1.');
+  });
+  test('failed type exposes only the received failure', () {
+    final failed = project(
+      'browser_type',
+      {'ref': '@e1', 'text': ''},
+      {'success': false, 'typed': '', 'error': 'Field missing.'},
+    );
+    expect(failed.response.map((block) => block.text), ['Field missing.']);
+    expect(failed.metadata, isEmpty);
+  });
 
   test(
     'search preserves source excerpt and rescue explanation without routing plumbing',
@@ -287,67 +293,68 @@ void main() {
       expect(details.response.last.copyable, isFalse);
       expect(details.receiptState, ToolReceiptState.warning);
       expect(details.images, isEmpty);
-      final allFailed = project('web_extract', {}, {
-        'results': [
-          {'url': 'https://example.org/slow', 'error': 'Timed out.'},
-        ],
-      });
-      expect(allFailed.receiptState, ToolReceiptState.error);
     },
   );
+  test('extract reports an error when every source fails', () {
+    final allFailed = project('web_extract', {}, {
+      'results': [
+        {'url': 'https://example.org/slow', 'error': 'Timed out.'},
+      ],
+    });
+    expect(allFailed.receiptState, ToolReceiptState.error);
+  });
+
+  test('desktop read keeps requested count and actual partial window', () {
+    const text = '  Account settings\n';
+    final read = project(
+      'desktop_preview',
+      {'action': 'read', 'start': 120, 'count': 20},
+      {
+        'kind': 'url',
+        'url': 'https://example.org/account',
+        'title': 'Account',
+        'text': text,
+        'start': 120,
+        'end': 140,
+        'total_chars': 800,
+      },
+    );
+    expect(read.headerFacts, ['Start: 120', 'Count: 20', 'Page: Account']);
+    expect(read.response.single.copyText, text);
+    expect(read.response.single.format, ToolDetailFormat.prose);
+    expect(read.response.single.facts, [
+      'Characters 120–140 of 800',
+      'Partial preview returned',
+    ]);
+  });
+  test('desktop file preview preserves exact resource identity', () {
+    final file = project(
+      'desktop_preview',
+      {'action': 'read'},
+      {
+        'kind': 'file',
+        'url': 'file:///workspace/report.md',
+        'path': '/workspace/report.md',
+        'title': 'report.md',
+        'text': '',
+        'start': 0,
+        'end': 0,
+        'total_chars': 0,
+        'note': 'Read the file itself with read_file.',
+      },
+    );
+    expect(file.resourceTarget, '/workspace/report.md');
+    expect(
+      file.resourceFor(file.resourceTarget!)?.path,
+      '/workspace/report.md',
+    );
+    expect(file.response.single.text, 'Read the file itself with read_file.');
+    expect(file.response.single.copyable, isFalse);
+    expect(file.images, isEmpty);
+  });
 
   test(
-    'desktop read keeps requested count, actual partial window and file identity',
-    () {
-      const text = '  Account settings\n';
-      final read = project(
-        'desktop_preview',
-        {'action': 'read', 'start': 120, 'count': 20},
-        {
-          'kind': 'url',
-          'url': 'https://example.org/account',
-          'title': 'Account',
-          'text': text,
-          'start': 120,
-          'end': 140,
-          'total_chars': 800,
-        },
-      );
-      expect(read.headerFacts, ['Start: 120', 'Count: 20', 'Page: Account']);
-      expect(read.response.single.copyText, text);
-      expect(read.response.single.format, ToolDetailFormat.prose);
-      expect(read.response.single.facts, [
-        'Characters 120–140 of 800',
-        'Partial preview returned',
-      ]);
-      final file = project(
-        'desktop_preview',
-        {'action': 'read'},
-        {
-          'kind': 'file',
-          'url': 'file:///workspace/report.md',
-          'path': '/workspace/report.md',
-          'title': 'report.md',
-          'text': '',
-          'start': 0,
-          'end': 0,
-          'total_chars': 0,
-          'note': 'Read the file itself with read_file.',
-        },
-      );
-      expect(file.resourceTarget, '/workspace/report.md');
-      expect(
-        file.resourceFor(file.resourceTarget!)?.path,
-        '/workspace/report.md',
-      );
-      expect(file.response.single.text, 'Read the file itself with read_file.');
-      expect(file.response.single.copyable, isFalse);
-      expect(file.images, isEmpty);
-    },
-  );
-
-  test(
-    'desktop open and close expose acknowledgements without claiming rendered page',
+    'desktop open exposes acknowledgement without claiming rendered page',
     () {
       final open = project(
         'desktop_preview',
@@ -357,19 +364,21 @@ void main() {
       expect(open.resourceTarget, 'https://example.org');
       expect(open.response.single.text, 'Preview open request accepted.');
       expect(open.response.single.copyable, isFalse);
-      final close = project(
-        'desktop_preview',
-        {'action': 'close'},
-        {'success': true, 'closed': 'all'},
-      );
-      expect(
-        close.response.single.text,
-        'Close request accepted for all previews.',
-      );
-      expect(close.resourceTarget, isNull);
-      expect(close.headerFacts, isEmpty);
     },
   );
+  test('desktop close reports acknowledgement without a resource', () {
+    final close = project(
+      'desktop_preview',
+      {'action': 'close'},
+      {'success': true, 'closed': 'all'},
+    );
+    expect(
+      close.response.single.text,
+      'Close request accepted for all previews.',
+    );
+    expect(close.resourceTarget, isNull);
+    expect(close.headerFacts, isEmpty);
+  });
 
   test(
     'drive sparse deltas show newly available and cleared values without baseline guesses',
@@ -416,72 +425,71 @@ void main() {
     },
   );
 
-  test(
-    'drive full inventory, press, submission and scroll retain actual requested intent',
-    () {
-      final inventory = project(
-        'drive_preview',
-        {'action': 'elements', 'max': 20},
-        {
-          'elements': [
-            {
-              'ref': 'save',
-              'role': 'button',
-              'label': 'Save',
-              'disabled': true,
-              'selector': '#save',
-            },
-          ],
-        },
-      );
-      expect(inventory.headerFacts, ['Limit: 20']);
-      expect(
-        inventory.response.single.text,
-        '[save] button Save (unavailable)',
-      );
-      expect(inventory.response.single.copyable, isFalse);
-      expect(inventory.images, isEmpty);
-      final press = project('drive_preview', {
-        'action': 'press',
-        'ref': 'search',
-        'key': 'Enter',
-      }, null);
-      expect(press.intent, 'Press Enter search');
-      expect(press.response, isEmpty);
-      final submit = project(
-        'drive_preview',
-        {'action': 'type', 'ref': 'search', 'text': 'privacy', 'submit': true},
-        {'acted': 'typed into Search and submitted'},
-      );
-      expect(submit.intent, 'Enter text search and submit');
-      expect(submit.response.single.copyable, isFalse);
-      final scroll = project(
-        'drive_preview',
-        {'action': 'scroll', 'amount': -600},
-        {
-          'acted': 'scrolled the page',
-          'note': 'The page has nothing to scroll.',
-        },
-      );
-      expect(scroll.intent, 'Scroll -600 px');
-      expect(scroll.response.last.text, 'The page has nothing to scroll.');
-    },
-  );
+  test('drive full inventory retains actual reported elements', () {
+    final inventory = project(
+      'drive_preview',
+      {'action': 'elements', 'max': 20},
+      {
+        'elements': [
+          {
+            'ref': 'save',
+            'role': 'button',
+            'label': 'Save',
+            'disabled': true,
+            'selector': '#save',
+          },
+        ],
+      },
+    );
+    expect(inventory.headerFacts, ['Limit: 20']);
+    expect(inventory.response.single.text, '[save] button Save (unavailable)');
+    expect(inventory.response.single.copyable, isFalse);
+    expect(inventory.images, isEmpty);
+  });
+  test('drive key press retains its requested target', () {
+    final press = project('drive_preview', {
+      'action': 'press',
+      'ref': 'search',
+      'key': 'Enter',
+    }, null);
+    expect(press.intent, 'Press Enter search');
+    expect(press.response, isEmpty);
+  });
+  test('drive text submission retains its requested intent', () {
+    final submit = project(
+      'drive_preview',
+      {'action': 'type', 'ref': 'search', 'text': 'privacy', 'submit': true},
+      {'acted': 'typed into Search and submitted'},
+    );
+    expect(submit.intent, 'Enter text search and submit');
+    expect(submit.response.single.copyable, isFalse);
+  });
+  test('drive scroll preserves amount and no-scroll receipt', () {
+    final scroll = project(
+      'drive_preview',
+      {'action': 'scroll', 'amount': -600},
+      {'acted': 'scrolled the page', 'note': 'The page has nothing to scroll.'},
+    );
+    expect(scroll.intent, 'Scroll -600 px');
+    expect(scroll.response.last.text, 'The page has nothing to scroll.');
+  });
 
+  test('drive probable navigation keeps backend uncertainty', () {
+    final navigating = project(
+      'drive_preview',
+      {'action': 'click', 'ref': 'settings'},
+      {
+        'success': true,
+        'acted': 'clicked Settings',
+        'note': 'The page stopped answering; it is probably navigating.',
+      },
+    );
+    expect(navigating.resourceTarget, isNull);
+    expect(navigating.response.last.text, contains('probably navigating'));
+  });
   test(
-    'drive probable navigation and partial typing keep backend uncertainty',
+    'drive interrupted typing keeps the exact authored input and partial failure',
     () {
-      final navigating = project(
-        'drive_preview',
-        {'action': 'click', 'ref': 'settings'},
-        {
-          'success': true,
-          'acted': 'clicked Settings',
-          'note': 'The page stopped answering; it is probably navigating.',
-        },
-      );
-      expect(navigating.resourceTarget, isNull);
-      expect(navigating.response.last.text, contains('probably navigating'));
       final interrupted = project(
         'drive_preview',
         {'action': 'type', 'ref': 'notes', 'text': 'Complete note'},

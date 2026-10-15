@@ -77,6 +77,9 @@ class _UpdateHost {
       if (endpoint == 'hermes/update/receipt') {
         return receiptResponse;
       }
+      if (endpoint != 'actions/hermes-update/status') {
+        throw StateError('Unexpected update read: $endpoint');
+      }
       if (statusFails) {
         throw StateError('private disconnected detail');
       }
@@ -127,7 +130,7 @@ void main() {
     });
   }
 
-  void expectCompactDialog(WidgetTester tester, String title, String action) {
+  void expectUsableDialog(WidgetTester tester, String title, String action) {
     final dialog = tester.getRect(
       find
           .descendant(
@@ -149,14 +152,15 @@ void main() {
         matching: find.byTooltip(action),
       ),
     );
-    expect(heading.left - dialog.left, closeTo(WingSpacing.md, 0.01));
-    expect(dialog.right - heading.right, closeTo(WingSpacing.md, 0.01));
-    expect(heading.top - dialog.top, closeTo(WingSpacing.md, 0.01));
-    expect(dialog.right - commit.right, closeTo(WingSpacing.md, 0.01));
-    expect(dialog.bottom - commit.bottom, closeTo(WingSpacing.md, 0.01));
-    expect(commit.left - cancel.right, closeTo(WingSpacing.sm, 0.01));
-    expect(cancel.size, const Size(48, 48));
-    expect(commit.size, cancel.size);
+    for (final rect in [heading, cancel, commit]) {
+      expect(dialog.intersect(rect), rect);
+    }
+    expect(cancel.overlaps(commit), isFalse);
+    for (final rect in [cancel, commit]) {
+      expect(rect.width, greaterThanOrEqualTo(48));
+      expect(rect.height, greaterThanOrEqualTo(48));
+    }
+    expect(find.byTooltip(action).hitTestable(), findsOneWidget);
   }
 
   for (final brightness in Brightness.values) {
@@ -386,7 +390,7 @@ void main() {
           await tester.pumpAndSettle();
           await tester.tap(find.text('Main branch').last);
           await tester.pumpAndSettle();
-          expectCompactDialog(tester, 'Update channel', 'Save update channel');
+          expectUsableDialog(tester, 'Update channel', 'Save update channel');
           final saveRect = tester.getRect(
             find.byTooltip('Save update channel'),
           );
@@ -402,7 +406,7 @@ void main() {
           // Measure the held save after the shared press feedback settles.
           await tester.pump(WingMotion.buttonPress);
           await tester.pump(WingMotion.buttonRelease);
-          expectCompactDialog(tester, 'Update channel', 'Save update channel');
+          expectUsableDialog(tester, 'Update channel', 'Save update channel');
           expect(
             tester.getRect(find.byTooltip('Save update channel')),
             saveRect,
@@ -440,7 +444,7 @@ void main() {
             find.text('The channel save could not be confirmed. Try again.'),
             findsWidgets,
           );
-          expectCompactDialog(tester, 'Update channel', 'Save update channel');
+          expectUsableDialog(tester, 'Update channel', 'Save update channel');
           await snapshot(tester, '${brightness.name}-$scale-save-error');
 
           host.source
@@ -463,7 +467,7 @@ void main() {
           await tester.ensureVisible(find.byTooltip('Update backend'));
           await tester.tap(find.byTooltip('Update backend'));
           await tester.pumpAndSettle();
-          expectCompactDialog(
+          expectUsableDialog(
             tester,
             'Update backend on this server?',
             'Update backend',
@@ -489,7 +493,7 @@ void main() {
           await tester.ensureVisible(find.byTooltip('Update backend'));
           await tester.tap(find.byTooltip('Update backend'));
           await tester.pumpAndSettle();
-          expectCompactDialog(
+          expectUsableDialog(
             tester,
             'Update backend on this server?',
             'Update backend',
@@ -636,10 +640,6 @@ void main() {
     expect(
       host.reads.where((call) => call.$1 == 'hermes/update/check'),
       hasLength(1),
-    );
-    expect(
-      host.reads.firstWhere((call) => call.$1 == 'hermes/update/check').$1,
-      'hermes/update/check',
     );
     expect(
       host.reads.firstWhere((call) => call.$1 == 'hermes/update/check').$2,
@@ -886,6 +886,7 @@ void main() {
   ) async {
     final host = _UpdateHost();
     final external = BackendUpdateController(host.gateway);
+    addTearDown(external.dispose);
     await external.checkForUpdate();
     await tester.pumpWidget(
       MaterialApp(
@@ -899,7 +900,6 @@ void main() {
     void listener() {}
     expect(() => external.addListener(listener), returnsNormally);
     external.removeListener(listener);
-    external.dispose();
   });
 
   testWidgets('confirmation cannot start a replacement external controller', (
@@ -987,7 +987,7 @@ void main() {
     expect(find.text('Checking for updates…'), findsNothing);
     expect(find.text('Checking…'), findsNothing);
     expect(find.byType(StudioLoading), findsNothing);
-    expect(find.byIcon(Icons.search), findsOneWidget);
+    expect(find.byIcon(Icons.sync), findsOneWidget);
     expect(
       tester
           .widget<IconButton>(

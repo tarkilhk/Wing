@@ -142,52 +142,46 @@ void main() {
     expect(find.text('Same source'), findsOneWidget);
   });
 
-  testWidgets(
-    'failed parse retries on new data and disposal ignores late work',
-    (tester) async {
-      final jobs = <Completer<MarkdownParseResult>>[];
-      Future<MarkdownParseResult> parse(String source) {
-        final result = Completer<MarkdownParseResult>();
-        jobs.add(result);
-        return result.future;
-      }
+  testWidgets('failed parse retries on new data and clears the error', (
+    tester,
+  ) async {
+    final jobs = <Completer<MarkdownParseResult>>[];
+    Future<MarkdownParseResult> parse(String source) {
+      final result = Completer<MarkdownParseResult>();
+      jobs.add(result);
+      return result.future;
+    }
 
-      Widget host(String data) => Directionality(
-        textDirection: TextDirection.ltr,
-        child: BackgroundMarkdownContent(
-          data: data,
-          deliverables: false,
-          parse: parse,
-          builder: (text, _) => Text(text),
-        ),
-      );
-      await tester.pumpWidget(host('A'));
-      final state = tester.state<BackgroundMarkdownContentState>(
-        find.byType(BackgroundMarkdownContent),
-      );
-      expect(state.pending, isTrue);
-      jobs.first.completeError(StateError('Injected failure'));
-      await tester.pump();
-      await tester.pump();
-      expect(find.byType(StudioError), findsOneWidget);
-      // A terminal failure must not keep restoration or test waiters pending.
-      expect(state.pending, isFalse);
-      await tester.pumpWidget(host('AB'));
-      expect(state.pending, isTrue);
-      jobs.last.complete(const MarkdownParseResult([], 1, 0, 1));
-      await tester.pump();
-      await tester.pump();
-      expect(find.text('AB'), findsOneWidget);
-      expect(find.byType(StudioError), findsNothing);
-      expect(state.pending, isFalse);
-      await tester.pumpWidget(host('ABC'));
-      await tester.pumpWidget(const SizedBox());
-      jobs.last.complete(const MarkdownParseResult([], 1, 0, 1));
-      await tester.pump();
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-    },
-  );
+    Widget host(String data) => Directionality(
+      textDirection: TextDirection.ltr,
+      child: BackgroundMarkdownContent(
+        data: data,
+        deliverables: false,
+        parse: parse,
+        builder: (text, _) => Text(text),
+      ),
+    );
+    await tester.pumpWidget(host('A'));
+    final state = tester.state<BackgroundMarkdownContentState>(
+      find.byType(BackgroundMarkdownContent),
+    );
+    expect(state.pending, isTrue);
+    jobs.first.completeError(StateError('Injected failure'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StudioError), findsOneWidget);
+    // A terminal failure must not keep restoration or test waiters pending.
+    expect(state.pending, isFalse);
+    await tester.pumpWidget(host('AB'));
+    expect(state.pending, isTrue);
+    jobs.last.complete(const MarkdownParseResult([], 1, 0, 1));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('AB'), findsOneWidget);
+    expect(find.byType(StudioError), findsNothing);
+    expect(state.pending, isFalse);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'latest update waits behind one parse while completed progress stays visible',

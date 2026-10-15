@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -22,7 +23,10 @@ void main() {
         '--json',
       ]);
       expect(result.exitCode, 0, reason: '${result.stdout}${result.stderr}');
-      expect(result.stdout, contains('"findings":[]'));
+      expect(
+        jsonDecode(result.stdout as String),
+        containsPair('findings', isEmpty),
+      );
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );

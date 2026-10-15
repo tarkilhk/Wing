@@ -298,7 +298,13 @@ void main() {
           .toSet()
           .toList();
       expect(links, hasLength(1));
-      links.single.onTap!();
+      final editable = _editable(tester, text).renderEditable;
+      await tester.tapAt(
+        editable.localToGlobal(
+          editable.getLocalRectForCaret(const TextPosition(offset: 3)).center,
+        ),
+      );
+      await tester.pump();
     }
     expect(calls, [
       'new https://example.test/updated',

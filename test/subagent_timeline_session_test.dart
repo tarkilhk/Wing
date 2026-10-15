@@ -101,7 +101,7 @@ void main() {
   );
 
   test(
-    'mounts exact lazy child and renders saved tool inputs and results',
+    'mounts the exact lazy child and retains saved tool inputs and results',
     () async {
       rows.addAll([
         {
@@ -132,6 +132,13 @@ void main() {
         'lazy': true,
         'omit_messages': true,
       });
+      expect(session.messages.first['tool_calls'], [
+        {
+          'id': 'call-1',
+          'function': {'name': 'terminal', 'arguments': '{"command":"pytest"}'},
+        },
+      ]);
+      expect(session.messages.last['tool_call_id'], 'call-1');
       expect(session.messages.last['content'], '17 passed');
       expect(session.historyAvailable, isTrue);
       expect(session.runtime.executionActive, isTrue);

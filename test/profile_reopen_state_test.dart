@@ -1,3 +1,4 @@
+import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -111,7 +112,19 @@ void main() {
       await controller.openSession(chat.key);
       expect(chat.runtime.questions, isNull);
       expect(chat.runtime.blocksTurnAdmission, isFalse);
-      expect(chat.reading.messages.single['content'], 'a completed');
+      final completed = chat.reading.messages
+          .where((row) => row['id'] == 1 && row['role'] == 'assistant')
+          .single;
+      expect(completed['content'], 'a completed');
+      final questions = chat.reading.questionHistory!.questions;
+      expect(
+        questions.map((q) => q.requestId),
+        containsAll(['reopened-approval', 'q']),
+      );
+      expect(
+        questions.every((q) => q.status == HermesQuestionStatus.closed),
+        isTrue,
+      );
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     },
   );

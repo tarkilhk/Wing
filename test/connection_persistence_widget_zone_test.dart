@@ -6,49 +6,64 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 
 void main() {
-  // Separate widget tests create separate FakeAsync zones, while production
-  // ConnectionManager instances reuse the same default credential store.
-  for (final iteration in [1, 2]) {
-    testWidgets('default-store operations settle in widget zone $iteration', (
-      tester,
-    ) async {
-      FlutterSecureStorage.setMockInitialValues({});
-      SharedPreferences.setMockInitialValues({});
-      final prefs = await SharedPreferences.getInstance();
-      ConnectionManager? manager;
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('default credential store settles across independently drained zones', () {
+    void completeLifecycle(int iteration) {
+      final microtasks = <void Function()>[];
+      var complete = false;
       Object? failure;
-      final pending = ConnectionManager.create(prefs);
-      unawaited(
-        pending.then<void>(
-          (value) => manager = value,
-          onError: (Object error, StackTrace _) => failure = error,
+      runZoned(
+        () async {
+          try {
+            FlutterSecureStorage.setMockInitialValues({});
+            SharedPreferences.setMockInitialValues({});
+            final prefs = await SharedPreferences.getInstance();
+            final manager = await ConnectionManager.create(prefs);
+            await manager.importConnections(
+              [
+                SavedConnection(
+                  id: 'widget-$iteration',
+                  label: 'Widget $iteration',
+                  host: 'widget.example',
+                  port: 443,
+                  apiKey: 'synthetic-widget-$iteration',
+                ),
+              ],
+              replaceExisting: true,
+              canCommit: () => true,
+            );
+            expect(
+              manager.getConnections().single.apiKey,
+              'synthetic-widget-$iteration',
+            );
+            complete = true;
+          } catch (error) {
+            failure = error;
+          }
+        },
+        zoneSpecification: ZoneSpecification(
+          scheduleMicrotask: (self, parent, zone, task) {
+            microtasks.add(() => zone.runGuarded(task));
+          },
         ),
       );
-      await tester.pump();
+      for (var steps = 0; microtasks.isNotEmpty && steps < 10000; steps++) {
+        microtasks.removeAt(0)();
+      }
+      expect(microtasks, isEmpty, reason: 'Storage operations must quiesce.');
       expect(failure, isNull);
       expect(
-        manager,
-        isNotNull,
+        complete,
+        isTrue,
         reason:
-            'A completed queue from an earlier widget zone must not strand this operation.',
+            'A queue retained in a drained earlier zone must not strand lifecycle $iteration.',
       );
-      await manager!.importConnections(
-        [
-          SavedConnection(
-            id: 'widget-$iteration',
-            label: 'Widget $iteration',
-            host: 'widget.example',
-            port: 443,
-            apiKey: 'synthetic-widget-$iteration',
-          ),
-        ],
-        replaceExisting: true,
-        canCommit: () => true,
-      );
-      expect(
-        manager!.getConnections().single.apiKey,
-        'synthetic-widget-$iteration',
-      );
-    });
-  }
+    }
+
+    // A finished lifecycle never drains its microtasks again. Both lifecycles
+    // belong to this test so selection and randomization retain the regression.
+    completeLifecycle(1);
+    completeLifecycle(2);
+  });
 }

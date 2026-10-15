@@ -101,7 +101,11 @@ void main() {
         await controller.initialize();
         addTearDown(controller.dispose);
         var runs = 0;
-        final opening = Completer<void>();
+        var opening = Completer<void>();
+        var opened = 0;
+        addTearDown(() {
+          if (!opening.isCompleted) opening.complete();
+        });
         fixture.override = (method, path, query, body) async {
           return {
             'name': 'doctor',
@@ -133,7 +137,10 @@ void main() {
               title: 'Doctor',
               createDraftSession: () =>
                   DoctorFindingDraftSession(operation, controller),
-              onOpenSession: (_) => opening.future,
+              onOpenSession: (_) {
+                opened++;
+                return opening.future;
+              },
               onRunAgain: () async {
                 runs++;
               },
@@ -159,7 +166,9 @@ void main() {
         await tester.tap(find.text('Ask Hermes').last);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
-        expect(find.byType(StudioLoading), findsNothing);
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(find.bySemanticsLabel('Opening chat'), findsOneWidget);
+        expect(opened, 1);
         expect(find.byIcon(WingIcons.newChat), findsNWidgets(3));
         expect(
           tester
@@ -175,6 +184,20 @@ void main() {
           findsOneWidget,
         );
         await snapshot(tester, '${brightness.name}-$scale-chat-error');
+        expect(find.bySemanticsLabel('Opening chat'), findsNothing);
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pumpAndSettle();
+        opening = Completer<void>();
+        await tester.ensureVisible(find.text('Ask Hermes').last);
+        await tester.tap(find.text('Ask Hermes').last);
+        await tester.pump();
+        await tester.pump();
+        expect(find.bySemanticsLabel('Opening chat'), findsOneWidget);
+        expect(opened, 2);
+        opening.complete();
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel('Opening chat'), findsNothing);
+
         expect(tester.takeException(), isNull);
         await tester.pump(const Duration(seconds: 5));
         await tester.pumpAndSettle();

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -28,6 +29,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'support/process_batch_fixture.dart';
 import 'composer_references_test.dart' show ReferenceHost;
 import 'package:wing/core/models/composer_reference.dart';
+
+Future<void> _waitUntil(bool Function() condition) async {
+  await Future<void>(() async {
+    while (!condition()) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }).timeout(const Duration(seconds: 5));
+}
 
 class AnswerHost {
   final gateways = <String, ProfileGateway>{};
@@ -110,6 +119,9 @@ class AnswerHost {
         activeName: 'a',
       ),
       get: (path, query) async {
+        if (path == 'model/info') return <String, dynamic>{};
+        if (path == 'model/options') return {'providers': <dynamic>[]};
+        if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
         if (path == 'sessions/$branchReadSession/messages' &&
             query['order'] == 'oldest') {
           await branchReadDelay?.future;
@@ -141,7 +153,9 @@ class AnswerHost {
                     },
                 ],
               }
-            : historyPage(scope.profileName, path, query);
+            : path.startsWith('sessions/') && path.endsWith('/messages')
+            ? historyPage(scope.profileName, path, query)
+            : throw StateError('Unhandled fixture GET: $path');
       },
       rpc: (method, params) async {
         calls.add((method, params));
@@ -409,7 +423,10 @@ void main() {
                 ),
                 child: RepaintBoundary(key: frame, child: child!),
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           );
           Future<void> picture(String state) async {
@@ -478,7 +495,15 @@ void main() {
             matching: find.byType(CustomPaint),
           );
           expect(glyph, findsOneWidget);
-          expect(tester.getSize(glyph), const Size(18, 18));
+          final paintedBounds = tester.getRect(glyph);
+          expect(paintedBounds.isEmpty, isFalse);
+          expect(tester.getRect(header).contains(paintedBounds.center), isTrue);
+          expect(
+            tester
+                .getRect(find.byType(ProfileWorkspaceScreen))
+                .intersect(paintedBounds),
+            paintedBounds,
+          );
           await picture('pending');
           expect(
             host.calls.where((call) => call.$1 == 'session.branch'),
@@ -513,7 +538,7 @@ void main() {
           host.branchReadSession = 'child-1';
           await tester.tap(find.byTooltip('Retry'));
           await tester.runAsync(() async {
-            await Future<void>.delayed(const Duration(milliseconds: 50));
+            await _waitUntil(() => host.parents.containsKey('child-1'));
           });
           await tester.pump();
           expect(controller.current!.chat, same(original));
@@ -547,7 +572,12 @@ void main() {
   ) async {
     await controller.updateDraft(original, 'Keep this draft');
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     event('message.start');
@@ -570,7 +600,7 @@ void main() {
     event('message.delta', {'text': 'The original work continues.'});
     await tester.runAsync(() async {
       host.branchDelay!.complete();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await _waitUntil(() => !original.branchingAnswer);
     });
     await tester.pump();
     expect(controller.current!.chat, isNull);
@@ -1005,7 +1035,12 @@ void main() {}
       });
       await controller.refreshHistory(original);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.textContaining('[System: model changed]'), findsNothing);
@@ -1375,7 +1410,12 @@ fixture-value-amber-729
     final restored = controller.current!.chat!;
     expect(controller.parentSessionId(restored), isNull);
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Chat actions'));
@@ -1538,7 +1578,12 @@ fixture-value-amber-729
     'regenerate updates the same chat without parent navigation or carousel',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       final originalActions = find.byKey(const ValueKey('answer-actions-3'));
@@ -1595,7 +1640,12 @@ fixture-value-amber-729
     });
     await controller.refreshHistory(original);
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     final actions = find.byKey(const ValueKey('answer-actions-3'));

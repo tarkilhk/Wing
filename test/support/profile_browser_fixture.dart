@@ -184,6 +184,10 @@ class ProfileBrowserFixture {
     get: (path, query) async {
       reads.add((path, query));
       if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
+      // Browser-only scenarios expose no configured models. Model-selection
+      // scenarios override these explicit observations with their own catalog.
+      if (path == 'model/options') return {'providers': <Object>[]};
+      if (path == 'model/info') return <String, dynamic>{};
       final offset = int.parse(query['offset'] ?? '0');
       final limit = int.parse(query['limit'] ?? '50');
       if (path.endsWith('/messages')) {

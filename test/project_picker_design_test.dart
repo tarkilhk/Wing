@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -111,7 +112,10 @@ void main() {
           ),
           child: RepaintBoundary(key: const ValueKey('capture'), child: child!),
         ),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -150,125 +154,126 @@ void main() {
             isFalse,
           );
           final semantics = tester.ensureSemantics();
-          expect(
-            tester.getSemantics(selector),
-            matchesSemantics(
-              label: 'Unassigned. Move to project',
-              isButton: true,
-              hasEnabledState: true,
-              isEnabled: true,
-              hasTapAction: true,
-              isFocusable: true,
-            ),
-          );
-          semantics.dispose();
-          await tester.tap(find.text(controller.current!.chat!.title));
-          await tester.pumpAndSettle();
-          expect(
-            find.byKey(const ValueKey('chat-project-sheet')),
-            findsNothing,
-          );
-          expect(find.byTooltip('Move to project'), findsNothing);
-          expect(
-            find.byKey(const ValueKey('chat-rename-title')),
-            findsOneWidget,
-          );
-          await tester.tap(find.byTooltip('Cancel'));
-          await tester.pumpAndSettle();
-          await screenshot(tester, 'header-${brightness.name}-$scale');
-          // Even the edge of the project's 48 dp target opens the selector.
-          await tester.tapAt(
-            tester.getBottomRight(selector) - const Offset(2, 2),
-          );
-          await tester.pumpAndSettle();
-          expect(
-            find.byKey(const ValueKey('chat-project-sheet')),
-            findsOneWidget,
-          );
-          expect(tester.takeException(), isNull);
-          await screenshot(tester, 'projects-${brightness.name}-$scale');
-          await tester.tap(find.byTooltip('Cancel project selection'));
-          await tester.pumpAndSettle();
-          await tester.tap(
-            find.byKey(const ValueKey('connection-status-target')),
-          );
-          await tester.pumpAndSettle();
-          expect(find.text('Connection details'), findsOneWidget);
-          expect(
-            find.byKey(const ValueKey('chat-project-sheet')),
-            findsNothing,
-          );
-          expect(tester.takeException(), isNull);
-          await screenshot(tester, 'connection-${brightness.name}-$scale');
-          await tester.tap(find.byTooltip('Close connection details'));
-          await tester.pumpAndSettle();
-          expect(host.moves, isEmpty);
-          host.projectChanges[project['id'] as String]!['label'] =
-              'australia-rwc-2027';
-          await controller.switchProfile('personal');
-          final assignedResource = controller.current!;
-          final assignedProject = assignedResource.projects.first;
-          await controller.createChat(
-            inProject: assignedProject,
-            canDispatch: () =>
-                identical(controller.current, assignedResource) &&
-                assignedResource.projects.contains(assignedProject),
-          );
-          emitChatEvent(
-            controller,
-            controller.current!.chat!,
-            'session.title',
-            {
-              'session_id': controller.current!.chat!.key.sessionId,
-              'title': 'Find budget car rental in Perth',
-            },
-          );
-          await tester.pumpAndSettle();
-          expect(tester.takeException(), isNull);
-          final projectText = find.text('australia-rwc-2027');
-          expect(projectText, findsOneWidget);
-          await tester.tap(find.text('Find budget car rental in Perth'));
-          await tester.pumpAndSettle();
-          expect(
-            find.byKey(const ValueKey('chat-rename-title')),
-            findsOneWidget,
-          );
-          await tester.tap(find.byTooltip('Cancel'));
-          await tester.pumpAndSettle();
-          expect(
-            find.byKey(const ValueKey('chat-project-sheet')),
-            findsNothing,
-          );
-          await tester.tap(projectText);
-          await tester.pumpAndSettle();
-          expect(
-            find.byKey(const ValueKey('chat-project-sheet')),
-            findsOneWidget,
-          );
-          await tester.tap(find.byTooltip('Cancel project selection'));
-          await tester.pumpAndSettle();
-          final nameStyle = tester.widget<Text>(projectText).style;
-          expect(
-            nameStyle?.color,
-            tester.widget<Text>(find.text('Host')).style?.color,
-          );
-          if (scale == 1) {
-            final title = find.text('Find budget car rental in Perth');
-            final scope = tester.getRect(
-              find.byKey(const ValueKey('chat-scope-inline')),
-            );
-            final target = tester.getRect(selector);
-            expect(target.right, scope.right);
-            expect(target.left, greaterThanOrEqualTo(scope.left));
-            expect(target.top, greaterThanOrEqualTo(scope.top));
-            expect(target.bottom, lessThanOrEqualTo(scope.bottom));
+          try {
             expect(
-              target.top,
-              greaterThanOrEqualTo(tester.getRect(title).bottom),
+              tester.getSemantics(selector),
+              matchesSemantics(
+                label: 'Unassigned. Move to project',
+                isButton: true,
+                hasEnabledState: true,
+                isEnabled: true,
+                hasTapAction: true,
+                isFocusable: true,
+              ),
             );
-            expect(selector.hitTestable(), findsOneWidget);
+            await tester.tap(find.text(controller.current!.chat!.title));
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('chat-project-sheet')),
+              findsNothing,
+            );
+            expect(find.byTooltip('Move to project'), findsNothing);
+            expect(
+              find.byKey(const ValueKey('chat-rename-title')),
+              findsOneWidget,
+            );
+            await tester.tap(find.byTooltip('Cancel'));
+            await tester.pumpAndSettle();
+            await screenshot(tester, 'header-${brightness.name}-$scale');
+            // Even the edge of the project's 48 dp target opens the selector.
+            await tester.tapAt(
+              tester.getBottomRight(selector) - const Offset(2, 2),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('chat-project-sheet')),
+              findsOneWidget,
+            );
+            expect(tester.takeException(), isNull);
+            await screenshot(tester, 'projects-${brightness.name}-$scale');
+            await tester.tap(find.byTooltip('Cancel project selection'));
+            await tester.pumpAndSettle();
+            await tester.tap(
+              find.byKey(const ValueKey('connection-status-target')),
+            );
+            await tester.pumpAndSettle();
+            expect(find.text('Connection details'), findsOneWidget);
+            expect(
+              find.byKey(const ValueKey('chat-project-sheet')),
+              findsNothing,
+            );
+            expect(tester.takeException(), isNull);
+            await screenshot(tester, 'connection-${brightness.name}-$scale');
+            await tester.tap(find.byTooltip('Close connection details'));
+            await tester.pumpAndSettle();
+            expect(host.moves, isEmpty);
+            host.projectChanges[project['id'] as String]!['label'] =
+                'australia-rwc-2027';
+            await controller.switchProfile('personal');
+            final assignedResource = controller.current!;
+            final assignedProject = assignedResource.projects.first;
+            await controller.createChat(
+              inProject: assignedProject,
+              canDispatch: () =>
+                  identical(controller.current, assignedResource) &&
+                  assignedResource.projects.contains(assignedProject),
+            );
+            emitChatEvent(
+              controller,
+              controller.current!.chat!,
+              'session.title',
+              {
+                'session_id': controller.current!.chat!.key.sessionId,
+                'title': 'Find budget car rental in Perth',
+              },
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            final projectText = find.text('australia-rwc-2027');
+            expect(projectText, findsOneWidget);
+            await tester.tap(find.text('Find budget car rental in Perth'));
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('chat-rename-title')),
+              findsOneWidget,
+            );
+            await tester.tap(find.byTooltip('Cancel'));
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('chat-project-sheet')),
+              findsNothing,
+            );
+            await tester.tap(projectText);
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('chat-project-sheet')),
+              findsOneWidget,
+            );
+            await tester.tap(find.byTooltip('Cancel project selection'));
+            await tester.pumpAndSettle();
+            if (scale == 1) {
+              final title = find.text('Find budget car rental in Perth');
+              final scope = tester.getRect(
+                find.byKey(const ValueKey('chat-scope-inline')),
+              );
+              final target = tester.getRect(selector);
+              expect(target.right, scope.right);
+              expect(target.left, greaterThanOrEqualTo(scope.left));
+              expect(target.top, greaterThanOrEqualTo(scope.top));
+              expect(target.bottom, lessThanOrEqualTo(scope.bottom));
+              expect(
+                target.top,
+                greaterThanOrEqualTo(tester.getRect(title).bottom),
+              );
+              expect(selector.hitTestable(), findsOneWidget);
+            }
+            await screenshot(
+              tester,
+              'header-assigned-${brightness.name}-$scale',
+            );
+          } finally {
+            semantics.dispose();
           }
-          await screenshot(tester, 'header-assigned-${brightness.name}-$scale');
         },
       );
     }

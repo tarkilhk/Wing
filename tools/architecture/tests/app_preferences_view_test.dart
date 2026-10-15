@@ -283,6 +283,10 @@ Future<void> _proofMain(List<String> args) async {
       cli: true,
     ),
   ];
+  final cliExits = <String, Set<int>>{
+    'source': {},
+    if (compiled != null) 'aot': {},
+  };
   var passed = 0;
   final workspace = Workspace();
   try {
@@ -347,6 +351,7 @@ Future<void> _proofMain(List<String> args) async {
             result.exitCode == expected,
             '${fixture.name}: actual CLI verdict ${result.exitCode}: ${result.stdout}${result.stderr}',
           );
+          cliExits[prefix.isEmpty ? 'aot' : 'source']!.add(result.exitCode);
           if (expected != 2) {
             final output = jsonDecode(result.stdout as String) as Map;
             final diagnostics = (output['findings'] as List).cast<Map>();
@@ -391,6 +396,10 @@ Future<void> _proofMain(List<String> args) async {
   } finally {
     workspace.dispose();
   }
+  require(
+    cliExits.values.every((exits) => exits.containsAll({0, 1, 2})),
+    'Every enabled CLI mode must prove rejection, acceptance and input failure',
+  );
   stdout.writeln(
     '${rule.id}: $passed API fixtures; actual source${compiled == null ? '' : '+AOT'} CLI invalid1/valid0/input2 and invalid SDK2 passed.',
   );

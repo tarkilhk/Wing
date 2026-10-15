@@ -6,6 +6,10 @@ share_intake_device.dart for --provider-faults. This check sends no Hermes
 messages. It builds a standalone SDK-only sender/provider APK, inspects
 only synthetic intake bytes, and removes its helper and owned files afterward.
 """
+# Optimization would remove the verdict assertions below.
+if not __debug__:
+    raise RuntimeError("Native acceptance requires Python assertions; remove -O/PYTHONOPTIMIZE")
+
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor

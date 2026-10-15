@@ -224,6 +224,26 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
           'ready': host.gateways.containsKey('a'),
           'alerts': alerts,
           'active': registry.hasActiveChats,
+          'controllerActive': controller.hasActiveChats,
+          'switching': controller.switching,
+          'selectedProfile': controller.current?.scope.profileName,
+          'chats': {
+            for (final entry in chats.entries)
+              entry.key: {
+                'session': entry.value.key.sessionId,
+                'runtime': entry.value.runtime.runtimeId,
+                'execution': entry.value.runtime.execution.name,
+                'recovery': entry.value.runtime.recovery.name,
+                'liveSessionConfirmed':
+                    entry.value.runtime.liveSessionConfirmed,
+                'needsInput': entry.value.runtime.needsInput,
+                'error': entry.value.runtime.error,
+                'composerError': entry.value.composer.observation.error,
+                'queued': entry.value.composer.observation.queue.length,
+                'paused': entry.value.composer.observation.paused,
+                'sending': entry.value.composer.observation.sending,
+              },
+          },
           'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
           'enabled':
               (preferences.getBool(
@@ -236,8 +256,12 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
                   true),
         }),
       );
-    } catch (_) {
+    } catch (error, stack) {
       request.response.statusCode = 500;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(
+        jsonEncode({'error': error.toString(), 'stack': stack.toString()}),
+      );
     } finally {
       await request.response.close();
     }

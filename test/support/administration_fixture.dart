@@ -132,11 +132,11 @@ class AdministrationFixture {
       rpc: (method, params) async {
         rpcRequests.add((name, method));
         if (rpcOverride != null) return rpcOverride!(method, params);
-        return {
-          'plugins': [],
-          'servers': [],
-          if (method == 'reload.mcp') 'status': 'reloaded',
-        };
+        if (method == 'plugins.manage' && params['action'] == 'list') {
+          return {'plugins': []};
+        }
+        if (method == 'reload.mcp') return {'status': 'reloaded'};
+        throw StateError('Unexpected fixture RPC $method $params');
       },
       discover: () => server.discover(),
     ),
@@ -150,6 +150,9 @@ class AdministrationFixture {
   ) async {
     requests.add((method, path, {...query}, body == null ? null : {...body}));
     if (override != null) return override!(method, path, query, body);
+    if (method != 'GET' && !(method == 'PUT' && path == 'config')) {
+      throw StateError('Unexpected fixture request $method $path');
+    }
     if (method == 'GET' && failReads) throw StateError('Offline');
     if (path == 'health') {
       return {'ok': true, 'version': updateCheck['current_version']};
@@ -251,6 +254,6 @@ ModelsDevPrices subscriptionApiPrices({double input = 10}) =>
 AdministrationRequest withSubscriptionModelOptions(
   AdministrationRequest request,
 ) =>
-    (method, path, query, body) => path == 'model/options'
+    (method, path, query, body) => method == 'GET' && path == 'model/options'
     ? Future.value(subscriptionModelOptions())
     : request(method, path, query, body);
