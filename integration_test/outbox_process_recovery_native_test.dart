@@ -175,7 +175,13 @@ void main() {
       expect(tester.widget<TextField>(editor).controller!.text, _draft);
       Finder queued() => find.descendant(
         of: find.byType(ProfileQueuedMessages),
-        matching: find.text(_text),
+        matching: find.text('$_text · recovery.txt'),
+      );
+      await until(
+        () =>
+            queued().hitTestable().evaluate().isNotEmpty &&
+            editor.hitTestable().evaluate().isNotEmpty,
+        'Restored draft and uncertain outgoing message become visible',
       );
       expect(queued().hitTestable(), findsOneWidget);
       expect(find.text('Queue paused'), findsOneWidget);
@@ -187,13 +193,19 @@ void main() {
       final attachment = restored.queuedPrompts.single.attachments.single;
       expect(await File(attachment.cachedPath).readAsString(), _bytes);
       // Reopening through the browser must also preserve uncertain admission.
-      await tester.tap(find.byTooltip('Back'));
+      await tester.binding.handlePopRoute();
+      final browserRow = find.byKey(const ValueKey('chat-a-same'));
       await until(
-        () => find.text('a chat').evaluate().isNotEmpty,
+        () => browserRow.hitTestable().evaluate().isNotEmpty,
         'Chats opens',
       );
-      await tester.tap(find.text('a chat'));
-      await until(() => editor.evaluate().isNotEmpty, 'Conversation reopens');
+      await tester.tap(browserRow);
+      await until(
+        () =>
+            editor.hitTestable().evaluate().isNotEmpty &&
+            queued().hitTestable().evaluate().isNotEmpty,
+        'Conversation reopens with its preserved draft and outbox',
+      );
       expect(tester.widget<TextField>(editor).controller!.text, _draft);
       expect(queued().hitTestable(), findsOneWidget);
       expect(find.text('Queue paused'), findsOneWidget);

@@ -147,6 +147,15 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('New project'));
         await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('chat-menu-android-qa-a')));
+        await until(
+          tester,
+          () => find
+              .byKey(const ValueKey('project-name-field'))
+              .hitTestable()
+              .evaluate()
+              .isNotEmpty,
+        );
         await tester.enterText(
           find.byKey(const ValueKey('project-name-field')),
           initialName,
