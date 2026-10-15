@@ -7,6 +7,7 @@ import 'package:wing/core/models/gateway_insight.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
+import 'package:wing/core/services/profile_supervision_session.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -99,6 +100,74 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'subagent header separates outcomes, queue and unconfirmed work',
+    () async {
+      final session = ProfileSupervisionSession(
+        controller: controller,
+        chat: chat,
+      );
+      addTearDown(session.dispose);
+      final rows = [
+        for (final (id, status) in [
+          ('done-1', 'completed'),
+          ('done-2', 'completed'),
+          ('done-3', 'completed'),
+          ('running-1', 'running'),
+          ('running-2', 'running'),
+          ('queued', 'queued'),
+          ('failed', 'failed'),
+          ('interrupted', 'interrupted'),
+        ])
+          {'subagent_id': id, 'goal': 'Review $id', 'status': status},
+      ];
+      host.listResponse = {'subagents': rows};
+      await controller.refreshSubagents(chat);
+      expect(
+        session.state.subagentSummary,
+        '3 of 8 completed · 2 running · 1 queued · 1 failed · 1 interrupted',
+      );
+      rows[3]['status'] = 'completed';
+      host.listResponse = {
+        'subagents': rows
+            .where(
+              (row) =>
+                  row['subagent_id'] != 'running-2' &&
+                  row['subagent_id'] != 'queued',
+            )
+            .toList(),
+      };
+      await controller.refreshSubagents(chat);
+      expect(
+        session.state.subagentSummary,
+        '4 of 8 completed · 1 failed · 1 interrupted · 2 unconfirmed',
+      );
+    },
+  );
+
+  test(
+    'subagent header handles empty and entirely completed rosters',
+    () async {
+      final session = ProfileSupervisionSession(
+        controller: controller,
+        chat: chat,
+      );
+      addTearDown(session.dispose);
+      expect(session.state.subagentSummary, 'No subagents');
+      host.listResponse = {
+        'subagents': [
+          {
+            'subagent_id': 'done',
+            'goal': 'Review source',
+            'status': 'completed',
+          },
+        ],
+      };
+      await controller.refreshSubagents(chat);
+      expect(session.state.subagentSummary, '1 of 1 completed');
+    },
+  );
 
   test('opening a saved chat discovers its active agent roster', () async {
     host.listResponse = {

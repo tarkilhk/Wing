@@ -117,24 +117,27 @@ final class ProfileSupervisionObservation {
   ]);
 
   String get subagentSummary {
-    if (subagents.isEmpty) return 'No live tasks';
-    final running = subagents.where((item) => !item.isTerminal).length;
-    final unconfirmed = subagents
-        .where(
-          (item) =>
-              !item.isTerminal && unconfirmedSubagentIds.contains(item.id),
-        )
-        .length;
-    if (unconfirmed > 0) {
-      return [
-        if (running > unconfirmed) '${running - unconfirmed} active',
-        '$unconfirmed unconfirmed',
-        '${subagents.length} total',
-      ].join(' · ');
+    if (subagents.isEmpty) return 'No subagents';
+    final counts = <GatewaySubagentStatus, int>{};
+    var unconfirmed = 0;
+    for (final agent in subagents) {
+      if (!agent.isTerminal && unconfirmedSubagentIds.contains(agent.id)) {
+        unconfirmed++;
+      } else {
+        counts.update(agent.status, (count) => count + 1, ifAbsent: () => 1);
+      }
     }
-    return running == 0
-        ? '${subagents.length} finished'
-        : '$running active · ${subagents.length} total';
+    return [
+      '${counts[GatewaySubagentStatus.completed] ?? 0} of ${subagents.length} completed',
+      for (final status in [
+        GatewaySubagentStatus.running,
+        GatewaySubagentStatus.queued,
+        GatewaySubagentStatus.failed,
+        GatewaySubagentStatus.interrupted,
+      ])
+        if ((counts[status] ?? 0) > 0) '${counts[status]} ${status.name}',
+      if (unconfirmed > 0) '$unconfirmed unconfirmed',
+    ].join(' · ');
   }
 
   String get backgroundSummary {

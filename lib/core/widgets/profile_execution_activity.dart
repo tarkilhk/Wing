@@ -98,34 +98,18 @@ class ProfileTodoPanel extends StatelessWidget {
     super.key,
     required this.todos,
     this.embedded = false,
+    this.showSummary = true,
   });
   final bool embedded;
+  final bool showSummary;
 
   @override
   Widget build(BuildContext context) {
     final completed = todos
         .where((todo) => todo.status == GatewayTodoStatus.completed)
         .length;
-    final pending = todos
-        .where((todo) => todo.status == GatewayTodoStatus.pending)
-        .length;
-    final working = todos
-        .where((todo) => todo.status == GatewayTodoStatus.inProgress)
-        .length;
-    final cancelled = todos
-        .where((todo) => todo.status == GatewayTodoStatus.cancelled)
-        .length;
     final children = <Widget>[
-      ActivityDetailFacts(
-        facts: [
-          [
-            '$completed of ${todos.length} completed',
-            if (working > 0) '$working in progress',
-            if (pending > 0) '$pending pending',
-            if (cancelled > 0) '$cancelled cancelled',
-          ].join(' · '),
-        ],
-      ),
+      if (showSummary) ProfileTodoSummary(todos: todos),
       ActivityDetailsCard(
         children: [
           for (final todo in todos)
@@ -148,6 +132,31 @@ class ProfileTodoPanel extends StatelessWidget {
       icon: Icons.format_list_bulleted,
       label: 'Tasks $completed/${todos.length}',
       children: children,
+    );
+  }
+}
+
+/// The same received task counts serve inline activity and the pinned dock.
+class ProfileTodoSummary extends StatelessWidget {
+  const ProfileTodoSummary({super.key, required this.todos});
+  final List<GatewayTodo> todos;
+
+  @override
+  Widget build(BuildContext context) {
+    int count(GatewayTodoStatus status) =>
+        todos.where((todo) => todo.status == status).length;
+    final working = count(GatewayTodoStatus.inProgress);
+    final pending = count(GatewayTodoStatus.pending);
+    final cancelled = count(GatewayTodoStatus.cancelled);
+    return ActivityDetailFacts(
+      facts: [
+        [
+          '${count(GatewayTodoStatus.completed)} of ${todos.length} completed',
+          if (working > 0) '$working in progress',
+          if (pending > 0) '$pending pending',
+          if (cancelled > 0) '$cancelled cancelled',
+        ].join(' · '),
+      ],
     );
   }
 }

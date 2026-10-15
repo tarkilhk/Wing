@@ -16,6 +16,10 @@ cancelled tasks do not count as completed. Empty categories stay hidden. During
 streaming, current Tasks and Subagents appear only in this drawer, including
 completed subagents whose parent is still answering.
 
+The summary stays fixed while the rows scroll. Swipe the top handle up to expand
+near full screen, or down to return to compact height; tapping it also toggles
+the height. Both Tasks and Subagents use this behavior.
+
 Past answers retain their received Activity and Work details. Tools and agent
 results share the Timeline and Agents tabs within the same Activity. Activity shows the
 available tool count. Expand a row to see what was requested and what Hermes
