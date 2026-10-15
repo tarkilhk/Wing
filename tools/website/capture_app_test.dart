@@ -507,6 +507,7 @@ void main() {
             onOpenMenu: () {},
             onOpenChat: (_) async {},
             onOpenGroup: (_) async {},
+            onOpenGroupMemberChat: (_, _) async {},
           ),
         ),
       ),

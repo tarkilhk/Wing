@@ -260,13 +260,30 @@ void main() {
           reason:
               'Closed activity must not construct or lay out the 80 replayed tool rows.',
         );
-        expect(
-          find.textContaining(
-            'The conversation is already readable.',
-            findRichText: true,
-          ),
-          findsWidgets,
+        final retainedAnswer = find.textContaining(
+          'The conversation is already readable.',
+          findRichText: true,
         );
+        // Live prose can push the earlier answer beyond a small lazy viewport.
+        // Read it through the real scroll before returning to the live tail.
+        await tester.scrollUntilVisible(
+          retainedAnswer,
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('profile-transcript')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.settleMarkdown();
+        expect(retainedAnswer, findsWidgets);
+        final latest = find.byKey(const ValueKey('jump-to-latest'));
+        if (latest.evaluate().isNotEmpty) {
+          await tester.tap(latest);
+          await entryFrames();
+          await tester.settleMarkdown();
+        }
         await _render(
           tester,
           frame,
@@ -276,6 +293,9 @@ void main() {
           of: find.text('Activity · 80 tools'),
           matching: find.byType(ProfileActivitySection),
         );
+        await tester.ensureVisible(find.text('Activity · 80 tools'));
+        await entryFrames();
+        expect(find.text('Activity · 80 tools').hitTestable(), findsOneWidget);
         await tester.tap(find.text('Activity · 80 tools'));
         await tester.pump(const Duration(milliseconds: 300));
         expect(
