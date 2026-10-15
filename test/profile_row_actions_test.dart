@@ -1,4 +1,6 @@
 import 'support/form_family_capture.dart';
+import 'package:wing/core/models/transcript_position.dart';
+import 'package:wing/core/services/conversation_reading_memory.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/models/browser_actions.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
@@ -635,7 +637,7 @@ void main() {
         changes: {'unread': true},
         canDispatch: () => true,
       );
-      expect(chat.reading.readingPosition.readThrough, isNull);
+      expect(chat.reading.readingPosition.readThrough, 4);
       chat.reading.recordReading(null, readThrough: 4);
       await controller.acknowledgeVisibleReading(chat, 4);
       expect(host.updates, hasLength(3));
@@ -768,13 +770,14 @@ void main() {
       expect(chat.markReadFailed, isTrue);
 
       host.failMutation = false;
+      host.titleHistory = chat.reading.messages;
       await controller.mutateSession(
         key(),
         changes: {'unread': false},
         canDispatch: () => true,
       );
       expect(chat.markReadFailed, isFalse);
-      expect(chat.reading.readingPosition.readThrough, isNull);
+      expect(chat.reading.readingPosition.readThrough, 2);
       expect(
         controller.current!.sessions.firstWhere(
           (row) => row['id'] == 'newest',
@@ -783,6 +786,98 @@ void main() {
       );
     },
   );
+
+  test(
+    'manual read moves both markers to latest only after acknowledgement',
+    () async {
+      await loadNewestUnread();
+      final memory = ConversationReadingRegistry(
+        controller.preferences,
+      ).chat(key());
+      memory.record(const TranscriptBookmark(messageId: 7), readThrough: 8);
+      final before = memory.position;
+      host.titleHistory = [
+        {'id': 9, 'role': 'assistant', 'content': 'Latest answer'},
+        {'id': 10, 'role': 'user', 'content': 'Thanks'},
+      ];
+      final historyGate = host.historyDelays[('newest', 0)] = Completer<void>();
+      host.mutationDelay = Completer<void>();
+      final pending = controller.mutateSession(
+        key(),
+        changes: {'unread': false},
+        canDispatch: () => true,
+      );
+      while (!host.reads.any((read) => read.$1.endsWith('/messages'))) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(controller.current!.mutatingSessions, contains('newest'));
+      expect(identical(memory.position, before), isTrue);
+      expect(host.updates, isEmpty);
+      historyGate.complete();
+      while (host.updates.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(identical(memory.position, before), isTrue);
+      host.titleHistory.add({
+        'id': 11,
+        'role': 'assistant',
+        'content': 'Later arrival',
+      });
+      host.mutationDelay!.complete();
+      await pending;
+      expect(memory.position.resume, isNull);
+      expect(memory.position.readThrough, 10);
+      expect(controller.current!.mutatingSessions, isEmpty);
+      memory.record(const TranscriptBookmark(messageId: 7));
+      final marked = memory.position;
+      await controller.mutateSession(
+        key(),
+        changes: {'unread': true},
+        canDispatch: () => true,
+      );
+      expect(identical(memory.position, marked), isTrue);
+      expect(
+        controller.current!.sessions.firstWhere(
+          (r) => r['id'] == 'newest',
+        )['unread'],
+        true,
+      );
+    },
+  );
+
+  test('failed manual read leaves both markers unchanged', () async {
+    await loadNewestUnread();
+    final memory = ConversationReadingRegistry(
+      controller.preferences,
+    ).chat(key());
+    memory.record(const TranscriptBookmark(messageId: 7), readThrough: 8);
+    final before = memory.position;
+    host.titleHistory = [
+      {'id': 10, 'role': 'assistant', 'content': 'Latest'},
+    ];
+    host.failHistory = true;
+    await expectLater(
+      controller.mutateSession(
+        key(),
+        changes: {'unread': false},
+        canDispatch: () => true,
+      ),
+      throwsStateError,
+    );
+    expect(host.updates, isEmpty);
+    expect(identical(memory.position, before), isTrue);
+    host.failHistory = false;
+    host.failMutation = true;
+    await expectLater(
+      controller.mutateSession(
+        key(),
+        changes: {'unread': false},
+        canDispatch: () => true,
+      ),
+      throwsStateError,
+    );
+    expect(identical(memory.position, before), isTrue);
+  });
 
   test('manual mark-unread survives app reconnect', () async {
     await loadNewestUnread();

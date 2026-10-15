@@ -1075,6 +1075,17 @@ void main() {
       );
       expect(after.unread, isFalse);
       expect(after.lastActive, before.lastActive);
+      final position = chat.reading.readingPosition;
+      // Stock Mark as unread resets its timestamp, not Wing's message marker.
+      fixture.unread = true;
+      fixture.lastRead = 0;
+      fixture.readWatermarks.clear();
+      await controller.refreshRecents();
+      expect(
+        controller.recentChats().singleWhere((c) => c.key == before.key).unread,
+        isTrue,
+      );
+      expect(identical(chat.reading.readingPosition, position), isTrue);
     },
   );
 

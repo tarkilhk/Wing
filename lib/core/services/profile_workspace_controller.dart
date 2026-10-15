@@ -1284,9 +1284,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final time = _latestMessageTime(page.rows);
     var preview = recentChatMessagePreview(page.rows);
     final watermark = lastRead is num && lastRead.isFinite ? lastRead : null;
-    final localRead = ConversationReadingRegistry(
-      preferences,
-    ).chat(ProfileSessionKey(resource.scope, id)).position.readThrough;
+    // Stock zero is an explicit unread choice, independent of local progress.
+    final localRead = checkUnread && watermark == 0
+        ? null
+        : ConversationReadingRegistry(
+            preferences,
+          ).chat(ProfileSessionKey(resource.scope, id)).position.readThrough;
     bool? unread = checkUnread || watermark != null || localRead != null
         ? _recentUnreadAnswer(page.rows, watermark, readThrough: localRead)
         : false;
@@ -4802,6 +4805,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
               sessionId: id,
             )
           : null;
+      int? markedThrough;
+      if (!delete &&
+          changes['unread'] == false &&
+          observedReadThrough == null) {
+        final latest = await resource.gateway.history(
+          id,
+          limit: 1,
+          inlineImages: false,
+        );
+        markedThrough = latest.rows.lastOrNull?['id'] as int?;
+      }
       Map<String, dynamic> updated = changes;
       if (delete) {
         final files = [
@@ -4849,6 +4863,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         updated = {
           ...changes,
           if (changes.containsKey('title')) 'title': result['title'],
+          if (changes['unread'] == true) 'last_read_at': 0.0,
         };
       }
       if (_closed && !delete) return;
@@ -4859,7 +4874,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _recentSessionRows[key] = {...row, ...updated};
       }
       if (changes.containsKey('unread') && observedReadThrough == null) {
-        ConversationReadingRegistry(preferences).chat(key).clearReadProgress();
+        if (changes['unread'] == false) {
+          ConversationReadingRegistry(
+            preferences,
+          ).chat(key).record(null, readThrough: markedThrough);
+        }
         if (chat != null) _readAcknowledgements[chat] = null;
       }
       _invalidateSessionLoad(resource);

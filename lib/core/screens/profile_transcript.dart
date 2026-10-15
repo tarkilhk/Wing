@@ -96,7 +96,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   bool _restoringMarkdown = false;
   bool _placingResume = false;
   bool _readingFrameScheduled = false;
-  int? _reportedReadThrough;
   bool _userScrolling = false;
   bool _readScrollPending = false;
   final _mountedRows = <TranscriptAnchorBox, ({int id, bool readable})>{};
@@ -173,8 +172,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         _latestDistance <= 24 ? null : bookmark,
         readThrough: read,
       );
-      if (read != null && read != _reportedReadThrough) {
-        _reportedReadThrough = read;
+      // Owners coalesce receipts. A later scroll can clear explicit unread
+      // even when the user reaches the same saved message again.
+      if (read != null) {
         widget.onReadThrough?.call(read);
       }
       final target = widget.notificationReading?.notificationReadTarget;
@@ -506,10 +506,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   @override
   void didUpdateWidget(covariant ProfileTranscript oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.presentation.readingPosition.readThrough != null &&
-        widget.presentation.readingPosition.readThrough == null) {
-      _reportedReadThrough = null;
-    }
     if (oldWidget.controller != widget.controller) {
       if (oldWidget.controller?._state == this) {
         oldWidget.controller?._state = null;

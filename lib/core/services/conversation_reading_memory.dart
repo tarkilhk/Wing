@@ -20,12 +20,6 @@ final class ConversationReadingMemory {
   TranscriptPosition _position = const TranscriptPosition();
   TranscriptPosition get position => _position;
 
-  // An explicit read/unread command delegates to the server's new receipt.
-  // Preserve where the user was reading, but retire the prior local receipt.
-  void clearReadProgress() {
-    _position = TranscriptPosition(resume: _position.resume);
-  }
-
   void record(TranscriptBookmark? resume, {int? readThrough}) {
     final previous = _position;
     final read =
