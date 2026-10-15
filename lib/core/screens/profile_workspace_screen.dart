@@ -205,28 +205,25 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     return _recentsOwner ??= WorkspaceRecentsSession(controller, bots);
   }
 
-  Future<void> _openProfileBotChat(String profile) => _run(() async {
+  Future<void> _openProfileBotChat(String profile) async {
     if (_destination != AppDestination.chats ||
         controller.current?.chat != null) {
       return;
     }
-    final navigation = ++_conversationNavigation;
-    final owner = controller;
-    bool current() =>
-        mounted &&
-        controller == owner &&
-        navigation == _conversationNavigation &&
-        _destination == AppDestination.chats &&
-        controller.current?.chat == null;
     final scope = WorkspaceScope(
       connectionId: controller.connection.id,
       connectionIdentity: controller.connectionIdentity,
       profileName: profile,
     );
-    final key = await _bots.openProfile(scope, canUse: current);
-    if (!current() || key == null) return;
-    await _openBotChat(key, origin: AppDestination.chats);
-  });
+    await _openConversationDestination(
+      (current) => _bots.openProfile(scope, canUse: current),
+      title: 'Bot Chat',
+      label: 'Opening bot chat',
+      owner: scope,
+      resumeStoredChat: true,
+      origin: AppDestination.chats,
+    );
+  }
 
   Future<void> _openBotChat(
     ProfileSessionKey key, {

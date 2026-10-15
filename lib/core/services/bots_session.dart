@@ -780,7 +780,9 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     try {
       final sources = await _loadSources(current);
       if (!current()) return const {};
-      if (_repositories == null) _retainRepositories(sources);
+      // Source discovery may change after an earlier empty catalog or a saved
+      // connection edit. Admit its current owners before publishing their rows.
+      _retainRepositories(sources);
       for (final source in sources) {
         if (!keys.any(
           (key) =>
@@ -1188,6 +1190,14 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
   }) async {
     bool current() => !_closed && canUse();
     if (!current()) return null;
+    // Explicit open/retry intent must not inherit passive appearance cooldowns.
+    _sourcesFailedAt = null;
+    for (final entry in _rosterJobs.entries) {
+      if (entry.key.connectionId == scope.connectionId &&
+          entry.key.connectionIdentity == scope.connectionIdentity) {
+        entry.value.failed = null;
+      }
+    }
     final identities = await identitiesForProfiles([scope], canRead: current);
     if (!current()) return null;
     final bot = identities[scope];

@@ -30,6 +30,7 @@ import 'package:wing/core/screens/bots/bot_settings_screen.dart';
 import 'package:wing/core/screens/administration/admin_connectors_page.dart';
 import 'package:wing/core/screens/bots/bots_create_screen.dart';
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/services/bot_group_draft_session.dart';
 import 'package:wing/core/services/bot_avatar_io.dart';
 import 'package:wing/core/widgets/bot_group_picture.dart';
@@ -2660,6 +2661,21 @@ void main() {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
+          // The retained app owner can predate saved-connection discovery.
+          var sources = <BotsRepository>[];
+          var failSources = false;
+          Completer<void>? sourceDelay;
+          Completer<void>? sourceStarted;
+          final botSession = BotsSession((_) async {
+            if (sourceStarted case final started?) {
+              if (!started.isCompleted) started.complete();
+            }
+            await sourceDelay?.future;
+            if (failSources) throw StateError('Discovery offline');
+            return sources;
+          });
+          await botSession.refresh();
+          sources = [bots.repository];
           final frame = GlobalKey();
           await tester.pumpMarkdownWidget(
             MaterialApp(
@@ -2674,8 +2690,7 @@ void main() {
                 key: frame,
                 child: ProfileWorkspaceScreen(
                   controller: controller,
-                  createBotsSession: () =>
-                      BotsSession((_) async => [bots.repository]),
+                  createBotsSession: () => botSession,
                 ),
               ),
             ),
@@ -2685,11 +2700,32 @@ void main() {
           await tester.pumpAndSettle();
           expect(controller.current!.chat, isNull);
           expect(find.text('Profile 1'), findsOneWidget);
+          failSources = true;
+          await tester.longPress(
+            find.byKey(const ValueKey('chat-profile-personal')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Bot profile is unavailable'), findsOneWidget);
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(controller.current!.chat, isNull);
+          failSources = false;
+          await tester.tap(find.byTooltip('Retry'));
+          await tester.pumpAndSettle();
+          expect(
+            controller.current!.chat!.key.workspace.profileName,
+            'personal',
+          );
+          expect(controller.current!.chat!.key.sessionId, 'canonical-root');
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.text('Profile 1'), findsOneWidget);
           for (final profile in ['personal', 'work']) {
             await tester.longPress(
               find.byKey(ValueKey('chat-profile-$profile')),
             );
             await tester.pumpAndSettle();
+            expect(find.text('Bot profile is unavailable'), findsNothing);
+            expect(controller.current!.chat, isNotNull);
             expect(
               controller.current!.chat!.key.workspace.profileName,
               profile,
@@ -2730,22 +2766,53 @@ void main() {
             );
             expect(find.text('Profile 1'), findsOneWidget);
           }
+          browser.failHistory = true;
+          await tester.longPress(
+            find.byKey(const ValueKey('chat-profile-personal')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioLoading), findsNothing);
+          expect(find.byTooltip('Retry'), findsOneWidget);
+          await _capture(
+            tester,
+            frame,
+            'profile-shortcut-failed-${brightness.name}-$scale',
+          );
+          browser.failHistory = false;
+          await tester.tap(find.byTooltip('Retry'));
+          await tester.pumpAndSettle();
+          expect(
+            controller.current!.chat!.key.workspace.profileName,
+            'personal',
+          );
+          expect(controller.current!.chat!.key.sessionId, 'canonical-root');
+          await tester.binding.handlePopRoute();
+          await tester.pumpAndSettle();
+          expect(find.text('Profile 1'), findsOneWidget);
+
           final held = Completer<void>();
           final started = Completer<void>();
-          bots.readHook = (profile, method, params) async {
-            if (method == 'profiles.list') {
-              if (!started.isCompleted) started.complete();
-              await held.future;
-            }
-            return null;
-          };
+          sourceStarted = started;
+          sourceDelay = held;
           await tester.longPress(
             find.byKey(const ValueKey('chat-profile-personal')),
           );
           await tester.pump();
           expect(started.isCompleted, isTrue);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('chat-profile-personal')),
+            findsNothing,
+          );
+          await _capture(
+            tester,
+            frame,
+            'profile-shortcut-pending-${brightness.name}-$scale',
+            motion: true,
+          );
           tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
-          await tester.pumpAndSettle();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 400));
           await tester.tap(find.byKey(const ValueKey('nav-settings')));
           await tester.pump(const Duration(milliseconds: 400));
           held.complete();
