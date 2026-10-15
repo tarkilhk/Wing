@@ -1483,6 +1483,8 @@ void main() {
     await tester.settleMarkdown();
     // Completed reasoning/tool cycles share one Activity; the current tool
     // remains in its own live Timeline until it joins that same disclosure.
+    expect(find.text('Activity'), findsNothing);
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
     expect(find.text('Activity · 1 tool'), findsOneWidget);
     await tester.ensureVisible(find.text('Activity · 1 tool'));
     await tester.pump(const Duration(milliseconds: 300));
@@ -1508,6 +1510,7 @@ void main() {
       tester.getTopLeft(find.text('Compare the results.')).dy,
       lessThan(tester.getTopLeft(second).dy),
     );
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
     expect(find.text('Timeline'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
