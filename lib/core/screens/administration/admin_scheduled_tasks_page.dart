@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/profile_session_key.dart';
@@ -141,12 +142,14 @@ class _AdminScheduledTasksPageState extends State<AdminScheduledTasksPage>
                   ),
                   const SizedBox(height: 24),
                 ],
-                TextField(
-                  controller: search,
-                  onChanged: (_) => setState(() {}),
-                  decoration: const InputDecoration(
-                    hintText: 'Search tasks',
-                    prefixIcon: Icon(Icons.search),
+                viewportSelection(
+                  TextField(
+                    controller: search,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      hintText: 'Search tasks',
+                      prefixIcon: Icon(Icons.search),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),

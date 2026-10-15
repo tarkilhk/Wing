@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'studio_error.dart';
 import 'dart:async';
@@ -79,15 +80,17 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                       child: Row(
                         children: [
                           Expanded(
-                            child: TextField(
-                              controller: _query,
-                              autofocus: true,
-                              onChanged: _queryChanged,
-                              decoration: const InputDecoration(
-                                labelText: 'Find in chat',
-                                prefixIcon: Icon(Icons.search),
-                                border: OutlineInputBorder(
-                                  borderRadius: WingRadius.control,
+                            child: viewportSelection(
+                              TextField(
+                                controller: _query,
+                                autofocus: true,
+                                onChanged: _queryChanged,
+                                decoration: const InputDecoration(
+                                  labelText: 'Find in chat',
+                                  prefixIcon: Icon(Icons.search),
+                                  border: OutlineInputBorder(
+                                    borderRadius: WingRadius.control,
+                                  ),
                                 ),
                               ),
                             ),
@@ -184,7 +187,9 @@ class _ChatFindSheetState extends State<ChatFindSheet> {
                                       ),
                                       child: Align(
                                         alignment: Alignment.centerLeft,
-                                        child: SelectableText(entry.text),
+                                        child: viewportSelection(
+                                          SelectableText(entry.text),
+                                        ),
                                       ),
                                     ),
                                   ],

@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import '../widgets/wing_app_bar.dart';
 import 'package:flutter/material.dart';
 
@@ -26,176 +27,179 @@ class ConnectionGuideScreen extends StatelessWidget {
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 560),
-              child: SelectionArea(
-                child: DefaultTextStyle.merge(
-                  style: textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w400,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Align(
-                        alignment: AlignmentDirectional.centerStart,
-                        child: WingFeathers(width: 40),
-                      ),
-                      const SizedBox(height: 16),
-                      Semantics(
-                        header: true,
-                        child: Text(
-                          'Connect in three steps',
-                          style: textTheme.titleLarge,
+              child: viewportSelection(
+                SelectionArea(
+                  child: DefaultTextStyle.merge(
+                    style: textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w400,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Align(
+                          alignment: AlignmentDirectional.centerStart,
+                          child: WingFeathers(width: 40),
                         ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'You’ll need your Hermes dashboard address and login.',
-                        style: textTheme.bodyMedium?.copyWith(
-                          color: tokens.muted,
+                        const SizedBox(height: 16),
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            'Connect in three steps',
+                            style: textTheme.titleLarge,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 32),
-                      const _GuideStep(
-                        number: '1',
-                        title: 'Prepare your agent',
-                        children: [
-                          Text(
-                            'On a Hermes host you’re allowed to use, check that '
-                            'your agent can answer a message.',
+                        const SizedBox(height: 8),
+                        Text(
+                          'You’ll need your Hermes dashboard address and login.',
+                          style: textTheme.bodyMedium?.copyWith(
+                            color: tokens.muted,
                           ),
-                        ],
-                      ),
-                      const _GuideStep(
-                        number: '2',
-                        title: 'Find your dashboard address',
-                        children: [
-                          Text(
-                            'Start your authenticated Hermes dashboard. Open it '
-                            'in your phone’s browser and check that you can sign in.',
-                          ),
-                          SizedBox(height: 16),
-                          _AddressExamples(),
-                          SizedBox(height: 16),
-                          _GuidePoint(
-                            lead: 'Keep the full address. ',
-                            text:
-                                'Include any custom port, such as :9119, '
-                                'and any path after the hostname.',
-                          ),
-                          SizedBox(height: 12),
-                          _GuidePoint(
-                            lead: 'Use your computer’s network address. ',
-                            text:
-                                'localhost on your phone means the phone itself.',
-                          ),
-                          SizedBox(height: 12),
-                          _GuidePoint(
-                            lead: 'Connecting remotely? ',
-                            text: 'Use HTTPS or an encrypted private network.',
-                          ),
-                        ],
-                      ),
-                      const _GuideStep(
-                        number: '3',
-                        title: 'Connect in Wing',
-                        children: [
-                          _GuidePoint(
-                            lead: 'Connect your agent',
-                            text:
-                                ' on the welcome screen starts setup. '
-                                'Enter your dashboard address, then sign in.',
-                          ),
-                          SizedBox(height: 12),
-                          _GuidePoint(
-                            lead: 'Check the connection. ',
-                            text:
-                                'Wing checks your profiles, live chat and history.',
-                          ),
-                          SizedBox(height: 12),
-                          _GuidePoint(
-                            lead: 'Save and open. ',
-                            text:
-                                'Give the verified connection a name, '
-                                'then open your workspace.',
-                          ),
-                        ],
-                      ),
-                      DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: tokens.raised,
-                          border: Border.all(color: tokens.border),
-                          borderRadius: WingRadius.card,
                         ),
-                        child: ExpansionTile(
-                          title: const Text('When do I need Custom setup?'),
-                          tilePadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                          ),
-                          childrenPadding: const EdgeInsets.fromLTRB(
-                            16,
-                            0,
-                            16,
-                            16,
-                          ),
-                          shape: const Border(),
-                          collapsedShape: const Border(),
-                          children: const [
-                            Text(
-                              'Only when your administrator supplies extra access '
-                              'settings, such as a proxy or a separate chat address. '
-                              'Model-provider keys stay on your Hermes host.',
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      Semantics(
-                        header: true,
-                        child: Text(
-                          'Already have a backup?',
-                          style: textTheme.titleMedium,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text.rich(
-                        TextSpan(
+                        const SizedBox(height: 32),
+                        const _GuideStep(
+                          number: '1',
+                          title: 'Prepare your agent',
                           children: [
-                            TextSpan(text: 'Choose '),
-                            TextSpan(
-                              text: 'Restore configuration',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            TextSpan(
-                              text:
-                                  ' on the welcome screen. Import your Wing '
-                                  'backup and enter its passphrase if you set one.',
+                            Text(
+                              'On a Hermes host you’re allowed to use, check that '
+                              'your agent can answer a message.',
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      StudioButtonPress(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            final opened = await openWebPreview(
-                              Uri.parse(
-                                'https://github.com/tarkilhk/Wing/blob/main/docs/GETTING_STARTED.md',
+                        const _GuideStep(
+                          number: '2',
+                          title: 'Find your dashboard address',
+                          children: [
+                            Text(
+                              'Start your authenticated Hermes dashboard. Open it '
+                              'in your phone’s browser and check that you can sign in.',
+                            ),
+                            SizedBox(height: 16),
+                            _AddressExamples(),
+                            SizedBox(height: 16),
+                            _GuidePoint(
+                              lead: 'Keep the full address. ',
+                              text:
+                                  'Include any custom port, such as :9119, '
+                                  'and any path after the hostname.',
+                            ),
+                            SizedBox(height: 12),
+                            _GuidePoint(
+                              lead: 'Use your computer’s network address. ',
+                              text:
+                                  'localhost on your phone means the phone itself.',
+                            ),
+                            SizedBox(height: 12),
+                            _GuidePoint(
+                              lead: 'Connecting remotely? ',
+                              text:
+                                  'Use HTTPS or an encrypted private network.',
+                            ),
+                          ],
+                        ),
+                        const _GuideStep(
+                          number: '3',
+                          title: 'Connect in Wing',
+                          children: [
+                            _GuidePoint(
+                              lead: 'Connect your agent',
+                              text:
+                                  ' on the welcome screen starts setup. '
+                                  'Enter your dashboard address, then sign in.',
+                            ),
+                            SizedBox(height: 12),
+                            _GuidePoint(
+                              lead: 'Check the connection. ',
+                              text:
+                                  'Wing checks your profiles, live chat and history.',
+                            ),
+                            SizedBox(height: 12),
+                            _GuidePoint(
+                              lead: 'Save and open. ',
+                              text:
+                                  'Give the verified connection a name, '
+                                  'then open your workspace.',
+                            ),
+                          ],
+                        ),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: tokens.raised,
+                            border: Border.all(color: tokens.border),
+                            borderRadius: WingRadius.card,
+                          ),
+                          child: ExpansionTile(
+                            title: const Text('When do I need Custom setup?'),
+                            tilePadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                            ),
+                            childrenPadding: const EdgeInsets.fromLTRB(
+                              16,
+                              0,
+                              16,
+                              16,
+                            ),
+                            shape: const Border(),
+                            collapsedShape: const Border(),
+                            children: const [
+                              Text(
+                                'Only when your administrator supplies extra access '
+                                'settings, such as a proxy or a separate chat address. '
+                                'Model-provider keys stay on your Hermes host.',
                               ),
-                            );
-                            if (!opened && context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: StudioError(
-                                    'Could not open the guide',
-                                  ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            'Already have a backup?',
+                            style: textTheme.titleMedium,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(text: 'Choose '),
+                              TextSpan(
+                                text: 'Restore configuration',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              TextSpan(
+                                text:
+                                    ' on the welcome screen. Import your Wing '
+                                    'backup and enter its passphrase if you set one.',
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        StudioButtonPress(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final opened = await openWebPreview(
+                                Uri.parse(
+                                  'https://github.com/tarkilhk/Wing/blob/main/docs/GETTING_STARTED.md',
                                 ),
                               );
-                            }
-                          },
-                          icon: const Icon(Icons.open_in_new, size: 18),
-                          label: const Text('Full setup instructions'),
+                              if (!opened && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: StudioError(
+                                      'Could not open the guide',
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.open_in_new, size: 18),
+                            label: const Text('Full setup instructions'),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'dart:convert';
 
@@ -234,7 +235,7 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
               node.tag == 'p' &&
               !widget.builders.containsKey('p')
           ? retainMarkdownParagraphText(built)
-          : built;
+          : [for (final child in built) viewportSelection(child)];
       if (CompletionDiagnostics.enabled) {
         builderUs += CompletionDiagnostics.start() - builderStart;
         rendered++;

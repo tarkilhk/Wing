@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'dart:async';
 import '../../widgets/studio_loading.dart';
@@ -578,7 +579,9 @@ class _BotScreenViewState extends State<BotScreenView>
                                     Text(message),
                                   if (status?.installed == false &&
                                       status?.installCommand != null)
-                                    SelectableText(status!.installCommand!),
+                                    viewportSelection(
+                                      SelectableText(status!.installCommand!),
+                                    ),
                                 ],
                               ),
                             ),
@@ -598,25 +601,27 @@ class _BotScreenViewState extends State<BotScreenView>
                         child: IgnorePointer(
                           child: Opacity(
                             opacity: 0,
-                            child: TextField(
-                              controller: _typing,
-                              focusNode: _focus,
-                              // Desktop gestures and controls share this bridge.
-                              // Only explicit keyboard dismissal should unfocus it.
-                              onTapOutside: (_) {},
-                              obscureText: true,
-                              obscuringCharacter: '\u200b',
-                              autocorrect: false,
-                              enableSuggestions: false,
-                              enableIMEPersonalizedLearning: false,
-                              enableInteractiveSelection: false,
-                              decoration: const InputDecoration.collapsed(
-                                hintText: 'Type on the bot’s screen',
+                            child: viewportSelection(
+                              TextField(
+                                controller: _typing,
+                                focusNode: _focus,
+                                // Desktop gestures and controls share this bridge.
+                                // Only explicit keyboard dismissal should unfocus it.
+                                onTapOutside: (_) {},
+                                obscureText: true,
+                                obscuringCharacter: '\u200b',
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                enableIMEPersonalizedLearning: false,
+                                enableInteractiveSelection: false,
+                                decoration: const InputDecoration.collapsed(
+                                  hintText: 'Type on the bot’s screen',
+                                ),
+                                onSubmitted: (_) {
+                                  _key(0xff0d);
+                                  _focus.requestFocus();
+                                },
                               ),
-                              onSubmitted: (_) {
-                                _key(0xff0d);
-                                _focus.requestFocus();
-                              },
                             ),
                           ),
                         ),

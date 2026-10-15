@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:flutter/material.dart';
 
 import '../models/side_question_delivery.dart';
@@ -53,13 +54,15 @@ class SideQuestionDeliveryCard extends StatelessWidget {
             ),
             if (delivery.question.isNotEmpty) ...[
               const SizedBox(height: 8),
-              SelectableText(delivery.question),
+              viewportSelection(SelectableText(delivery.question)),
               if (delivery.questionTruncated)
                 const Text('Prompt shortened by Hermes.'),
             ],
             const SizedBox(height: 8),
-            SelectableText(
-              pending ? 'Waiting for the Hermes host.' : delivery.result,
+            viewportSelection(
+              SelectableText(
+                pending ? 'Waiting for the Hermes host.' : delivery.result,
+              ),
             ),
             if (!pending && delivery.resultTruncated)
               const Text('Result shortened by Hermes.'),

@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -320,7 +321,11 @@ class _SourceCodeTextState extends State<SourceCodeText> {
             });
             return false;
           },
-          child: _accessible(_editor(style)),
+          child: SelectionViewport.code(
+            controller: _controller,
+            codeRender: () => _controller.selectionRender,
+            child: _accessible(_editor(style)),
+          ),
         ),
       );
     },
@@ -330,6 +335,17 @@ class _SourceCodeTextState extends State<SourceCodeText> {
 /// Document selection is independent of which paragraphs happen to be drawn.
 /// Display-only breaks in a long wrapped line never enter the clipboard.
 class _SourceController extends CodeLineEditingControllerDelegate {
+  GlobalKey? _selectionEditor;
+
+  @override
+  void bindEditor(GlobalKey key) {
+    _selectionEditor = key;
+    super.bindEditor(key);
+  }
+
+  RenderBox? get selectionRender =>
+      _selectionEditor?.currentContext?.findRenderObject() as RenderBox?;
+
   factory _SourceController(SourceDocument document) =>
       _SourceController._(document, document.displayLines());
 

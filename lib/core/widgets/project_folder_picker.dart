@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'dart:async';
 
@@ -156,14 +157,16 @@ class _ProjectFolderPickerDialogState extends State<ProjectFolderPickerDialog> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
-                        key: const ValueKey('project-new-folder-name'),
-                        controller: _name,
-                        enabled: !_browser.busy,
-                        onChanged: (_) => setState(() {}),
-                        onSubmitted: (_) => unawaited(_createFolder()),
-                        decoration: const InputDecoration(
-                          labelText: 'Folder name',
+                      child: viewportSelection(
+                        TextField(
+                          key: const ValueKey('project-new-folder-name'),
+                          controller: _name,
+                          enabled: !_browser.busy,
+                          onChanged: (_) => setState(() {}),
+                          onSubmitted: (_) => unawaited(_createFolder()),
+                          decoration: const InputDecoration(
+                            labelText: 'Folder name',
+                          ),
                         ),
                       ),
                     ),

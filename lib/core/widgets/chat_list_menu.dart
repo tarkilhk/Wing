@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -164,38 +165,40 @@ Future<void> showChatListMenu(
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: searchHint != null
-                                            ? TextField(
-                                                key: const ValueKey(
-                                                  'chat-menu-search',
-                                                ),
-                                                style: labelStyle,
-                                                textInputAction:
-                                                    TextInputAction.search,
-                                                autocorrect: false,
-                                                enableSuggestions: false,
-                                                decoration: InputDecoration(
-                                                  hintText: searchHint,
-                                                  isDense: true,
-                                                  contentPadding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 8,
-                                                      ),
-                                                  prefixIcon: const Icon(
-                                                    Icons.search,
-                                                    size: 16,
+                                            ? viewportSelection(
+                                                TextField(
+                                                  key: const ValueKey(
+                                                    'chat-menu-search',
                                                   ),
-                                                  prefixIconConstraints:
-                                                      const BoxConstraints(
-                                                        minWidth: 28,
-                                                      ),
+                                                  style: labelStyle,
+                                                  textInputAction:
+                                                      TextInputAction.search,
+                                                  autocorrect: false,
+                                                  enableSuggestions: false,
+                                                  decoration: InputDecoration(
+                                                    hintText: searchHint,
+                                                    isDense: true,
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 8,
+                                                        ),
+                                                    prefixIcon: const Icon(
+                                                      Icons.search,
+                                                      size: 16,
+                                                    ),
+                                                    prefixIconConstraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 28,
+                                                        ),
+                                                  ),
+                                                  onChanged: (value) =>
+                                                      update(() {
+                                                        query = value
+                                                            .trim()
+                                                            .toLowerCase();
+                                                      }),
                                                 ),
-                                                onChanged: (value) =>
-                                                    update(() {
-                                                      query = value
-                                                          .trim()
-                                                          .toLowerCase();
-                                                    }),
                                               )
                                             : Text(
                                                 title,

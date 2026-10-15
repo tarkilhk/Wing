@@ -3,7 +3,7 @@
   "scope": {
     "root": ".",
     "revision": "a5650fa675209b6a782a5adf3f39ff12c53efb4c",
-    "tracked_count": 903,
+    "tracked_count": 908,
     "intentional_untracked_count": 602,
     "exclude": [
       ".git/**",
@@ -6492,6 +6492,33 @@
       "purpose": "Required native notification shade tap with blocked history; owns isolated CI emulator lifetime",
       "source": ".github/workflows/pr-quality.yml; .github/workflows/release.yml; internal/docs/TESTING.md",
       "status": "supported"
+    },
+    {
+      "id": "host-test-test/hermes_question_history_test.dart",
+      "kind": "host-test",
+      "path": "test/hermes_question_history_test.dart",
+      "purpose": "Question lifecycle, durable owner scoping and passive transcript placement",
+      "source": "test/hermes_question_history_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/hermes_question_card_test.dart",
+      "kind": "host-test",
+      "path": "test/hermes_question_card_test.dart",
+      "purpose": "Passive question history outcomes, disclosure and command rendering",
+      "source": "test/hermes_question_card_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/selection_viewport_test.dart",
+      "kind": "host-test",
+      "path": "test/selection_viewport_test.dart",
+      "purpose": "Native handle clipping and restoration preserve selection and Copy",
+      "source": "test/selection_viewport_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -14947,6 +14974,41 @@
     },
     {
       "path": "test/conversation_reading_position_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/hermes_question.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/hermes_question_history.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/hermes_question_card.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/hermes_question_card_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/hermes_question_history_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/selection_viewport.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/selection_viewport_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     }

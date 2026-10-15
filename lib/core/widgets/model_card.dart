@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:flutter/material.dart';
 import '../models/model_choice.dart';
 import '../models/model_catalog_details.dart';
@@ -91,9 +92,11 @@ class ModelCard extends StatelessWidget {
                 choice.routeLabel,
                 style: tokens.typography.label.copyWith(color: tokens.muted),
               ),
-              SelectableText(
-                choice.model,
-                style: tokens.typography.mono.copyWith(color: tokens.muted),
+              viewportSelection(
+                SelectableText(
+                  choice.model,
+                  style: tokens.typography.mono.copyWith(color: tokens.muted),
+                ),
               ),
               if (provider?.warning != null)
                 Padding(

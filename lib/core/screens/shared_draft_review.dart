@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import '../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -88,7 +89,7 @@ class _SharedDraftReviewState extends State<_SharedDraftReview> {
                             children: [
                               if (state.text case final String text
                                   when text.isNotEmpty) ...[
-                                SelectableText(text),
+                                viewportSelection(SelectableText(text)),
                                 if (state.files.isNotEmpty)
                                   const Divider(height: 24),
                               ],

@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -231,18 +232,20 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
                         AdminNotice.error(_state.error!, retry: _session.load),
                     ],
                   ),
-                  TextField(
-                    key: const ValueKey('profile-description-field'),
-                    controller: _description,
-                    enabled: _state.description.enabled,
-                    minLines: 2,
-                    maxLines: 6,
-                    decoration: InputDecoration(
-                      labelText: 'Description',
-                      hintText: 'What this profile is for',
-                      alignLabelWithHint: true,
-                      errorText: _state.description.issue,
-                      errorMaxLines: 4,
+                  viewportSelection(
+                    TextField(
+                      key: const ValueKey('profile-description-field'),
+                      controller: _description,
+                      enabled: _state.description.enabled,
+                      minLines: 2,
+                      maxLines: 6,
+                      decoration: InputDecoration(
+                        labelText: 'Description',
+                        hintText: 'What this profile is for',
+                        alignLabelWithHint: true,
+                        errorText: _state.description.issue,
+                        errorMaxLines: 4,
+                      ),
                     ),
                   ),
                   if (_state.description.conflicted)
@@ -251,18 +254,20 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
                       _state.description,
                     ),
                   const SizedBox(height: 24),
-                  TextField(
-                    key: const ValueKey('profile-soul-field'),
-                    controller: _soul,
-                    enabled: _state.soul.enabled,
-                    minLines: 12,
-                    maxLines: null,
-                    decoration: InputDecoration(
-                      labelText: 'SOUL',
-                      hintText: 'Instructions that shape this profile',
-                      alignLabelWithHint: true,
-                      errorText: _state.soul.issue,
-                      errorMaxLines: 4,
+                  viewportSelection(
+                    TextField(
+                      key: const ValueKey('profile-soul-field'),
+                      controller: _soul,
+                      enabled: _state.soul.enabled,
+                      minLines: 12,
+                      maxLines: null,
+                      decoration: InputDecoration(
+                        labelText: 'SOUL',
+                        hintText: 'Instructions that shape this profile',
+                        alignLabelWithHint: true,
+                        errorText: _state.soul.issue,
+                        errorMaxLines: 4,
+                      ),
                     ),
                   ),
                   if (_state.soul.conflicted)

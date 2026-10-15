@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/studio_capacity_meter.dart';
@@ -240,24 +241,26 @@ class _AdminSettingsPageState extends State<AdminSettingsPage> {
       AdminFieldKind.decimal,
     }.contains(field.kind);
     final largeText = MediaQuery.textScalerOf(context).scale(16) >= 24;
-    final input = TextFormField(
-      key: ValueKey('setting:${field.key}'),
-      controller: _inputs[field.key],
-      enabled: !_saving,
-      decoration: InputDecoration(
-        labelText: largeText ? null : field.label,
-        suffixText: field.percentage ? '%' : null,
-        helperText: field.help.isEmpty ? null : field.help,
-        helperMaxLines: 8,
+    final input = viewportSelection(
+      TextFormField(
+        key: ValueKey('setting:${field.key}'),
+        controller: _inputs[field.key],
+        enabled: !_saving,
+        decoration: InputDecoration(
+          labelText: largeText ? null : field.label,
+          suffixText: field.percentage ? '%' : null,
+          helperText: field.help.isEmpty ? null : field.help,
+          helperMaxLines: 8,
+        ),
+        minLines: field.kind == AdminFieldKind.lines ? 3 : 1,
+        maxLines: field.kind == AdminFieldKind.lines ? 6 : 1,
+        keyboardType: numeric
+            ? const TextInputType.numberWithOptions(decimal: true)
+            : null,
+        autovalidateMode: AutovalidateMode.always,
+        validator: (_) => item.error,
+        onChanged: (text) => session.setText(field.key, text),
       ),
-      minLines: field.kind == AdminFieldKind.lines ? 3 : 1,
-      maxLines: field.kind == AdminFieldKind.lines ? 6 : 1,
-      keyboardType: numeric
-          ? const TextInputType.numberWithOptions(decimal: true)
-          : null,
-      autovalidateMode: AutovalidateMode.always,
-      validator: (_) => item.error,
-      onChanged: (text) => session.setText(field.key, text),
     );
     if (!largeText) {
       return input;

@@ -1,5 +1,7 @@
 import '../models/bots.dart';
 import 'conversation_reading_memory.dart';
+import '../models/hermes_question.dart';
+import 'hermes_question_history.dart';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +20,6 @@ class BotsPreferences {
   ConversationReadingRegistry get readingPositions =>
       ConversationReadingRegistry(_preferences);
   static final _draftWrites = Expando<_MessageDraftWrites>();
-  static final _approvalWrites = Expando<Map<String, Future<void>>>();
   _MessageDraftWrites get _writes =>
       _draftWrites[_preferences] ??= _MessageDraftWrites();
   static const _pinsKey = 'bots_group_pins_v1';
@@ -51,96 +52,38 @@ class BotsPreferences {
     }
   }
 
-  String _approvalReceiptsKey(String identity, String roomId) =>
-      'bots_group_approval_receipts:${jsonEncode([identity, roomId])}';
+  HermesQuestionHistory questions(String identity, String roomId) =>
+      HermesQuestionHistory(
+        _preferences,
+        jsonEncode(['group', identity, roomId]),
+      );
 
-  List<({BotGroupAction action, String? decision})> approvalReceipts(
-    String identity,
-    String roomId,
-  ) {
-    final saved = _preferences.getString(
-      _approvalReceiptsKey(identity, roomId),
+  void observeQuestions(BotGroup group, BotGroupRuntime runtime, int sequence) {
+    final history = questions(group.scope.connectionIdentity, group.id);
+    final actions = runtime.actions.where(
+      (action) => action.kind == 'approval',
     );
-    if (saved == null) return const [];
-    final rows = jsonDecode(saved);
-    if (rows is! List) throw const FormatException('Invalid approval receipts');
-    return [for (final row in rows) _decodeApprovalReceipt(row)];
-  }
-
-  ({BotGroupAction action, String? decision}) _decodeApprovalReceipt(
-    dynamic row,
-  ) {
-    if (row is! Map ||
-        !['task', 'member', 'request'].every(
-          (key) => row[key] is String && (row[key] as String).isNotEmpty,
-        ) ||
-        row['generation'] is! int ||
-        row['generation'] < 1 ||
-        row['command'] is! String ||
-        row['description'] is! String ||
-        row['choices'] is! List ||
-        (row['choices'] as List).any((c) => !['once', 'deny'].contains(c)) ||
-        ![null, 'once', 'deny'].contains(row['decision'])) {
-      throw const FormatException('Invalid approval receipt');
+    for (final action in actions) {
+      history.observe(
+        HermesQuestion(
+          id: action.key,
+          requestId: action.request,
+          kind: HermesQuestionKind.approval,
+          status: HermesQuestionStatus.pending,
+          timestamp: DateTime.now(),
+          description: action.description,
+          command: action.command,
+          sender:
+              group.members
+                  .where((member) => member.id == action.member)
+                  .firstOrNull
+                  ?.name ??
+              action.member,
+        ),
+        groupSequence: sequence,
+      );
     }
-    return (
-      action: BotGroupAction(
-        kind: 'approval',
-        task: row['task'],
-        member: row['member'],
-        request: row['request'],
-        generation: row['generation'],
-        command: row['command'],
-        description: row['description'],
-        choices: List<String>.from(row['choices']),
-      ),
-      decision: row['decision'] as String?,
-    );
-  }
-
-  Future<void> writeApprovalReceipts(
-    String identity,
-    String roomId,
-    Iterable<({BotGroupAction action, String? decision})> receipts,
-  ) {
-    final captured = List.of(receipts);
-    final key = _approvalReceiptsKey(identity, roomId);
-    final tails = _approvalWrites[_preferences] ??= {};
-    final operation = (tails[key] ?? Future<void>.value()).then((_) async {
-      final merged = {
-        for (final receipt in approvalReceipts(identity, roomId))
-          receipt.action.key: receipt,
-      };
-      for (final receipt in captured) {
-        final existing = merged[receipt.action.key];
-        // A passive replay cannot erase an accepted decision from another owner.
-        if (existing?.decision == null || receipt.decision != null) {
-          merged[receipt.action.key] = receipt;
-        }
-      }
-      final encoded = jsonEncode([
-        for (final receipt in merged.values)
-          {
-            'task': receipt.action.task,
-            'member': receipt.action.member,
-            'request': receipt.action.request,
-            'generation': receipt.action.generation,
-            'command': receipt.action.command,
-            'description': receipt.action.description,
-            'choices': receipt.action.choices,
-            'decision': receipt.decision,
-          },
-      ]);
-      if (_preferences.getString(key) == encoded) return;
-      if (!await _preferences.setString(key, encoded)) {
-        throw StateError('Approval details could not be saved on this device');
-      }
-    });
-    tails[key] = operation.then<void>(
-      (_) {},
-      onError: (Object _, StackTrace _) {},
-    );
-    return operation;
+    history.reconcile(actions.map((action) => action.key).toSet());
   }
 
   String _messageDraftKey(String identity, String roomId) =>

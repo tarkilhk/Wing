@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../models/profile_session_key.dart';
@@ -1279,14 +1280,16 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                  child: TextField(
-                    key: const ValueKey('workspace-search'),
-                    controller: _search,
-                    focusNode: widget.searchFocusNode,
-                    onChanged: _setQuery,
-                    decoration: const InputDecoration(
-                      hintText: 'Search chats',
-                      prefixIcon: Icon(Icons.search, size: 20),
+                  child: viewportSelection(
+                    TextField(
+                      key: const ValueKey('workspace-search'),
+                      controller: _search,
+                      focusNode: widget.searchFocusNode,
+                      onChanged: _setQuery,
+                      decoration: const InputDecoration(
+                        hintText: 'Search chats',
+                        prefixIcon: Icon(Icons.search, size: 20),
+                      ),
                     ),
                   ),
                 ),

@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:flutter/material.dart';
 
 import '../../services/doctor_diagnostic.dart';
@@ -75,16 +76,20 @@ class AdminDoctorDiagnosis extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SelectableText(
-                          finding.title,
-                          style: theme.textTheme.titleMedium,
+                        viewportSelection(
+                          SelectableText(
+                            finding.title,
+                            style: theme.textTheme.titleMedium,
+                          ),
                         ),
                         if (finding.detail != null) ...[
                           const SizedBox(height: WingSpacing.sm),
-                          SelectableText(
-                            finding.detail!,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: tokens.muted,
+                          viewportSelection(
+                            SelectableText(
+                              finding.detail!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: tokens.muted,
+                              ),
                             ),
                           ),
                         ],

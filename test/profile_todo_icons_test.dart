@@ -60,6 +60,159 @@ void main() {
     }
   });
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'task selection does not paint handles outside the reading viewport: $brightness/$scale',
+        (tester) async {
+          tester.view.physicalSize = const Size(390, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final frame = GlobalKey();
+          final content = List.generate(
+            30,
+            (i) => 'Task line $i to inspect',
+          ).join('\n');
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: frame,
+              child: MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: Center(
+                    child: SizedBox(
+                      width: 350,
+                      height: 400,
+                      child: ProfileTodoPanel(
+                        embedded: true,
+                        todos: [
+                          GatewayTodo(
+                            id: 'selection',
+                            content: content,
+                            status: GatewayTodoStatus.inProgress,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.byTooltip('Expand task'));
+          await tester.pumpAndSettle();
+          final preview = find.byKey(const ValueKey('activity-content-scroll'));
+          final scroll = tester
+              .widget<SingleChildScrollView>(preview)
+              .controller!;
+          scroll.jumpTo(100);
+          await tester.pumpAndSettle();
+          Future<({ByteData data, int width, int height})> pixels() async =>
+              (await tester.runAsync(() async {
+                final image =
+                    await (frame.currentContext!.findRenderObject()!
+                            as RenderRepaintBoundary)
+                        .toImage();
+                try {
+                  final data = await image.toByteData(
+                    format: ui.ImageByteFormat.rawRgba,
+                  );
+                  return (
+                    data: data!,
+                    width: image.width,
+                    height: image.height,
+                  );
+                } finally {
+                  image.dispose();
+                }
+              }))!;
+          final before = await pixels();
+          await tester.longPressAt(tester.getRect(preview).center);
+          await tester.pumpAndSettle();
+          final editable = tester.state<EditableTextState>(
+            find.byType(EditableText),
+          );
+          // At 200% the native adaptive toolbar puts Select all in overflow.
+          // Invoke that same native item; ordinary size exercises its button.
+          if (scale == 1) {
+            await tester.tap(find.text('Select all'));
+          } else {
+            editable.contextMenuButtonItems
+                .singleWhere(
+                  (item) => item.type == ContextMenuButtonType.selectAll,
+                )
+                .onPressed!();
+          }
+          await tester.pumpAndSettle();
+          expect(
+            editable.widget.controller.selection.textInside(
+              editable.widget.controller.text,
+            ),
+            content,
+          );
+          // Isolate selection painting from the separate context-menu overlay.
+          editable.hideToolbar(false);
+          scroll.jumpTo(100);
+          await tester.pumpAndSettle();
+          if (_capture) {
+            await tester.runAsync(() async {
+              final image =
+                  await (frame.currentContext!.findRenderObject()!
+                          as RenderRepaintBoundary)
+                      .toImage();
+              try {
+                final bytes = await image.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final file = File(
+                  'build/design-previews/task-selection/${brightness.name}-$scale.png',
+                );
+                await file.parent.create(recursive: true);
+                await file.writeAsBytes(bytes!.buffer.asUint8List());
+              } finally {
+                image.dispose();
+              }
+            });
+          }
+          final after = await pixels();
+          expect((after.width, after.height), (before.width, before.height));
+          final visible = tester.getRect(preview);
+          var outsideChanges = 0;
+          var insideChanges = 0;
+          for (var y = 0; y < after.height; y++) {
+            for (var x = 0; x < after.width; x++) {
+              final i = (y * after.width + x) * 4;
+              if (before.data.getUint32(i) == after.data.getUint32(i)) continue;
+              if (visible.contains(Offset(x.toDouble(), y.toDouble()))) {
+                insideChanges++;
+              } else {
+                outsideChanges++;
+              }
+            }
+          }
+          expect(
+            insideChanges,
+            greaterThan(0),
+            reason: 'Selection must be painted',
+          );
+          expect(
+            outsideChanges,
+            0,
+            reason:
+                'Selecting hidden task text must not paint selection handles over the surrounding screen',
+          );
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
   testWidgets('in-progress tasks retain their static semantic glyph', (
     tester,
   ) async {

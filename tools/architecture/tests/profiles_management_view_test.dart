@@ -40,6 +40,13 @@ class AdminGroup { const AdminGroup(); }
     await put('lib/core/widgets/studio_loading.dart', '''
 class StudioLoadingRegion { const StudioLoadingRegion(); }
 ''');
+    await put('lib/core/widgets/selection_viewport.dart', '''
+Object viewportSelection(Object child) => child;
+void internalSelectionProtocol() {}
+''');
+    await put('lib/core/widgets/fake_selection.dart', '''
+Object viewportSelection(Object child) => child;
+''');
     await put('lib/core/widgets/studio_form_actions.dart', '''
 class StudioFormActions { const StudioFormActions(); }
 ''');
@@ -104,6 +111,21 @@ class AdminProfilesPage {
       String declaration = factory,
     }) => '$imports$declaration$source';
     final invalid = <String>[
+      view(
+        'void f() { internalSelectionProtocol(); }',
+        imports:
+            '${sessionImport}import "../../widgets/selection_viewport.dart" show internalSelectionProtocol;\n',
+      ),
+      view(
+        'Object f() => viewportSelection(1);',
+        imports:
+            '${sessionImport}import "../../widgets/selection_viewport.dart";\n',
+      ),
+      view(
+        'Object f() => viewportSelection(1);',
+        imports:
+            '${sessionImport}import "../../widgets/fake_selection.dart";\n',
+      ),
       view(
         'void f() { const StudioFormActions(); }',
         imports: '${sessionImport}import "../../widgets/leaky_forms.dart";\n',
@@ -217,6 +239,16 @@ class AdminProfilesPage {
       view('void f() { final make = ProfilesManagementSession.new; make(); }'),
     );
     final valid = <String>[
+      view(
+        'Object f() => viewportSelection(1);',
+        imports:
+            '${sessionImport}import "../../widgets/selection_viewport.dart" show viewportSelection;\n',
+      ),
+      view(
+        'Object f() => selection.viewportSelection(1);',
+        imports:
+            '${sessionImport}import "../../widgets/selection_viewport.dart" as selection show viewportSelection;\n',
+      ),
       view(
         'void f() { const StudioButtonPress(child: StudioPopupMenuItem()); }',
         imports: '${sessionImport}import "../../theme/wing_theme.dart";\n',

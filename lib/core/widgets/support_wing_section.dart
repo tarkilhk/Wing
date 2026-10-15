@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -135,7 +136,7 @@ class _SupportWingSectionState extends State<SupportWingSection> {
               'Could not open your browser. Please try again or open this link in a browser:',
             ),
             const SizedBox(height: WingSpacing.sm),
-            SelectableText(_failed.toString()),
+            viewportSelection(SelectableText(_failed.toString())),
           ],
         ],
       ),

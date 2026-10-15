@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/profile_session_key.dart';
@@ -251,7 +252,9 @@ class _AdminScheduledTaskDetailPageState
                 ),
               TaskSection(
                 'Task',
-                child: SelectableText(task.instructionsDisplay),
+                child: viewportSelection(
+                  SelectableText(task.instructionsDisplay),
+                ),
               ),
               TaskSection(
                 'Details',
@@ -370,7 +373,7 @@ class _AdminScheduledTaskDetailPageState
           ),
           if (run.preview.isNotEmpty && !run.title.contains(run.preview)) ...[
             const SizedBox(height: 4),
-            SelectableText(run.preview),
+            viewportSelection(SelectableText(run.preview)),
           ],
         ],
       ),
@@ -387,7 +390,7 @@ class _AdminScheduledTaskDetailPageState
       children: [
         Text(label, style: Theme.of(context).textTheme.bodySmall),
         const SizedBox(height: 4),
-        SelectableText(value),
+        viewportSelection(SelectableText(value)),
       ],
     ),
   );

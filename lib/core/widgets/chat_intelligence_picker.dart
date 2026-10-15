@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'package:flutter/material.dart';
 import '../models/chat_intelligence.dart';
@@ -527,17 +528,19 @@ class _ManualModelDialogState extends State<_ManualModelDialog> {
             ),
           ),
           const SizedBox(height: 16),
-          TextField(
-            key: const Key('manual-model-id'),
-            controller: _id,
-            autofocus: true,
-            decoration: InputDecoration(
-              labelText: 'Model ID',
-              errorText: _id.text.isNotEmpty && !valid
-                  ? 'Use a model ID without spaces or command flags.'
-                  : null,
+          viewportSelection(
+            TextField(
+              key: const Key('manual-model-id'),
+              controller: _id,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: 'Model ID',
+                errorText: _id.text.isNotEmpty && !valid
+                    ? 'Use a model ID without spaces or command flags.'
+                    : null,
+              ),
+              onChanged: (_) => setState(() {}),
             ),
-            onChanged: (_) => setState(() {}),
           ),
         ],
       ),

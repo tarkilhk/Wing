@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import 'package:flutter/material.dart';
 import '../models/health_alert.dart';
 import '../models/host_thresholds.dart';
@@ -421,20 +422,22 @@ class _RuleEditorState extends State<_RuleEditor> {
           label: '${healthAlertMetricLabel(widget.metric)} $label',
           child: SizedBox(
             width: decimal ? (large ? 112 : 64) : 48,
-            child: TextField(
-              controller: controller,
-              keyboardType: TextInputType.numberWithOptions(decimal: decimal),
-              decoration: const InputDecoration(
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 4,
-                  vertical: 8,
+            child: viewportSelection(
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.numberWithOptions(decimal: decimal),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 8,
+                  ),
                 ),
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.end,
+                onChanged: _edit,
+                onSubmitted: _edit,
               ),
-              style: Theme.of(context).textTheme.bodyMedium,
-              textAlign: TextAlign.end,
-              onChanged: _edit,
-              onSubmitted: _edit,
             ),
           ),
         ),

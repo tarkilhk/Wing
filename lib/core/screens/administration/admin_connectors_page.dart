@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
@@ -579,16 +580,18 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
                     ? 'This connector uses its registered callback address. After approving access, copy the full address from your browser and paste it below, even if the page does not load.'
                     : 'Return to Wing after approval. If your browser stops at a localhost page, paste its full address below.',
               ),
-              TextField(
-                controller: _callback,
-                enabled: !_flow.busy,
-                obscureText: true,
-                autocorrect: false,
-                enableSuggestions: false,
-                keyboardType: TextInputType.url,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(labelText: 'Callback URL'),
-                onSubmitted: (_) => _submit(),
+              viewportSelection(
+                TextField(
+                  controller: _callback,
+                  enabled: !_flow.busy,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.url,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(labelText: 'Callback URL'),
+                  onSubmitted: (_) => _submit(),
+                ),
               ),
               const SizedBox(height: 12),
               StudioButtonPress(
@@ -622,7 +625,7 @@ class _AdminMcpSignInState extends State<AdminMcpSignIn> {
                 const AdminNotice(
                   'Device-code sign-in and providers requiring a client metadata document need a terminal on your Hermes server. Run the command for this profile, then return here to test the connector.',
                 ),
-                SelectableText(_flow.terminalCommand),
+                viewportSelection(SelectableText(_flow.terminalCommand)),
                 const SizedBox(height: 12),
                 const AdminNotice(
                   'For device-code sign-in, add --flow device. The provider must support it.',

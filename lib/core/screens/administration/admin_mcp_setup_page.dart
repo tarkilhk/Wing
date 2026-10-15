@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
@@ -117,21 +118,23 @@ class _AdminMcpSetupPageState extends State<AdminMcpSetupPage> {
           ],
           Semantics(
             label: largeText ? label : null,
-            child: TextField(
-              key: ValueKey('mcp-field-$label'),
-              controller: controller,
-              onChanged: (_) => _sync(),
-              enabled: !_busy && !_uncertain,
-              obscureText: secret,
-              autocorrect: false,
-              enableSuggestions: false,
-              autofillHints: secret
-                  ? const [AutofillHints.password]
-                  : const <String>[],
-              maxLines: lines,
-              decoration: InputDecoration(
-                labelText: largeText ? null : label,
-                hintText: example,
+            child: viewportSelection(
+              TextField(
+                key: ValueKey('mcp-field-$label'),
+                controller: controller,
+                onChanged: (_) => _sync(),
+                enabled: !_busy && !_uncertain,
+                obscureText: secret,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: secret
+                    ? const [AutofillHints.password]
+                    : const <String>[],
+                maxLines: lines,
+                decoration: InputDecoration(
+                  labelText: largeText ? null : label,
+                  hintText: example,
+                ),
               ),
             ),
           ),

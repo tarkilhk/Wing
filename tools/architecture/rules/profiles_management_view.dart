@@ -20,6 +20,7 @@ const _session = 'lib/core/services/profiles_management_session.dart';
 const _helper = 'lib/core/screens/administration/admin_widgets.dart';
 const _loading = 'lib/core/widgets/studio_loading.dart';
 const _formActions = 'lib/core/widgets/studio_form_actions.dart';
+const _selectionViewport = 'lib/core/widgets/selection_viewport.dart';
 const _error = 'lib/core/widgets/studio_error.dart';
 const _theme = 'lib/core/theme/wing_theme.dart';
 const _navigation = 'lib/core/screens/administration/admin_navigation.dart';
@@ -243,6 +244,11 @@ class _Boundary extends RecursiveAstVisitor<void> {
         element is ConstructorElement &&
         element.enclosingElement.name == 'ProfilesManagementSession') {
       return false;
+    }
+    if (source == '$root/$_selectionViewport' &&
+        element is TopLevelFunctionElement &&
+        element.name == 'viewportSelection') {
+      return true;
     }
     if (parts.contains(source) ||
         source == '$root/$_session' ||

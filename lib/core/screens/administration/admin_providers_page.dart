@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 import '../../models/provider_inventory.dart';
@@ -61,12 +62,14 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
             'Credentials for this profile · Availability is not a model test.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          TextField(
-            decoration: const InputDecoration(
-              labelText: 'Search providers and keys',
-              prefixIcon: Icon(Icons.search),
+          viewportSelection(
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Search providers and keys',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: session.search,
             ),
-            onChanged: session.search,
           ),
           const SizedBox(height: 12),
           Wrap(

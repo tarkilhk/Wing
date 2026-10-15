@@ -1,3 +1,4 @@
+import '../selection_viewport.dart';
 import 'activity_detail_actions.dart';
 import 'dart:async';
 import 'dart:math' as math;
@@ -345,9 +346,11 @@ class _SkillDocumentViewerState extends State<SkillDocumentViewer> {
                   Padding(
                     padding: const EdgeInsets.all(8),
                     child: _raw || !widget.markdown
-                        ? SelectableText(
-                            document.rawContent,
-                            style: colors.typography.mono,
+                        ? viewportSelection(
+                            SelectableText(
+                              document.rawContent,
+                              style: colors.typography.mono,
+                            ),
                           )
                         : MarkdownMessageContent(
                             data: document.formattedContent,

@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'wing_app_bar.dart';
 import 'server_connection_label.dart';
 import 'package:flutter/material.dart';
@@ -56,9 +57,11 @@ class ResourceFilename extends StatelessWidget {
             enabled: false,
             height: 0,
             padding: EdgeInsets.zero,
-            child: SelectableText(
-              target,
-              style: tokens.typography.mono.copyWith(color: tokens.onSurface),
+            child: viewportSelection(
+              SelectableText(
+                target,
+                style: tokens.typography.mono.copyWith(color: tokens.onSurface),
+              ),
             ),
           ),
         ],

@@ -1298,7 +1298,9 @@ class BotsRepository {
     return sequence;
   }
 
-  Future<BotGroupRuntime> groupRuntime(BotGroup group) async {
+  Future<({BotGroupRuntime runtime, int sequence})> groupRuntime(
+    BotGroup group,
+  ) async {
     _ownsGroup(group);
     final result = await _read('default', 'groups.state', {
       'room_id': group.id,
@@ -1308,7 +1310,7 @@ class BotsRepository {
     if (runtime == null) {
       throw const FormatException('Group runtime unavailable');
     }
-    return runtime;
+    return (runtime: runtime, sequence: decoded.latestSequence);
   }
 
   static ({BotGroup? room, int latestSequence, BotGroupRuntime? runtime})

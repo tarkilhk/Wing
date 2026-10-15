@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart' show viewportSelection;
 import '../../widgets/studio_error.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -127,7 +128,7 @@ class _AdminProfilesPageState extends State<AdminProfilesPage> {
             if (state.error != null) AdminNotice.error(state.error!),
             for (final settlement in state.settlements) ...[
               AdminNotice(settlement.message),
-              SelectableText(settlement.manualGuidance!),
+              viewportSelection(SelectableText(settlement.manualGuidance!)),
               const SizedBox(height: 12),
             ],
             if (!state.busy &&
@@ -291,18 +292,20 @@ class _ProfileNameDialogState extends State<_ProfileNameDialog> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextFormField(
-                  controller: _name,
-                  enabled: !busy && draft?.canCancel == true,
-                  autofocus: true,
-                  decoration: InputDecoration(
-                    labelText: 'Name',
-                    helperMaxLines: 4,
-                    helperText: draft?.help,
-                    errorText: draft?.validationError,
+                viewportSelection(
+                  TextFormField(
+                    controller: _name,
+                    enabled: !busy && draft?.canCancel == true,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Name',
+                      helperMaxLines: 4,
+                      helperText: draft?.help,
+                      errorText: draft?.validationError,
+                    ),
+                    onChanged: (value) =>
+                        widget.session.updateName(widget.intent, value),
                   ),
-                  onChanged: (value) =>
-                      widget.session.updateName(widget.intent, value),
                 ),
                 if (state.error case final error?) ...[
                   const SizedBox(height: 12),

@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -203,15 +204,17 @@ class _AdminScheduledTaskEditorPageState
                 key: const ValueKey('task-editor-instructions'),
                 child: Column(
                   children: [
-                    TextFormField(
-                      controller: name,
-                      onChanged: (value) =>
-                          session.setText(TaskEditText.name, value),
-                      enabled: !saving,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Name (optional)',
-                        hintText: 'Morning briefing',
+                    viewportSelection(
+                      TextFormField(
+                        controller: name,
+                        onChanged: (value) =>
+                            session.setText(TaskEditText.name, value),
+                        enabled: !saving,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          labelText: 'Name (optional)',
+                          hintText: 'Morning briefing',
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -219,18 +222,20 @@ class _AdminScheduledTaskEditorPageState
                       const TaskMessage(
                         'This task runs a server script without an agent. Its execution settings stay on the server.',
                       ),
-                    TextFormField(
-                      controller: prompt,
-                      onChanged: (value) =>
-                          session.setText(TaskEditText.prompt, value),
-                      enabled: !saving && !state.scriptOnly,
-                      minLines: 4,
-                      maxLines: null,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        labelText: 'Instructions',
-                        alignLabelWithHint: true,
-                        hintText: 'What should your agent do?',
+                    viewportSelection(
+                      TextFormField(
+                        controller: prompt,
+                        onChanged: (value) =>
+                            session.setText(TaskEditText.prompt, value),
+                        enabled: !saving && !state.scriptOnly,
+                        minLines: 4,
+                        maxLines: null,
+                        textCapitalization: TextCapitalization.sentences,
+                        decoration: const InputDecoration(
+                          labelText: 'Instructions',
+                          alignLabelWithHint: true,
+                          hintText: 'What should your agent do?',
+                        ),
                       ),
                     ),
                   ],
@@ -327,17 +332,19 @@ class _AdminScheduledTaskEditorPageState
                     ],
                     if (kind == TaskScheduleKind.interval ||
                         kind == TaskScheduleKind.delay)
-                      TextFormField(
-                        controller: minutes,
-                        onChanged: (value) => session.setSchedule(
-                          state.schedule.copyWith(minutes: value),
-                        ),
-                        enabled: !saving,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: kind == TaskScheduleKind.delay
-                              ? 'Run once after (minutes)'
-                              : 'Repeat every (minutes)',
+                      viewportSelection(
+                        TextFormField(
+                          controller: minutes,
+                          onChanged: (value) => session.setSchedule(
+                            state.schedule.copyWith(minutes: value),
+                          ),
+                          enabled: !saving,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: kind == TaskScheduleKind.delay
+                                ? 'Run once after (minutes)'
+                                : 'Repeat every (minutes)',
+                          ),
                         ),
                       ),
                     if (kind == TaskScheduleKind.once)
@@ -353,19 +360,21 @@ class _AdminScheduledTaskEditorPageState
                         ),
                       ),
                     if (kind == TaskScheduleKind.custom)
-                      TextFormField(
-                        controller: custom,
-                        onChanged: (value) => session.setSchedule(
-                          state.schedule.copyWith(custom: value),
-                        ),
-                        enabled: !saving,
-                        style: const TextStyle(fontFamily: 'monospace'),
-                        decoration: const InputDecoration(
-                          labelText: 'Schedule expression',
-                          hintText: '0 9 * * 1-5',
-                          helperText:
-                              'Cron, “every 30m”, or “in 30m” for a single run.',
-                          helperMaxLines: 3,
+                      viewportSelection(
+                        TextFormField(
+                          controller: custom,
+                          onChanged: (value) => session.setSchedule(
+                            state.schedule.copyWith(custom: value),
+                          ),
+                          enabled: !saving,
+                          style: const TextStyle(fontFamily: 'monospace'),
+                          decoration: const InputDecoration(
+                            labelText: 'Schedule expression',
+                            hintText: '0 9 * * 1-5',
+                            helperText:
+                                'Cron, “every 30m”, or “in 30m” for a single run.',
+                            helperMaxLines: 3,
+                          ),
                         ),
                       ),
                     if (kind != TaskScheduleKind.custom)
@@ -798,17 +807,19 @@ class _AdminScheduledTaskEditorPageState
               },
       );
     }
-    return TextFormField(
-      key: ValueKey('${template!.key}-${field.name}'),
-      initialValue: value,
-      enabled: !saving,
-      decoration: InputDecoration(
-        labelText: field.label,
-        hintText: field.kind == TaskTemplateFieldKind.time
-            ? '09:00 · Hermes time'
-            : null,
+    return viewportSelection(
+      TextFormField(
+        key: ValueKey('${template!.key}-${field.name}'),
+        initialValue: value,
+        enabled: !saving,
+        decoration: InputDecoration(
+          labelText: field.label,
+          hintText: field.kind == TaskTemplateFieldKind.time
+              ? '09:00 · Hermes time'
+              : null,
+        ),
+        onChanged: (value) => session.setTemplateValue(field.name, value),
       ),
-      onChanged: (value) => session.setTemplateValue(field.name, value),
     );
   }
 
