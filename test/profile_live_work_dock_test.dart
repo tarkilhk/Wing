@@ -64,6 +64,8 @@ void main() {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       ProfileLiveWorkDock(
+                        taskSummary: const Text('Task summary'),
+                        subagentSummary: const Text('Agent summary'),
                         key: dock,
                         taskCount: 7,
                         completedTasks: 3,
@@ -180,6 +182,109 @@ void main() {
       });
     }
   }
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('pinned summaries and resizing ${brightness.name} $scale', (
+        tester,
+      ) async {
+        await show(
+          tester,
+          brightness: brightness,
+          scale: scale,
+          reduced: scale == 2,
+        );
+        final panel = find.byKey(const ValueKey('live-work-panel'));
+        final handle = find.byKey(const ValueKey('live-work-handle'));
+        final composer = tester.getRect(find.byKey(const ValueKey('draft')));
+        await tester.tap(tab(1, overlay: false));
+        await tester.pumpAndSettle();
+        final compact = tester.getRect(panel);
+        final summary = tester.getRect(find.text('Task summary'));
+        final first = tester.getTopLeft(
+          find.text('Task 0: research metric definitions'),
+        );
+        await tester.drag(find.byType(PageView), const Offset(0, -140));
+        await tester.pumpAndSettle();
+        expect(tester.getRect(find.text('Task summary')), summary);
+        expect(tester.getRect(panel), compact);
+        expect(
+          tester
+              .getTopLeft(find.text('Task 0: research metric definitions'))
+              .dy,
+          lessThan(first.dy),
+        );
+        final gesture = await tester.startGesture(tester.getCenter(handle));
+        await gesture.moveBy(const Offset(0, -20));
+        await tester.pump();
+        await gesture.moveBy(const Offset(0, -140));
+        await tester.pump();
+        expect(tester.getSize(panel).height, greaterThan(compact.height));
+        expect(tester.getSize(panel).height, lessThan(700));
+        expect(tester.getRect(panel).bottom, compact.bottom);
+        await gesture.moveBy(const Offset(0, -350));
+        await gesture.up();
+        await tester.pumpAndSettle();
+        final expanded = tester.getRect(panel);
+        expect(expanded.top, closeTo(8, 1));
+        expect(expanded.bottom, compact.bottom);
+        expect(find.byTooltip('Collapse drawer'), findsOneWidget);
+        expect(tester.getRect(find.byKey(const ValueKey('draft'))), composer);
+        await picture(tester, '${brightness.name}-$scale-tasks-expanded');
+        await tester.tap(tab(0));
+        await tester.pumpAndSettle();
+        expect(tester.getRect(panel), expanded);
+        final agentSummary = tester.getRect(find.text('Agent summary'));
+        await tester.drag(find.byType(PageView), const Offset(0, -300));
+        await tester.pumpAndSettle();
+        expect(tester.getRect(find.text('Agent summary')), agentSummary);
+        await picture(tester, '${brightness.name}-$scale-agents-expanded');
+        // The same handle is an accessible tap/keyboard alternative to dragging.
+        await tester.tap(handle);
+        await tester.pumpAndSettle();
+        expect(tester.getSize(panel).height, compact.height);
+        await tester.tap(handle);
+        await tester.pumpAndSettle();
+        expect(tester.getRect(panel), expanded);
+        await tester.fling(handle, const Offset(0, 500), 1000);
+        await tester.pumpAndSettle();
+        expect(tester.getSize(panel).height, compact.height);
+        expect(tester.getRect(find.byKey(const ValueKey('draft'))), composer);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('keyboard grip resizes immediately and reopening resets height', (
+    tester,
+  ) async {
+    await show(tester, keyboard: 260);
+    await tester.tap(tab(1, overlay: false));
+    await tester.pumpAndSettle();
+    final panel = find.byKey(const ValueKey('live-work-panel'));
+    final handle = find.byKey(const ValueKey('live-work-handle'));
+    final compact = tester.getRect(panel);
+    final grip = find.descendant(of: handle, matching: find.byType(Container));
+    Focus.of(tester.element(grip)).requestFocus();
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+    expect(tester.getRect(panel).top, closeTo(8, 1));
+    expect(tester.getRect(panel).bottom, compact.bottom);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pump();
+    expect(tester.getRect(panel), compact);
+    await tester.tap(handle);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(panel).top, closeTo(8, 1));
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byType(PageView), findsNothing);
+    await tester.tap(tab(1, overlay: false));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(panel), compact);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('tap and swift thumb release both settle at 220 ms', (
     tester,
   ) async {
@@ -276,6 +381,8 @@ void main() {
                     builder: (context, setState) {
                       update = setState;
                       return ProfileLiveWorkDock(
+                        taskSummary: const Text('Task summary'),
+                        subagentSummary: const Text('Agent summary'),
                         key: dock,
                         taskCount: tasks,
                         completedTasks: 0,
@@ -390,6 +497,8 @@ void main() {
                 builder: (context, setState) {
                   update = setState;
                   return ProfileLiveWorkDock(
+                    taskSummary: const Text('Task summary'),
+                    subagentSummary: const Text('Agent summary'),
                     key: dock,
                     taskCount: 1,
                     completedTasks: 0,

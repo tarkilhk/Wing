@@ -13,6 +13,8 @@ class ProfileLiveWorkDock extends StatefulWidget {
     required this.taskCount,
     required this.completedTasks,
     required this.subagentCount,
+    required this.taskSummary,
+    required this.subagentSummary,
     required this.tasks,
     required this.subagents,
     required this.onAgentsSelected,
@@ -22,6 +24,7 @@ class ProfileLiveWorkDock extends StatefulWidget {
   static const slideDuration = Duration(milliseconds: 220);
   final int? taskCount, completedTasks, subagentCount;
   final Widget tasks, subagents;
+  final Widget taskSummary, subagentSummary;
   final Future<void> Function() onAgentsSelected;
   final VoidCallback? onOpenChanged;
 
@@ -40,6 +43,9 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   int _singleTab = 0;
   bool _open = false, _refreshingAgents = false, _openingPages = false;
   bool _instantHeight = false;
+  bool _expanded = false;
+  double? _dragHeight;
+  static const _handleHeight = 48.0;
   int _selected = 0, _generation = 0;
 
   List<int> get _tabs => [
@@ -161,6 +167,8 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
     if (!wasOpen) widget.onOpenChanged?.call();
     _portal.show();
     if (!wasOpen) {
+      _expanded = false;
+      _dragHeight = null;
       _openingPages = true;
       if (_reduced || keyboard) {
         _reveal.value = 1;
@@ -201,6 +209,80 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
       }
     }
     if (mounted && generation == _generation && !_open) _portal.hide();
+  }
+
+  Widget _handle(double fitted, double compact, double maximum) {
+    final label = _expanded ? 'Collapse drawer' : 'Expand drawer';
+    void toggle({bool keyboard = false}) => setState(() {
+      _instantHeight = keyboard;
+      _dragHeight = null;
+      _expanded = !_expanded;
+    });
+    return Semantics(
+      button: true,
+      label: label,
+      onIncrease: _expanded ? null : toggle,
+      onDecrease: _expanded ? toggle : null,
+      child: Tooltip(
+        message: label,
+        child: GestureDetector(
+          onVerticalDragStart: (_) => setState(() {
+            _instantHeight = false;
+            _dragHeight = fitted;
+          }),
+          onVerticalDragUpdate: (details) => setState(() {
+            _dragHeight = ((_dragHeight ?? fitted) - details.delta.dy).clamp(
+              compact,
+              maximum,
+            );
+          }),
+          onVerticalDragEnd: (details) => setState(() {
+            final velocity = details.primaryVelocity ?? 0;
+            _expanded = velocity.abs() > 250
+                ? velocity < 0
+                : (_dragHeight ?? fitted) > (compact + maximum) / 2;
+            _dragHeight = null;
+          }),
+          onVerticalDragCancel: () => setState(() => _dragHeight = null),
+          child: Focus(
+            canRequestFocus: false,
+            onKeyEvent: (_, event) {
+              if (event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.escape) {
+                _close(keyboard: true);
+                return KeyEventResult.handled;
+              }
+              if (event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.enter ||
+                      event.logicalKey == LogicalKeyboardKey.space)) {
+                toggle(keyboard: true);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: TextButton(
+              key: const ValueKey('live-work-handle'),
+              onPressed: toggle,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(double.infinity, _handleHeight),
+                padding: EdgeInsets.zero,
+                shape: const RoundedRectangleBorder(),
+              ),
+              child: ExcludeSemantics(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -452,7 +534,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
             final query = MediaQuery.of(context);
             final available = math.max(
               48.0,
-              bottom - height - query.padding.top - 56,
+              bottom - height - query.padding.top - 8,
             );
             final panelHeight = math.min(
               available,
@@ -489,12 +571,17 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                               final to = position.ceil();
                               double pageHeight(int page) => math.min(
                                 panelHeight,
-                                _contentHeights[tabs[page]] ?? panelHeight,
+                                (_contentHeights[tabs[page]] ?? panelHeight) +
+                                    _handleHeight,
                               );
-                              final fitted =
+                              final compact =
                                   pageHeight(from) +
                                   (pageHeight(to) - pageHeight(from)) *
                                       (position - from);
+                              final fitted =
+                                  (_dragHeight ??
+                                          (_expanded ? available : compact))
+                                      .clamp(compact, available);
                               final scrolling =
                                   _pages.hasClients &&
                                   _pages.position.isScrollingNotifier.value;
@@ -512,6 +599,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                                     duration:
                                         _reduced ||
                                             _instantHeight ||
+                                            _dragHeight != null ||
                                             scrolling ||
                                             !ready
                                         ? Duration.zero
@@ -534,37 +622,57 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                                         ),
                                         child: ClipRRect(
                                           borderRadius: WingRadius.sheet,
-                                          child: PageView(
-                                            controller: _pages,
-                                            pageSnapping: false,
-                                            allowImplicitScrolling: true,
-                                            physics: _WorkPagePhysics(
-                                              reducedMotion: _reduced,
-                                            ),
-                                            onPageChanged: (page) {
-                                              final id = _tabs[page];
-                                              if (!_openingPages &&
-                                                  _selected != id) {
-                                                setState(() => _selected = id);
-                                                if (id == 0) _refreshAgents();
-                                              }
-                                            },
+                                          child: Column(
                                             children: [
-                                              for (final id in tabs)
-                                                _WorkPage(
-                                                  key: PageStorageKey((
-                                                    'live-work-page',
-                                                    id,
-                                                  )),
-                                                  onHeight: (value) =>
-                                                      _measureContent(
-                                                        id,
-                                                        value,
+                                              _handle(
+                                                fitted,
+                                                compact,
+                                                available,
+                                              ),
+                                              Expanded(
+                                                child: PageView(
+                                                  controller: _pages,
+                                                  pageSnapping: false,
+                                                  allowImplicitScrolling: true,
+                                                  physics: _WorkPagePhysics(
+                                                    reducedMotion: _reduced,
+                                                  ),
+                                                  onPageChanged: (page) {
+                                                    final id = _tabs[page];
+                                                    if (!_openingPages &&
+                                                        _selected != id) {
+                                                      setState(
+                                                        () => _selected = id,
+                                                      );
+                                                      if (id == 0) {
+                                                        _refreshAgents();
+                                                      }
+                                                    }
+                                                  },
+                                                  children: [
+                                                    for (final id in tabs)
+                                                      _WorkPage(
+                                                        key: PageStorageKey((
+                                                          'live-work-page',
+                                                          id,
+                                                        )),
+                                                        onHeight: (value) =>
+                                                            _measureContent(
+                                                              id,
+                                                              value,
+                                                            ),
+                                                        summary: id == 0
+                                                            ? widget
+                                                                  .subagentSummary
+                                                            : widget
+                                                                  .taskSummary,
+                                                        child: id == 0
+                                                            ? widget.subagents
+                                                            : widget.tasks,
                                                       ),
-                                                  child: id == 0
-                                                      ? widget.subagents
-                                                      : widget.tasks,
+                                                  ],
                                                 ),
+                                              ),
                                             ],
                                           ),
                                         ),
@@ -609,8 +717,14 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
 }
 
 class _WorkPage extends StatefulWidget {
-  const _WorkPage({super.key, required this.child, required this.onHeight});
+  const _WorkPage({
+    super.key,
+    required this.child,
+    required this.summary,
+    required this.onHeight,
+  });
   final Widget child;
+  final Widget summary;
   final ValueChanged<double> onHeight;
   @override
   State<_WorkPage> createState() => _WorkPageState();
@@ -618,18 +732,73 @@ class _WorkPage extends StatefulWidget {
 
 class _WorkPageState extends State<_WorkPage>
     with AutomaticKeepAliveClientMixin {
+  double _headerHeight = 0, _bodyHeight = 0;
+
+  void _measure({double? header, double? body}) {
+    _headerHeight = header ?? _headerHeight;
+    _bodyHeight = body ?? _bodyHeight;
+    widget.onHeight(_headerHeight + _bodyHeight);
+  }
+
   @override
   bool get wantKeepAlive => true;
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return SingleChildScrollView(
-      child: _WorkContentSize(
-        onHeight: widget.onHeight,
-        child: Padding(padding: const EdgeInsets.all(12), child: widget.child),
-      ),
+    return CustomMultiChildLayout(
+      delegate: _WorkPageLayout(),
+      children: [
+        LayoutId(
+          id: 0,
+          child: _WorkContentSize(
+            onHeight: (height) => _measure(header: height),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: DefaultTextStyle.merge(
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                child: widget.summary,
+              ),
+            ),
+          ),
+        ),
+        LayoutId(
+          id: 1,
+          child: SingleChildScrollView(
+            child: _WorkContentSize(
+              onHeight: (height) => _measure(body: height),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
+}
+
+/// Kept-alive neighbors may have a taller summary than the selected short page.
+/// Lay out that summary naturally and clip it during page-height interpolation.
+class _WorkPageLayout extends MultiChildLayoutDelegate {
+  @override
+  void performLayout(Size size) {
+    final header = layoutChild(0, BoxConstraints.tightFor(width: size.width));
+    positionChild(0, Offset.zero);
+    layoutChild(
+      1,
+      BoxConstraints.tight(
+        Size(size.width, math.max(0, size.height - header.height)),
+      ),
+    );
+    positionChild(1, Offset(0, header.height));
+  }
+
+  @override
+  bool shouldRelayout(_WorkPageLayout oldDelegate) => false;
 }
 
 /// Measure real laid-out content, including text wrapping, without a duplicate

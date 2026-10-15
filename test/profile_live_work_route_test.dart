@@ -409,10 +409,29 @@ void main() {
           findsOneWidget,
         );
         await picture('tasks');
+        final drawer = find.byKey(const ValueKey('live-work-panel'));
+        final handle = find.byKey(const ValueKey('live-work-handle'));
+        final compact = tester.getRect(drawer);
+        final taskSummary = tester.getRect(find.byType(ProfileTodoSummary));
+        await tester.drag(find.byType(PageView), const Offset(0, -100));
+        await settle();
+        expect(tester.getRect(find.byType(ProfileTodoSummary)), taskSummary);
+        await tester.fling(handle, const Offset(0, -500), 1000);
+        await settle();
+        expect(tester.getRect(drawer).top, closeTo(8, 1));
+        expect(tester.getRect(drawer).bottom, compact.bottom);
+        expect(tester.getRect(composer), rect);
+        await picture('tasks-expanded');
         await tester.tap(tab(0));
         await settle();
         expect(tester.getRect(composer), rect);
         expect(find.text('Inspect source mappings'), findsOneWidget);
+        expect(tester.getRect(drawer).top, closeTo(8, 1));
+        expect(find.text('0 of 2 completed · 2 running'), findsOneWidget);
+        await picture('subagents-expanded');
+        await tester.fling(handle, const Offset(0, 500), 1000);
+        await settle();
+        expect(tester.getSize(drawer).height, lessThanOrEqualTo(320));
         await picture('subagents');
 
         void expectNoReadButtons() {
@@ -480,6 +499,14 @@ void main() {
           greaterThanOrEqualTo(56),
         );
         await picture('keyboard');
+        await tester.tap(handle);
+        await settle();
+        expect(tester.getRect(drawer).top, closeTo(8, 1));
+        expect(
+          tester.getRect(drawer).bottom,
+          lessThan(tester.getRect(composer).top),
+        );
+        await picture('keyboard-expanded');
         await tester.binding.handlePopRoute();
         await settle();
         expect(find.byType(PageView), findsNothing);
@@ -646,6 +673,10 @@ void main() {
         // Navigate through the actual viewport. Whole-row ensureVisible can
         // place a lazily resized row's header outside a short enlarged viewport.
         for (var i = 0; i < 20; i++) {
+          if (savedTitle.evaluate().isNotEmpty) {
+            await tester.ensureVisible(savedTitle);
+            await settle();
+          }
           if (savedTitle
               .hitTestable(at: Alignment.centerLeft)
               .evaluate()

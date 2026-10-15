@@ -336,7 +336,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('1 active · 2 total'), findsOneWidget);
+      expect(find.text('1 of 2 completed · 1 running'), findsOneWidget);
       if (scale == 1) {
         expect(
           tester
