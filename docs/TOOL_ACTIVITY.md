@@ -1,9 +1,10 @@
 # Tool activity
 
-**Activity** starts collapsed, including while a reply is streaming. Open it to
-read tool calls and separate Markdown reasoning blocks in their received order.
-The open section keeps updating as work arrives and keeps your expanded tool
-details. Close it to return to a compact conversation.
+While a reply is streaming, reasoning appears as readable Markdown between tool
+runs. Each run has its own **Activity** disclosure, collapsed by default. Open a
+run to inspect its tools; later reasoning stays visible and starts a new tool run
+below it. Opened runs keep their expanded tool details as work arrives. Once the
+reply finishes, saved reasoning and tools use the ordinary collapsed Activity.
 
 Use the compact **Subagents / Tasks** bar above your draft, or at the bottom of
 Working history. It remains available while Hermes waits for subagents and after

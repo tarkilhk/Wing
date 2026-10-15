@@ -37,6 +37,13 @@ not report which member is currently writing. Individual Running and Needs
 input states keep their priority. A completed or unavailable room clears the
 group indication.
 
+Once a Bot Chat conversation identity is confirmed, previously loaded messages
+remain readable while Wing checks for updates. The header shows progress until
+that check finishes. If refresh fails, the saved messages remain visible with
+Retry. Returning to retained reading preserves your place; Latest shows messages
+received while you were away. A conversation without retained reading opens at
+the latest message.
+
 Bot Chats stay hidden from the default Chats list. Enable **Show automated chats** in Chats to reveal them, or open them directly through Bots. Displayed Bot Chats show a small version of the bot's avatar before their name. Cached names and avatars appear immediately while Wing refreshes them. On a first read, the name appears as soon as it is known, while the saved avatar loads. Other conversations retain their saved titles.
 
 In Chats, long press a profile icon beside the connection name to open that

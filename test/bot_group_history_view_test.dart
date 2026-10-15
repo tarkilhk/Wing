@@ -245,8 +245,14 @@ void main() {
         for (var i = 0; i < 12; i++) {
           await tester.pump(const Duration(milliseconds: 30));
         }
+        await tester.settleMarkdown();
         expect(session.runtime.activityEntries, hasLength(81));
-        expect(find.text('Activity · 99 tools'), findsOneWidget);
+        expect(
+          find.text('Live reasoning stays split.', findRichText: true),
+          findsOneWidget,
+        );
+        expect(find.text('Activity · 19 tools'), findsOneWidget);
+        expect(find.text('Activity · 80 tools'), findsOneWidget);
         expect(find.text('Timeline'), findsNothing);
         expect(
           find.byType(ProfileExecutionActivity, skipOffstage: false),
@@ -254,32 +260,52 @@ void main() {
           reason:
               'Closed activity must not construct or lay out the 80 replayed tool rows.',
         );
-        expect(
-          find.textContaining(
-            'The conversation is already readable.',
-            findRichText: true,
-          ),
-          findsWidgets,
+        final retainedAnswer = find.textContaining(
+          'The conversation is already readable.',
+          findRichText: true,
         );
+        // Live prose can push the earlier answer beyond a small lazy viewport.
+        // Read it through the real scroll before returning to the live tail.
+        await tester.scrollUntilVisible(
+          retainedAnswer,
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('profile-transcript')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.settleMarkdown();
+        expect(retainedAnswer, findsWidgets);
+        final latest = find.byKey(const ValueKey('jump-to-latest'));
+        if (latest.evaluate().isNotEmpty) {
+          await tester.tap(latest);
+          await entryFrames();
+          await tester.settleMarkdown();
+        }
         await _render(
           tester,
           frame,
           'history-entry-live-collapsed-${brightness.name}-$scale',
         );
         final section = find.ancestor(
-          of: find.text('Activity · 99 tools'),
+          of: find.text('Activity · 80 tools'),
           matching: find.byType(ProfileActivitySection),
         );
-        await tester.tap(find.text('Activity · 99 tools'));
+        await tester.ensureVisible(find.text('Activity · 80 tools'));
+        await entryFrames();
+        expect(find.text('Activity · 80 tools').hitTestable(), findsOneWidget);
+        await tester.tap(find.text('Activity · 80 tools'));
         await tester.pump(const Duration(milliseconds: 300));
         expect(
           find.descendant(of: section, matching: find.text('Timeline')),
           findsWidgets,
         );
         expect(find.byType(ProfileExecutionActivity), findsWidgets);
-        await tester.ensureVisible(find.text('Activity · 99 tools'));
+        await tester.ensureVisible(find.text('Activity · 80 tools'));
         await tester.pump();
-        await tester.tap(find.text('Activity · 99 tools'));
+        await tester.tap(find.text('Activity · 80 tools'));
         await tester.pump(const Duration(milliseconds: 300));
         event('tool.complete', {
           'tool_id': 'later',
@@ -288,7 +314,7 @@ void main() {
         });
         await session.refreshLive();
         await tester.pump(const Duration(milliseconds: 30));
-        expect(find.text('Activity · 100 tools'), findsOneWidget);
+        expect(find.text('Activity · 81 tools'), findsOneWidget);
         expect(find.text('Timeline'), findsNothing);
         expect(fixture.commands, isEmpty);
         expect(tester.takeException(), isNull);
@@ -635,9 +661,47 @@ void main() {
                 .label,
             'Thinking… · 1 subagent active',
           );
-          expect(find.text('Activity'), findsOneWidget);
-          expect(find.text('Thinking'), findsNothing);
-          await tester.openLiveActivity();
+          expect(find.byType(ProfileActivitySection), findsNothing);
+          expect(find.text('Thinking'), findsOneWidget);
+          await tester.settleMarkdown();
+          final refreshGate = Completer<void>();
+          addTearDown(() {
+            if (!refreshGate.isCompleted) refreshGate.complete();
+          });
+          final liveRead = fixture.readHook!;
+          fixture.readHook = (profile, method, params) async {
+            if (method == 'session.list') await refreshGate.future;
+            return liveRead(profile, method, params);
+          };
+          await tester.tap(find.byTooltip('Refresh working history'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 50));
+          final headerPulse = find.descendant(
+            of: find.byType(StudioLoadingSlot),
+            matching: find.byType(StudioLoading),
+          );
+          expect(headerPulse, findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byIcon(Icons.refresh), findsOneWidget);
+          expect(
+            tester.widget<StudioLoading>(headerPulse).label,
+            'Refreshing working history',
+          );
+          await _render(
+            tester,
+            frame,
+            'history-working-refresh-${brightness.name}-$scale',
+          );
+          refreshGate.complete();
+          for (var i = 0; i < 12; i++) {
+            await tester.pump(const Duration(milliseconds: 50));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+          }
+          expect(headerPulse, findsNothing);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          fixture.readHook = liveRead;
           expect(
             find.textContaining('Inspecting the work', findRichText: true),
             findsWidgets,
@@ -645,13 +709,17 @@ void main() {
           expect(find.byType(StudioWorkingIndicator), findsWidgets);
           await liveFrames();
           final reasoning = find
-              .textContaining('Inspecting the work', findRichText: true)
+              .textContaining(
+                'Reasoning stays visible while the bot streams.',
+                findRichText: true,
+              )
               .first;
           final viewport = tester.getRect(find.byType(ProfileTranscript));
           expect(
             tester.getRect(reasoning).overlaps(viewport),
             isTrue,
-            reason: 'Opening live Activity must reveal its contents on screen.',
+            reason:
+                'Live reasoning must be readable without opening a disclosure.',
           );
           await _render(
             tester,
@@ -750,7 +818,8 @@ void main() {
             matching: find.text('Running command'),
           );
           await tester.ensureVisible(toolTitle);
-          await tester.tap(toolTitle);
+          await liveFrames();
+          await tester.tap(toolTitle.hitTestable());
           await liveFrames();
           await _render(
             tester,

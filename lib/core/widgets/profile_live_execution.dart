@@ -12,7 +12,7 @@ import 'profile_execution_activity.dart';
 import 'profile_activity_tabs.dart';
 import 'profile_tool_activity.dart';
 
-/// One lazy, collapsible Activity keeps the parent's received work in order.
+/// Readable live reasoning separates independently collapsed tool runs.
 class ProfileLiveExecution extends StatefulWidget {
   const ProfileLiveExecution({
     super.key,
@@ -55,27 +55,6 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final saved = widget.savedActivity;
-    final count =
-        (saved?.toolCount ?? 0) +
-        widget.entries.whereType<ChatToolEntry>().length;
-    return ProfileActivitySection(
-      key: const ValueKey('live-activity'),
-      initiallyExpanded: false,
-      anchorExpansion: false,
-      label: count == 0
-          ? 'Activity'
-          : 'Activity · $count ${count == 1 ? 'tool' : 'tools'}',
-      subtitle: (saved?.reviewCount ?? 0) == 0
-          ? null
-          : Text(
-              '${saved!.reviewCount} ${saved.reviewCount == 1 ? 'review' : 'reviews'}',
-            ),
-      detailsBuilder: _contents,
-    );
-  }
-
-  Widget _contents(BuildContext context) {
     final groups = <List<ChatActivityEntry>>[];
     var tools = <ChatActivityEntry>[];
     void flush() {
@@ -100,12 +79,13 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
 
     final saved = widget.savedActivity;
     return Column(
+      key: const ValueKey('live-activity'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (saved != null)
-          ProfileActivityContents(
+          ProfileToolActivitySection(
+            key: const ValueKey('live-saved-activity'),
             section: saved,
-            currentActivity: const [],
             noticeBuilder: widget.noticeBuilder,
             loadImage: widget.loadImage,
             onOpenResource: widget.onOpenResource,
@@ -149,15 +129,19 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
               ),
             )
           else
-            ProfileActivityTabs(
-              key: ValueKey(('live-timeline', group.first.identity)),
-              tabs: [
-                ProfileActivityTab(
-                  id: 'timeline',
-                  label: 'Timeline',
-                  child: _run(group),
-                ),
-              ],
+            ProfileActivitySection(
+              key: ValueKey(('live-tool-run', group.first.identity)),
+              label:
+                  'Activity · ${group.length} ${group.length == 1 ? 'tool' : 'tools'}',
+              detailsBuilder: (_) => ProfileActivityTabs(
+                tabs: [
+                  ProfileActivityTab(
+                    id: 'timeline',
+                    label: 'Timeline',
+                    child: _run(group),
+                  ),
+                ],
+              ),
             ),
       ],
     );

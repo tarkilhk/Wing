@@ -332,10 +332,19 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       // Creation already selected and initialized the fresh chat. Stored Bot
       // entries still require their canonical resume/history admission.
       final chat = resumeStoredChat
-          ? await controller.openSession(
+          ? await controller.openSessionForReading(
               key,
-              propagateHistoryFailure: true,
               isCurrentRequest: current,
+              onReadingAvailable: (chat) {
+                if (!current()) return;
+                setState(() {
+                  _pendingChatTitle = null;
+                  _pendingChatScope = null;
+                  _pendingBot = null;
+                  _retryChatEntry = null;
+                });
+                controller.setRouteVisibility(this, _hasChatFocus);
+              },
             )
           : controller.current?.chat;
       if (!current()) return;
@@ -1646,13 +1655,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         _retainedConversationHeader(context, chat, bot),
         StudioPageLoading(
           active:
+              chat.refreshingConversation ||
               controller.refreshingWorkspace ||
               chat.branchingAnswer ||
               chat.changingIntelligence ||
               _loadingIntelligence == chat.key ||
               chat.composer.observation.saving ||
               chat.composer.observation.steering,
-          label: controller.refreshingWorkspace
+          label: chat.refreshingConversation
+              ? 'Refreshing conversation'
+              : controller.refreshingWorkspace
               ? 'Refreshing workspace'
               : chat.branchingAnswer
               ? 'Preparing answer'
@@ -1694,9 +1706,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     content: StudioError(chat.runtime.openingError!),
                     actions: [
                       StudioButtonPress(
-                        child: TextButton(
-                          onPressed: () => _run(controller.resumeConnection),
-                          child: const Text('Retry connection'),
+                        child: IconButton(
+                          tooltip: 'Retry',
+                          onPressed:
+                              controller.recovering ||
+                                  chat.refreshingConversation
+                              ? null
+                              : () => _run(controller.resumeConnection),
+                          icon: const Icon(Icons.refresh),
                         ),
                       ),
                     ],

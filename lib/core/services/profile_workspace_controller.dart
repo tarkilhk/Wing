@@ -123,8 +123,8 @@ class ProfileChat {
   ComposerSession _composer;
   ComposerSession get composer => _composer;
   final TranscriptReading reading;
-  Object? _recentRefresh;
-  bool get refreshingConversation => _recentRefresh != null;
+  Object? _readingRefresh;
+  bool get refreshingConversation => _readingRefresh != null;
 
   final List<({GatewayNotice notice, String identity})> _reviewNotices = [];
   List<GatewayTodo> _todos = [];
@@ -4088,6 +4088,55 @@ class ProfileWorkspaceController extends ChangeNotifier {
     isCurrentRequest: isCurrentRequest,
   );
 
+  /// Reveal owned reading while resume/history reconciliation continues.
+  /// The operation retains its resources and reports refresh failures on that
+  /// same reading instead of replacing it with an empty opening screen.
+  Future<ProfileChat?> openSessionForReading(
+    ProfileSessionKey key, {
+    required bool Function() isCurrentRequest,
+    required void Function(ProfileChat) onReadingAvailable,
+  }) => _retainWorkspaceOperation(() async {
+    ProfileChat? reading;
+    final token = Object();
+    bool ownsReading() =>
+        reading != null &&
+        identical(_resources[key.workspace]?._chats[key.sessionId], reading) &&
+        identical(reading!._readingRefresh, token);
+    try {
+      return await _openSession(
+        key,
+        isCurrentRequest: isCurrentRequest,
+        propagateHistoryFailure: true,
+        onReadingAvailable: (chat) {
+          if (reading != null || !isCurrentRequest()) return;
+          reading = chat;
+          chat._readingRefresh = token;
+          chat._runtime.beginOpening();
+          onReadingAvailable(chat);
+          _changed();
+        },
+      );
+    } catch (failure) {
+      if (reading == null) rethrow;
+      if (ownsReading()) {
+        reading!._runtime.finishOpening(
+          error: _isMissingSessionFailure(failure)
+              ? 'This conversation is no longer available. Your saved messages are kept.'
+              : 'Conversation could not be refreshed. Retry to check for new messages.',
+        );
+      }
+      return reading;
+    } finally {
+      if (ownsReading()) {
+        reading!._readingRefresh = null;
+        if (reading!.runtime.opening && reading!.runtime.openingError == null) {
+          reading!._runtime.finishOpening();
+        }
+        _changed();
+      }
+    }
+  });
+
   /// Camera intake borrows a mounted draft without navigation or server reads.
   /// An absent destination still uses the exact saved-chat recovery workflow.
   Future<({ProfileChat chat, bool retainWorkspace})?> prepareSharedDraftTarget(
@@ -4116,7 +4165,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     bool recoverExpiredDraft = false,
     bool propagateHistoryFailure = false,
     bool Function()? isCurrentRequest,
-    void Function(ProfileChat)? onRetainedReading,
+    void Function(ProfileChat)? onReadingAvailable,
   }) async {
     final navigation = ++_navigationGeneration;
     if (!owns(key)) {
@@ -4125,7 +4174,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (_closed || isCurrentRequest?.call() == false) return null;
     final retainedResource = _resources[key.workspace];
     final retained = retainedResource?._chats[key.sessionId];
-    if (onRetainedReading != null &&
+    if (onReadingAvailable != null &&
         _initialized &&
         retainedResource?._offlineSnapshot == false &&
         !retainedResource!.blocksSession(key.sessionId) &&
@@ -4152,7 +4201,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         unawaited(appPreferences.settleProfileSelection(connectionIdentity));
       }
       retainedResource._selectedSession = key.sessionId;
-      onRetainedReading(retained);
+      onReadingAvailable(retained);
       _changed();
     }
     if (recoverExpiredDraft) {
@@ -4338,6 +4387,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       unawaited(_loadChatProject(resource, chat));
       await refreshHistory(chat, propagateFailure: propagateHistoryFailure);
       chat._runtime.recovered();
+      if (!_closed &&
+          _current?.chat == chat &&
+          navigation == _navigationGeneration &&
+          isCurrentRequest?.call() != false &&
+          chat.reading.historyError == null) {
+        onReadingAvailable?.call(chat);
+      }
       if (!_closed &&
           _current?.chat == chat &&
           navigation == _navigationGeneration &&

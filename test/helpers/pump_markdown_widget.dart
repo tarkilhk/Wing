@@ -23,22 +23,31 @@ extension PumpMarkdownWidget on WidgetTester {
       await pump();
       await pump(const Duration(milliseconds: 300));
     }
-    final icon = widget<Icon>(
-      find.descendant(of: section, matching: find.byType(Icon)).first,
+    final disclosures = find.descendant(
+      of: section,
+      matching: find.byType(ProfileActivitySection),
     );
-    if (icon.icon != Icons.keyboard_arrow_right_rounded) return;
-    final label = widget<ProfileActivitySection>(section).label;
-    final title = find
-        .descendant(of: section, matching: find.text(label))
-        .first;
-    await ensureVisible(title);
-    await pump(const Duration(milliseconds: 300));
-    final rect = getRect(title);
-    await tapAt(Offset(rect.left + 4, rect.center.dy));
-    await pump();
-    await pump(const Duration(milliseconds: 300));
-    await settleMarkdown();
-    await pump();
+    for (final element in disclosures.evaluate().toList()) {
+      final disclosure = find.byElementPredicate(
+        (candidate) => candidate == element,
+      );
+      final icon = widget<Icon>(
+        find.descendant(of: disclosure, matching: find.byType(Icon)).first,
+      );
+      if (icon.icon != Icons.keyboard_arrow_right_rounded) continue;
+      final label = (element.widget as ProfileActivitySection).label;
+      final title = find
+          .descendant(of: disclosure, matching: find.text(label))
+          .first;
+      await ensureVisible(title);
+      await pump(const Duration(milliseconds: 300));
+      final rect = getRect(title);
+      await tapAt(Offset(rect.left + 4, rect.center.dy));
+      await pump();
+      await pump(const Duration(milliseconds: 300));
+      await settleMarkdown();
+      await pump();
+    }
   }
 
   Future<void> settleMarkdown() async {
