@@ -2502,7 +2502,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       chat,
       chat.context,
       chat.contextCompressions,
-      chat.contextLoading,
+      chat.contextRefreshPending,
       chat.contextError,
     );
     if (_contextRingInputs == inputs) return _contextRing!;
@@ -2511,9 +2511,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       key: ValueKey(('context-ring', chat.key)),
       occupancy: chat.context,
       compressions: chat.contextCompressions,
-      loading: chat.contextLoading,
+      loading: chat.contextRefreshPending,
       error: chat.contextError,
-      onRefresh: () => unawaited(controller.refreshContext(chat)),
+      onRefresh: () =>
+          unawaited(controller.refreshContext(chat, userInitiated: true)),
     );
   }
 
