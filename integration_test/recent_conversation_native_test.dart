@@ -1571,11 +1571,14 @@ void main() {
                 ], milliseconds: 500),
               ],
             );
-            final offset = first.reading.historyScrollOffset;
-            expect(offset, greaterThan(20));
+            final offset = first.reading.readingPosition.resume;
+            expect(offset, isNotNull);
             await swipe('reading-switch');
             await swipe('reading-return', right: true);
-            expect(first.reading.historyScrollOffset, closeTo(offset, 3));
+            expect(
+              first.reading.readingPosition.resume?.messageId,
+              offset?.messageId,
+            );
             expect(first.composer.observation.displayedText, draft);
             expect(
               first.composer.observation.attachments.map((a) => a.id),

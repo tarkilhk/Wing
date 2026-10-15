@@ -48,8 +48,13 @@ class _ScrollCaptureViewportState extends State<ScrollCaptureViewport> {
   // Flutter's reversed list instead measures pixels from its bottom.
   bool get _reversed =>
       widget.controller.position.axisDirection == AxisDirection.up;
-  double _captureOffset(double pixels) =>
-      _reversed ? widget.controller.position.maxScrollExtent - pixels : pixels;
+  double _captureOffset(double pixels) => _reversed
+      ? widget.controller.position.maxScrollExtent - pixels
+      : pixels - widget.controller.position.minScrollExtent;
+
+  double _scrollOffset(double offset) => _reversed
+      ? widget.controller.position.maxScrollExtent - offset
+      : widget.controller.position.minScrollExtent + offset;
 
   Map<String, Object>? _metrics() {
     if (!mounted ||
@@ -69,8 +74,8 @@ class _ScrollCaptureViewportState extends State<ScrollCaptureViewport> {
       'right': origin.dx + size.width,
       'bottom': origin.dy + size.height,
       'offset': _captureOffset(scroll.pixels) * ratio,
-      'min': scroll.minScrollExtent * ratio,
-      'max': scroll.maxScrollExtent * ratio,
+      'min': 0.0,
+      'max': (scroll.maxScrollExtent - scroll.minScrollExtent) * ratio,
       'ratio': ratio,
     };
   }
@@ -110,7 +115,7 @@ class _ScrollCaptureViewportState extends State<ScrollCaptureViewport> {
         final ratio = MediaQuery.devicePixelRatioOf(context);
         final position = widget.controller.position;
         widget.controller.jumpTo(
-          _captureOffset(
+          _scrollOffset(
             offset / ratio,
           ).clamp(position.minScrollExtent, position.maxScrollExtent),
         );

@@ -338,8 +338,9 @@ void main() {
                   .byType(SelectableText)
                   .evaluate()
                   .where((e) {
-                    final top = tester.getTopLeft(find.byWidget(e.widget)).dy;
-                    return top > 160 && top < 450;
+                    return tester
+                        .getRect(list)
+                        .contains(tester.getCenter(find.byWidget(e.widget)));
                   })
                   .first
                   .widget
@@ -359,7 +360,7 @@ void main() {
       await tester.settleMarkdown();
       await tester.pumpAndSettle();
       expect(tester.getTopLeft(find.text(text)).dy, closeTo(before, 2));
-      final position = chat.reading.historyScrollOffset;
+      final position = chat.reading.readingPosition.resume;
       final ongoingSource = chat.reading.streaming;
       expect(chat.runtime.blocksTurnAdmission, isTrue);
       controller.showList();
@@ -372,7 +373,10 @@ void main() {
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       await tester.pumpAndSettle();
-      expect(chat.reading.historyScrollOffset, closeTo(position, 2));
+      expect(
+        chat.reading.readingPosition.resume?.messageId,
+        position?.messageId,
+      );
       final restoredTop = tester.getTopLeft(find.text(text)).dy;
       emitChatEvent(controller, chat, 'message.delta', {
         'text': List.filled(12, 'More streaming line\n').join(),
@@ -410,21 +414,22 @@ void main() {
       tester.state<ScrollableState>(scroll).position.jumpTo(1000);
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
-      final saved = chat.reading.historyScrollOffset;
-      expect(saved, closeTo(1000, 1));
+      final saved = chat.reading.readingPosition.resume;
+      expect(saved!.messageId, 620);
+      expect(saved.fraction, greaterThan(0));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );
       // Temporary empty message bodies must not overwrite the saved target.
-      expect(chat.reading.historyScrollOffset, closeTo(saved, 1));
+      expect(chat.reading.readingPosition.resume?.messageId, saved.messageId);
       await tester.settleMarkdown();
       await tester.pumpAndSettle();
       expect(
-        tester.state<ScrollableState>(scroll).position.pixels,
-        closeTo(saved, 1),
+        chat.reading.readingPosition.resume?.fraction,
+        closeTo(saved.fraction, .001),
       );
-      expect(chat.reading.historyScrollOffset, closeTo(saved, 1));
+      expect(chat.reading.readingPosition.resume?.messageId, saved.messageId);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

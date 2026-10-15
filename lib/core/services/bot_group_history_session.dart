@@ -1,6 +1,8 @@
 import 'chat_transcript_events.dart';
+import 'conversation_reading_memory.dart';
 import 'subagent_timeline_session.dart';
 import 'dart:async';
+import '../models/transcript_position.dart';
 import '../models/chat_runtime.dart';
 import '../models/gateway_insight.dart';
 import '../models/gateway_todo.dart';
@@ -19,12 +21,13 @@ import 'profile_gateway.dart';
 /// One passive inspection route. Polls stock observations; never admits commands.
 class BotGroupHistorySession extends ChangeNotifier
     implements SubagentInspectionSession {
-  BotGroupHistorySession(this.repository, this.group) {
+  BotGroupHistorySession(this.repository, this.group, {this.readingPositions}) {
     repository.retain();
     _reading = _newReading(null);
   }
 
   final BotsRepository repository;
+  final ConversationReadingRegistry? readingPositions;
   final BotGroup group;
   BotGroupMember? _member;
   BotGroupMember? get member => _member;
@@ -58,6 +61,13 @@ class BotGroupHistorySession extends ChangeNotifier
           profileName: member?.profile ?? repository.scope.profileName,
         ),
       );
+
+  void _bindReading(_BotGroupHistoryReading reading, String session) {
+    final memory = readingPositions?.chat(
+      ProfileSessionKey(reading._reading.scope, session),
+    );
+    if (memory != null) reading._reading.readingMemory = memory;
+  }
 
   void setVisible(bool value) {
     _visible = value;
@@ -439,6 +449,7 @@ class BotGroupHistorySession extends ChangeNotifier
         if (initial) {
           // Publish each received page before waiting on older messages. The
           // transcript renders their Activity lazily while backfill continues.
+          _bindReading(reading, session);
           reading.installNewestPage(session, rows, older);
           notifyListeners();
         }
@@ -457,6 +468,7 @@ class BotGroupHistorySession extends ChangeNotifier
         offset = older;
       } while (true);
       if (refresh) {
+        _bindReading(reading, session);
         reading.installNewestPage(session, rows, older);
       } else {
         final merged = <int, Map<String, dynamic>>{
@@ -670,7 +682,6 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   bool _paging = false;
   bool _available = false;
   String? _error;
-  double _scrollOffset = 0;
   @override
   bool get historyLoading => _loading || _explicitRead;
   @override
@@ -688,9 +699,10 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   @override
   String get streaming => _reading.streaming;
   @override
-  double get historyScrollOffset => _scrollOffset;
+  TranscriptPosition get readingPosition => _reading.readingPosition;
   @override
-  void recordScrollOffset(double offset) => _scrollOffset = offset;
+  void recordReading(TranscriptBookmark? resume, {int? readThrough}) =>
+      _reading.recordReading(resume, readThrough: readThrough);
   @override
   Object messagePresentationId(Map<String, dynamic> row) =>
       _reading.messagePresentationId(row);

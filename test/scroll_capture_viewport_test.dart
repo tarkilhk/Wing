@@ -20,9 +20,14 @@ Future<Object?> _native(String method, Map<String, Object> args) async {
 }
 
 void main() {
-  for (final reversed in [false, true]) {
+  for (final (reversed, centered) in [
+    (false, false),
+    (true, false),
+    (false, true),
+    (true, true),
+  ]) {
     testWidgets(
-      'capture scrolls only the viewport, clamps and restores reading reversed=$reversed',
+      'capture scrolls only the viewport, clamps and restores reading reversed=$reversed centered=$centered',
       (tester) async {
         final registrations = <Map<Object?, Object?>>[];
         final methods = <String>[];
@@ -48,6 +53,7 @@ void main() {
         final controller = ScrollController(initialScrollOffset: 200);
         addTearDown(controller.dispose);
         final states = <bool>[];
+        const center = ValueKey('center');
         await tester.pumpWidget(
           MaterialApp(
             home: Scaffold(
@@ -58,14 +64,34 @@ void main() {
                     child: ScrollCaptureViewport(
                       controller: controller,
                       onCaptureChanged: states.add,
-                      child: ListView(
-                        controller: controller,
-                        reverse: reversed,
-                        children: [
-                          for (var i = 0; i < 50; i++)
-                            SizedBox(height: 80, child: Text('Message $i')),
-                        ],
-                      ),
+                      child: centered
+                          ? CustomScrollView(
+                              controller: controller,
+                              reverse: reversed,
+                              center: center,
+                              slivers: [
+                                for (var side = 0; side < 2; side++)
+                                  SliverFixedExtentList(
+                                    key: side == 1 ? center : null,
+                                    itemExtent: 80,
+                                    delegate: SliverChildBuilderDelegate(
+                                      (_, i) => Text('Message $side/$i'),
+                                      childCount: 25,
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : ListView(
+                              controller: controller,
+                              reverse: reversed,
+                              children: [
+                                for (var i = 0; i < 50; i++)
+                                  SizedBox(
+                                    height: 80,
+                                    child: Text('Message $i'),
+                                  ),
+                              ],
+                            ),
                     ),
                   ),
                   const SizedBox(height: 100, child: Text('Composer')),
@@ -82,8 +108,16 @@ void main() {
           reversed
               ? (controller.position.maxScrollExtent - 200) *
                     tester.view.devicePixelRatio
-              : 200 * tester.view.devicePixelRatio,
+              : (200 - controller.position.minScrollExtent) *
+                    tester.view.devicePixelRatio,
         );
+        expect(
+          metrics['max'],
+          (controller.position.maxScrollExtent -
+                  controller.position.minScrollExtent) *
+              tester.view.devicePixelRatio,
+        );
+        if (centered) expect(controller.position.minScrollExtent, lessThan(0));
         expect(metrics['top'], greaterThan(0));
         expect(metrics['bottom'], lessThan(tester.view.physicalSize.height));
         expect(await _native('metrics', {'id': id + 1}), isNull);
@@ -99,7 +133,8 @@ void main() {
           reversed
               ? controller.position.maxScrollExtent -
                     800 / tester.view.devicePixelRatio
-              : 800 / tester.view.devicePixelRatio,
+              : controller.position.minScrollExtent +
+                    800 / tester.view.devicePixelRatio,
         );
         final clamped = _native('scroll', {'id': id, 'offset': -100});
         await tester.pump();

@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../models/transcript_position.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -388,12 +389,13 @@ final class SubagentTimelineSession extends ChangeNotifier
   @override
   bool get historyUnavailable => false;
   @override
-  double get historyScrollOffset => _reading.historyScrollOffset;
+  TranscriptPosition get readingPosition => _reading.readingPosition;
   @override
   Object messagePresentationId(Map<String, dynamic> row) =>
       _reading.messagePresentationId(row);
   @override
-  void recordScrollOffset(double offset) => _reading.recordScrollOffset(offset);
+  void recordReading(TranscriptBookmark? resume, {int? readThrough}) =>
+      _reading.recordReading(resume, readThrough: readThrough);
   @override
   void dispose() {
     if (_closed) return;

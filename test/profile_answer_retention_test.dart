@@ -155,8 +155,8 @@ Widget _screen(
                     )
                   : null,
               notificationReading: chat.reading,
-              onAnswerVisible: (target) =>
-                  controller.notificationAnswerVisible(chat, target),
+              onAnswerRead: (target) =>
+                  controller.notificationAnswerRead(chat, target),
               onRefreshHistory: () => controller.refreshHistory(chat),
               onLoadOlder: () => controller.loadOlderMessages(chat),
               messageBuilder: (row) => ProfileMessage(message: row.message),

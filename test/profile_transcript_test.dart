@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_position.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
@@ -165,8 +166,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                       )
                     : null,
                 notificationReading: chat.reading,
-                onAnswerVisible: (target) =>
-                    controller.notificationAnswerVisible(chat, target),
+                onAnswerRead: (target) =>
+                    controller.notificationAnswerRead(chat, target),
                 onRefreshHistory: () => controller.refreshHistory(chat),
                 onLoadOlder:
                     loadOlder ?? () => controller.loadOlderMessages(chat),
@@ -482,8 +483,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                         )
                       : null,
                   notificationReading: chat.reading,
-                  onAnswerVisible: (target) =>
-                      controller.notificationAnswerVisible(chat, target),
+                  onAnswerRead: (target) =>
+                      controller.notificationAnswerRead(chat, target),
                   onRefreshHistory: () => controller.refreshHistory(chat),
                   onLoadOlder:
                       loadOlder ?? () => controller.loadOlderMessages(chat),
@@ -761,12 +762,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       expect(find.byTooltip('New activity'), findsOneWidget);
       await tester.tap(jump);
       await tester.pumpAndSettle();
-      expect(chat.reading.historyScrollOffset, closeTo(0, 1));
+      expect(chat.reading.readingPosition.resume, isNull);
       expect(jump, findsNothing);
       chat.reading.updateStreaming('More streaming output');
       tailHeight = 2000;
       await rebuildPresentation(tester);
-      expect(chat.reading.historyScrollOffset, closeTo(0, 1));
+      expect(chat.reading.readingPosition.resume, isNull);
       expect(jump, findsNothing);
     },
   );
@@ -925,7 +926,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       expect(find.byTooltip('New activity'), findsOneWidget);
       await tester.tap(jump);
       await tester.pumpAndSettle();
-      expect(chat.reading.historyScrollOffset, 0);
+      expect(chat.reading.readingPosition.resume, isNull);
       expect(jump, findsNothing);
       expect(chat.reading.messages.last['id'], 621);
     },
@@ -1243,7 +1244,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         .first;
     await tester.ensureVisible(pane);
     await tester.pumpAndSettle();
-    final chatOffset = chat.reading.historyScrollOffset;
+    final chatOffset = chat.reading.readingPosition.resume;
     final headerTop = tester.getTopLeft(header).dy;
     await tester.drag(pane, const Offset(0, -100));
     await tester.pumpAndSettle();
@@ -1251,7 +1252,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       tester.widget<SingleChildScrollView>(pane).controller!.offset,
       greaterThan(0),
     );
-    expect(chat.reading.historyScrollOffset, closeTo(chatOffset, 1));
+    expect(
+      chat.reading.readingPosition.resume?.messageId,
+      chatOffset?.messageId,
+    );
     expect(tester.getTopLeft(header).dy, closeTo(headerTop, 1));
     expect(find.text('Preview'), findsNothing);
   });
@@ -1296,7 +1300,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(tester.getTopLeft(header).dy, lessThan(beforeDrag - 100));
     await tester.tap(jump);
     await tester.pumpAndSettle();
-    expect(chat.reading.historyScrollOffset, closeTo(0, 1));
+    expect(chat.reading.readingPosition.resume, isNull);
   });
 
   testWidgets(
@@ -1365,7 +1369,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.settleMarkdown();
     expect(find.text('A short thought'), findsNWidgets(2));
     await toggleInPlace(tester, thought);
-    expect(chat.reading.historyScrollOffset, closeTo(0, 1));
+    expect(chat.reading.readingPosition.resume, isNull);
   });
 
   testWidgets('restored history shows the saved prompt-to-reply interval', (
@@ -1503,7 +1507,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       findsOneWidget,
     );
     await tester.pumpWidget(const SizedBox.shrink());
-    chat.reading.recordScrollOffset(0);
+    chat.reading.recordReading(null);
     await show(tester);
     expect(
       find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
@@ -1580,7 +1584,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       final before = host.calls.length;
       await tester.tap(jump);
       await tester.pumpAndSettle();
-      expect(chat.reading.historyScrollOffset, 0);
+      expect(chat.reading.readingPosition.resume, isNull);
       expect(chat.runtime.approval, isNotNull);
       expect(host.calls.length, before);
     },
@@ -1609,7 +1613,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       final before = host.calls.length;
       await tester.tap(jump);
       await tester.pumpAndSettle();
-      expect(chat.reading.historyScrollOffset, 0);
+      expect(chat.reading.readingPosition.resume, isNull);
       expect(chat.runtime.secureInput?.requestId, request.requestId);
       expect(chat.runtime.secureInput?.kind, request.kind);
       expect(host.calls.length, before);
@@ -1627,7 +1631,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       final originalMessages = List<Map<String, dynamic>>.of(
         chat.reading.messages,
       );
-      chat.reading.recordScrollOffset(84);
+      chat.reading.recordReading(const TranscriptBookmark(messageId: 84));
       var returned = false;
       final nearby = [
         for (var id = 1; id <= 9; id++)
@@ -1669,8 +1673,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                       )
                     : null,
                 notificationReading: chat.reading,
-                onAnswerVisible: (target) =>
-                    controller.notificationAnswerVisible(chat, target),
+                onAnswerRead: (target) =>
+                    controller.notificationAnswerRead(chat, target),
                 onRefreshHistory: () => controller.refreshHistory(chat),
                 onLoadOlder:
                     loadOlder ?? () => controller.loadOlderMessages(chat),
@@ -1712,12 +1716,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       );
       expect(tester.takeException(), isNull);
       expect(chat.reading.messages, originalMessages);
-      expect(chat.reading.historyScrollOffset, 84);
+      expect(chat.reading.readingPosition.resume?.messageId, 84);
 
       await tester.tap(find.text('Back to latest'));
       expect(returned, isTrue);
       await tester.pumpWidget(const SizedBox.shrink());
-      expect(chat.reading.historyScrollOffset, 84);
+      expect(chat.reading.readingPosition.resume?.messageId, 84);
     },
   );
 

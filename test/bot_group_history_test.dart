@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_position.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/group_observations.dart';
@@ -1147,7 +1148,7 @@ void main() {
       await session.select(group.members.first);
       await session.refreshLive();
       final atlasReader = session.reader;
-      atlasReader.recordScrollOffset(240);
+      atlasReader.recordReading(const TranscriptBookmark(messageId: 240));
       await session.select(group.members.last);
       await session.refreshLive();
       final reads = fixture.historyReads.length;
@@ -1155,7 +1156,7 @@ void main() {
       await session.refreshLive();
       expect(fixture.historyReads.length, reads);
       expect(session.reader, same(atlasReader));
-      expect(session.reader.historyScrollOffset, 240);
+      expect(session.reader.readingPosition.resume?.messageId, 240);
       fixture.workerMessages['atlas'] = [_message(3, 'Atlas refreshed')];
       await session.refresh();
       expect(session.reader.messages.single['content'], 'Atlas refreshed');
@@ -1265,12 +1266,12 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(session.historyAvailable, isFalse);
       final retiredReader = session.reader;
-      retiredReader.recordScrollOffset(180);
+      retiredReader.recordReading(const TranscriptBookmark(messageId: 180));
       await session.select(group.members.last);
       await session.refreshLive();
       expect(session.historyAvailable, isTrue);
-      retiredReader.recordScrollOffset(420);
-      expect(session.reader.historyScrollOffset, 0);
+      retiredReader.recordReading(const TranscriptBookmark(messageId: 420));
+      expect(session.reader.readingPosition.resume, isNull);
       expect(session.reader, isNot(same(retiredReader)));
       held.complete(
         ProfileHistoryPage('atlas-tip', [_message(1, 'Late Atlas')], 0, 100),

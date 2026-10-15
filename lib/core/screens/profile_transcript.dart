@@ -3,6 +3,7 @@ import '../widgets/conversation_activity.dart';
 import '../widgets/scroll_capture_viewport.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/recent_conversations/conversation_gestures.dart';
+import '../widgets/recent_conversations/conversation_route_scope.dart';
 import '../models/chat_output.dart';
 import '../services/server_connection_status.dart';
 import '../models/notification_focus.dart';
@@ -11,9 +12,11 @@ import '../widgets/studio_error.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show ScrollCacheExtent;
+import 'package:flutter/rendering.dart' show ScrollCacheExtent, ScrollDirection;
 import '../theme/wing_theme.dart';
 import '../models/transcript_presentation.dart';
+import '../models/transcript_position.dart';
+import '../models/transcript_message.dart';
 import '../services/transcript_reading.dart';
 import '../services/completion_diagnostics.dart';
 import '../utils/expansion_scroll_controller.dart';
@@ -36,7 +39,7 @@ class ProfileTranscript extends StatefulWidget {
   final TranscriptPresentation presentation;
   final Widget? openingContent;
   final TranscriptReading? notificationReading;
-  final void Function(NotificationFocus)? onAnswerVisible;
+  final void Function(NotificationFocus)? onAnswerRead;
   final Future<void> Function() onRefreshHistory;
   final Widget Function(timeline_facts.TranscriptTimelineEntry) messageBuilder;
   final Widget? Function(timeline_facts.TranscriptTimelineSection)?
@@ -46,7 +49,7 @@ class ProfileTranscript extends StatefulWidget {
   final ConversationActivity? activity;
   final List<ProfileActivityTab> additionalActivityTabs;
   final ValueChanged<bool>? onCaptureChanged;
-  final VoidCallback? onLatestVisible;
+  final ValueChanged<int>? onReadThrough;
   final Widget? emptyContent;
   final ConversationTranscriptController? controller;
   final Future<Uint8List> Function(String)? loadImage;
@@ -60,7 +63,7 @@ class ProfileTranscript extends StatefulWidget {
     required this.presentation,
     this.openingContent,
     this.notificationReading,
-    this.onAnswerVisible,
+    this.onAnswerRead,
     required this.onRefreshHistory,
     this.onLoadOlder,
     required this.messageBuilder,
@@ -69,7 +72,7 @@ class ProfileTranscript extends StatefulWidget {
     this.activity,
     this.additionalActivityTabs = const [],
     this.onCaptureChanged,
-    this.onLatestVisible,
+    this.onReadThrough,
     this.emptyContent,
     this.controller,
     this.loadImage,
@@ -83,31 +86,114 @@ class ProfileTranscript extends StatefulWidget {
   State<ProfileTranscript> createState() => _ProfileTranscriptState();
 }
 
-// Geometry belongs to the retained reader, not to a particular route mount.
-// Weak keys release this cache with the reader; it contains no widgets, render
-// objects, persisted bookmarks or transport state.
-final _retainedTranscriptLayouts = Expando<_RetainedTranscriptLayout>();
-
-class _RetainedTranscriptLayout {
-  final heights = <Object, double>{};
-  Object? readingThrough;
-  String? segment;
-}
-
 class _ProfileTranscriptState extends State<ProfileTranscript> {
   late final _scroll = ExpansionScrollController(
     preserveViewportPosition: () => !widget.presentation.needsInput,
-    initialScrollOffset: widget.focusedMessageId == null
-        ? widget.presentation.scrollOffset
-        : 0,
-    restoreInitialOffset:
-        widget.focusedMessageId == null && widget.presentation.scrollOffset > 0,
   );
-  late double _lastScrollOffset = widget.presentation.scrollOffset;
+  TranscriptBookmark? _resume;
+  int? _centerMessage;
+  bool _positionChosen = false;
+  bool _restoringMarkdown = false;
+  bool _placingResume = false;
+  bool _readingFrameScheduled = false;
+  int? _reportedReadThrough;
+  bool _userScrolling = false;
+  bool _readScrollPending = false;
+  final _mountedRows = <TranscriptAnchorBox, ({int id, bool readable})>{};
+  final _mountedAnchors = <TranscriptAnchorBox>{};
+  final _centerSliver = GlobalKey();
 
-  void _recordScrollOffset(double offset) {
-    _lastScrollOffset = offset;
-    widget.presentation.recordScrollOffset(offset);
+  double get _latestDistance => !_scroll.hasClients
+      ? 0
+      : (_scroll.offset -
+                (_centerMessage == null ? 0 : _scroll.position.minScrollExtent))
+            .abs();
+
+  bool get _canObserveReading =>
+      mounted &&
+      !_capturing &&
+      !_jumping &&
+      !_restoringMarkdown &&
+      widget.focusedMessageId == null &&
+      (ModalRoute.of(context)?.isCurrent ?? true) &&
+      TickerMode.valuesOf(context).enabled &&
+      (ConversationPresentationScope.maybeOf(context)?.visible ?? true) &&
+      (WidgetsBinding.instance.lifecycleState == null ||
+          WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed);
+
+  void _scheduleReadingObservation() {
+    if (_readingFrameScheduled) return;
+    _readingFrameScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _readingFrameScheduled = false;
+      final scrolledPast = _readScrollPending;
+      _readScrollPending = false;
+      if (!_canObserveReading || !_scroll.hasClients) return;
+      final viewport = _viewport.currentContext?.findRenderObject();
+      if (viewport is! RenderBox || !viewport.hasSize) return;
+      final top = viewport.localToGlobal(Offset.zero).dy;
+      final bottom = top + viewport.size.height;
+      TranscriptBookmark? bookmark;
+      double? firstTop;
+      int? read;
+      for (final entry in _mountedRows.entries) {
+        final box = entry.key;
+        if (!box.attached || !box.hasSize || box.contentPending) continue;
+        final y = box.localToGlobal(Offset.zero).dy;
+        final end = y + box.size.height;
+        if (box.size.height <= 0) continue;
+        // Only a user scroll towards newer messages can advance read-through.
+        // The newest reply cannot leave the top: reaching its end at the bottom
+        // through that same gesture is its terminal equivalent.
+        final passed =
+            end <= top + .5 || _latestDistance <= .5 && end <= bottom + .5;
+        if (scrolledPast &&
+            entry.value.readable &&
+            passed &&
+            (read == null || entry.value.id > read)) {
+          read = entry.value.id;
+        }
+        if (end <= top || y >= bottom) continue;
+        if (firstTop == null || y < firstTop) {
+          firstTop = y;
+          bookmark = TranscriptBookmark(
+            messageId: entry.value.id,
+            fraction: ((top - y) / box.size.height).clamp(0.0, 1.0),
+            alignment: ((y - top) / viewport.size.height).clamp(0.0, 1.0),
+          );
+        }
+      }
+      if (bookmark == null && _latestDistance > 24 && read == null) return;
+      if (widget.openingContent != null ||
+          widget.presentation.history.loading ||
+          widget.presentation.history.error != null) {
+        read = null;
+      }
+      widget.presentation.recordReading(
+        _latestDistance <= 24 ? null : bookmark,
+        readThrough: read,
+      );
+      if (read != null && read != _reportedReadThrough) {
+        _reportedReadThrough = read;
+        widget.onReadThrough?.call(read);
+      }
+      final target = widget.notificationReading?.notificationReadTarget;
+      if (read != null && target?.kind == 'answer') {
+        final presentation =
+            timeline_facts.TranscriptTimeline.notificationAnswerPresentation(
+              widget.notificationReading!.messages,
+              presentationId: widget.notificationReading!.messagePresentationId,
+              messageId: target!.messageId,
+            );
+        final answerId = widget.presentation.timeline.entries
+            .where((entry) => entry.presentationId == presentation)
+            .firstOrNull
+            ?.id;
+        if (answerId is int && read >= answerId) {
+          widget.onAnswerRead?.call(target);
+        }
+      }
+    });
   }
 
   final _viewport = GlobalKey();
@@ -125,6 +211,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       );
 
   void _recordRowHeight(Key key, TranscriptAnchorBox row, double height) {
+    _mountedAnchors.add(row);
     final previous = _rowHeights[key];
     _rowHeights[key] = height;
     if (previous != null) _scroll.recordRowHeightChange(row, height - previous);
@@ -145,10 +232,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   late String _streaming;
   Object? _streamingPresentationId;
   String? _segment;
-  late bool _restoringMarkdown =
-      widget.focusedMessageId == null && widget.presentation.scrollOffset > 0;
   late final _jumpLabel = ValueNotifier<String?>(
-    widget.focusedMessageId == null && widget.presentation.scrollOffset > 48
+    widget.focusedMessageId == null &&
+            widget.presentation.readingPosition.resume != null
         ? 'Latest'
         : null,
   );
@@ -161,14 +247,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         .where((entry) => !entry.streaming)
         .lastOrNull
         ?.presentationId;
-    final retained =
-        _retainedTranscriptLayouts[widget.presentation.readingIdentity];
-    if (widget.focusedMessageId == null &&
-        widget.presentation.scrollOffset > 0 &&
-        retained?.segment == widget.presentation.segment) {
-      _readingThrough = retained?.readingThrough;
-      _hasNewContent = _readingThrough != null && _readingThrough != _newestId;
-    }
     _streaming = widget.presentation.streaming;
     _streamingPresentationId = widget.presentation.timeline.entries
         .where((entry) => entry.streaming)
@@ -217,31 +295,50 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   }
 
   void _finishMarkdownRestoration() {
-    if (!mounted || !_restoringMarkdown) return;
-    var pending = false;
-    void visit(Element element) {
-      if (pending) return;
-      if (element is StatefulElement &&
-          element.state is BackgroundMarkdownContentState &&
-          (element.state as BackgroundMarkdownContentState).pending) {
-        pending = true;
-        return;
-      }
-      element.visitChildren(visit);
+    if (!mounted ||
+        !_restoringMarkdown ||
+        _placingResume ||
+        !_scroll.hasClients) {
+      return;
     }
-
-    (context as Element).visitChildren(visit);
-    if (!pending) {
+    final resume = _resume;
+    if (resume == null) return;
+    final row = _mountedRows.entries
+        .where((entry) => entry.value.id == resume.messageId)
+        .firstOrNull
+        ?.key;
+    if (row == null || !row.attached || !row.hasSize || row.contentPending) {
+      return;
+    }
+    final target =
+        row.size.height * (1 - resume.fraction) -
+        _scroll.position.viewportDimension * (1 - resume.alignment);
+    _placingResume = true;
+    _scroll.jumpTo(
+      target.clamp(
+        _scroll.position.minScrollExtent,
+        _scroll.position.maxScrollExtent,
+      ),
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _cancelMarkdownRestoration();
-      if (_scroll.hasClients) {
-        _recordScrollOffset(_scroll.offset);
-      }
-    }
+      _updateJump();
+    });
+    WidgetsBinding.instance.scheduleFrame();
   }
 
   void _cancelMarkdownRestoration() {
+    _placingResume = false;
+    final changed = _restoringMarkdown;
     _restoringMarkdown = false;
-    _scroll.finishInitialOffsetRestoration();
+    _resume = null;
+    if (changed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+      WidgetsBinding.instance.scheduleFrame();
+    }
   }
 
   void _revealFocusedRow() {
@@ -288,6 +385,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           _revealedNotificationGeneration !=
               notification.notificationFocusGeneration) {
         _cancelMarkdownRestoration();
+        if (_centerMessage != null) {
+          setState(() {
+            _centerMessage = null;
+            _readingThrough = null;
+          });
+          _scheduleNoticeVisibility();
+          return;
+        }
         if (_noticeRevealGeneration !=
             notification.notificationFocusGeneration) {
           _noticeRevealGeneration = notification.notificationFocusGeneration;
@@ -327,7 +432,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         }
       }
       final target = notification.notificationReadTarget;
-      if (target == null) return;
+      if (target == null || target.kind == 'answer') return;
       final viewport = _viewport.currentContext?.findRenderObject();
       final answer = _notificationAnchor(
         target,
@@ -342,7 +447,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       final answerBounds = answer.localToGlobal(Offset.zero) & answer.size;
       if (bounds.intersect(answerBounds).height >= 16 &&
           bounds.overlaps(answerBounds)) {
-        widget.onAnswerVisible?.call(target);
+        widget.onAnswerRead?.call(target);
       }
     });
   }
@@ -350,7 +455,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   void _updateJump() {
     if (!mounted || !_scroll.hasClients) return;
     _scheduleNoticeVisibility();
-    final distance = _scroll.offset.abs();
+    _scheduleReadingObservation();
+    if (_restoringMarkdown) return;
+    final distance = _latestDistance;
     if (distance <= 24) {
       _hasNewContent = false;
       if (_readingThrough != null && !_admittingLatest) {
@@ -360,12 +467,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           if (mounted &&
               !_capturing &&
               _scroll.hasClients &&
-              _scroll.offset.abs() <= 24) {
+              _latestDistance <= 24) {
             setState(() => _readingThrough = null);
           }
         });
-      } else if (!_capturing && _readingThrough == null) {
-        widget.onLatestVisible?.call();
       }
     }
     final attention = widget.presentation.needsInput;
@@ -384,8 +489,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _cancelMarkdownRestoration();
     _scroll.releaseExpansionAnchor();
     _jumping = true;
-    if (_readingThrough != null) {
-      setState(() => _readingThrough = null);
+    widget.presentation.recordReading(null);
+    if (_readingThrough != null || _centerMessage != null) {
+      setState(() {
+        _readingThrough = null;
+        _centerMessage = null;
+      });
       await WidgetsBinding.instance.endOfFrame;
       if (!mounted || !_scroll.hasClients) return;
     }
@@ -397,6 +506,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   @override
   void didUpdateWidget(covariant ProfileTranscript oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.presentation.readingPosition.readThrough != null &&
+        widget.presentation.readingPosition.readThrough == null) {
+      _reportedReadThrough = null;
+    }
     if (oldWidget.controller != widget.controller) {
       if (oldWidget.controller?._state == this) {
         oldWidget.controller?._state = null;
@@ -408,7 +521,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final atBottom =
         !_scroll.hasExpansionAnchor &&
         (_jumping ||
-            (_scroll.offset.abs() <= 0.5 &&
+            (_latestDistance <= 0.5 &&
                 !_scroll.position.isScrollingNotifier.value));
     final newest = widget.presentation.timeline.entries
         .where((entry) => !entry.streaming)
@@ -429,7 +542,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         atBottom ||
         widget.notificationReading?.notificationFocus != null) {
       _readingThrough = null;
-    } else if (_readingThrough == null &&
+    } else if (_centerMessage == null &&
+        _readingThrough == null &&
         newest != _newestId &&
         !oldWidget.presentation.timeline.hasLiveMessage &&
         !widget.presentation.timeline.hasLiveMessage &&
@@ -465,9 +579,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           gesture != _gestureGeneration) {
         return;
       }
-      if (!_restoringMarkdown) {
-        _recordScrollOffset(_scroll.offset);
-      }
+      _scheduleReadingObservation();
       _updateJump();
     });
   }
@@ -476,8 +588,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     TranscriptAnchorBox? growingRow, {
     TranscriptAnchorBox? Function()? replacement,
   }) {
-    // A restored pixel offset already includes the old rendered heights.
-    // Anchoring initial empty Markdown bodies would add that growth twice.
+    // The bookmarked row establishes its own origin during initial layout.
     if (_restoringMarkdown ||
         _scroll.hasExpansionAnchor ||
         widget.focusedMessageId != null ||
@@ -487,9 +598,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final atBottom =
         !_scroll.hasExpansionAnchor &&
         (_jumping ||
-            (_scroll.offset.abs() <= 0.5 &&
+            (_latestDistance <= 0.5 &&
                 !_scroll.position.isScrollingNotifier.value));
-    GlobalKey? anchor;
+    TranscriptAnchorBox? anchor;
     double? top;
     final viewport = _viewport.currentContext?.findRenderObject();
     if (!atBottom && viewport is RenderBox) {
@@ -505,44 +616,23 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           return;
         }
       }
-      for (final key in {..._rows.values, _tail, _executionRow}) {
-        final box = key.currentContext?.findRenderObject();
-        if (box is! RenderBox || !box.hasSize) continue;
+      for (final box in _mountedAnchors) {
+        if (!box.attached || !box.hasSize) continue;
         final y = box.localToGlobal(Offset.zero).dy;
         if (y < end &&
             y + box.size.height > start &&
             (top == null || y < top)) {
-          anchor = key;
+          anchor = box;
           top = y;
         }
       }
     }
-    _scroll.preserveReaderAnchor(
-      anchor?.currentContext?.findRenderObject() as TranscriptAnchorBox?,
-    );
+    _scroll.preserveReaderAnchor(anchor);
   }
 
   @override
   void dispose() {
     if (widget.controller?._state == this) widget.controller?._state = null;
-    if (widget.focusedMessageId == null &&
-        !_restoringMarkdown &&
-        _scroll.hasClients) {
-      _recordScrollOffset(_scroll.offset);
-    }
-    if (widget.focusedMessageId == null && !_restoringMarkdown) {
-      final retained = _RetainedTranscriptLayout()
-        ..segment = widget.presentation.segment
-        ..readingThrough = _lastScrollOffset > 0
-            ? _readingThrough ?? _newestId
-            : null;
-      for (final entry in _rows.entries) {
-        final height = _rowHeights[entry.value];
-        if (height != null) retained.heights[entry.key] = height;
-      }
-      _retainedTranscriptLayouts[widget.presentation.readingIdentity] =
-          retained;
-    }
     _scroll.dispose();
     _jumpLabel.dispose();
     super.dispose();
@@ -574,6 +664,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         : 0;
     final presentation = widget.presentation;
     _scheduleNoticeVisibility();
+    _scheduleReadingObservation();
     final timeline = _readingThrough == null
         ? widget.presentation.timeline
         : widget.presentation.timeline.through(_readingThrough!);
@@ -584,6 +675,39 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final rows = timeline.sections.reversed
         .where((section) => !identical(section, _joinedLiveActivity))
         .toList();
+    if (!_positionChosen && presentation.history.available) {
+      _positionChosen = true;
+      _resume = widget.notificationReading?.notificationFocus == null
+          ? presentation.readingPosition.resume
+          : null;
+      _centerMessage = _resume?.messageId;
+      _restoringMarkdown = _resume != null;
+    }
+    var centerRow = _centerMessage == null
+        ? -1
+        : rows.indexWhere(
+            (section) =>
+                section.messages.any((entry) => entry.id == _centerMessage),
+          );
+    if (_restoringMarkdown && centerRow < 0) {
+      if (presentation.history.hasOlder &&
+          !presentation.history.loading &&
+          presentation.history.error == null &&
+          !_olderLoadScheduled) {
+        _olderLoadScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) async {
+          _olderLoadScheduled = false;
+          if (mounted && _restoringMarkdown) await widget.onLoadOlder?.call();
+        });
+      } else if (!presentation.history.hasOlder &&
+          !presentation.history.loading &&
+          presentation.history.error == null &&
+          widget.openingContent == null) {
+        // A deleted/expired message no longer supplies a meaningful origin.
+        _centerMessage = null;
+        _cancelMarkdownRestoration();
+      }
+    }
     final liveAnswerIndex = rows.indexWhere(
       (section) => !section.isActivity && section.messages.last.streaming,
     );
@@ -640,6 +764,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       if (tailContent.isNotEmpty)
         TranscriptScrollAnchor(
           key: _tail,
+          onDetached: _mountedAnchors.remove,
           initialHeight: _rowHeights[_tail] ?? 0,
           onHeightChanged: (row, height) =>
               _recordRowHeight(_tail, row, height),
@@ -697,14 +822,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       for (final id in presentations) {
         _rows[id] = key;
       }
-      if (existing == null) {
-        final retained =
-            _retainedTranscriptLayouts[presentation.readingIdentity];
-        if (retained?.segment == presentation.segment) {
-          final height = retained?.heights[presentations.last];
-          if (height != null) _rowHeights[key] = height;
-        }
-      }
       keys.add(key);
       usedKeys.add(key);
     }
@@ -753,9 +870,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       child: NotificationListener<ScrollMetricsNotification>(
         onNotification: (event) {
           if (event.depth == 0) {
-            if (!_restoringMarkdown) {
-              _recordScrollOffset(event.metrics.pixels);
-            }
+            _scheduleReadingObservation();
             _updateJump();
           }
           return false;
@@ -763,6 +878,19 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         child: NotificationListener<ScrollNotification>(
           onNotification: (event) {
             if (event.depth != 0) return false;
+            if (event is UserScrollNotification) {
+              _userScrolling = event.direction != ScrollDirection.idle;
+            }
+            if (event is ScrollStartNotification && event.dragDetails != null) {
+              _userScrolling = true;
+            }
+            if (_userScrolling &&
+                (event is ScrollUpdateNotification &&
+                        (event.scrollDelta ?? 0) < 0 ||
+                    event is OverscrollNotification && event.overscroll < 0)) {
+              _readScrollPending = true;
+            }
+            if (event is ScrollEndNotification) _userScrolling = false;
             if (event is ScrollStartNotification && event.dragDetails != null ||
                 event is ScrollUpdateNotification &&
                     event.dragDetails != null) {
@@ -773,9 +901,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               _jumping = false;
               _scroll.releaseExpansionAnchor();
             }
-            if (!_restoringMarkdown) {
-              _recordScrollOffset(event.metrics.pixels);
-            }
+            _scheduleReadingObservation();
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _updateJump();
             });
@@ -790,29 +916,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             return false;
           },
           child: LayoutBuilder(
-            builder: (_, constraints) => ListView.builder(
-              key: const ValueKey('profile-transcript'),
-              controller: _scroll,
-              scrollCacheExtent: ScrollCacheExtent.pixels(
-                (constraints.maxHeight / 2).clamp(0.0, 250.0),
-              ),
-              reverse: true,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: BotConversationScope.maybeOf(context) == null
-                  ? const EdgeInsets.symmetric(vertical: WingSpacing.sm)
-                  : const EdgeInsets.only(top: 28, bottom: 8),
-              findChildIndexCallback: (key) => indices[key],
-              itemCount:
-                  tail.length +
-                  rows.length +
-                  1 +
-                  (executionIndex == null ? 0 : 1),
-              itemBuilder: (_, index) {
+            builder: (_, constraints) {
+              Widget itemBuilder(BuildContext context, int index) {
                 if (index < tail.length) return tail[index];
                 final contentIndex = index - tail.length;
                 if (executionIndex != null && contentIndex == executionIndex) {
                   return TranscriptScrollAnchor(
                     key: _executionRow,
+                    onDetached: _mountedAnchors.remove,
                     initialHeight: _rowHeights[_executionRow] ?? 0,
                     onHeightChanged: (row, height) =>
                         _recordRowHeight(_executionRow, row, height),
@@ -840,8 +951,37 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                   return TranscriptScrollAnchor(
                     key: keys[rowIndex],
                     initialHeight: _rowHeights[keys[rowIndex]] ?? 0,
-                    onHeightChanged: (row, height) =>
-                        _recordRowHeight(keys[rowIndex], row, height),
+                    onDetached: (box) {
+                      _mountedRows.remove(box);
+                      _mountedAnchors.remove(box);
+                    },
+                    onHeightChanged: (box, height) {
+                      _recordRowHeight(keys[rowIndex], box, height);
+                      final id =
+                          section.messages
+                              .where((entry) => entry.id == _centerMessage)
+                              .firstOrNull
+                              ?.id ??
+                          row.id;
+                      if (id is int && id >= 0) {
+                        _mountedRows[box] = (
+                          id: id,
+                          readable:
+                              !section.isActivity &&
+                              !row.streaming &&
+                              (row.message.kind ==
+                                      TranscriptMessageKind.dialogue ||
+                                  row.message.kind ==
+                                      TranscriptMessageKind.discussion),
+                        );
+                      }
+                      _scheduleReadingObservation();
+                      if (_restoringMarkdown) {
+                        WidgetsBinding.instance.addPostFrameCallback(
+                          (_) => _finishMarkdownRestoration(),
+                        );
+                      }
+                    },
                     child: Padding(
                       padding: EdgeInsets.only(
                         top: clearActivity ? 28 : 0,
@@ -937,8 +1077,91 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                         : _historyEdge(),
                   ),
                 );
-              },
-            ),
+              }
+
+              final count =
+                  tail.length +
+                  rows.length +
+                  1 +
+                  (executionIndex == null ? 0 : 1);
+              final cache = ScrollCacheExtent.pixels(
+                (constraints.maxHeight / 2).clamp(0.0, 250.0),
+              );
+              final padding = BotConversationScope.maybeOf(context) == null
+                  ? const EdgeInsets.symmetric(vertical: WingSpacing.sm)
+                  : const EdgeInsets.only(top: 28, bottom: 8);
+              if (centerRow < 0) {
+                return ListView.builder(
+                  key: const ValueKey('profile-transcript'),
+                  controller: _scroll,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  reverse: true,
+                  scrollCacheExtent: cache,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: padding,
+                  findChildIndexCallback: (key) => indices[key],
+                  itemCount: count,
+                  itemBuilder: itemBuilder,
+                );
+              }
+              final pivot =
+                  tail.length +
+                  centerRow +
+                  (executionIndex != null && centerRow >= executionIndex
+                      ? 1
+                      : 0);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _finishMarkdownRestoration();
+              });
+              // Two lazy halves share the bookmarked message as their origin.
+              // Newer rows grow towards negative offsets; older rows grow up.
+              // Locating the origin never measures all intervening messages.
+              return CustomScrollView(
+                key: const ValueKey('profile-transcript'),
+                controller: _scroll,
+                physics: const AlwaysScrollableScrollPhysics(),
+                reverse: true,
+                center: _centerSliver,
+                scrollCacheExtent: cache,
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.only(bottom: padding.bottom),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) =>
+                            itemBuilder(context, pivot - index - 1),
+                        childCount: pivot,
+                        findChildIndexCallback: (key) {
+                          final index = indices[key];
+                          return index != null && index < pivot
+                              ? pivot - index - 1
+                              : null;
+                        },
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    key: _centerSliver,
+                    padding: EdgeInsets.only(top: padding.top),
+                    sliver: SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) => itemBuilder(context, pivot + index),
+                        childCount: count - pivot,
+                        findChildIndexCallback: (key) {
+                          final index = indices[key];
+                          return index != null && index >= pivot
+                              ? index - pivot
+                              : null;
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ),
       ),
@@ -973,7 +1196,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       );
     }
     return StudioPageLoading(
-      active: _historyBlocksReading,
+      active:
+          _historyBlocksReading ||
+          _restoringMarkdown && widget.presentation.history.error == null,
       label: 'Loading history',
       child: Column(
         children: [
@@ -1006,6 +1231,19 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     child: transcript,
                   ),
                 ),
+                if (_restoringMarkdown && presentation.history.error != null)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: Material(
+                      color: Theme.of(context).colorScheme.surface,
+                      child: Padding(
+                        padding: const EdgeInsets.all(WingSpacing.lg),
+                        child: _historyEdge(),
+                      ),
+                    ),
+                  ),
                 if (!needsInput)
                   Positioned(bottom: 8, left: 0, right: 0, child: navigation),
               ],

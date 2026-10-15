@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../models/transcript_position.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/bots.dart';
@@ -846,14 +847,16 @@ final class _GroupContinuation {
 final class BotGroupTranscriptReading implements TranscriptReader {
   BotGroupTranscriptReading._(this._session);
   final BotGroupSession _session;
-  double _offset = 0;
+  late final _readingMemory = _session.preferences.readingPositions.group(
+    _session.group.key,
+  );
   @override
   List<Map<String, dynamic>> get messages => List.unmodifiable([
     for (final event in _session.events.where(
       (event) => event.isTranscriptEntry,
     ))
       Map<String, dynamic>.unmodifiable({
-        'id': '${_session.group.id}:${event.sequence}',
+        'id': event.sequence,
         'role': event.kind == 'message.user' ? 'user' : 'assistant',
         'content': event.isPass ? 'Passed' : event.text,
         '_discussion_event': event,
@@ -885,9 +888,10 @@ final class BotGroupTranscriptReading implements TranscriptReader {
       _session._historyAvailable ||
       _session._events.values.any((event) => event.isTranscriptEntry);
   @override
-  double get historyScrollOffset => _offset;
+  TranscriptPosition get readingPosition => _readingMemory.position;
   @override
   String get streaming => '';
   @override
-  void recordScrollOffset(double offset) => _offset = offset;
+  void recordReading(TranscriptBookmark? resume, {int? readThrough}) =>
+      _readingMemory.record(resume, readThrough: readThrough);
 }

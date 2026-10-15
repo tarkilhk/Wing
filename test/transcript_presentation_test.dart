@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_position.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import 'package:wing/core/models/transcript_reader.dart';
@@ -21,13 +22,17 @@ class _Reading implements TranscriptReader {
   @override
   bool historyUnavailable = false;
   @override
-  double historyScrollOffset = 0;
+  TranscriptPosition readingPosition = const TranscriptPosition();
   @override
   String streaming = '';
   @override
   Object messagePresentationId(Map<String, dynamic> row) => row['id']!;
   @override
-  void recordScrollOffset(double offset) => historyScrollOffset = offset;
+  void recordReading(TranscriptBookmark? resume, {int? readThrough}) =>
+      readingPosition = TranscriptPosition(
+        resume: resume,
+        readThrough: readThrough,
+      );
 
   TranscriptPresentation capture() => TranscriptPresentation.capture(
     identity: 'conversation',
@@ -77,13 +82,15 @@ void main() {
   );
 
   test('reading position writes stay with the captured conversation', () {
-    final first = _Reading()..historyScrollOffset = 80;
-    final second = _Reading()..historyScrollOffset = 20;
+    final first = _Reading()
+      ..recordReading(const TranscriptBookmark(messageId: 80));
+    final second = _Reading()
+      ..recordReading(const TranscriptBookmark(messageId: 20));
     final captured = first.capture();
-    captured.recordScrollOffset(120);
-    expect(first.historyScrollOffset, 120);
-    expect(second.historyScrollOffset, 20);
-    expect(captured.scrollOffset, 80);
-    expect(first.capture().scrollOffset, 120);
+    captured.recordReading(const TranscriptBookmark(messageId: 120));
+    expect(first.readingPosition.resume?.messageId, 120);
+    expect(second.readingPosition.resume?.messageId, 20);
+    expect(captured.readingPosition.resume?.messageId, 80);
+    expect(first.capture().readingPosition.resume?.messageId, 120);
   });
 }

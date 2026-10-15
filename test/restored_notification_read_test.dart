@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_position.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
@@ -374,7 +375,9 @@ void main() {
             hasLength(1),
           );
           final previousChat = (await controller.openSession(key))!;
-          previousChat.reading.recordScrollOffset(savedOffset);
+          previousChat.reading.recordReading(
+            const TranscriptBookmark(messageId: 1),
+          );
           await controller.updateDraft(
             previousChat,
             'An unsent draft to preserve',
@@ -412,7 +415,7 @@ void main() {
           isTrue,
         );
         if (savedOffset > 0) {
-          expect(chat.reading.historyScrollOffset, lessThan(savedOffset));
+          expect(chat.reading.readingPosition.resume?.messageId, isNot(1));
           expect(chat.composer.observation.text, 'An unsent draft to preserve');
           expect(
             tester
@@ -426,6 +429,12 @@ void main() {
         }
         expect(chat.reading.historyError, isNull);
         expect(chat.runtime.offline, isFalse);
+        expect(cancelled, isNot(contains(seedSink.shown.first.id)));
+        await tester.drag(
+          find.byKey(const ValueKey('profile-transcript')),
+          const Offset(0, -700),
+        );
+        await tester.pumpAndSettle();
         expect(cancelled, contains(seedSink.shown.first.id));
         expect(controller.visible, isTrue);
         await tester.tap(find.byTooltip('Attach file'));

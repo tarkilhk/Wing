@@ -207,8 +207,8 @@ void main() {
                           )
                         : null,
                     notificationReading: chat.reading,
-                    onAnswerVisible: (target) =>
-                        controller.notificationAnswerVisible(chat, target),
+                    onAnswerRead: (target) =>
+                        controller.notificationAnswerRead(chat, target),
                     onRefreshHistory: () => controller.refreshHistory(chat),
                     onLoadOlder: () => loadOlderReading(),
                     messageBuilder: (m) => ProfileMessage(message: m.message),
@@ -254,7 +254,7 @@ void main() {
             final count = chat.reading.messages.length;
             await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
             await tester.pumpAndSettle();
-            expect(chat.reading.historyScrollOffset, closeTo(0, 1));
+            expect(chat.reading.readingPosition.resume, isNull);
             expect(chat.reading.messages.length, count);
           }
           // Refresh keeps the older prefix when the server's newest page overlaps.

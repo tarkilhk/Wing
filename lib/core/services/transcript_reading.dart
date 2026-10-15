@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../models/transcript_position.dart';
+import 'conversation_reading_memory.dart';
 
 import '../models/notification_focus.dart';
 import '../models/transcript_reader.dart';
@@ -16,12 +18,19 @@ import 'workspace_connection_failure.dart';
 /// Sole writer of a chat's transcript rows, read revisions and presentation IDs.
 /// It borrows transport; the coordinator supplies captured publication authority.
 final class TranscriptReading implements TranscriptReader {
-  TranscriptReading({required ProfileGateway gateway})
-    : _gateway = gateway,
-      scope = gateway.scope;
+  TranscriptReading({
+    required ProfileGateway gateway,
+    ConversationReadingMemory? readingMemory,
+  }) : readingMemory = readingMemory ?? ConversationReadingMemory(),
+       _gateway = gateway,
+       scope = gateway.scope;
 
   /// Saved rows and live display buffers without transport or command authority.
-  TranscriptReading.passive({required this.scope}) : _gateway = null;
+  TranscriptReading.passive({required this.scope})
+    : readingMemory = ConversationReadingMemory(),
+      _gateway = null;
+
+  ConversationReadingMemory readingMemory;
 
   static const _observedToolLimit = 256;
 
@@ -37,7 +46,6 @@ final class TranscriptReading implements TranscriptReader {
   bool _historyPaging = false;
   String? _historyError;
   bool _historyUnavailable = false;
-  double _historyScrollOffset = 0;
   bool _closed = false;
   String _streaming = '';
   Map<String, dynamic>? _streamingMessage;
@@ -202,7 +210,7 @@ final class TranscriptReading implements TranscriptReader {
   bool get historyAvailable =>
       _historySessionId != null || _messages.isNotEmpty;
   @override
-  double get historyScrollOffset => _historyScrollOffset;
+  TranscriptPosition get readingPosition => readingMemory.position;
   @override
   String get streaming => _streaming;
   Map<String, dynamic>? get streamingMessage => _streamingMessage;
@@ -212,8 +220,8 @@ final class TranscriptReading implements TranscriptReader {
       _messagePresentations[row] ??= Object();
 
   @override
-  void recordScrollOffset(double offset) {
-    if (!_closed) _historyScrollOffset = offset;
+  void recordReading(TranscriptBookmark? resume, {int? readThrough}) {
+    if (!_closed) readingMemory.record(resume, readThrough: readThrough);
   }
 
   void cancelReads() {

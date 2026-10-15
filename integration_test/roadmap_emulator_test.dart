@@ -525,7 +525,7 @@ void main() {
     await tester.tap(inputJump);
     await _settle(tester);
 
-    expect(chat.reading.historyScrollOffset, closeTo(0, 1));
+    expect(chat.reading.readingPosition.resume, isNull);
     expect(chat.runtime.secureInput?.requestId, 'roadmap-vault-unlock');
     expect(find.text('Unlock Roadmap Vault'), findsOneWidget);
     await captureJourney(tester, 'vault-unlock');

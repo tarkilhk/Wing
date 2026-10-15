@@ -1,4 +1,5 @@
 import '../models/bots.dart';
+import 'conversation_reading_memory.dart';
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -14,6 +15,8 @@ class _MessageDraftWrites {
 class BotsPreferences {
   BotsPreferences(this._preferences);
   final SharedPreferences _preferences;
+  ConversationReadingRegistry get readingPositions =>
+      ConversationReadingRegistry(_preferences);
   static final _draftWrites = Expando<_MessageDraftWrites>();
   static final _approvalWrites = Expando<Map<String, Future<void>>>();
   _MessageDraftWrites get _writes =>

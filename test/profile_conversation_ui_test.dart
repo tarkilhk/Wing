@@ -440,10 +440,7 @@ void main() {
       final count = controller.current!.chat!.reading.messages.length;
       await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
       await tester.pumpAndSettle();
-      expect(
-        controller.current!.chat!.reading.historyScrollOffset,
-        closeTo(0, 1),
-      );
+      expect(controller.current!.chat!.reading.readingPosition.resume, isNull);
       expect(controller.current!.chat!.reading.messages.length, count);
       expect(find.byKey(const ValueKey('jump-to-latest')), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());

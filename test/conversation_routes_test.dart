@@ -82,7 +82,7 @@ void _expectCollapsedActivity() {
       matching: find.byType(MarkdownMessageContent, skipOffstage: false),
       skipOffstage: false,
     ),
-    findsNothing,
+    findsOneWidget,
   );
 }
 

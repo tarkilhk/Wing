@@ -571,7 +571,7 @@ void main() {
   );
 
   test(
-    'opening an unread chat marks every loaded owner row read after history',
+    'opening retains unread until the latest saved answer is visibly read',
     () async {
       await loadNewestUnread();
       final resource = controller.current!;
@@ -589,7 +589,23 @@ void main() {
           .entries
           .singleWhere((entry) => entry.sessionKey == key());
       await browser.open(target);
-
+      expect(host.updates, isEmpty);
+      final chat = controller.current!.chat!;
+      controller.setRouteVisibility(controller, true);
+      chat.reading.installSavedHistory([
+        {'id': 1, 'role': 'user', 'content': 'Question'},
+        {'id': 2, 'role': 'assistant', 'content': 'Earlier reply'},
+        {'id': 3, 'role': 'assistant', 'content': 'Latest reply'},
+        {'id': 4, 'role': 'user', 'content': 'Thanks'},
+      ]);
+      await controller.acknowledgeVisibleReading(chat, 2);
+      expect(
+        host.updates,
+        isEmpty,
+        reason: 'An older answer cannot clear a newer one',
+      );
+      chat.reading.recordReading(null, readThrough: 4);
+      await controller.acknowledgeVisibleReading(chat, 4);
       expect(host.updates, hasLength(1));
       expect(host.updates.single.$1, 'personal');
       expect(host.updates.single.$2, 'sessions/newest');
@@ -614,6 +630,17 @@ void main() {
         isFalse,
       );
 
+      await controller.mutateSession(
+        key(),
+        changes: {'unread': true},
+        canDispatch: () => true,
+      );
+      expect(chat.reading.readingPosition.readThrough, isNull);
+      chat.reading.recordReading(null, readThrough: 4);
+      await controller.acknowledgeVisibleReading(chat, 4);
+      expect(host.updates, hasLength(3));
+      expect(host.updates.last.$3['unread'], false);
+
       host.updates.clear();
       controller.showList();
       await controller.openSession(key());
@@ -622,7 +649,7 @@ void main() {
   );
 
   test(
-    'direct open outside loaded rows marks the server session read after history',
+    'direct open outside loaded rows does not infer that answers were read',
     () async {
       final directKey = key('notification-only');
       expect(
@@ -633,11 +660,7 @@ void main() {
       );
 
       await controller.openSession(directKey);
-
-      expect(host.updates, hasLength(1));
-      expect(host.updates.single.$1, 'personal');
-      expect(host.updates.single.$2, 'sessions/notification-only');
-      expect(host.updates.single.$3, {'unread': false, 'profile': 'personal'});
+      expect(host.updates, isEmpty);
     },
   );
 
@@ -727,6 +750,12 @@ void main() {
       await controller.openSession(key());
 
       final chat = controller.current!.chat!;
+      controller.setRouteVisibility(controller, true);
+      chat.reading.installSavedHistory([
+        {'id': 2, 'role': 'assistant', 'content': 'Viewed reply'},
+      ]);
+      chat.reading.recordReading(null, readThrough: 1);
+      await controller.acknowledgeVisibleReading(chat, 2);
       expect(controller.current!.selectedSession, 'newest');
       expect(
         controller.current!.sessions.firstWhere(
@@ -745,6 +774,7 @@ void main() {
         canDispatch: () => true,
       );
       expect(chat.markReadFailed, isFalse);
+      expect(chat.reading.readingPosition.readThrough, isNull);
       expect(
         controller.current!.sessions.firstWhere(
           (row) => row['id'] == 'newest',

@@ -256,6 +256,10 @@ void main() {
         );
         expect(fixture.readWrites, 0);
         await controller.openSession(key);
+        expect(fixture.readWrites, 0);
+        controller.setRouteVisibility(controller, true);
+        chat.reading.recordReading(null, readThrough: 2);
+        await controller.acknowledgeVisibleReading(chat, 2);
         await Future<void>.delayed(Duration.zero);
         expect(fixture.readWrites, 1);
         expect(
@@ -521,7 +525,9 @@ void main() {
         controller.setRouteVisibility(controller, true);
         fixture.failRead = failed;
         final target = chat.reading.notificationReadTarget!;
-        controller.notificationAnswerVisible(chat, target);
+        controller.notificationAnswerRead(chat, target);
+        chat.reading.recordReading(null, readThrough: 2);
+        await controller.acknowledgeVisibleReading(chat, 2);
         for (var tick = 0; tick < 20; tick++) {
           await Future<void>.delayed(Duration.zero);
         }
@@ -534,6 +540,7 @@ void main() {
           );
           fixture.failRead = false;
           await controller.openSession(key);
+          await controller.acknowledgeVisibleReading(chat, 2);
           await Future<void>.delayed(Duration.zero);
           expect(fixture.readWrites, 1);
           expect(chat.markReadFailed, isFalse);
@@ -1058,7 +1065,11 @@ void main() {
             c.key.sessionId == 'shared-id',
       );
       expect(before.unread, isTrue);
-      await controller.openSession(before.key);
+      final chat = (await controller.openSession(before.key))!;
+      expect(fixture.readWrites, 0);
+      controller.setRouteVisibility(controller, true);
+      chat.reading.recordReading(null, readThrough: 1);
+      await controller.acknowledgeVisibleReading(chat, 1);
       final after = controller.recentChats().singleWhere(
         (c) => c.key == before.key,
       );
@@ -1121,7 +1132,11 @@ void main() {
         await controller.refreshRecents();
         expect(controller.recentsProfileErrors, isNot(contains('personal')));
         expect(fixture.readWrites, writes);
-        await controller.openSession(key);
+        final chat = (await controller.openSession(key))!;
+        expect(fixture.readWrites, writes);
+        controller.setRouteVisibility(controller, true);
+        chat.reading.recordReading(null, readThrough: 1);
+        await controller.acknowledgeVisibleReading(chat, 1);
         expect(fixture.readWrites, writes + 1);
         expect(
           controller.recentChats().singleWhere((c) => c.key == key).unread,

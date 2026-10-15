@@ -8,15 +8,11 @@ class ExpansionScrollController extends ScrollController {
   ExpansionScrollController({
     required this.preserveViewportPosition,
     super.initialScrollOffset,
-    bool restoreInitialOffset = false,
-  }) : _restoringInitialOffset = restoreInitialOffset;
+  });
 
   // Input navigation must align controls with the new viewport bounds; ordinary
   // reading instead retains the visible row while lower chrome changes height.
   final bool Function() preserveViewportPosition;
-  bool _restoringInitialOffset;
-
-  void finishInitialOffsetRestoration() => _restoringInitialOffset = false;
 
   ExpansionAnchorBox? _anchor;
   bool _allowBottomGap = true;
@@ -74,8 +70,16 @@ class ExpansionScrollController extends ScrollController {
 
     final index = indexOf(row);
     final anchorIndex = indexOf(anchoredRow);
-    if (index != null && anchorIndex != null && index <= anchorIndex) {
-      _pendingHeight += delta;
+    final sliver = row.parentSliver;
+    if (index != null &&
+        anchorIndex != null &&
+        index <= anchorIndex &&
+        identical(sliver, anchoredRow.parentSliver)) {
+      if (sliver?.constraints.growthDirection == GrowthDirection.reverse) {
+        if (index < anchorIndex) _pendingHeight -= delta;
+      } else {
+        _pendingHeight += delta;
+      }
     }
   }
 
@@ -167,14 +171,13 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
         controller.preserveViewportPosition() &&
         hasPixels &&
         axisDirection == AxisDirection.up &&
-        pixels > .5 &&
+        pixels > minScrollExtent + .5 &&
         !isScrollingNotifier.value &&
-        !controller._restoringInitialOffset &&
         previous != nextViewport) {
       // Bottom controls can animate through several heights without a new
       // transcript update. Keep the visible row fixed through every frame.
       final target = (pixels + previous - nextViewport).clamp(
-        0.0,
+        minScrollExtent,
         double.infinity,
       );
       correctPixels(target);
@@ -185,16 +188,6 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
 
   @override
   bool applyContentDimensions(double minScrollExtent, double maxScrollExtent) {
-    if (controller._restoringInitialOffset) {
-      final target = controller.initialScrollOffset.clamp(
-        minScrollExtent,
-        maxScrollExtent,
-      );
-      if ((target - pixels).abs() > 0.01) {
-        correctPixels(target);
-        return false;
-      }
-    }
     final reader =
         controller._readerReplacement?.call() ?? controller._readerAnchor;
     controller._readerAnchor = null;
@@ -259,14 +252,18 @@ class TranscriptScrollAnchor extends SingleChildRenderObjectWidget {
     required super.child,
     this.initialHeight = 0,
     this.onHeightChanged,
+    this.onDetached,
   });
 
   final double initialHeight;
+  final ValueChanged<TranscriptAnchorBox>? onDetached;
   final void Function(TranscriptAnchorBox row, double height)? onHeightChanged;
 
   @override
   TranscriptAnchorBox createRenderObject(BuildContext context) =>
-      TranscriptAnchorBox(initialHeight)..onHeightChanged = onHeightChanged;
+      TranscriptAnchorBox(initialHeight)
+        ..onHeightChanged = onHeightChanged
+        ..onDetached = onDetached;
 
   @override
   void updateRenderObject(
@@ -274,6 +271,7 @@ class TranscriptScrollAnchor extends SingleChildRenderObjectWidget {
     TranscriptAnchorBox renderObject,
   ) {
     renderObject.onHeightChanged = onHeightChanged;
+    renderObject.onDetached = onDetached;
   }
 }
 
@@ -281,6 +279,15 @@ class TranscriptAnchorBox extends RenderProxyBox {
   TranscriptAnchorBox([this._height = 0]);
 
   double _height;
+  ValueChanged<TranscriptAnchorBox>? onDetached;
+  bool get contentPending => _pendingContent.isNotEmpty;
+
+  @override
+  void detach() {
+    onDetached?.call(this);
+    super.detach();
+  }
+
   void Function(TranscriptAnchorBox row, double height)? onHeightChanged;
   final _pendingContent = <Object>{};
   bool _pendingLayoutScheduled = false;
@@ -306,16 +313,30 @@ class TranscriptAnchorBox extends RenderProxyBox {
     }
   }
 
+  RenderSliverMultiBoxAdaptor? get parentSliver {
+    RenderObject item = this;
+    while (item.parent != null && item.parent is! RenderSliverMultiBoxAdaptor) {
+      item = item.parent!;
+    }
+    return item.parent is RenderSliverMultiBoxAdaptor
+        ? item.parent! as RenderSliverMultiBoxAdaptor
+        : null;
+  }
+
   double get leadingOffset {
     RenderObject item = this;
     while (item.parent != null && item.parent is! RenderSliverMultiBoxAdaptor) {
       item = item.parent!;
     }
     final data = item.parentData;
-    return (data is SliverMultiBoxAdaptorParentData
-            ? data.layoutOffset ?? 0
-            : 0) +
-        _height;
+    final offset = data is SliverMultiBoxAdaptorParentData
+        ? data.layoutOffset ?? 0
+        : 0;
+    final sliver = parentSliver;
+    final preceding = sliver?.constraints.precedingScrollExtent ?? 0;
+    return sliver?.constraints.growthDirection == GrowthDirection.reverse
+        ? -(preceding + offset)
+        : preceding + offset + _height;
   }
 
   @override

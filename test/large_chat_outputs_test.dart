@@ -134,7 +134,7 @@ void main() {
     await tester.settleMarkdown();
     expect(find.text('Search result'), findsNothing);
     expect(find.text('Saved /srv/latest.pdf'), findsOneWidget);
-    expect(chat.reading.historyScrollOffset, 0);
+    expect(chat.reading.readingPosition.resume, isNull);
 
     await tester.tap(find.byTooltip('Chat actions'));
     await tester.pumpAndSettle();

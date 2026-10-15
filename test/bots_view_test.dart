@@ -3063,7 +3063,7 @@ void main() {
         'fresh',
         'retained',
         'refresh pending',
-        'read acknowledgement pending',
+        'unread opening',
         'new messages',
       ]) {
         final revisit =
@@ -3091,7 +3091,7 @@ void main() {
                   'content': 'Latest request visible on opening',
                 },
               ];
-            if (entry == 'read acknowledgement pending') {
+            if (entry == 'unread opening') {
               browser.markReadDelay = Completer<void>();
             }
             addTearDown(() {
@@ -3150,11 +3150,17 @@ void main() {
             await tester.pumpAndSettle();
             Future<void> open() async {
               await tester.tap(find.text('Atlas').last);
-              await tester.pumpAndSettle();
+              for (var i = 0; i < 20; i++) {
+                await tester.pump(const Duration(milliseconds: 16));
+                await tester.runAsync(
+                  () => Future<void>.delayed(const Duration(milliseconds: 10)),
+                );
+              }
               await tester.settleMarkdown();
+              await tester.pumpAndSettle();
             }
 
-            if (entry == 'read acknowledgement pending') {
+            if (entry == 'unread opening') {
               await tester.tap(find.text('Atlas').last);
               for (var i = 0; i < 20; i++) {
                 await tester.pump();
@@ -3169,7 +3175,11 @@ void main() {
                     .hitTestable(),
                 findsOneWidget,
               );
-              expect(find.byType(StudioLoading), findsOneWidget);
+              expect(find.byType(StudioLoading), findsNothing);
+              expect(
+                controller.current!.chat!.reading.readingPosition.readThrough,
+                isNull,
+              );
               await _capture(
                 tester,
                 frame,
@@ -3192,7 +3202,7 @@ void main() {
                 anchor(),
                 findsOneWidget,
                 reason:
-                    'Saved message $anchorId, visible IDs ${tester.widgetList<ProfileMessage>(find.byType(ProfileMessage)).map((message) => message.message.id).toList()}, offset ${controller.current!.chat!.reading.historyScrollOffset}, previous top $anchorTop',
+                    'Saved message $anchorId, visible IDs ${tester.widgetList<ProfileMessage>(find.byType(ProfileMessage)).map((message) => message.message.id).toList()}, offset ${controller.current!.chat!.reading.readingPosition.resume}, previous top $anchorTop',
               );
               final viewport = tester.getRect(
                 find.byKey(const ValueKey('profile-transcript')),
@@ -3262,6 +3272,9 @@ void main() {
                   await tester.pump();
                 }
                 await tester.settleMarkdown();
+                for (var i = 0; i < 3; i++) {
+                  await tester.pump();
+                }
                 expectReadingPoint();
                 expect(find.byType(StudioLoading), findsOneWidget);
                 await _capture(

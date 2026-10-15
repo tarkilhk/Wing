@@ -1,4 +1,5 @@
 import 'transcript_reader.dart';
+import 'transcript_position.dart';
 import 'transcript_timeline.dart';
 
 /// One captured frame of a conversation. The viewport never reads mutable
@@ -25,8 +26,8 @@ final class TranscriptPresentation {
        segment = reader.historySessionId,
        streaming = reader.streaming,
        hasMessages = reader.messages.isNotEmpty,
-       scrollOffset = reader.historyScrollOffset,
-       _recordScrollOffset = reader.recordScrollOffset;
+       readingPosition = reader.readingPosition,
+       recordReading = reader.recordReading;
 
   final Object identity;
   final Object readingIdentity;
@@ -37,14 +38,13 @@ final class TranscriptPresentation {
   final bool hasMessages;
   final bool needsInput;
   final bool turnAdmissionBlocked;
-  final double scrollOffset;
-  final void Function(double) _recordScrollOffset;
+  final TranscriptPosition readingPosition;
+  final void Function(TranscriptBookmark? resume, {int? readThrough})
+  recordReading;
 
   bool get isEmpty => !hasMessages && streaming.isEmpty;
   bool get blocksReading =>
       history.loading && (history.paging || !history.available && isEmpty);
-
-  void recordScrollOffset(double offset) => _recordScrollOffset(offset);
 }
 
 /// Availability is an observation of the transcript, never inferred from

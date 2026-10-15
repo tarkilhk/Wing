@@ -2258,8 +2258,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         )
                       : null,
                   notificationReading: chat.reading,
-                  onAnswerVisible: (target) =>
-                      controller.notificationAnswerVisible(chat, target),
+                  onReadThrough: (id) =>
+                      controller.acknowledgeVisibleReading(chat, id),
+                  onAnswerRead: (target) =>
+                      controller.notificationAnswerRead(chat, target),
                   onRefreshHistory: () => controller.refreshHistory(chat),
                   onLoadOlder: () => controller.loadOlderMessages(chat),
                   activityTrailingBuilder: (section) {

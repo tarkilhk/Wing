@@ -157,7 +157,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _presentationVisible = visible;
     _syncVisibility();
     if (revealed) {
-      _acknowledgeLatest();
+      _acknowledgeReading();
       if (_restoreComposerFocus) {
         _restoreComposerFocus = false;
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -167,20 +167,17 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     }
   }
 
-  void _acknowledgeLatest() {
+  void _acknowledgeReading([int? visibleSequence]) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           !_visible ||
           ModalRoute.of(context)?.isCurrent != true ||
           _capturing ||
-          _inspectingDetails ||
-          _session.reading.historyScrollOffset.abs() > 24) {
+          _inspectingDetails) {
         return;
       }
-      final sequence = _session.events
-          .where((e) => e.isMessage)
-          .lastOrNull
-          ?.sequence;
+      final sequence =
+          visibleSequence ?? _session.reading.readingPosition.readThrough;
       if (sequence != null) {
         unawaited(_session.acknowledgeVisibleMessages(sequence));
       }
@@ -299,7 +296,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           ),
       ],
     );
-    if (mounted) _acknowledgeLatest();
+    if (mounted) _acknowledgeReading();
   }
 
   Widget _approvalCard(
@@ -521,7 +518,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
     _syncVisibility();
-    if (_foreground) _acknowledgeLatest();
+    if (_foreground) _acknowledgeReading();
   }
 
   @override
@@ -723,7 +720,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       _inspectingDetails = false;
       if (mounted) {
         _syncVisibility();
-        _acknowledgeLatest();
+        _acknowledgeReading();
       }
     }
   }
@@ -767,8 +764,11 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             BotGroupHistoryScreen(
               initialMemberId: member?.id,
               appearanceForMember: _session.appearance,
-              createSession: () =>
-                  BotGroupHistorySession(_session.repository, _session.group),
+              createSession: () => BotGroupHistorySession(
+                _session.repository,
+                _session.group,
+                readingPositions: _session.preferences.readingPositions,
+              ),
             ),
           ),
         ),
@@ -866,7 +866,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             onRefreshHistory: _refreshGroup,
             messageBuilder: _message,
             onCaptureChanged: _captureChanged,
-            onLatestVisible: _acknowledgeLatest,
+            onReadThrough: _acknowledgeReading,
             emptyContent: const Padding(
               padding: EdgeInsets.all(24),
               child: Text(

@@ -18,6 +18,7 @@ import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
 import 'package:wing/core/models/model_choice.dart';
 import 'dart:async';
+import 'conversation_reading_memory.dart';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
@@ -469,7 +470,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   /// App-owned failure; distinguish it from opaque command output in the UI.
   static const markReadFailureNotice =
-      'This chat opened, but it could not be marked as read. '
+      'The viewed answer could not be marked as read. '
       'Return to Chats and choose Mark as read.';
 
   final ConnectionAccess access;
@@ -1142,8 +1143,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
   /// answers, even though stock session activity can mark them unread.
   static bool? _recentUnreadAnswer(
     List<Map<String, dynamic>> messages,
-    num? lastRead,
-  ) {
+    num? lastRead, {
+    int? readThrough,
+  }) {
     for (final row in messages.reversed) {
       final message = TranscriptMessage.fromRow(row);
       final calls = row['tool_calls'];
@@ -1151,15 +1153,78 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (message.role != 'assistant' ||
           message.kind != TranscriptMessageKind.dialogue ||
           message.text.trim().isEmpty ||
-          (calls is List && calls.isNotEmpty) ||
-          time is! num ||
-          !time.isFinite) {
+          (calls is List && calls.isNotEmpty)) {
         continue;
       }
+      final id = row['id'];
+      if (readThrough != null && id is int) return id > readThrough;
+      if (time is! num || !time.isFinite) continue;
       return lastRead == null || time > lastRead;
     }
     final time = _latestMessageTime(messages);
     return lastRead != null && time != null && time <= lastRead ? false : null;
+  }
+
+  final _readAcknowledgements = Expando<int>();
+  final _readingAcknowledgementsPending = <ProfileChat>{};
+
+  /// Called with the message reached by the shared viewport's user-scroll rule.
+  /// Stock Hermes accepts a timestamp acknowledgement, not a message ID. The
+  /// in-memory watermark remains authoritative for detecting newer unseen IDs.
+  Future<void> acknowledgeVisibleReading(
+    ProfileChat chat,
+    int messageId,
+  ) async {
+    bool admitted() =>
+        !_closed &&
+        visible &&
+        identical(_current?.chat, chat) &&
+        !chat.runtime.opening &&
+        !chat.runtime.offline &&
+        !chat.reading.historyLoading &&
+        chat.reading.historyError == null;
+    if (!admitted() ||
+        _readingAcknowledgementsPending.contains(chat) ||
+        (_readAcknowledgements[chat] ?? -1) >= messageId) {
+      return;
+    }
+    final latestAnswer = chat.reading.messages.reversed.where((row) {
+      final message = TranscriptMessage.fromRow(row);
+      final calls = row['tool_calls'];
+      return row['id'] is int &&
+          message.role == 'assistant' &&
+          message.kind == TranscriptMessageKind.dialogue &&
+          message.text.trim().isNotEmpty &&
+          !(calls is List && calls.isNotEmpty);
+    }).firstOrNull;
+    final latestAnswerId = latestAnswer?['id'];
+    if (latestAnswerId is! int || latestAnswerId > messageId) return;
+    final generation = chat.reading.historyGeneration;
+    final key = chat.key;
+    _readingAcknowledgementsPending.add(chat);
+    try {
+      await mutateSession(
+        key,
+        changes: const {'unread': false},
+        observedReadThrough: messageId,
+        canDispatch: () =>
+            admitted() &&
+            chat.key == key &&
+            chat.reading.historyGeneration == generation,
+      );
+      if (!_closed) _readAcknowledgements[chat] = messageId;
+    } catch (_) {
+      if (admitted() && chat.reading.historyGeneration == generation) {
+        chat._markReadFailed = true;
+        _changed();
+      }
+    } finally {
+      _readingAcknowledgementsPending.remove(chat);
+      final newer = chat.reading.readingPosition.readThrough;
+      if (admitted() && newer != null && newer > messageId) {
+        unawaited(acknowledgeVisibleReading(chat, newer));
+      }
+    }
   }
 
   bool _recentChatUnread(ProfileSessionKey key) {
@@ -1171,6 +1236,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
             .firstOrNull;
     final observedAt = _recentMessageTimes[key];
     final chat = resource?._chats[key.sessionId];
+    final localRead = ConversationReadingRegistry(
+      preferences,
+    ).chat(key).position.readThrough;
+    if (localRead != null &&
+        chat != null &&
+        _recentUnreadAnswer(
+              chat.reading.messages,
+              null,
+              readThrough: localRead,
+            ) ==
+            true) {
+      return true;
+    }
     if (observedAt != null && chat != null) {
       final lastRead = row?['last_read_at'];
       final watermark =
@@ -1206,8 +1284,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final time = _latestMessageTime(page.rows);
     var preview = recentChatMessagePreview(page.rows);
     final watermark = lastRead is num && lastRead.isFinite ? lastRead : null;
-    bool? unread = checkUnread || watermark != null
-        ? _recentUnreadAnswer(page.rows, watermark)
+    final localRead = ConversationReadingRegistry(
+      preferences,
+    ).chat(ProfileSessionKey(resource.scope, id)).position.readThrough;
+    bool? unread = checkUnread || watermark != null || localRead != null
+        ? _recentUnreadAnswer(page.rows, watermark, readThrough: localRead)
         : false;
     while ((preview == null || unread == null) &&
         page.nextOffset != null &&
@@ -1220,7 +1301,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         inlineImages: false,
       );
       preview ??= recentChatMessagePreview(page.rows);
-      unread ??= _recentUnreadAnswer(page.rows, watermark);
+      unread ??= _recentUnreadAnswer(
+        page.rows,
+        watermark,
+        readThrough: localRead,
+      );
     }
     return (time: time, preview: preview ?? '', unread: unread ?? false);
   }
@@ -3011,7 +3096,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (_readingWindow(chat) == null) {
       return;
     }
-    chat.reading.recordScrollOffset(0);
+    chat.reading.recordReading(null);
     _activeReadingWindow = null;
     _changed();
   }
@@ -4234,16 +4319,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
             : 'Chat was deleted',
       );
     }
-    final openedSessionGeneration = resource._sessionGeneration;
-    final openedRows = <Map<String, dynamic>>[
-      ?_recentSessionRows[key],
-      ...resource.visibleSessions,
-      ...resource._sessions,
-    ].where((row) => row['id'] == key.sessionId).toList();
-    final markReadAfterOpen =
-        _recentChatUnread(key) ||
-        openedRows.any((row) => row['unread'] == true) ||
-        !openedRows.any((row) => row['unread'] == false);
     _cancelOlderLoads();
     var chat = resource._chats[key.sessionId];
     var replacedExpiredDraft = false;
@@ -4407,38 +4482,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (!chat.runtime.blocksTurnAdmission &&
           chat.reading.historyError == null) {
         chat.reading.updateStreaming('');
-      }
-      if (markReadAfterOpen &&
-          !chat._replaceableUnsubmittedRuntime &&
-          chat.reading.historyError == null &&
-          !chat.reading.historyLoading &&
-          chat.reading.historySessionId != null &&
-          !_closed &&
-          _current == resource &&
-          identical(resource._chats[chat._key.sessionId], chat) &&
-          resource._selectedSession == chat._key.sessionId &&
-          navigation == _navigationGeneration &&
-          resource._sessionGeneration == openedSessionGeneration &&
-          !resource._mutatingSessions.contains(chat._key.sessionId)) {
-        try {
-          final readChat = chat;
-          await mutateSession(
-            readChat._key,
-            changes: const {'unread': false},
-            canDispatch: () =>
-                !_closed &&
-                identical(_current, resource) &&
-                navigation == _navigationGeneration &&
-                identical(resource._chats[readChat._key.sessionId], readChat),
-          );
-        } catch (_) {
-          if (!_closed &&
-              _current == resource &&
-              identical(resource._chats[chat._key.sessionId], chat)) {
-            chat._markReadFailed = true;
-            _changed();
-          }
-        }
       }
       if (!replacedExpiredDraft) await _drainQueuedPrompts(chat);
     }
@@ -4698,12 +4741,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileSessionKey key, {
     Map<String, dynamic> changes = const {},
     bool delete = false,
+    int? observedReadThrough,
     required bool Function() canDispatch,
   }) => _retainWorkspaceOperation(
     () => _mutateSession(
       key,
       changes: changes,
       delete: delete,
+      observedReadThrough: observedReadThrough,
       canDispatch: canDispatch,
     ),
   );
@@ -4712,6 +4757,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileSessionKey key, {
     required Map<String, dynamic> changes,
     required bool delete,
+    required int? observedReadThrough,
     required bool Function() canDispatch,
   }) async {
     if (_closed || !canDispatch()) throw StateError('Workspace is closed');
@@ -4811,6 +4857,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _recentMessageTimes.remove(key);
       } else if (_recentSessionRows[key] case final row?) {
         _recentSessionRows[key] = {...row, ...updated};
+      }
+      if (changes.containsKey('unread') && observedReadThrough == null) {
+        ConversationReadingRegistry(preferences).chat(key).clearReadProgress();
+        if (chat != null) _readAcknowledgements[chat] = null;
       }
       _invalidateSessionLoad(resource);
       if (delete || changes.containsKey('archived')) {
@@ -5504,6 +5554,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       composer: composer,
       reading:
           TranscriptReading(
+            readingMemory: ConversationReadingRegistry(preferences).chat(key),
             gateway: _resource(key.workspace.profileName).gateway,
           )..restoreToolDurations(
             _snapshots.readToolDurations(

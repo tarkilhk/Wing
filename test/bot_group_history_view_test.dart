@@ -1362,7 +1362,7 @@ void main() {
             find.byType(ProfileTranscript),
           );
           expect(shared.notificationReading, isNull);
-          expect(shared.onAnswerVisible, isNull);
+          expect(shared.onAnswerRead, isNull);
           expect(shared.openingContent, isNull);
           expect(find.byType(TextField), findsNothing);
           expect(

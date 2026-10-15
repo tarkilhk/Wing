@@ -180,7 +180,7 @@ extension ProfileNotificationState on ProfileWorkspaceController {
     );
   }
 
-  void notificationAnswerVisible(ProfileChat chat, NotificationFocus target) {
+  void notificationAnswerRead(ProfileChat chat, NotificationFocus target) {
     if (_closed ||
         !visible ||
         _current?.chat != chat ||
@@ -192,27 +192,6 @@ extension ProfileNotificationState on ProfileWorkspaceController {
       return;
     }
     if (!chat.reading.acknowledgeNotificationRead(target)) return;
-    if (target.kind == 'answer' && _recentChatUnread(chat.key)) {
-      final runtime = chat.runtime.runtimeId;
-      _trackNotificationWork(() async {
-        try {
-          await mutateSession(
-            chat.key,
-            changes: const {'unread': false},
-            canDispatch: () =>
-                !_closed &&
-                visible &&
-                _current?.chat == chat &&
-                chat.runtime.runtimeId == runtime,
-          );
-        } catch (_) {
-          if (!_closed && _current?.chat == chat) {
-            chat._markReadFailed = true;
-            _changed();
-          }
-        }
-      });
-    }
     final callback = onNotificationRead;
     if (callback != null) {
       _trackNotificationWork(() => callback(chat._key, target.identity));

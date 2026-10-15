@@ -2485,6 +2485,16 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/subagent_timeline.dart"
+    },
+    "lib/core/models/transcript_position.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/transcript_position.dart"
+    },
+    "lib/core/services/conversation_reading_memory.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/conversation_reading_memory.dart"
     }
   }
 }

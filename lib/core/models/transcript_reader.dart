@@ -1,3 +1,5 @@
+import 'transcript_position.dart';
+
 /// Reading facts and local scroll memory shared by live and saved chat views.
 /// The transcript widget has no runtime or transport authority through this seam.
 abstract interface class TranscriptReader {
@@ -13,8 +15,8 @@ abstract interface class TranscriptReader {
   bool get historyPaging;
   String? get historyError;
   bool get historyUnavailable;
-  double get historyScrollOffset;
+  TranscriptPosition get readingPosition;
   String get streaming;
   Object messagePresentationId(Map<String, dynamic> row);
-  void recordScrollOffset(double offset);
+  void recordReading(TranscriptBookmark? resume, {int? readThrough});
 }
