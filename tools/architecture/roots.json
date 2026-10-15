@@ -14964,6 +14964,21 @@
       "path": "test/conversation_routes_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/subagent_timeline_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/subagent_timeline.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/subagent_timeline_session_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

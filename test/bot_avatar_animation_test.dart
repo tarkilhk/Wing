@@ -142,6 +142,7 @@ void main() {
                   viewState: view,
                   onViewChanged: (next) => setState(() => view = next),
                   onOpenMenu: () {},
+                  onOpenGroupMemberChat: (_, _) async {},
                   onOpenChat: (_) async {},
                   onOpenGroup: (_) async {},
                 ),
@@ -717,6 +718,7 @@ void main() {
                   viewState: view,
                   onViewChanged: (next) => setState(() => view = next),
                   onOpenMenu: () {},
+                  onOpenGroupMemberChat: (_, _) async {},
                   onOpenChat: (bot) async {
                     final key = await session.open(bot, canUse: () => true);
                     if (key != null) opened.add(key.sessionId);

@@ -1,7 +1,45 @@
+import 'package:flutter/foundation.dart';
+import 'chat_runtime.dart';
+import 'gateway_todo.dart';
+import 'transcript_reader.dart';
 import 'profile_session_key.dart';
 import 'gateway_insight.dart';
 import 'gateway_process.dart';
 import 'session_control.dart';
+
+/// Inspection facts and reads; control eligibility remains in each observation.
+abstract interface class SubagentInspectionSession implements Listenable {
+  ProfileSupervisionObservation get state;
+  Future<void> refreshSubagents();
+  SubagentInspectionDetail openSubagent(String id);
+}
+
+abstract interface class SubagentInspectionDetail implements Listenable {
+  SubagentSupervisionObservation get state;
+  SubagentTimelineReader? get timeline;
+  bool get supportsTail;
+  void setActive(bool value);
+  Future<void> refreshTail();
+  void retryTail();
+  Future<bool> steer(String text);
+  Future<void> interrupt();
+  void dispose();
+}
+
+/// Read-only facts and visit commands shared by child timeline views.
+abstract interface class SubagentTimelineReader
+    implements TranscriptReader, SubagentInspectionSession {
+  ChatRuntimeObservation get runtime;
+  Map<String, dynamic>? get streamingMessage;
+  List<GatewayTodo> get todos;
+  bool get liveAnswering;
+  String? get qualification;
+  String? get liveError;
+  void setActive(bool value);
+  Future<void> refresh();
+  Future<void> loadOlder();
+  void dispose();
+}
 
 /// Detached supervision facts. Runtime/session-control remain controller-owned.
 final class ProfileSupervisionObservation {
@@ -138,6 +176,7 @@ final class SubagentSupervisionObservation {
 GatewaySubagentActivity copySupervisedSubagent(GatewaySubagentActivity value) =>
     GatewaySubagentActivity(
       id: value.id,
+      childSessionId: value.childSessionId,
       goal: value.goal,
       phase: value.phase,
       parentId: value.parentId,

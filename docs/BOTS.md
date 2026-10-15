@@ -50,6 +50,8 @@ In Chats, long press a profile icon beside the connection name to open that
 profile’s Bot Chat. A normal tap filters the list. Back returns to Chats with
 the existing filters.
 
+Bot Chats have no projects; their header shows only the instance below the title.
+
 ## Profile options
 
 The row menu offers View screen, Pin/Unpin, Hide bot/Show bot and **Bot settings**. The roster menu offers Show hidden bots. Bot pins and appearance synchronize through Hermes; group pins are saved on this device.
@@ -97,6 +99,9 @@ before sending. Finish or cancel recording before pinching into Recents.
 Leaving the discussion or backgrounding Wing cancels recording.
 
 Create a hosted **Discussion** with 2–6 bots from one ready instance. Hermes runs the discussion and can continue while Wing is backgrounded. Type `@` anywhere in your message to choose a frozen room member or `@everyone`. Search by the bot's name or Hermes handle; selecting Pace inserts `@Pace`, while Wing retains its canonical Hermes identity. Members show their saved bot avatars when available; Everyone uses a group icon. Tap a group’s icon in the Groups roster to open its editor directly; tap its name or message area to open the discussion. Tap the group’s icon or name in the discussion header, including discussions opened from Recents, or choose **Edit group** from its roster actions to change its name, icon color or picture. Upload, generate or remove the picture, then use the checkmark to save to Hermes. Membership and the Hermes instance are fixed when created. Rooms also offer stop and disband.
+
+Tap a member’s avatar or name in **Edit group** to open its Bot Chat. Back
+returns to the editor with your unsaved changes.
 
 In an ordinary chat, `@` anywhere in your message offers agents from the same Hermes server with their
 saved bot avatars when available. Search also matches saved bot titles; selection
@@ -148,7 +153,7 @@ mentions. Leaving the group or restarting Wing restores its draft. Each server
 and room keeps its own draft. Sending clears the accepted text; a newer draft
 typed while sending stays available.
 
-An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Pending approvals stay above the composer while you scroll. Use the checkmark to allow once or the cross to deny. Wing retains the details after Hermes withdraws a request, with a No longer pending status and no decision buttons. Saved details remain available after reopening the group. You can also answer group approvals from Wing notifications.
+An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Pending approvals stay above the composer while you scroll. Long commands scroll within their own preview; select and copy text there. Explanations scroll separately. Use the checkmark to allow once or the cross to deny. Wing retains the details after Hermes withdraws a request, with a No longer pending status and no decision buttons. Saved details remain available after reopening the group. You can also answer group approvals from Wing notifications.
 
 Your bubbles show your message without a User label. Bot replies show the
 sender's saved avatar and name, formatted text, links, code and timestamps.

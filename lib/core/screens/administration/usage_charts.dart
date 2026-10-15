@@ -233,7 +233,7 @@ class _UsageCalendarState extends State<UsageCalendar> {
                   ? 'No returned year data'
                   : count == null
                   ? 'Tokens unavailable'
-                  : '${locale.formatDecimal(count)} tokens'}',
+                  : '${compactUsage(count)} tokens'}',
           excludeFromSemantics: true,
           triggerMode: TooltipTriggerMode.manual,
           preferBelow: false,

@@ -2,6 +2,7 @@ import 'support/form_family_capture.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -601,6 +602,7 @@ void main() {
                   viewState: view,
                   onViewChanged: (next) => setState(() => view = next),
                   onOpenMenu: () {},
+                  onOpenGroupMemberChat: (_, _) async {},
                   onOpenChat: (_) async {},
                   onOpenGroup: (_) async {},
                 ),
@@ -737,6 +739,7 @@ void main() {
                           session: session,
                           group: true,
                           editGroup: group,
+                          onOpenMemberChat: (_, _) async {},
                           createGroupDraft: () => draft,
                         ),
                       ),
@@ -889,6 +892,7 @@ void main() {
               viewState: state,
               onViewChanged: (next) => setState(() => state = next),
               onOpenMenu: () {},
+              onOpenGroupMemberChat: (_, _) async {},
               onOpenChat: (_) async {},
               onOpenGroup: (group) => Navigator.of(context).push<void>(
                 MaterialPageRoute(
@@ -897,7 +901,12 @@ void main() {
                     voiceInputSettings: () =>
                         const LocalVoiceInputSettings(language: ''),
                     createSession: () => session.openGroup(group),
-                    onEdit: (group) => openGroupEditor(context, session, group),
+                    onEdit: (group) => openGroupEditor(
+                      context,
+                      session,
+                      group,
+                      onOpenMemberChat: (_, _) async {},
+                    ),
                   ),
                 ),
               ),
@@ -1991,6 +2000,7 @@ void main() {
                   viewState: view,
                   onViewChanged: (next) => setState(() => view = next),
                   onOpenMenu: () {},
+                  onOpenGroupMemberChat: (_, _) async {},
                   onOpenChat: (bot) async {
                     final key = await session.open(bot, canUse: () => true);
                     if (key != null) opened.add(key.sessionId);
@@ -2002,8 +2012,12 @@ void main() {
                         voiceInputSettings: () =>
                             const LocalVoiceInputSettings(language: ''),
                         createSession: () => session.openGroup(group),
-                        onEdit: (group) =>
-                            openGroupEditor(context, session, group),
+                        onEdit: (group) => openGroupEditor(
+                          context,
+                          session,
+                          group,
+                          onOpenMemberChat: (_, _) async {},
+                        ),
                       ),
                     ),
                   ),
@@ -2411,6 +2425,7 @@ void main() {
                 viewState: const BotsViewState(),
                 onViewChanged: (_) {},
                 onOpenMenu: () {},
+                onOpenGroupMemberChat: (_, _) async {},
                 onOpenChat: (_) async {},
                 onOpenGroup: (_) async {},
               ),
@@ -2470,6 +2485,7 @@ void main() {
             viewState: view,
             onViewChanged: (next) => setState(() => view = next),
             onOpenMenu: () {},
+            onOpenGroupMemberChat: (_, _) async {},
             onOpenChat: (_) async {},
             onOpenGroup: (group) => Navigator.of(context).push<void>(
               MaterialPageRoute(
@@ -2478,7 +2494,12 @@ void main() {
                   voiceInputSettings: () =>
                       const LocalVoiceInputSettings(language: ''),
                   createSession: () => session.openGroup(group),
-                  onEdit: (group) => openGroupEditor(context, session, group),
+                  onEdit: (group) => openGroupEditor(
+                    context,
+                    session,
+                    group,
+                    onOpenMemberChat: (_, _) async {},
+                  ),
                 ),
               ),
             ),
@@ -3631,7 +3652,15 @@ void main() {
           expect(find.byTooltip('Chat actions'), findsOneWidget);
           expect(
             find.byKey(const ValueKey('chat-project-picker')),
-            findsOneWidget,
+            findsNothing,
+          );
+          expect(find.text('Project unavailable'), findsNothing);
+          expect(find.text('Unassigned'), findsNothing);
+          expect(find.text('·'), findsNothing);
+          expect(find.text('Home server'), findsOneWidget);
+          expect(
+            tester.widget<WingAppBar>(find.byType(WingAppBar)).contextHeight,
+            48,
           );
           await tester.settleMarkdown();
           await tester.pumpAndSettle();
@@ -3721,6 +3750,10 @@ void main() {
           await tester.pumpAndSettle();
           expect(avatar, findsOneWidget);
           expect(find.text('Compacted conversation'), findsNothing);
+          expect(
+            find.byKey(const ValueKey('chat-project-picker')),
+            findsNothing,
+          );
           // A delayed lookup for one chat must not decorate a different chat.
           heldRoster = Completer<Map<String, dynamic>?>();
           await controller.openSession(
@@ -3739,6 +3772,10 @@ void main() {
           expect(find.byType(BotAvatar), findsNothing);
           expect(find.text('Bot Chat'), findsOneWidget);
           expect(find.byTooltip('Bot settings'), findsNothing);
+          expect(
+            find.byKey(const ValueKey('chat-project-picker')),
+            findsOneWidget,
+          );
           expect(find.text('Hermes'), findsNothing);
           expect(tester.takeException(), isNull);
           semantics.dispose();
@@ -3904,6 +3941,222 @@ void main() {
         appPreferences.dispose();
       },
     );
+  }
+
+  for (final entry in ['roster', 'discussion']) {
+    for (final brightness in Brightness.values) {
+      for (final scale in [1.0, 2.0]) {
+        testWidgets(
+          'group editor member opens Bot Chat from $entry ${brightness.name} $scale',
+          (tester) async {
+            SharedPreferences.setMockInitialValues({});
+            final preferences = await SharedPreferences.getInstance();
+            final appPreferences = AppPreferences(preferences);
+            addTearDown(appPreferences.dispose);
+            final browser = _BotConversationBrowser();
+            final administration = AdministrationFixture('Home server');
+            final controller = ProfileWorkspaceController(
+              access: ConnectionAccess(
+                connection: SavedConnection(
+                  id: 'host',
+                  label: 'Home server',
+                  host: 'localhost',
+                  port: 1,
+                  apiKey: '',
+                ),
+                dashboardOAuth: null,
+              ),
+              connectionIdentity: 'instance-1',
+              preferences: preferences,
+              appPreferences: appPreferences,
+              gatewayFactory: (scope) {
+                final base = browser.gateway(scope);
+                return ProfileGateway(
+                  scope: scope,
+                  discover: base.discover,
+                  get: (path, query) => path == 'model/options'
+                      ? administration.server
+                            .profile(scope.profileName)
+                            .gateway
+                            .read(path, query)
+                      : base.read(path, query),
+                  rpc: base.call,
+                );
+              },
+            );
+            addTearDown(controller.dispose);
+            await controller.initialize();
+            final bots = BotsFixture(server: administration.server);
+            bots.profiles
+              ..clear()
+              ..addAll([
+                BotsFixture.profile('default', 'Hermes'),
+                BotsFixture.profile('personal', 'Atlas'),
+                BotsFixture.profile('work', 'Mira'),
+              ]);
+            bots.profiles.last['canonical_session'] = {
+              'id': 'canonical-root',
+              'resolved_id': 'canonical-tip',
+            };
+            bots.room['members'][0]['profile'] = 'personal';
+            bots.room['members'][1]['profile'] = 'work';
+            await tester.binding.setSurfaceSize(
+              Size(scale == 1 ? 390 : 320, 844),
+            );
+            addTearDown(() => tester.binding.setSurfaceSize(null));
+            final frame = GlobalKey();
+            await tester.pumpMarkdownWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(scale),
+                    disableAnimations: scale == 2,
+                  ),
+                  child: RepaintBoundary(key: frame, child: child!),
+                ),
+                home: ProfileWorkspaceScreen(
+                  controller: controller,
+                  initialDestination: AppDestination.bots,
+                  createBotsSession: () =>
+                      BotsSession((_) async => [bots.repository]),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            await tester.tap(find.widgetWithText(Tab, 'Groups'));
+            await tester.pumpAndSettle();
+            if (entry == 'roster') {
+              await tester.tap(find.byTooltip('Edit group Research team'));
+            } else {
+              await tester.tap(find.text('Research team'));
+              await tester.pumpAndSettle();
+              await tester.tap(find.byTooltip('Edit group'));
+            }
+            await tester.pumpAndSettle();
+            final name = find.byKey(const ValueKey('group-name'));
+            expect(tester.widget<TextField>(name).enabled, isTrue);
+            await tester.enterText(name, 'Unsaved room name');
+            final member = find.widgetWithText(ListTile, 'Mira');
+            await _revealGroup(tester, member);
+            await _capture(
+              tester,
+              frame,
+              'member-chat-editor-$entry-${brightness.name}-$scale',
+            );
+            final identity = Completer<void>();
+            final resume = browser.resumeDelay = Completer<void>();
+            final history = Completer<void>();
+            browser.historyDelays[('canonical-root', 0)] = history;
+            bots.readHook = (_, method, _) async {
+              if (method == 'profiles.list') await identity.future;
+              return null;
+            };
+            expect(tester.widget<ListTile>(member).onTap, isNotNull);
+            await tester.tap(
+              find.descendant(of: member, matching: find.text('Mira')),
+            );
+            await tester.pump();
+            expect(
+              tester
+                  .widget<ProfileWorkspaceScreen>(
+                    find
+                        .byType(ProfileWorkspaceScreen, skipOffstage: false)
+                        .last,
+                  )
+                  .initialBot
+                  ?.profile
+                  .name,
+              'work',
+            );
+            await tester.pump();
+            expect(find.byType(StudioLoading), findsOneWidget);
+            await tester.pump(const Duration(milliseconds: 400));
+            await tester.pump(const Duration(milliseconds: 400));
+            expect(find.byType(BotsCreateScreen), findsNothing);
+            expect(find.byType(ProfileMessage), findsNothing);
+            await _capture(
+              tester,
+              frame,
+              'member-chat-pending-$entry-${brightness.name}-$scale',
+              motion: true,
+            );
+            identity.complete();
+            for (var i = 0; i < 20; i++) {
+              await tester.pump();
+            }
+            expect(find.byType(StudioLoading), findsOneWidget);
+            resume.complete();
+            for (var i = 0; i < 20; i++) {
+              await tester.pump();
+            }
+            expect(find.byType(StudioLoading), findsOneWidget);
+            history.complete();
+            await tester.pumpAndSettle();
+            await tester.settleMarkdown();
+            expect(controller.current!.chat!.key.workspace.profileName, 'work');
+            expect(controller.current!.chat!.key.sessionId, 'canonical-root');
+            expect(find.byType(StudioLoading), findsNothing);
+            await _capture(
+              tester,
+              frame,
+              'member-chat-loaded-$entry-${brightness.name}-$scale',
+            );
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+            expect(find.byType(BotsCreateScreen), findsOneWidget);
+            await _revealGroup(tester, name, delta: -120);
+            expect(
+              tester.widget<TextField>(name).controller!.text,
+              'Unsaved room name',
+            );
+            expect(bots.commands, isEmpty);
+
+            // The avatar uses the same captured target and failure/retry flow.
+            await _revealGroup(tester, member);
+            browser.failHistory = true;
+            await tester.tap(
+              find.descendant(
+                of: member,
+                matching: find.byType(BorrowedBotAvatar),
+              ),
+            );
+            await tester.pumpAndSettle();
+            expect(find.byType(BotsCreateScreen), findsNothing);
+            expect(find.byTooltip('Retry'), findsOneWidget);
+            expect(find.byType(StudioLoading), findsNothing);
+            await _capture(
+              tester,
+              frame,
+              'member-chat-error-$entry-${brightness.name}-$scale',
+            );
+            browser.failHistory = false;
+            final retry = Completer<void>();
+            browser.historyDelays[('canonical-root', 0)] = retry;
+            await tester.tap(find.byTooltip('Retry'));
+            for (var i = 0; i < 20; i++) {
+              await tester.pump();
+            }
+            expect(find.byType(StudioLoading), findsOneWidget);
+            // Back during a held read retires navigation and retains the draft.
+            await tester.binding.handlePopRoute();
+            await tester.pumpAndSettle();
+            expect(find.byType(BotsCreateScreen), findsOneWidget);
+            retry.complete();
+            await tester.pumpAndSettle();
+            expect(find.byType(BotsCreateScreen), findsOneWidget);
+            await _revealGroup(tester, name, delta: -120);
+            expect(
+              tester.widget<TextField>(name).controller!.text,
+              'Unsaved room name',
+            );
+            expect(bots.commands, isEmpty);
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox());
+          },
+        );
+      }
+    }
   }
 
   for (final brightness in Brightness.values) {

@@ -364,39 +364,53 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               constraints: BoxConstraints(
                 maxHeight: maxBodyHeight.clamp(24, 160),
               ),
-              child: _GroupApprovalDetails(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if ((pending ? _session.approvalError(action) : null)
-                        case final error?)
-                      StudioError(error),
-                    if (action.command.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        width: double.infinity,
+              // Each selectable command owns its bounded native viewport.
+              // An outer scroll view would give its handles the hidden full
+              // document's geometry instead of the preview's geometry.
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if ((pending ? _session.approvalError(action) : null)
+                      case final error?)
+                    Flexible(
+                      child: _GroupApprovalDetails(child: StudioError(error)),
+                    ),
+                  if (action.command.isNotEmpty)
+                    Flexible(
+                      flex: 3,
+                      child: Container(
+                        key: ValueKey(('group-approval-command', action.key)),
+                        margin: const EdgeInsets.only(top: 8),
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: tokens.surface,
                           borderRadius: WingRadius.control,
                         ),
-                        child: SelectableText(
-                          action.command,
-                          style: tokens.typography.mono.copyWith(
-                            color: tokens.onSurface,
+                        child: Scrollbar(
+                          interactive: false,
+                          child: SelectableText(
+                            action.command,
+                            style: tokens.typography.mono.copyWith(
+                              color: tokens.onSurface,
+                            ),
                           ),
                         ),
                       ),
-                    ],
-                    if (action.description.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        action.description,
-                        style: theme.textTheme.bodyMedium,
+                    ),
+                  if (action.description.isNotEmpty)
+                    Flexible(
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _GroupApprovalDetails(
+                          child: Text(
+                            action.description,
+                            style: theme.textTheme.bodyMedium,
+                          ),
+                        ),
                       ),
-                    ],
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -1015,6 +1029,7 @@ class _GroupApprovalDetailsState extends State<_GroupApprovalDetails> {
   final _scroll = ScrollController();
   @override
   void dispose() {
+    _scroll.dispose();
     super.dispose();
   }
 

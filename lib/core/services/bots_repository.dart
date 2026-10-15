@@ -1036,6 +1036,27 @@ class BotsRepository {
     return page;
   }
 
+  /// Mount only the stock lazy child watch; never build or prompt an agent.
+  Future<Map<String, dynamic>> watchSubagent(
+    BotGroup group,
+    BotGroupMember member,
+    String child,
+  ) {
+    _ownsGroup(group);
+    if (child.isEmpty ||
+        !group.members.any(
+          (candidate) =>
+              candidate.id == member.id && candidate.profile == member.profile,
+        )) {
+      throw ArgumentError('Invalid subagent observation');
+    }
+    return _read(member.profile, 'session.resume', {
+      'session_id': child,
+      'lazy': true,
+      'omit_messages': true,
+    });
+  }
+
   /// Passive inspection only. Never attaches, resumes or controls the worker.
   Future<Map<String, dynamic>> groupMemberObservation(
     BotGroup group,

@@ -138,6 +138,12 @@ void main() {
             'output_tokens': 0,
           },
           {'day': '2026-09-18', 'input_tokens': 10, 'output_tokens': 20},
+          {
+            'day': '2026-09-19',
+            'input_tokens': 297927473,
+            'cache_read_tokens': 0,
+            'output_tokens': 0,
+          },
         ],
       }, period: 365);
       final selected = <String>[];
@@ -168,6 +174,20 @@ void main() {
       );
       expect(find.textContaining('0 tokens', findRichText: true), findsNothing);
       expect(selected, ['2026-09-17', '2026-09-18']);
+      await tester.tap(find.byKey(const ValueKey('usage-day-2026-09-19')));
+      await tester.pumpAndSettle(const Duration(milliseconds: 250));
+      expect(
+        find.textContaining('298M tokens', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<Semantics>(find.byKey(const ValueKey('2026-09-19')))
+            .properties
+            .label,
+        contains('297,927,473 tokens'),
+      );
+
       await tester.tapAt(const Offset(300, 300));
       await tester.pumpAndSettle(const Duration(milliseconds: 250));
       expect(

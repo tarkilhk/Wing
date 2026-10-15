@@ -2475,6 +2475,16 @@
       "role": "domain",
       "feature": "conversation",
       "library": "lib/core/models/transcript_presentation.dart"
+    },
+    "lib/core/services/subagent_timeline_session.dart": {
+      "role": "application",
+      "feature": "chat-activity",
+      "library": "lib/core/services/subagent_timeline_session.dart"
+    },
+    "lib/core/widgets/subagent_timeline.dart": {
+      "role": "view",
+      "feature": "chat-activity",
+      "library": "lib/core/widgets/subagent_timeline.dart"
     }
   }
 }

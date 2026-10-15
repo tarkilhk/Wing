@@ -1,3 +1,4 @@
+import '../widgets/profile_subagent_panel.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import '../widgets/conversation_activity.dart';
 import '../widgets/studio_form_actions.dart';
@@ -601,13 +602,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Future<void> _openGroupChatWindow(
     BuildContext groupContext, {
     required AppDestination origin,
+    required ValueChanged<AppDestination> onLeave,
     BotRecord? bot,
   }) => Navigator.of(groupContext).push<void>(
     MaterialPageRoute(
       builder: (_) => RecentConversationRouteScope(
         recents: _recents,
         origin: origin,
-        onLeave: _leaveConversation,
+        onLeave: onLeave,
         child: ProfileWorkspaceScreen(
           controller: controller,
           initialBot: bot,
@@ -640,7 +642,33 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     await _openGroupChatWindow(
       groupContext,
       origin: AppDestination.bots,
+      onLeave: _leaveConversation,
       bot: bot,
+    );
+  }
+
+  Future<void> _openGroupEditorBotChat(
+    BuildContext editorContext,
+    BotRecord bot,
+  ) async {
+    if (!mounted ||
+        !editorContext.mounted ||
+        ModalRoute.isCurrentOf(editorContext) != true) {
+      return;
+    }
+    final editorRoute = ModalRoute.of(editorContext);
+    await _openGroupChatWindow(
+      editorContext,
+      origin: AppDestination.bots,
+      bot: bot,
+      onLeave: (destination) {
+        if (destination != AppDestination.bots) {
+          _leaveConversation(destination);
+          return;
+        }
+        controller.showList();
+        Navigator.of(editorContext).popUntil((route) => route == editorRoute);
+      },
     );
   }
 
@@ -670,6 +698,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               onOpenChat: (_) => _openGroupChatWindow(
                 groupContext,
                 origin: AppDestination.activity,
+                onLeave: _leaveConversation,
               ),
             ),
             previewBuilder: _recentPreview,
@@ -679,7 +708,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               voiceDevice: widget.voiceDevice,
               stopVoicePlayback: _voiceOutput.stop,
               createSession: () => _bots.openGroup(group),
-              onEdit: (group) => openGroupEditor(groupContext, _bots, group),
+              onEdit: (group) => openGroupEditor(
+                groupContext,
+                _bots,
+                group,
+                onOpenMemberChat: _openGroupEditorBotChat,
+              ),
               onOpenBotChat: (bot) => _openGroupBotChat(groupContext, bot),
               onOpenBotSettings: (bot) =>
                   _openBotSettings(bot, routeContext: groupContext),
@@ -1344,6 +1378,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         _bots.repository(bot.scope.connectionIdentity).server != null;
     final parentSessionId = controller.parentSessionId(chat);
     final stackChatScope =
+        bot == null &&
         MediaQuery.textScalerOf(context).scale(12) > 18 &&
         MediaQuery.sizeOf(context).width < 480;
     final canMoveProject =
@@ -1454,12 +1489,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w400,
           );
-          final projectLabel = chat.runtime.opening || chat.runtime.offline
-              ? chat.key.workspace.profileName
-              : controller.chatProjectLabel(chat);
-          final projectAppearance = chat.runtime.opening || chat.runtime.offline
-              ? null
-              : controller.chatProject(chat);
           final server = ServerConnectionLabel(
             alignment: Alignment.centerLeft,
             label: controller.connection.label,
@@ -1467,6 +1496,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             status: controller.connectionStatus,
             style: scopeStyle,
           );
+          if (bot != null) return server;
+          final projectLabel = chat.runtime.opening || chat.runtime.offline
+              ? chat.key.workspace.profileName
+              : controller.chatProjectLabel(chat);
+          final projectAppearance = chat.runtime.opening || chat.runtime.offline
+              ? null
+              : controller.chatProject(chat);
           final project = Tooltip(
             message: 'Move to project: $projectLabel',
             child: Semantics(
@@ -2448,6 +2484,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     entries: entries ?? chat.runtime.activityEntries,
     todos: chat.todos,
     inspection: _supervisionFor(chat),
+    agentsBuilder: () =>
+        ProfileSubagentPanel(session: _supervisionFor(chat), embedded: true),
     live: _liveAnswering(chat),
     taskCount: chat.todoRevision == null ? null : chat.todos.length,
     agentCount: chat.subagentsAvailable ? chat.subagents.length : null,
@@ -2484,7 +2522,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       chat,
       chat.context,
       chat.contextCompressions,
-      chat.contextLoading,
+      chat.contextRefreshPending,
       chat.contextError,
     );
     if (_contextRingInputs == inputs) return _contextRing!;
@@ -2493,9 +2531,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       key: ValueKey(('context-ring', chat.key)),
       occupancy: chat.context,
       compressions: chat.contextCompressions,
-      loading: chat.contextLoading,
+      loading: chat.contextRefreshPending,
       error: chat.contextError,
-      onRefresh: () => unawaited(controller.refreshContext(chat)),
+      onRefresh: () =>
+          unawaited(controller.refreshContext(chat, userInitiated: true)),
     );
   }
 
@@ -3700,20 +3739,36 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               context: context,
 
               title: Text(_destination.label, maxLines: 6, softWrap: true),
-              contextRow:
-                  _destination == AppDestination.activity ||
-                      _destination == AppDestination.health ||
-                      _destination == AppDestination.analytics
+              contextRow: _destination == AppDestination.analytics
+                  ? Row(
+                      children: [
+                        Flexible(child: _instanceHeader()),
+                        const SizedBox(width: 16),
+                        Flexible(
+                          child: WorkspaceProfilePicker(
+                            label: _analyticsProfileName == null
+                                ? 'All'
+                                : controller.discovery
+                                          ?.named(_analyticsProfileName!)
+                                          ?.label ??
+                                      _analyticsProfileName!,
+                            onPressed: (anchor) => unawaited(
+                              _pickWorkspace(
+                                anchor,
+                                mode: WorkspacePickerMode.analytics,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : _destination == AppDestination.activity ||
+                        _destination == AppDestination.health
                   ? ServerConnectionLabel(
                       label: controller.connection.label,
                       icon: controller.connection.icon,
-                      pickerMode: _destination == AppDestination.analytics
-                          ? WorkspacePickerMode.analytics
-                          : null,
                       suffix: _destination == AppDestination.activity
                           ? null
-                          : _destination == AppDestination.analytics
-                          ? _analyticsProfileName ?? 'All'
                           : controller.current?.scope.profileName,
                       status: controller.connectionStatus,
                     )
@@ -3762,6 +3817,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   onViewChanged: (view) => setState(() => _botsView = view),
                   onOpenMenu: () => _scaffoldKey.currentState?.openDrawer(),
                   onOpenChat: _openBot,
+                  onOpenGroupMemberChat: _openGroupEditorBotChat,
                   onOpenGroup: (group) =>
                       _openRecentGroup(group, origin: AppDestination.bots),
                 ),

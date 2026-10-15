@@ -3,6 +3,7 @@ import 'package:wing/core/widgets/profile_live_execution.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_activity_status.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
+import 'package:wing/core/widgets/subagent_timeline.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
@@ -486,35 +487,119 @@ void main() {
           });
           event('subagent.start', {
             'subagent_id': 'child-1',
+            'child_session_id': 'child-session',
             'goal': 'Check received events',
             'status': 'running',
           });
+          final childMount = Completer<void>();
+          addTearDown(() {
+            if (!childMount.isCompleted) childMount.complete();
+          });
+          var failChildReplay = false;
+          var childReads = 0;
+          fixture.historyHook = (profile, id, offset) async {
+            if (id == 'child-session') {
+              return ProfileHistoryPage(
+                id,
+                [
+                  {
+                    'id': 100,
+                    'role': 'user',
+                    'content': 'Check received events',
+                  },
+                  {
+                    'id': 101,
+                    'role': 'assistant',
+                    'content': 'Inspecting the child transcript.',
+                  },
+                ],
+                offset,
+                20,
+                isComplete: true,
+              );
+            }
+            return ProfileHistoryPage(
+              id,
+              fixture.workerMessages[profile] ?? [],
+              offset,
+              20,
+            );
+          };
+          final childEvents = [
+            {
+              'seq': 1,
+              'session_id': 'child-watch',
+              'type': 'message.start',
+              'payload': <String, dynamic>{},
+            },
+            {
+              'seq': 2,
+              'session_id': 'child-watch',
+              'type': 'reasoning.delta',
+              'payload': {'text': 'Checking child tool events'},
+            },
+            {
+              'seq': 3,
+              'session_id': 'child-watch',
+              'type': 'tool.start',
+              'payload': {
+                'tool_id': 'submirror:child:1',
+                'name': 'terminal',
+                'args': <String, dynamic>{},
+                'preview': 'pytest -q tests/events',
+              },
+            },
+          ];
           var working = true;
-          fixture.readHook = (profile, method, params) async =>
-              switch (method) {
-                'session.active_list' => {
-                  'sessions': [
-                    {
-                      'id': 'atlas-live',
-                      'session_key': 'atlas-tip',
-                      'title': 'Group: room-1',
-                      'status': working ? 'working' : 'idle',
-                    },
-                  ],
-                },
-                'session.events.since' => {
-                  'events': events
-                      .where(
-                        (e) => (e['seq'] as int) > (params['last_seen'] as int),
-                      )
-                      .toList(),
-                  'latest_seq': events.length,
-                  'truncated': false,
-                  'epoch': 'test',
-                  'open_requests': [],
-                },
-                _ => null,
+          fixture.readHook = (profile, method, params) async {
+            if (method == 'session.resume' &&
+                params['session_id'] == 'child-session') {
+              expect(params['lazy'], isTrue);
+              expect(params['omit_messages'], isTrue);
+              await childMount.future;
+              return {
+                'session_id': 'child-watch',
+                'resumed': 'child-session',
+                'running': true,
               };
+            }
+            if (method == 'session.events.since' &&
+                params['session_id'] == 'child-watch') {
+              childReads++;
+              if (failChildReplay) throw StateError('Child disconnected');
+              return {
+                'epoch': 'child-epoch',
+                'events': childEvents,
+                'latest_seq': childEvents.length,
+                'truncated': false,
+                'open_requests': [],
+              };
+            }
+            return switch (method) {
+              'session.active_list' => {
+                'sessions': [
+                  {
+                    'id': 'atlas-live',
+                    'session_key': 'atlas-tip',
+                    'title': 'Group: room-1',
+                    'status': working ? 'working' : 'idle',
+                  },
+                ],
+              },
+              'session.events.since' => {
+                'events': events
+                    .where(
+                      (e) => (e['seq'] as int) > (params['last_seen'] as int),
+                    )
+                    .toList(),
+                'latest_seq': events.length,
+                'truncated': false,
+                'epoch': 'test',
+                'open_requests': [],
+              },
+              _ => null,
+            };
+          };
           late BotGroupHistorySession session;
           final frame = GlobalKey();
           await tester.pumpWidget(
@@ -626,19 +711,91 @@ void main() {
           await tester.pump(const Duration(milliseconds: 300));
           await tester.pump(const Duration(milliseconds: 300));
           await tester.tap(find.text('Check received events').hitTestable());
+          await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
+          expect(find.text('Subagent activity'), findsOneWidget);
+          expect(find.byType(ProfileTranscript), findsNWidgets(2));
+          await liveFrames();
+          expect(find.byTooltip('Loading subagent activity'), findsOneWidget);
+          await _render(
+            tester,
+            frame,
+            'subagent-opening-${brightness.name}-$scale',
+          );
+          childMount.complete();
           await liveFrames();
           expect(find.text('Task'), findsOneWidget);
           expect(find.byTooltip('Interrupt subagent'), findsNothing);
           expect(find.byTooltip('Steer subagent'), findsNothing);
+          expect(childReads, greaterThan(0));
+          final childView = find.byType(SubagentTimeline);
+          final childSession = tester
+              .widget<SubagentTimeline>(childView)
+              .session;
+          expect(
+            childSession.runtime.toolActivities.single.context,
+            'pytest -q tests/events',
+          );
+          final childActivity = find.descendant(
+            of: childView,
+            matching: find.text('Activity · 1 tool'),
+          );
+          await tester.ensureVisible(childActivity);
+          await tester.tap(childActivity);
+          await liveFrames();
+          expect(
+            find.descendant(
+              of: childView,
+              matching: find.byType(ProfileExecutionActivity),
+            ),
+            findsWidgets,
+          );
+          await _render(
+            tester,
+            frame,
+            'subagent-timeline-${brightness.name}-$scale',
+          );
+          final toolTitle = find.descendant(
+            of: childView,
+            matching: find.text('Running command'),
+          );
+          await tester.ensureVisible(toolTitle);
+          await tester.tap(toolTitle);
           await liveFrames();
           await _render(
             tester,
             frame,
-            'history-live-agent-detail-${brightness.name}-$scale',
+            'subagent-tool-${brightness.name}-$scale',
           );
+          failChildReplay = true;
+          await tester.tap(find.byTooltip('Refresh subagent activity'));
+          await liveFrames();
+          expect(
+            find.text(
+              'Subagent activity could not refresh. Retry to continue.',
+            ),
+            findsWidgets,
+          );
+          await _render(
+            tester,
+            frame,
+            'subagent-failed-${brightness.name}-$scale',
+          );
+          failChildReplay = false;
+          await tester.tap(find.byTooltip('Retry subagent activity'));
+          await liveFrames();
+          expect(
+            find.text(
+              'Subagent activity could not refresh. Retry to continue.',
+            ),
+            findsNothing,
+          );
+          expect(session.reader.historySessionId, 'atlas-tip');
+          final readsBeforeClose = childReads;
           Navigator.of(tester.element(find.text('Task'))).pop();
           await tester.pump(const Duration(milliseconds: 300));
+          await tester.pump(const Duration(seconds: 4));
+          expect(childReads, readsBeforeClose);
           tester
               .state<ProfileLiveWorkDockState>(find.byType(ProfileLiveWorkDock))
               .dismiss();

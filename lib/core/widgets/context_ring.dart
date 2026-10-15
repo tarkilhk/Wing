@@ -147,6 +147,28 @@ class _ContextRingState extends State<ContextRing>
                                       ),
                                     ),
                                   ),
+                                  SizedBox.square(
+                                    dimension: 24,
+                                    child: widget.loading
+                                        ? Semantics(
+                                            label: 'Loading context breakdown',
+                                            child: Center(
+                                              child: SizedBox.square(
+                                                dimension: 16,
+                                                child: media.disableAnimations
+                                                    ? Icon(
+                                                        Icons.hourglass_top,
+                                                        size: 16,
+                                                        color: tokens.muted,
+                                                      )
+                                                    : const CircularProgressIndicator(
+                                                        strokeWidth: 2,
+                                                      ),
+                                              ),
+                                            ),
+                                          )
+                                        : null,
+                                  ),
                                   StudioButtonPress(
                                     child: IconButton(
                                       tooltip: 'Close context window',
@@ -202,30 +224,36 @@ class _ContextRingState extends State<ContextRing>
                                       numbers: numbers,
                                     ),
                                   ),
-                              ] else
+                              ] else if (!widget.loading &&
+                                  widget.error == null)
                                 Padding(
                                   padding: const EdgeInsets.only(
                                     bottom: WingSpacing.sm,
                                   ),
                                   child: Text(
-                                    widget.loading
-                                        ? 'Loading context breakdown…'
-                                        : widget.error ??
-                                              (value == null
-                                                  ? 'Context usage is unavailable for this chat.'
-                                                  : 'No composition breakdown available yet.'),
+                                    value == null
+                                        ? 'Context usage is unavailable for this chat.'
+                                        : 'No composition breakdown available yet.',
                                     style: labelStyle.copyWith(
                                       color: tokens.muted,
                                     ),
+                                  ),
+                                ),
+                              if (widget.error != null && !widget.loading)
+                                Text(
+                                  widget.error!,
+                                  style: labelStyle.copyWith(
+                                    color: tokens.muted,
                                   ),
                                 ),
                               if (widget.error != null &&
                                   !widget.loading &&
                                   widget.onRefresh != null)
                                 StudioButtonPress(
-                                  child: TextButton(
+                                  child: IconButton(
                                     onPressed: widget.onRefresh,
-                                    child: const Text('Retry'),
+                                    tooltip: 'Retry context breakdown',
+                                    icon: const Icon(Icons.refresh),
                                   ),
                                 ),
                               if (value != null ||

@@ -25,6 +25,56 @@ enum WorkspaceChoiceKind { connection, profile, allProfiles }
 
 typedef WorkspaceChoice = ({String? id, WorkspaceChoiceKind kind});
 
+/// A separate profile filter beside the standard instance header.
+class WorkspaceProfilePicker extends StatelessWidget {
+  const WorkspaceProfilePicker({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final ValueChanged<BuildContext> onPressed;
+
+  @override
+  Widget build(BuildContext context) => Builder(
+    builder: (anchor) => Semantics(
+      label: '$label. Choose profile',
+      button: true,
+      excludeSemantics: true,
+      onTap: () => onPressed(anchor),
+      child: Tooltip(
+        message: 'Choose profile',
+        child: StudioButtonPress(
+          child: InkWell(
+            key: const ValueKey('analytics-profile-picker-target'),
+            borderRadius: WingRadius.control,
+            onTap: () => onPressed(anchor),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.expand_more, size: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 Future<WorkspaceChoice?> showWorkspacePicker(
   BuildContext context, {
   required List<SavedConnection> connections,

@@ -44,14 +44,18 @@ class ContextOccupancy {
     Iterable<ContextCategory> categories = const [],
   }) : categories = List.unmodifiable(categories);
 
-  /// Live usage invalidates an idle composition without replacing measured
-  /// occupancy with a sum of the category estimates.
-  ContextOccupancy withoutCategories() => ContextOccupancy(
-    used: used,
-    max: max,
-    percent: percent,
-    estimated: estimated,
-  );
+  /// Composition is a separate server estimate, never a replacement for the
+  /// latest reported occupancy.
+  ContextOccupancy withCategories(Iterable<ContextCategory> categories) =>
+      ContextOccupancy(
+        used: used,
+        max: max,
+        percent: percent,
+        estimated: estimated,
+        categories: categories,
+      );
+
+  ContextOccupancy withoutCategories() => withCategories(const []);
 
   /// Parses only authoritative server values. Missing or unusable limits make
   /// occupancy unknown rather than encouraging a phone-owned estimate.

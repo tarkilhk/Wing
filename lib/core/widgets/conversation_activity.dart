@@ -4,12 +4,11 @@ import '../models/chat_runtime.dart';
 import '../models/transcript_timeline.dart';
 import '../models/chat_output.dart';
 import '../models/gateway_todo.dart';
-import '../services/profile_supervision_session.dart';
+import '../models/profile_supervision.dart';
 import 'profile_activity_status.dart';
 import 'profile_execution_activity.dart';
 import 'profile_live_execution.dart';
 import 'profile_live_work_dock.dart';
-import 'profile_subagent_panel.dart';
 import 'profile_transcript_disclosure.dart';
 
 /// Shared conversation presentation. Transport owners supply facts and commands;
@@ -20,6 +19,7 @@ final class ConversationActivity {
     required this.entries,
     required this.todos,
     required this.inspection,
+    required this.agentsBuilder,
     required this.live,
     required this.taskCount,
     required this.agentCount,
@@ -28,6 +28,7 @@ final class ConversationActivity {
   final List<ChatActivityEntry> entries;
   final List<GatewayTodo> todos;
   final SubagentInspectionSession inspection;
+  final Widget Function() agentsBuilder;
   final bool live;
   // Null means the source has not observed this category yet.
   final int? taskCount;
@@ -81,8 +82,7 @@ final class ConversationActivity {
         ];
 
   Widget get tasks => ProfileTodoPanel(todos: todos, embedded: true);
-  Widget get agents =>
-      ProfileSubagentPanel(session: inspection, embedded: true);
+  Widget get agents => agentsBuilder();
 
   Widget status({Key? key, required bool saving}) => ProfileActivityStatus(
     key: key,
