@@ -146,7 +146,7 @@ mentions. Leaving the group or restarting Wing restores its draft. Each server
 and room keeps its own draft. Sending clears the accepted text; a newer draft
 typed while sending stays available.
 
-An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Pending approvals stay above the composer while you scroll. Use the checkmark to allow once or the cross to deny. Wing retains the details after Hermes withdraws a request, with a No longer pending status and no decision buttons. Saved details remain available after reopening the group. You can also answer group approvals from Wing notifications.
+An unconfirmed send stays available for review/retry. Paused work offers Continue group work to stop the paused attempt and send a continuation request. Pending approvals stay above the composer while you scroll. Long commands scroll within their own preview; select and copy text there. Explanations scroll separately. Use the checkmark to allow once or the cross to deny. Wing retains the details after Hermes withdraws a request, with a No longer pending status and no decision buttons. Saved details remain available after reopening the group. You can also answer group approvals from Wing notifications.
 
 Your bubbles show your message without a User label. Bot replies show the
 sender's saved avatar and name, formatted text, links, code and timestamps.
