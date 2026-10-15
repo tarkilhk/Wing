@@ -159,11 +159,12 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'queue preview follows this server connection ${brightness.name} $scale',
+        'nonempty outbox stays visible across connection changes ${brightness.name} $scale',
         (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           tester.view.devicePixelRatio = 1;
           addTearDown(tester.view.reset);
+          tester.view.viewInsets = const FakeViewPadding(bottom: 260);
           host.event('a', 'message.start');
           await controller.queuePrompt(chat, 'First waiting message');
           await controller.queuePrompt(chat, 'Second waiting message');
@@ -185,11 +186,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           for (var i = 0; i < 8; i++) {
             await tester.pump(const Duration(milliseconds: 100));
           }
-          expect(find.byIcon(Icons.keyboard_return), findsNothing);
+          expect(find.byIcon(Icons.keyboard_return), findsNWidgets(2));
           expect(chat.composer.observation.queue, hasLength(2));
           controller.connectionStatus.liveChanged('b', false);
           await tester.pump();
-          expect(find.byIcon(Icons.keyboard_return), findsNothing);
+          expect(find.byIcon(Icons.keyboard_return), findsNWidgets(2));
           controller.connectionStatus.liveChanged('a', false);
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
@@ -202,11 +203,32 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           controller.connectionStatus.liveChanged('a', true);
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
-          expect(find.byIcon(Icons.keyboard_return), findsNothing);
+          expect(find.byIcon(Icons.keyboard_return), findsNWidgets(2));
           expect(chat.composer.observation.queue, hasLength(2));
           await renderStatus(
             tester,
             'chat-queue-connected-${brightness.name}-$scale',
+          );
+          await controller.removeQueuedPrompt(
+            chat,
+            chat.composer.observation.queue.first.id,
+          );
+          await tester.pump();
+          expect(find.text('First waiting message'), findsNothing);
+          expect(
+            find.text('Second waiting message').hitTestable(),
+            findsOneWidget,
+          );
+          await controller.removeQueuedPrompt(
+            chat,
+            chat.composer.observation.queue.single.id,
+          );
+          await tester.pump();
+          expect(find.byIcon(Icons.keyboard_return), findsNothing);
+          expect(find.text('Second waiting message'), findsNothing);
+          await renderStatus(
+            tester,
+            'chat-queue-empty-${brightness.name}-$scale',
           );
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
@@ -275,7 +297,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             expect(chat.runtime.execution, ChatExecution.submitting);
             expect(find.text('Sending message…'), findsNothing);
             expect(find.text('Saving queue…'), findsNothing);
-            expect(find.byIcon(Icons.keyboard_return), findsNothing);
+            expect(find.byIcon(Icons.keyboard_return), findsOneWidget);
             expect(find.byType(StudioLoading), findsOneWidget);
             expect(
               tester.getSize(find.byType(ProfileActivityStatus)).height,

@@ -2722,21 +2722,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         key: const ValueKey('profile-activity-status'),
                         saving: chat.composer.observation.saving,
                       ),
-                      ListenableBuilder(
-                        listenable: controller.connectionStatus,
-                        builder: (_, _) => ProfileQueuedMessages(
-                          key: ValueKey(('queued-messages', chat.key)),
-                          work: chat.composer.observation,
-                          onOpenActions: _hasMessageActions(chat)
-                              ? () => _showBusyActions(chat, context)
-                              : null,
-                          onEdit: !chat.composer.actions().canEditQueue
-                              ? null
-                              : (prompt) => _beginQueuedEdit(chat, prompt),
-                          onDelete: !chat.composer.actions().canEditQueue
-                              ? null
-                              : (prompt) => _deleteQueuedPrompt(chat, prompt),
-                        ),
+                      ProfileQueuedMessages(
+                        key: ValueKey(('queued-messages', chat.key)),
+                        work: chat.composer.observation,
+                        onOpenActions: _hasMessageActions(chat)
+                            ? () => _showBusyActions(chat, context)
+                            : null,
+                        onEdit: !chat.composer.actions().canEditQueue
+                            ? null
+                            : (prompt) => _beginQueuedEdit(chat, prompt),
+                        onDelete: !chat.composer.actions().canEditQueue
+                            ? null
+                            : (prompt) => _deleteQueuedPrompt(chat, prompt),
                       ),
                       SafeArea(
                         top: false,
@@ -3245,11 +3242,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget? _actionButton;
   Widget _composerActionButton(ProfileChat chat) {
     final actions = chat.composer.actions();
-    final primary = actions.prefersStopAction
-        ? ComposerAction.stop
-        : actions.prefersRunningAction
-        ? controller.appPreferences.current.preferredRunningAction
-        : ComposerAction.send;
+    final primary = actions.primaryAction(
+      controller.appPreferences.current.preferredRunningAction,
+    );
     final resting = actions.prefersStopAction
         ? ComposerAction.stop
         : primary == null

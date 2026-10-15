@@ -104,7 +104,6 @@ class ComposerSession {
 
   ComposerObservation get observation => ComposerObservation(
     revision: _revision,
-    serverDisconnected: _runtime().serverDisconnected,
     text: _text,
     references: _editing == null ? _references : _editReferences,
     submissionUncertain: _uncertain,

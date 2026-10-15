@@ -444,6 +444,7 @@ void main() {
     await pumpFrames(tester);
     expect(chat.composer.observation.queue.single.text, 'Later');
     expect(chat.composer.observation.text, isEmpty);
+    expect(find.text('Later').hitTestable(), findsOneWidget);
     expect(
       controller.preferences.getString(
         AppPreferenceField.runningAction.storageKey,
@@ -484,8 +485,8 @@ void main() {
     );
     expect(chat.composer.observation.text, isEmpty);
     final preview = find.text('follow up after this turn');
-    expect(preview, findsNothing);
-    expect(find.byIcon(Icons.keyboard_return), findsNothing);
+    expect(preview.hitTestable(), findsOneWidget);
+    expect(find.byIcon(Icons.keyboard_return), findsOneWidget);
   });
 
   testWidgets('accepted steer immediately shows its text in the transcript', (
@@ -548,7 +549,7 @@ void main() {
       [file.id],
     );
     expect(chat.composer.observation.attachments, isEmpty);
-    expect(find.text('report.pdf'), findsNothing);
+    expect(find.text('report.pdf').hitTestable(), findsOneWidget);
     controller.connectionStatus.liveChanged(
       chat.key.workspace.profileName,
       false,

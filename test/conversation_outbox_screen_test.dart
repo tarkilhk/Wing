@@ -15,9 +15,11 @@ import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
+import 'package:wing/core/widgets/profile_queued_messages.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
+import 'support/composer_fixture.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_OUTBOX');
@@ -109,6 +111,10 @@ void main() {
 
   final editor = find.byKey(const Key('profile-message-composer'));
   final send = find.byType(ComposerActionButton);
+  Finder queuedText(String text) => find.descendant(
+    of: find.byType(ProfileQueuedMessages),
+    matching: find.text(text),
+  );
 
   testWidgets('Send waits for the requested attachment to finish preparing', (
     tester,
@@ -221,6 +227,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 10));
     }
     expect(host.promptSubmitStarted!.isCompleted, isTrue);
+    expect(queuedText('First message').hitTestable(), findsOneWidget);
     try {
       await tester.enterText(editor, 'Second message');
       await tester.pump();
@@ -235,6 +242,8 @@ void main() {
         'First message',
         'Second message',
       ]);
+      expect(queuedText('First message'), findsOneWidget);
+      expect(queuedText('Second message'), findsOneWidget);
       expect(
         host.calls.where((call) => call.$2 == 'prompt.submit'),
         hasLength(1),
@@ -249,10 +258,22 @@ void main() {
     expect(chat.composer.observation.sending, isFalse);
     expect(chat.composer.observation.text, 'Fresh editable draft');
     expect(chat.composer.observation.queue.single.text, 'Second message');
+    expect(queuedText('First message'), findsNothing);
+    expect(queuedText('Second message').hitTestable(), findsOneWidget);
     expect(
       tester.widget<ComposerActionButton>(send).primary,
       ComposerAction.steer,
     );
+    host.promptSubmitStarted = null;
+    host.promptSubmitDelay = null;
+    emitChatEvent(controller, chat, 'turn.end', {'status': 'completed'});
+    for (var i = 0; i < 30 && chat.composer.observation.queue.isNotEmpty; i++) {
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(chat.composer.observation.queue, isEmpty);
+    expect(queuedText('Second message'), findsNothing);
+    expect(tester.getSize(find.byType(ProfileQueuedMessages)).height, 0);
+    expect(chat.composer.observation.text, 'Fresh editable draft');
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     dispose(controller);

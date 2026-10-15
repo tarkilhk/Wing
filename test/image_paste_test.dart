@@ -3,13 +3,19 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/models/composer_action.dart';
+import 'package:wing/core/widgets/composer_action_button.dart';
+import 'package:wing/core/widgets/profile_queued_messages.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/services/attachment_draft_service.dart';
 import 'package:wing/core/services/composer_draft_store.dart';
 import 'package:wing/core/services/connection_manager.dart';
@@ -26,15 +32,78 @@ void main() {
   late AppPreferences appPreferences;
   late ProfileChat chat;
   late SharedPreferences preferences;
-  final png = image.encodePng(image.Image(width: 3, height: 2));
+  final png = image.encodePng(
+    image.Image(width: 3, height: 2)..clear(image.ColorRgb8(39, 127, 137)),
+  );
   const composerKey = Key('profile-message-composer');
+
+  const capture = bool.fromEnvironment('CAPTURE_PASTE_ORDER');
+  const frameKey = ValueKey('paste-order-frame');
+
+  setUpAll(() async {
+    if (!capture) return;
+    const fonts = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final entry in {
+      'Roboto': 'Roboto-Regular.ttf',
+      'Ahem': 'Roboto-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(
+              '$fonts/${entry.value}',
+            ).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
+
+  Future<void> pumpFrames(WidgetTester tester) async {
+    for (var frame = 0; frame < 8; frame++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+  }
+
+  Future<void> snapshot(WidgetTester tester, String name) async {
+    if (!capture) return;
+    final context = tester.element(find.byKey(frameKey));
+    var decoded = false;
+    final images = Future.wait([
+      for (final widget in tester.widgetList<Image>(find.byType(Image)))
+        precacheImage(widget.image, context),
+    ]).then((_) => decoded = true);
+    for (var attempt = 0; attempt < 200 && !decoded; attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    expect(decoded, isTrue, reason: 'Decode the attachment before capture');
+    await images;
+    await tester.pump();
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(frameKey),
+    );
+    await tester.runAsync(() async {
+      final bitmap = await boundary.toImage();
+      try {
+        final bytes = await bitmap.toByteData(format: ui.ImageByteFormat.png);
+        final directory = Directory('build/design-previews/paste-order')
+          ..createSync(recursive: true);
+        await File(
+          '${directory.path}/$name.png',
+        ).writeAsBytes(bytes!.buffer.asUint8List());
+      } finally {
+        bitmap.dispose();
+      }
+    });
+  }
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
     cache = await Directory.systemTemp.createTemp('hermes-paste-test-');
-    host = Host();
+    host = Host()..running = false;
     controller = ProfileWorkspaceController(
       access: ConnectionAccess(
         connection: SavedConnection(
@@ -155,11 +224,165 @@ void main() {
     );
   });
 
-  Future<void> show(WidgetTester tester) async {
+  Future<void> show(
+    WidgetTester tester, {
+    bool settle = true,
+    Brightness? brightness,
+    double scale = 1,
+  }) async {
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      RepaintBoundary(
+        key: frameKey,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: brightness == null ? null : wingTheme(brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: ProfileWorkspaceScreen(controller: controller),
+        ),
+      ),
     );
-    await tester.pumpAndSettle();
+    if (settle) {
+      await tester.pumpAndSettle();
+    } else {
+      await pumpFrames(tester);
+    }
+  }
+
+  for (final configuration in [
+    (running: false, brightness: Brightness.light, scale: 1.0),
+    for (final brightness in Brightness.values)
+      for (final scale in [1.0, 2.0])
+        (running: true, brightness: brightness, scale: scale),
+  ]) {
+    for (final imageFirst in [true, false, null]) {
+      final name =
+          '${configuration.running}-${configuration.brightness.name}-${configuration.scale}-$imageFirst';
+      testWidgets('pasted image keeps the primary action usable $name', (
+        tester,
+      ) async {
+        final running = configuration.running;
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = Size(
+          configuration.scale == 1 ? 390 : 320,
+          850,
+        );
+        addTearDown(tester.view.reset);
+        host.running = running;
+        controller.connectionStatus.accessAvailable();
+        controller.connectionStatus.liveChanged(
+          chat.key.workspace.profileName,
+          true,
+        );
+        if (running) emitChatEvent(controller, chat, 'message.start');
+        final read = Completer<Uint8List>();
+        tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          ImageClipboard.channel,
+          (call) async => call.method == 'hasImage' ? true : read.future,
+        );
+        await show(
+          tester,
+          settle: false,
+          brightness: configuration.brightness,
+          scale: configuration.scale,
+        );
+        tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+        if (imageFirst == false) {
+          await tester.enterText(find.byKey(composerKey), 'Describe this');
+        }
+        await pumpFrames(tester);
+        await tester.longPressAt(
+          tester.getTopLeft(find.byType(EditableText)) + const Offset(12, 12),
+        );
+        await pumpFrames(tester);
+        if (find.text('Paste').evaluate().isEmpty) {
+          await tester.tap(find.byTooltip('More'));
+          await pumpFrames(tester);
+        }
+        await tester.tap(find.text('Paste'));
+        await tester.pump();
+        expect(find.bySemanticsLabel('Adding photo…'), findsOneWidget);
+        expect(
+          tester.widget<TextField>(find.byKey(composerKey)).enabled,
+          isTrue,
+        );
+        await snapshot(tester, '$name-pending');
+        read.complete(png);
+        for (
+          var attempt = 0;
+          attempt < 200 && !controller.canAddAttachment(chat);
+          attempt++
+        ) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 10)),
+          );
+          await tester.pump();
+        }
+        await pumpFrames(tester);
+        expect(chat.composer.observation.preparing, isFalse);
+        expect(chat.composer.observation.attachments, hasLength(1));
+        if (imageFirst == true) {
+          final imageOnlyButton = tester.widget<ComposerActionButton>(
+            find.byType(ComposerActionButton),
+          );
+          expect(imageOnlyButton.unavailable[imageOnlyButton.primary], isNull);
+          await tester.enterText(find.byKey(composerKey), 'Describe this');
+          await pumpFrames(tester);
+        }
+        final button = tester.widget<ComposerActionButton>(
+          find.byType(ComposerActionButton),
+        );
+        expect(button.unavailable[button.primary], isNull);
+        expect(button.primary, ComposerAction.send);
+        await snapshot(tester, '$name-ready');
+        await tester.runAsync(() async {
+          await tester.tap(find.byTooltip('Send'));
+          await chat.composer.admittedWrites;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await pumpFrames(tester);
+        expect(chat.composer.observation.text, isEmpty);
+        expect(chat.composer.observation.attachments, isEmpty);
+        if (running) {
+          expect(
+            chat.composer.observation.queue.single.text,
+            imageFirst == null ? '' : 'Describe this',
+          );
+          expect(
+            chat.composer.observation.queue.single.attachments,
+            hasLength(1),
+          );
+          expect(
+            host.calls.where((call) => call.$2 == 'prompt.submit'),
+            isEmpty,
+          );
+          expect(
+            find
+                .descendant(
+                  of: find.byType(ProfileQueuedMessages),
+                  matching: find.text(
+                    imageFirst == null
+                        ? 'Pasted image.png'
+                        : 'Describe this · Pasted image.png',
+                  ),
+                )
+                .hitTestable(),
+            findsOneWidget,
+          );
+          await snapshot(tester, '$name-queued');
+        } else {
+          expect(
+            host.calls.where((call) => call.$2 == 'prompt.submit'),
+            hasLength(1),
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
   testWidgets(

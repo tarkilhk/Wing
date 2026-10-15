@@ -77,7 +77,6 @@ void main() {
       working: working,
       canSteer: working,
       connected: true,
-      serverDisconnected: false,
       automaticDrainAvailable: true,
       switching: false,
       changingAnswer: false,

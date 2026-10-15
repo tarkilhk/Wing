@@ -5460,12 +5460,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
       runtimeId: chat.runtime.runtimeId,
       working: chat.runtime.blocksTurnAdmission,
       canSteer: chat.runtime.canSteer,
-      serverDisconnected:
-          connectionStatus.access == ConnectionAvailability.unavailable ||
-          (connectionStatus.hasLiveObservation(
-                chat.key.workspace.profileName,
-              ) &&
-              !connectionStatus.liveAvailable(chat.key.workspace.profileName)),
       connected:
           !_closed &&
           !chat.runtime.opening &&

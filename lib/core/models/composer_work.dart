@@ -68,7 +68,6 @@ final class ComposerRuntimeObservation {
     required this.working,
     required this.canSteer,
     required this.connected,
-    required this.serverDisconnected,
     required this.automaticDrainAvailable,
     required this.switching,
     required this.changingAnswer,
@@ -83,7 +82,6 @@ final class ComposerRuntimeObservation {
   final bool working;
   final bool canSteer;
   final bool connected;
-  final bool serverDisconnected;
 
   /// Automatic sending requires positively observed access and live transport.
   /// Optimistic availability offered by the UI does not grant this authority.
@@ -111,7 +109,6 @@ final class ComposerAttachmentPreparation {
 final class ComposerObservation {
   ComposerObservation({
     required this.revision,
-    required this.serverDisconnected,
     required this.text,
     Iterable<ComposerReference> references = const [],
     required this.submissionUncertain,
@@ -133,7 +130,6 @@ final class ComposerObservation {
        queue = List.unmodifiable(queue);
 
   final int revision;
-  final bool serverDisconnected;
   final String text;
   final List<ComposerReference> references;
   final bool submissionUncertain;
@@ -236,4 +232,14 @@ final class ComposerActions {
   final bool canResumeQueue;
   final bool editingBusy;
   final bool canEditText;
+
+  ComposerAction? primaryAction(ComposerAction? runningAction) {
+    if (prefersStopAction) return ComposerAction.stop;
+    if (!prefersRunningAction) return ComposerAction.send;
+    if (runningAction == null) return null;
+    return unavailable[runningAction] == null ||
+            unavailable[ComposerAction.send] != null
+        ? runningAction
+        : ComposerAction.send;
+  }
 }

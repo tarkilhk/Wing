@@ -20,7 +20,7 @@ class ProfileQueuedMessages extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!work.serverDisconnected || work.queue.isEmpty) {
+    if (work.queue.isEmpty) {
       return const SizedBox.shrink();
     }
     final theme = Theme.of(context);
