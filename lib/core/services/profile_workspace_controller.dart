@@ -111,6 +111,7 @@ class ProfileChat {
   bool _reasoningUnconfirmed = false;
   bool? _yolo;
   bool _changingIntelligence = false;
+  bool _branchingAnswer = false;
   String? _intelligenceRuntime;
   int _intelligenceReadGeneration = 0;
   int _intelligenceRevision = 0;
@@ -177,6 +178,7 @@ class ProfileChat {
   ChatFastMode? get fastMode => _fastMode;
   bool? get yolo => _yolo;
   bool get changingIntelligence => _changingIntelligence;
+  bool get branchingAnswer => _branchingAnswer;
   String? get intelligenceRuntime => _intelligenceRuntime;
   List<GatewayNotice> get reviewNotices =>
       List.unmodifiable(_reviewNotices.map((receipt) => receipt.notice));
@@ -5589,6 +5591,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await openSession(ProfileSessionKey(resource.scope, parent));
   }
 
+  /// Copying saved history does not require an idle source turn.
+  bool canBranchAnswer(ProfileChat chat) =>
+      !_closed &&
+      !chat.runtime.opening &&
+      !chat.runtime.offline &&
+      !recovering &&
+      !chat.runtime.reconnecting &&
+      !chat.runtime.changingAnswer &&
+      !chat.branchingAnswer &&
+      !chat.changingIntelligence &&
+      !switching;
+
   /// Branches an answer, or regenerates it in place to match Desktop rewind.
   Future<ProfileChat?> branchAnswer(
     ProfileChat source,
@@ -5596,8 +5610,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     bool regenerate = false,
   }) async {
     final resource = _commandOwner(source);
-    if (source.runtime.blocksTurnAdmission ||
+    if ((regenerate
+            ? source.runtime.blocksTurnAdmission
+            : !canBranchAnswer(source)) ||
         source.runtime.changingAnswer ||
+        source.branchingAnswer ||
         source._changingIntelligence ||
         switching) {
       return null;
@@ -5612,7 +5629,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     final navigation = _navigationGeneration;
     final profileGeneration = _generation;
-    source._runtime.beginAnswerChange(submitting: false);
+    if (regenerate) {
+      source._runtime.beginAnswerChange(submitting: false);
+    } else {
+      source._branchingAnswer = true;
+    }
     _changed();
     try {
       // Address the saved row, even when only the newest history page is visible.
@@ -5712,7 +5733,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
       await refreshHistory(child);
       return child;
     } finally {
-      source._runtime.finishAnswerChange();
+      if (regenerate) {
+        source._runtime.finishAnswerChange();
+      } else {
+        source._branchingAnswer = false;
+      }
       _changed();
     }
   }
@@ -5848,6 +5873,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
                 chat.runtime.execution != ChatExecution.submitting
           : !chat.runtime.blocksTurnAdmission) &&
       !chat.runtime.changingAnswer &&
+      !chat.branchingAnswer &&
       !chat._changingIntelligence &&
       !chat.runtime.commandRunning &&
       !chat.composer.observation.draining &&
@@ -6691,11 +6717,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat.reading.appendCommandNotice('Session title: ${chat.title}');
       case 'branch':
       case 'fork':
-        if (chat.runtime.blocksTurnAdmission || switching) {
-          throw StateError('Wait for the current turn before branching.');
-        }
         final index = chat.reading.messages.lastIndexWhere(
-          (m) => m['role'] == 'assistant' && isBranchMessage(m),
+          (m) =>
+              m['role'] == 'assistant' &&
+              isBranchMessage(m) &&
+              answerMessageId(m) != null,
         );
         if (index < 0) {
           throw StateError('Send a message before branching this chat.');

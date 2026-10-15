@@ -4,9 +4,13 @@ import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'helpers/pump_markdown_widget.dart';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -17,6 +21,8 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/widgets/answer_actions.dart';
+import 'package:wing/core/widgets/transcript_latest_button.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/process_batch_fixture.dart';
@@ -29,6 +35,9 @@ class AnswerHost {
   final parents = <String, String>{};
   final calls = <(String, Map<String, dynamic>)>[];
   Completer<void>? branchDelay;
+  Object? branchError;
+  Completer<void>? branchReadDelay;
+  String? branchReadSession;
   void Function(List<Map<String, dynamic>>)? alterBranch;
   List<Map<String, dynamic>>? branchReplyMessages;
   Completer<void>? submitDelay;
@@ -100,34 +109,40 @@ class AnswerHost {
         currentName: 'a',
         activeName: 'a',
       ),
-      get: (path, query) async =>
-          references != null && (path == 'profiles' || path.startsWith('files'))
-          ? references!.read(path, query)
-          : path == 'sessions'
-          ? {
-              'offset': int.parse(query['offset']!),
-              'limit': int.parse(query['limit']!),
-              'total': 1 + parents.length,
-              'sessions': [
-                {
-                  'id': 'original',
-                  'title': 'Original chat',
-                  'unread': false,
-                  'profile': scope.profileName,
-                },
-                for (final entry in parents.entries)
+      get: (path, query) async {
+        if (path == 'sessions/$branchReadSession/messages' &&
+            query['order'] == 'oldest') {
+          await branchReadDelay?.future;
+        }
+        return references != null &&
+                (path == 'profiles' || path.startsWith('files'))
+            ? references!.read(path, query)
+            : path == 'sessions'
+            ? {
+                'offset': int.parse(query['offset']!),
+                'limit': int.parse(query['limit']!),
+                'total': 1 + parents.length,
+                'sessions': [
                   {
-                    'id': entry.key,
-                    'title': 'Branched chat',
+                    'id': 'original',
+                    'title': 'Original chat',
+                    'unread': false,
                     'profile': scope.profileName,
-                    if (clearListParent)
-                      'parent_session_id': null
-                    else if (!omitListParent)
-                      'parent_session_id': entry.value,
                   },
-              ],
-            }
-          : historyPage(scope.profileName, path, query),
+                  for (final entry in parents.entries)
+                    {
+                      'id': entry.key,
+                      'title': 'Branched chat',
+                      'profile': scope.profileName,
+                      if (clearListParent)
+                        'parent_session_id': null
+                      else if (!omitListParent)
+                        'parent_session_id': entry.value,
+                    },
+                ],
+              }
+            : historyPage(scope.profileName, path, query);
+      },
       rpc: (method, params) async {
         calls.add((method, params));
         final profile = scope.profileName;
@@ -150,6 +165,13 @@ class AnswerHost {
           'title': 'Branched chat',
         };
         switch (method) {
+          case 'commands.catalog':
+            return {
+              'pairs': [
+                ['/branch', 'Branch the saved conversation'],
+                ['/fork', 'Fork the saved conversation'],
+              ],
+            };
           case 'session.context_breakdown':
             return {
               'context_used': 0,
@@ -176,6 +198,7 @@ class AnswerHost {
             };
           case 'session.branch':
             await branchDelay?.future;
+            if (branchError != null) throw branchError!;
             final child = 'child-${++next}';
             histories['$profile/$child'] = history(profile, id)
                 .where(isBranchMessage)
@@ -243,6 +266,20 @@ class AnswerHost {
 }
 
 void main() {
+  const captureFork = bool.fromEnvironment('CAPTURE_RUNNING_FORK');
+  setUpAll(() async {
+    if (!captureFork) return;
+    for (final font in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+    }.entries) {
+      await (FontLoader(
+            font.key,
+          )..addFont(File(font.value).readAsBytes().then(ByteData.sublistView)))
+          .load();
+    }
+  });
   late AnswerHost host;
   late SharedPreferences preferences;
   late ProfileWorkspaceController controller;
@@ -282,6 +319,334 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  void event(String type, [Map<String, dynamic> data = const {}]) {
+    host.gateways['a']!.onEvent!(
+      StreamEvent(
+        type: type,
+        sessionId: original.runtime.runtimeId,
+        data: data,
+      ),
+    );
+  }
+
+  test(
+    'fork older answer preserves a running source through completion',
+    () async {
+      event('message.start');
+      event('tool.start', {'tool_id': 'live-tool', 'name': 'terminal'});
+      final activity = original.runtime.mainToolActivity;
+      final history = original.reading.messages.toList();
+      await controller.updateDraft(original, 'Keep this draft');
+      host.branchDelay = Completer<void>();
+      final pending = controller.branchAnswer(original, 2);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        host.calls.where((call) => call.$1 == 'session.branch'),
+        hasLength(1),
+      );
+      expect(original.runtime.execution, ChatExecution.running);
+      expect(original.runtime.mainActivity, ChatMainActivity.tool);
+      expect(original.runtime.mainToolActivity, same(activity));
+      expect(original.runtime.changingAnswer, isFalse);
+      expect(await controller.branchAnswer(original, 2), isNull);
+      expect(
+        await controller.branchAnswer(original, 2, regenerate: true),
+        isNull,
+      );
+      expect(original.reading.messages, history);
+      expect(original.composer.observation.text, 'Keep this draft');
+
+      event('tool.complete', {
+        'tool_id': 'live-tool',
+        'result': 'Still working',
+      });
+      event('reasoning.chunk', {'text': 'Continue the original work'});
+      host.branchDelay!.complete();
+      final child = await pending;
+      expect(child, isNotNull);
+      expect(controller.current!.chat, same(child));
+      expect(child!.reading.messages.map(answerMessageText), [
+        'Original prompt',
+        'Original answer',
+      ]);
+      expect(original.runtime.execution, ChatExecution.running);
+      expect(original.composer.observation.text, 'Keep this draft');
+      event('message.complete');
+      await Future<void>.delayed(Duration.zero);
+      expect(original.runtime.execution, ChatExecution.completed);
+      expect(child.runtime.execution, ChatExecution.idle);
+      expect(
+        host.calls.where(
+          (call) =>
+              call.$1 == 'session.interrupt' || call.$1 == 'prompt.submit',
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'fork older answer while running shows failure and retry ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: scale == 2,
+                ),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(controller: controller),
+            ),
+          );
+          Future<void> picture(String state) async {
+            if (!captureFork) return;
+            await tester.settleMarkdown();
+            await tester.pump();
+            await tester.runAsync(() async {
+              final bitmap =
+                  await (frame.currentContext!.findRenderObject()!
+                          as RenderRepaintBoundary)
+                      .toImage();
+              try {
+                final bytes = await bitmap.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final directory = Directory(
+                  'build/design-previews/running-fork',
+                )..createSync(recursive: true);
+                await File(
+                  '${directory.path}/${brightness.name}-$scale-$state.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+              } finally {
+                bitmap.dispose();
+              }
+            });
+          }
+
+          await tester.pumpAndSettle();
+          event('message.start');
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.settleMarkdown();
+          final actions = find.byKey(const ValueKey('answer-actions-3'));
+          await tester.ensureVisible(actions);
+          await tester.pump(const Duration(milliseconds: 300));
+          final fork = find.descendant(
+            of: actions,
+            matching: find.byTooltip('Branch in new session'),
+          );
+          expect(tester.widget<AnswerActions>(actions).onBranch, isNotNull);
+          expect(tester.widget<AnswerActions>(actions).onRegenerate, isNull);
+          await picture('available');
+          final actionBounds = tester.getRect(actions);
+          host.branchDelay = Completer<void>();
+          host.branchError = StateError('Fork failed; try again');
+          host.branchReadDelay = Completer<void>();
+          host.branchReadSession = 'original';
+          await tester.tap(fork);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(original.branchingAnswer, isTrue);
+          expect(tester.widget<AnswerActions>(actions).onBranch, isNull);
+          expect(original.runtime.execution, ChatExecution.running);
+          expect(tester.getRect(actions), actionBounds);
+          final header = find.byKey(const ValueKey('studio-loading-slot'));
+          expect(
+            find.descendant(
+              of: header,
+              matching: find.byTooltip('Preparing answer'),
+            ),
+            findsOneWidget,
+          );
+          await picture('pending');
+          expect(
+            host.calls.where((call) => call.$1 == 'session.branch'),
+            isEmpty,
+          );
+          await tester.runAsync(() async {
+            host.branchReadDelay!.complete();
+            await Future<void>.delayed(Duration.zero);
+          });
+          await tester.pump();
+          expect(
+            host.calls.where((call) => call.$1 == 'session.branch'),
+            hasLength(1),
+          );
+          expect(original.branchingAnswer, isTrue);
+          await tester.runAsync(() async {
+            host.branchDelay!.complete();
+            await Future<void>.delayed(Duration.zero);
+          });
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(find.textContaining('Fork failed; try again'), findsOneWidget);
+          expect(original.branchingAnswer, isFalse);
+          expect(tester.widget<AnswerActions>(actions).onBranch, isNotNull);
+          expect(original.runtime.execution, ChatExecution.running);
+          await picture('failed');
+          await tester.pump(const Duration(seconds: 4));
+          await tester.pump(const Duration(milliseconds: 300));
+          // Keep the real retry control clear of the floating Latest button.
+          await Scrollable.ensureVisible(tester.element(fork), alignment: 0.5);
+          await tester.pump();
+          host.branchError = null;
+          host.branchReadDelay = Completer<void>();
+          host.branchReadSession = 'child-1';
+          await tester.tap(fork);
+          await tester.runAsync(() async {
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+          await tester.pump();
+          expect(controller.current!.chat, same(original));
+          expect(original.branchingAnswer, isTrue);
+          await tester.runAsync(() async {
+            host.branchReadDelay!.complete();
+            await Future<void>.delayed(Duration.zero);
+          });
+          await tester.pump();
+          expect(controller.current!.chat, isNot(same(original)));
+          expect(original.runtime.execution, ChatExecution.running);
+          await tester.pump(const Duration(milliseconds: 300));
+          await picture('branched');
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
+  testWidgets('fork progress survives scrolling away from saved answers', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+    event('message.start');
+    await tester.pump(const Duration(milliseconds: 300));
+    final actions = find.byKey(const ValueKey('answer-actions-3'));
+    await tester.ensureVisible(actions);
+    host.branchDelay = Completer<void>();
+    await tester.tap(
+      find.descendant(
+        of: actions,
+        matching: find.byTooltip('Branch in new session'),
+      ),
+    );
+    await tester.pump();
+    event('message.delta', {
+      'text': List.filled(200, 'The original work continues.\n\n').join(),
+    });
+    await tester.pump(const Duration(milliseconds: 80));
+    await tester.settleMarkdown();
+    await tester.tap(find.byType(TranscriptLatestButton));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.settleMarkdown();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byTooltip('Branch in new session').hitTestable(), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('studio-loading-slot')),
+        matching: find.byTooltip('Preparing answer'),
+      ),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const Key('profile-message-composer')),
+      'Another draft',
+    );
+    await tester.pump();
+    expect(original.composer.observation.text, 'Another draft');
+    host.branchError = StateError('Fork failed; try again');
+    await tester.runAsync(() async {
+      host.branchDelay!.complete();
+      await Future<void>.delayed(Duration.zero);
+    });
+    await tester.pump();
+    expect(original.branchingAnswer, isFalse);
+    expect(original.runtime.execution, ChatExecution.running);
+    expect(find.textContaining('Fork failed; try again'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  for (final command in ['branch', 'fork']) {
+    test('$command command copies saved answers during a live reply', () async {
+      event('message.start');
+      event('message.delta', {'text': 'Unfinished response'});
+      await controller.updateDraft(original, '/$command');
+      await controller.send(original);
+      final child = controller.current!.chat!;
+      expect(child, isNot(same(original)));
+      expect(child.reading.messages.last['text'], 'Later answer');
+      expect(original.runtime.execution, ChatExecution.running);
+      expect(
+        host.calls.lastWhere((call) => call.$1 == 'session.branch').$2['count'],
+        4,
+      );
+    });
+  }
+
+  for (final pendingInput in ['approval', 'clarify']) {
+    test('fork keeps pending $pendingInput on the source chat', () async {
+      event('message.start');
+      event(
+        pendingInput,
+        pendingInput == 'approval'
+            ? {
+                'request_id': 'pending',
+                'command': 'echo hello',
+                'choices': ['once', 'deny'],
+              }
+            : {
+                'request_id': 'pending',
+                'questions': [
+                  {'qid': 'q0', 'question': 'Which room?'},
+                ],
+              },
+      );
+      expect(original.runtime.needsInput, isTrue);
+      final child = await controller.branchAnswer(original, 2);
+      expect(child, isNotNull);
+      expect(original.runtime.needsInput, isTrue);
+      expect(child!.runtime.needsInput, isFalse);
+      expect(
+        host.calls.where(
+          (call) => {
+            'approval.respond',
+            'clarify.lock',
+            'request.answer',
+            'session.interrupt',
+          }.contains(call.$1),
+        ),
+        isEmpty,
+      );
+    });
+  }
+
+  test(
+    'source completion during a fork is not reset by branch settlement',
+    () async {
+      event('message.start');
+      host.branchDelay = Completer<void>();
+      final pending = controller.branchAnswer(original, 2);
+      await Future<void>.delayed(Duration.zero);
+      event('message.complete');
+      expect(original.runtime.execution, ChatExecution.completed);
+      host.branchDelay!.complete();
+      expect(await pending, isNotNull);
+      expect(original.runtime.execution, ChatExecution.completed);
+      expect(original.branchingAnswer, isFalse);
+    },
+  );
 
   for (final delivery in [
     processBatchEnvelope,

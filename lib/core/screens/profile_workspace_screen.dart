@@ -1613,10 +1613,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         StudioPageLoading(
           active:
               controller.refreshingWorkspace ||
+              chat.branchingAnswer ||
               chat.changingIntelligence ||
               _loadingIntelligence == chat.key,
           label: controller.refreshingWorkspace
               ? 'Refreshing workspace'
+              : chat.branchingAnswer
+              ? 'Preparing answer'
               : 'Updating model settings',
           child: StudioLoadingRegion(
             busy: controller.switching || chat.refreshingConversation,
@@ -1867,6 +1870,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         !controller.recovering &&
         !chat.runtime.blocksTurnAdmission &&
         !chat.runtime.changingAnswer &&
+        !chat.branchingAnswer &&
         !chat.changingIntelligence &&
         !chat.runtime.commandRunning &&
         !controller.switching;
@@ -1926,7 +1930,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       onReadAloud: () => _run(() => _requestReadAloud(chat, message)),
       readingAloud:
           _voiceOutput.owner == controller.voiceReplyKey(chat, message),
-      onBranch: enabled
+      onBranch: controller.canBranchAnswer(chat) && !chat.runtime.commandRunning
           ? () => _run(() async {
               await controller.branchAnswer(
                 chat,

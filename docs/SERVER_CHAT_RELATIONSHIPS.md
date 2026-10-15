@@ -5,6 +5,10 @@ session** creates a separate chat through the selected saved answer, preserving
 the original. The composer commands `/branch` and `/fork` branch through the
 latest saved assistant reply; an optional argument names the new chat.
 
+You can fork a saved answer while the original chat is working or waiting for
+your input. Its current work continues in the original chat. The branch includes
+only history through the selected saved answer.
+
 **Restore checkpoint** on a saved user prompt changes the existing chat instead.
 After confirmation, it replaces that prompt and everything after it, then reruns
 the prompt. It can interrupt ongoing work and pauses the unsent queue. If the
