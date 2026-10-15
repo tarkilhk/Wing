@@ -1369,6 +1369,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         _bots.repository(bot.scope.connectionIdentity).server != null;
     final parentSessionId = controller.parentSessionId(chat);
     final stackChatScope =
+        bot == null &&
         MediaQuery.textScalerOf(context).scale(12) > 18 &&
         MediaQuery.sizeOf(context).width < 480;
     final canMoveProject =
@@ -1479,12 +1480,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             color: Theme.of(context).colorScheme.onSurfaceVariant,
             fontWeight: FontWeight.w400,
           );
-          final projectLabel = chat.runtime.opening || chat.runtime.offline
-              ? chat.key.workspace.profileName
-              : controller.chatProjectLabel(chat);
-          final projectAppearance = chat.runtime.opening || chat.runtime.offline
-              ? null
-              : controller.chatProject(chat);
           final server = ServerConnectionLabel(
             alignment: Alignment.centerLeft,
             label: controller.connection.label,
@@ -1492,6 +1487,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             status: controller.connectionStatus,
             style: scopeStyle,
           );
+          if (bot != null) return server;
+          final projectLabel = chat.runtime.opening || chat.runtime.offline
+              ? chat.key.workspace.profileName
+              : controller.chatProjectLabel(chat);
+          final projectAppearance = chat.runtime.opening || chat.runtime.offline
+              ? null
+              : controller.chatProject(chat);
           final project = Tooltip(
             message: 'Move to project: $projectLabel',
             child: Semantics(
@@ -2503,7 +2505,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       chat,
       chat.context,
       chat.contextCompressions,
-      chat.contextLoading,
+      chat.contextRefreshPending,
       chat.contextError,
     );
     if (_contextRingInputs == inputs) return _contextRing!;
@@ -2512,9 +2514,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       key: ValueKey(('context-ring', chat.key)),
       occupancy: chat.context,
       compressions: chat.contextCompressions,
-      loading: chat.contextLoading,
+      loading: chat.contextRefreshPending,
       error: chat.contextError,
-      onRefresh: () => unawaited(controller.refreshContext(chat)),
+      onRefresh: () =>
+          unawaited(controller.refreshContext(chat, userInitiated: true)),
     );
   }
 

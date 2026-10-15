@@ -2,6 +2,7 @@ import 'support/form_family_capture.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -3359,7 +3360,15 @@ void main() {
           expect(find.byTooltip('Chat actions'), findsOneWidget);
           expect(
             find.byKey(const ValueKey('chat-project-picker')),
-            findsOneWidget,
+            findsNothing,
+          );
+          expect(find.text('Project unavailable'), findsNothing);
+          expect(find.text('Unassigned'), findsNothing);
+          expect(find.text('·'), findsNothing);
+          expect(find.text('Home server'), findsOneWidget);
+          expect(
+            tester.widget<WingAppBar>(find.byType(WingAppBar)).contextHeight,
+            48,
           );
           await tester.settleMarkdown();
           await tester.pumpAndSettle();
@@ -3449,6 +3458,10 @@ void main() {
           await tester.pumpAndSettle();
           expect(avatar, findsOneWidget);
           expect(find.text('Compacted conversation'), findsNothing);
+          expect(
+            find.byKey(const ValueKey('chat-project-picker')),
+            findsNothing,
+          );
           // A delayed lookup for one chat must not decorate a different chat.
           heldRoster = Completer<Map<String, dynamic>?>();
           await controller.openSession(
@@ -3467,6 +3480,10 @@ void main() {
           expect(find.byType(BotAvatar), findsNothing);
           expect(find.text('Bot Chat'), findsOneWidget);
           expect(find.byTooltip('Bot settings'), findsNothing);
+          expect(
+            find.byKey(const ValueKey('chat-project-picker')),
+            findsOneWidget,
+          );
           expect(find.text('Hermes'), findsNothing);
           expect(tester.takeException(), isNull);
           semantics.dispose();

@@ -37,6 +37,9 @@ confirmation. You can keep editing your draft. Fast and reasoning changes keep
 the reported context percentage visible.
 
 The context ring uses reported server usage or a labelled estimate. Unknown usage is not shown as zero. Its warning thresholds are 65% and 85%.
+Tap it to fetch the token composition, including while Hermes is working. Live
+token totals keep updating without clearing the last composition estimate.
+If a breakdown read fails, the panel keeps known values and offers Retry.
 
 Messages show a local date/time in the footer when available. Long-press it for the full value. Copy at the upper right copies only the message. Newly sent messages may use their local submission time until saved history arrives.
 

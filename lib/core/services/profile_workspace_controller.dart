@@ -92,8 +92,10 @@ part 'profile_workspace_deleted_drafts.dart';
 class ProfileChat {
   ContextOccupancy? _context;
   int _contextGeneration = 0;
+  int _contextUsageRevision = 0;
   int? _contextCompressions;
   bool _contextLoading = false;
+  bool _contextExplicitRefresh = false;
   String? _contextError;
   ProfileSessionKey _key;
   String _title;
@@ -164,6 +166,7 @@ class ProfileChat {
   ContextOccupancy? get context => _context;
   int? get contextCompressions => _contextCompressions;
   bool get contextLoading => _contextLoading;
+  bool get contextRefreshPending => _contextLoading && _contextExplicitRefresh;
   String? get contextError => _contextError;
   ProfileSessionKey get key => _key;
   String get title => _title;
@@ -3037,13 +3040,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
   }
 
-  Future<void> refreshContext(ProfileChat chat) async {
-    if (_closed || chat.runtime.blocksTurnAdmission) return;
+  Future<void> refreshContext(
+    ProfileChat chat, {
+    bool userInitiated = false,
+  }) async {
+    if (_closed) return;
     final resource = _owned(chat);
     final key = chat._key;
     final gateway = resource.gateway;
     final runtime = chat.runtime.runtimeId;
     final generation = ++chat._contextGeneration;
+    final usageRevision = chat._contextUsageRevision;
+    chat._contextExplicitRefresh = userInitiated || chat.contextRefreshPending;
     chat._contextLoading = true;
     chat._contextError = null;
     _changed();
@@ -3065,7 +3073,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat._contextGeneration != generation) {
       return;
     }
-    chat._context = value;
+    if (error == null) {
+      // Usage streams independently of this read. Accept the category estimate
+      // without rolling newer totals back to when the request started.
+      chat._context = chat._contextUsageRevision == usageRevision
+          ? value
+          : chat._context?.withCategories(value?.categories ?? const []);
+    }
     chat._contextLoading = false;
     chat._contextError = error;
     _changed();
@@ -3617,6 +3631,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       'The session changed, but its continuation was not accepted. Check this chat and refresh session controls before trying again.';
 
   void _updateContext(ProfileChat chat, Map usage) {
+    final explicitRefresh = chat.contextRefreshPending;
     final compressions = usage['compressions'];
     final compressionChanged =
         compressions is int &&
@@ -3628,15 +3643,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     if (compressionChanged) _invalidateContextDetails(chat);
     if (!usage.keys.any((key) => key.toString().startsWith('context_'))) {
-      if (compressionChanged && !chat.runtime.blocksTurnAdmission) {
-        unawaited(refreshContext(chat));
+      if (compressionChanged) {
+        unawaited(refreshContext(chat, userInitiated: explicitRefresh));
       }
       return;
     }
     final previous = chat._context;
-    chat._contextGeneration++;
-    chat._contextLoading = false;
-    chat._contextError = null;
+    chat._contextUsageRevision++;
     chat._context = ContextOccupancy.fromJson({
       if (previous != null) ...{
         'context_used': previous.used,
@@ -3645,9 +3658,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         'context_estimated': previous.estimated,
       },
       ...Map<String, dynamic>.from(usage),
-    });
-    if (compressionChanged && !chat.runtime.blocksTurnAdmission) {
-      unawaited(refreshContext(chat));
+    })?.withCategories(previous?.categories ?? const []);
+    if (compressionChanged) {
+      unawaited(refreshContext(chat, userInitiated: explicitRefresh));
     }
   }
 
@@ -7053,10 +7066,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return false;
     }
     if (commandPrompt == null) {
-      _invalidateContextDetails(chat);
       chat._runtime.beginTurn(submitting: true);
     } else {
-      _invalidateContextDetails(chat);
       chat._runtime.beginCommandPrompt(commandPrompt);
     }
     chat.reading.cancelReads();
@@ -7770,7 +7781,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         // Cold resume can answer before the agent exists. Its ready event may
         // still have no measured usage; fetch the server's history estimate.
-        if (event.data['lazy'] != true && !chat.runtime.blocksTurnAdmission) {
+        if (event.data['lazy'] != true) {
           unawaited(refreshContext(chat));
         }
         if (!chat._sessionControlReadAttempted) {
@@ -7789,7 +7800,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
           _updateContext(chat, event.data['usage'] as Map);
         }
       case 'message.start':
-        _invalidateContextDetails(chat);
         applyChatTranscriptEvent(
           runtime: chat._runtime,
           reading: chat.reading,

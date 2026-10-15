@@ -393,7 +393,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('context-ring-details')));
     await tester.pumpAndSettle();
     expect(find.text('Couldn’t load the context breakdown.'), findsOneWidget);
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.byTooltip('Retry context breakdown'));
     expect(retries, 2); // Open and explicit Retry each forward the intent.
     expect(find.textContaining('0%'), findsNothing);
   });
