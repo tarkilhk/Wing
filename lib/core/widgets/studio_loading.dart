@@ -111,7 +111,10 @@ class _StudioWorkingIndicatorState extends State<StudioWorkingIndicator> {
       ? _glyph(true)
       : ValueListenableBuilder<_LoadingState>(
           valueListenable: _presentation!,
-          builder: (_, state, _) => _glyph(identical(state.work, _identity)),
+          builder: (_, state, _) => _glyph(
+            identical(state.work, _identity) &&
+                !(state.headerLabel != null && state.slot != null),
+          ),
         );
 }
 
@@ -408,17 +411,9 @@ class _StudioLoadingSlotState extends State<StudioLoadingSlot> {
                 !identical(state.slot, _identity) ||
                 !(ModalRoute.isCurrentOf(context) ?? true)
             ? const SizedBox.shrink()
-            : state.work == null
-            ? StudioLoading(label: state.headerLabel!, size: 18)
             : Tooltip(
                 message: state.headerLabel!,
-                child: Semantics(
-                  liveRegion: true,
-                  label: state.headerLabel!,
-                  child: const ExcludeSemantics(
-                    child: Icon(Icons.refresh, size: 18),
-                  ),
-                ),
+                child: StudioLoading(label: state.headerLabel!, size: 18),
               ),
       ),
     ),

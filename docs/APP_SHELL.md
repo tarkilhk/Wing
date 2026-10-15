@@ -16,6 +16,10 @@ The floating pen creates a chat. Wing asks which profile to use unless exactly o
 
 Back returns through the current viewer, editor or Recents stack, then from a conversation to its originating Chats, Recents or Bots screen. At the workspace root it opens the drawer before exiting. Navigation preserves drafts and open work.
 
+Page loading and manual refresh show a pulsating Wing in the header. During
+that wait, an existing conversation work Wing stays static and resumes pulsing
+when loading finishes. Reduced motion keeps the Wing static.
+
 ## Search and visibility
 
 Search finds chat titles and server message matches across profiles, including archived matches when they fit the selected scope. Message search has a server limit of 100 results per profile. Incomplete loads retain readable rows and offer Retry; a partial list is not a complete archive search.

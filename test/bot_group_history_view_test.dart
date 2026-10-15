@@ -664,6 +664,44 @@ void main() {
           expect(find.byType(ProfileActivitySection), findsNothing);
           expect(find.text('Thinking'), findsOneWidget);
           await tester.settleMarkdown();
+          final refreshGate = Completer<void>();
+          addTearDown(() {
+            if (!refreshGate.isCompleted) refreshGate.complete();
+          });
+          final liveRead = fixture.readHook!;
+          fixture.readHook = (profile, method, params) async {
+            if (method == 'session.list') await refreshGate.future;
+            return liveRead(profile, method, params);
+          };
+          await tester.tap(find.byTooltip('Refresh working history'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 50));
+          final headerPulse = find.descendant(
+            of: find.byType(StudioLoadingSlot),
+            matching: find.byType(StudioLoading),
+          );
+          expect(headerPulse, findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byIcon(Icons.refresh), findsOneWidget);
+          expect(
+            tester.widget<StudioLoading>(headerPulse).label,
+            'Refreshing working history',
+          );
+          await _render(
+            tester,
+            frame,
+            'history-working-refresh-${brightness.name}-$scale',
+          );
+          refreshGate.complete();
+          for (var i = 0; i < 12; i++) {
+            await tester.pump(const Duration(milliseconds: 50));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+          }
+          expect(headerPulse, findsNothing);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          fixture.readHook = liveRead;
           expect(
             find.textContaining('Inspecting the work', findRichText: true),
             findsWidgets,
@@ -780,7 +818,8 @@ void main() {
             matching: find.text('Running command'),
           );
           await tester.ensureVisible(toolTitle);
-          await tester.tap(toolTitle);
+          await liveFrames();
+          await tester.tap(toolTitle.hitTestable());
           await liveFrames();
           await _render(
             tester,
