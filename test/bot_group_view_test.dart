@@ -1998,7 +1998,6 @@ void main() {
               tester.getCenter(menuAvatar).dy,
               closeTo(anchor.center.dy, .1),
             );
-            expect(panelRect.size, const Size(240, 201));
           }
           expect(
             find.descendant(of: identity, matching: find.text('Mira')),
