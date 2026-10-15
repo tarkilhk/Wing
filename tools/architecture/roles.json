@@ -2510,6 +2510,11 @@
       "role": "view",
       "feature": "conversation",
       "library": "lib/core/widgets/hermes_question_card.dart"
+    },
+    "lib/core/widgets/selection_viewport.dart": {
+      "role": "view",
+      "feature": "app-shell",
+      "library": "lib/core/widgets/selection_viewport.dart"
     }
   }
 }

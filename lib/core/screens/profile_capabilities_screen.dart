@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import '../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -220,14 +221,17 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                               ),
                         ),
                         const SizedBox(height: 12),
-                        TextField(
-                          decoration: InputDecoration(
-                            hintText: _kind == ProfileCapabilityKind.tools
-                                ? 'Find a capability'
-                                : 'Find a skill',
-                            prefixIcon: Icon(Icons.search),
+                        viewportSelection(
+                          TextField(
+                            decoration: InputDecoration(
+                              hintText: _kind == ProfileCapabilityKind.tools
+                                  ? 'Find a capability'
+                                  : 'Find a skill',
+                              prefixIcon: Icon(Icons.search),
+                            ),
+                            onChanged: (value) =>
+                                setState(() => _query = value),
                           ),
-                          onChanged: (value) => setState(() => _query = value),
                         ),
                       ],
                     ),
@@ -350,7 +354,7 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                           ),
                         if (!_skills && row.hasTools) ...[
                           const SizedBox(height: 8),
-                          SelectableText(tools.join(', ')),
+                          viewportSelection(SelectableText(tools.join(', '))),
                         ],
                       ],
                     ),

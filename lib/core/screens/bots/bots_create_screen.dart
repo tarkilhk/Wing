@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
@@ -106,16 +107,18 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
           ),
           content: SizedBox(
             width: 392,
-            child: TextFormField(
-              initialValue: draft.picturePrompt,
-              onChanged: (value) =>
-                  updateDialog(() => draft.setPicturePrompt(value)),
-              style: Theme.of(context).textTheme.bodyMedium,
-              minLines: 4,
-              maxLines: 6,
-              decoration: const InputDecoration(
-                labelText: 'Prompt',
-                alignLabelWithHint: true,
+            child: viewportSelection(
+              TextFormField(
+                initialValue: draft.picturePrompt,
+                onChanged: (value) =>
+                    updateDialog(() => draft.setPicturePrompt(value)),
+                style: Theme.of(context).textTheme.bodyMedium,
+                minLines: 4,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Prompt',
+                  alignLabelWithHint: true,
+                ),
               ),
             ),
           ),
@@ -215,31 +218,34 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
         : draft.memberCount < 2
         ? 'Choose 2–6 bots'
         : '${draft.memberCount} bots · ${draft.instance}';
-    final name = TextField(
-      key: const ValueKey('group-name'),
-      controller: _name,
-      enabled: editable,
-      maxLength: 64,
-      buildCounter:
-          (_, {required currentLength, required isFocused, maxLength}) => null,
-      decoration: InputDecoration(
-        labelText: draft.editing ? 'Group name' : 'Group name (optional)',
-        hintText: draft.suggestedName.isEmpty
-            ? 'e.g. Launch team'
-            : draft.suggestedName,
-        floatingLabelBehavior: FloatingLabelBehavior.always,
+    final name = viewportSelection(
+      TextField(
+        key: const ValueKey('group-name'),
+        controller: _name,
+        enabled: editable,
+        maxLength: 64,
+        buildCounter:
+            (_, {required currentLength, required isFocused, maxLength}) =>
+                null,
+        decoration: InputDecoration(
+          labelText: draft.editing ? 'Group name' : 'Group name (optional)',
+          hintText: draft.suggestedName.isEmpty
+              ? 'e.g. Launch team'
+              : draft.suggestedName,
+          floatingLabelBehavior: FloatingLabelBehavior.always,
+        ),
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.done,
+        onChanged: (value) {
+          draft.setName(value);
+          if (_name.text != draft.name) {
+            _name.value = TextEditingValue(
+              text: draft.name,
+              selection: TextSelection.collapsed(offset: draft.name.length),
+            );
+          }
+        },
       ),
-      textCapitalization: TextCapitalization.words,
-      textInputAction: TextInputAction.done,
-      onChanged: (value) {
-        draft.setName(value);
-        if (_name.text != draft.name) {
-          _name.value = TextEditingValue(
-            text: draft.name,
-            selection: TextSelection.collapsed(offset: draft.name.length),
-          );
-        }
-      },
     );
     final picture = Stack(
       alignment: Alignment.center,
@@ -441,29 +447,31 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                     ),
                     const SizedBox(height: WingSpacing.md),
                   ],
-                  TextField(
-                    key: ValueKey('group-member-search-${draft.identity}'),
-                    controller: _search,
-                    enabled: editable,
-                    decoration: InputDecoration(
-                      hintText: 'Search bots',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: draft.query.isEmpty
-                          ? null
-                          : StudioButtonPress(
-                              child: IconButton(
-                                tooltip: 'Clear search',
-                                onPressed: editable
-                                    ? () {
-                                        _search.clear();
-                                        draft.search('');
-                                      }
-                                    : null,
-                                icon: const Icon(Icons.close),
+                  viewportSelection(
+                    TextField(
+                      key: ValueKey('group-member-search-${draft.identity}'),
+                      controller: _search,
+                      enabled: editable,
+                      decoration: InputDecoration(
+                        hintText: 'Search bots',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: draft.query.isEmpty
+                            ? null
+                            : StudioButtonPress(
+                                child: IconButton(
+                                  tooltip: 'Clear search',
+                                  onPressed: editable
+                                      ? () {
+                                          _search.clear();
+                                          draft.search('');
+                                        }
+                                      : null,
+                                  icon: const Icon(Icons.close),
+                                ),
                               ),
-                            ),
+                      ),
+                      onChanged: draft.search,
                     ),
-                    onChanged: draft.search,
                   ),
                   const SizedBox(height: WingSpacing.sm),
                   if (draft.matches.isEmpty)
@@ -703,17 +711,19 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _name,
-                    enabled: !_busy,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      labelText: 'Profile name',
-                      helperText:
-                          'Lowercase letters, numbers, hyphens and underscores',
-                      helperMaxLines: 4,
+                  viewportSelection(
+                    TextField(
+                      controller: _name,
+                      enabled: !_busy,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        labelText: 'Profile name',
+                        helperText:
+                            'Lowercase letters, numbers, hyphens and underscores',
+                        helperMaxLines: 4,
+                      ),
+                      textCapitalization: TextCapitalization.none,
                     ),
-                    textCapitalization: TextCapitalization.none,
                   ),
                   const SizedBox(height: 20),
                   Text(

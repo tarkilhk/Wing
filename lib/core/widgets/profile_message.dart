@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'hermes_question_card.dart';
 import 'dart:async';
 import 'bot_mention_scope.dart';
@@ -158,14 +159,16 @@ class ProfileMessage extends StatelessWidget {
                       if (content.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
-                          child: SelectableText.rich(
-                            BotMentionScope.of(
-                                  context,
-                                )?.text(content, colors.primary) ??
-                                TextSpan(text: content),
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              height: 1.45,
-                              color: colors.onPrimaryContainer,
+                          child: viewportSelection(
+                            SelectableText.rich(
+                              BotMentionScope.of(
+                                    context,
+                                  )?.text(content, colors.primary) ??
+                                  TextSpan(text: content),
+                              style: theme.textTheme.bodyLarge?.copyWith(
+                                height: 1.45,
+                                color: colors.onPrimaryContainer,
+                              ),
                             ),
                           ),
                         ),
@@ -575,12 +578,14 @@ class ProfileMessage extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.all(12),
                   child: message.noticePlainText
-                      ? SelectableText(
-                          result,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontFamily: message.noticeMonospace
-                                ? 'monospace'
-                                : null,
+                      ? viewportSelection(
+                          SelectableText(
+                            result,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontFamily: message.noticeMonospace
+                                  ? 'monospace'
+                                  : null,
+                            ),
                           ),
                         )
                       : MarkdownMessageContent(
@@ -637,7 +642,11 @@ class ProfileMessage extends StatelessWidget {
                   const SizedBox(width: 8),
                   Text('steered', style: style),
                   Text(' · ', style: style),
-                  Flexible(child: SelectableText(message.text, style: style)),
+                  Flexible(
+                    child: viewportSelection(
+                      SelectableText(message.text, style: style),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -652,11 +661,13 @@ class ProfileMessage extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
         child: Center(
-          child: SelectableText(
-            text,
-            textAlign: multiline ? TextAlign.left : TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          child: viewportSelection(
+            SelectableText(
+              text,
+              textAlign: multiline ? TextAlign.left : TextAlign.center,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ),

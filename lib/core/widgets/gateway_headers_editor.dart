@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 
@@ -112,32 +113,36 @@ class _GatewayHeadersEditorState extends State<GatewayHeadersEditor> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextFormField(
-                key: ObjectKey(entry.$2.name),
-                controller: entry.$2.name,
-                enabled: widget.enabled,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                validator: (_) => _captureEdit().nameError(entry.$1),
-                onChanged: (_) => _publishEdit(),
-                decoration: const InputDecoration(labelText: 'Header name'),
-                autocorrect: false,
-              ),
-              TextFormField(
-                key: ObjectKey(entry.$2.value),
-                controller: entry.$2.value,
-                enabled: widget.enabled,
-                autovalidateMode: AutovalidateMode.onUserInteraction,
-                validator: (_) => _captureEdit().valueError(entry.$1),
-                onChanged: (_) => _publishEdit(),
-                obscureText: true,
-                autofillHints: const [AutofillHints.password],
-                decoration: InputDecoration(
-                  labelText: 'Value',
-                  hintText: entry.$2.savedName == null
-                      ? null
-                      : 'Keep saved value',
+              viewportSelection(
+                TextFormField(
+                  key: ObjectKey(entry.$2.name),
+                  controller: entry.$2.name,
+                  enabled: widget.enabled,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) => _captureEdit().nameError(entry.$1),
+                  onChanged: (_) => _publishEdit(),
+                  decoration: const InputDecoration(labelText: 'Header name'),
+                  autocorrect: false,
                 ),
-                autocorrect: false,
+              ),
+              viewportSelection(
+                TextFormField(
+                  key: ObjectKey(entry.$2.value),
+                  controller: entry.$2.value,
+                  enabled: widget.enabled,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  validator: (_) => _captureEdit().valueError(entry.$1),
+                  onChanged: (_) => _publishEdit(),
+                  obscureText: true,
+                  autofillHints: const [AutofillHints.password],
+                  decoration: InputDecoration(
+                    labelText: 'Value',
+                    hintText: entry.$2.savedName == null
+                        ? null
+                        : 'Keep saved value',
+                  ),
+                  autocorrect: false,
+                ),
               ),
               Align(
                 alignment: AlignmentDirectional.centerEnd,

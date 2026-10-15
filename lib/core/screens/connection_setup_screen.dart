@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import '../widgets/studio_form_actions.dart';
 import '../widgets/wing_app_bar.dart';
 import 'package:flutter/material.dart';
@@ -542,23 +543,25 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           'Where’s your Hermes?',
           'Use the dashboard address you open in your phone’s browser.',
         ),
-        TextFormField(
-          key: const Key('connection-address'),
-          controller: _address,
-          decoration: const InputDecoration(
-            labelText: 'Dashboard address',
-            hintText: 'https://hermes.example.com',
-            helperText: 'Include the port and any path in this one address.',
-            helperMaxLines: 4,
-            errorMaxLines: 5,
+        viewportSelection(
+          TextFormField(
+            key: const Key('connection-address'),
+            controller: _address,
+            decoration: const InputDecoration(
+              labelText: 'Dashboard address',
+              hintText: 'https://hermes.example.com',
+              helperText: 'Include the port and any path in this one address.',
+              helperMaxLines: 4,
+              errorMaxLines: 5,
+            ),
+            keyboardType: TextInputType.url,
+            textInputAction: TextInputAction.next,
+            autocorrect: false,
+            enableSuggestions: false,
+            onChanged: _session.editAddress,
+            onFieldSubmitted: (_) => _continue(),
+            validator: _session.validateAddress,
           ),
-          keyboardType: TextInputType.url,
-          textInputAction: TextInputAction.next,
-          autocorrect: false,
-          enableSuggestions: false,
-          onChanged: _session.editAddress,
-          onFieldSubmitted: (_) => _continue(),
-          validator: _session.validateAddress,
         ),
         const SizedBox(height: 24),
         _panel(
@@ -672,50 +675,54 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               'Your access proxy handles sign-in. Wing will check that it allows profiles, live chat and history.',
             )
           else ...[
-            TextFormField(
-              key: const Key('connection-username'),
-              controller: _username,
-              decoration: const InputDecoration(
-                labelText: 'Username',
-                errorMaxLines: 3,
+            viewportSelection(
+              TextFormField(
+                key: const Key('connection-username'),
+                controller: _username,
+                decoration: const InputDecoration(
+                  labelText: 'Username',
+                  errorMaxLines: 3,
+                ),
+                autofillHints: const [AutofillHints.username],
+                textInputAction: TextInputAction.next,
+                autocorrect: false,
+                enableSuggestions: false,
+                onChanged: _session.editUsername,
+                validator: _session.validateUsername,
               ),
-              autofillHints: const [AutofillHints.username],
-              textInputAction: TextInputAction.next,
-              autocorrect: false,
-              enableSuggestions: false,
-              onChanged: _session.editUsername,
-              validator: _session.validateUsername,
             ),
             const SizedBox(height: 20),
-            TextFormField(
-              key: const Key('connection-password'),
-              controller: _password,
-              obscureText: !_revealPassword,
-              autofillHints: const [AutofillHints.password],
-              textInputAction: TextInputAction.done,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: InputDecoration(
-                labelText: 'Password',
-                errorMaxLines: 3,
-                suffixIcon: StudioButtonPress(
-                  child: IconButton(
-                    tooltip: _revealPassword
-                        ? 'Hide password'
-                        : 'Show password',
-                    onPressed: () =>
-                        setState(() => _revealPassword = !_revealPassword),
-                    icon: Icon(
-                      _revealPassword
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
+            viewportSelection(
+              TextFormField(
+                key: const Key('connection-password'),
+                controller: _password,
+                obscureText: !_revealPassword,
+                autofillHints: const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: InputDecoration(
+                  labelText: 'Password',
+                  errorMaxLines: 3,
+                  suffixIcon: StudioButtonPress(
+                    child: IconButton(
+                      tooltip: _revealPassword
+                          ? 'Hide password'
+                          : 'Show password',
+                      onPressed: () =>
+                          setState(() => _revealPassword = !_revealPassword),
+                      icon: Icon(
+                        _revealPassword
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                      ),
                     ),
                   ),
                 ),
+                onChanged: _session.editPassword,
+                onFieldSubmitted: (_) => _check(),
+                validator: _session.validatePassword,
               ),
-              onChanged: _session.editPassword,
-              onFieldSubmitted: (_) => _check(),
-              validator: _session.validatePassword,
             ),
             const SizedBox(height: 16),
             Text(
@@ -785,15 +792,17 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           children: [
             Align(
               alignment: AlignmentDirectional.centerStart,
-              child: SelectableText(
-                [
-                  'Dashboard: ${_address.text}',
-                  'Live chat: ${_state.chatSocketUrl}',
-                  if (_probe.httpStatus != null) 'HTTP ${_probe.httpStatus}',
-                  if (_probe.checkedAt != null)
-                    'Checked: ${_probe.checkedAt!.toLocal()}',
-                ].join('\n'),
-                style: Theme.of(context).textTheme.bodySmall,
+              child: viewportSelection(
+                SelectableText(
+                  [
+                    'Dashboard: ${_address.text}',
+                    'Live chat: ${_state.chatSocketUrl}',
+                    if (_probe.httpStatus != null) 'HTTP ${_probe.httpStatus}',
+                    if (_probe.checkedAt != null)
+                      'Checked: ${_probe.checkedAt!.toLocal()}',
+                  ].join('\n'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
             ),
           ],
@@ -896,19 +905,21 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           'Give this Hermes a name you’ll recognize.',
         ),
         _destination(),
-        TextFormField(
-          key: const Key('connection-name'),
-          controller: _name,
-          enabled: !_saving,
-          decoration: const InputDecoration(
-            labelText: 'Instance name',
-            hintText: 'Home',
-            errorMaxLines: 3,
+        viewportSelection(
+          TextFormField(
+            key: const Key('connection-name'),
+            controller: _name,
+            enabled: !_saving,
+            decoration: const InputDecoration(
+              labelText: 'Instance name',
+              hintText: 'Home',
+              errorMaxLines: 3,
+            ),
+            textInputAction: TextInputAction.done,
+            onChanged: _session.editName,
+            onFieldSubmitted: (_) => _save(),
+            validator: _session.validateName,
           ),
-          textInputAction: TextInputAction.done,
-          onChanged: _session.editName,
-          onFieldSubmitted: (_) => _save(),
-          validator: _session.validateName,
         ),
         const SizedBox(height: 24),
         StudioButtonPress(
@@ -1141,23 +1152,25 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
                     label: MediaQuery.textScalerOf(context).scale(16) >= 24
                         ? 'Chat gateway base address'
                         : null,
-                    child: TextFormField(
-                      key: const Key('connection-chat-address'),
-                      controller: _chat,
-                      keyboardType: TextInputType.url,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      decoration: InputDecoration(
-                        labelText:
-                            MediaQuery.textScalerOf(context).scale(16) >= 24
-                            ? null
-                            : 'Chat gateway base address',
-                        helperText:
-                            'Use an http(s) base address. Wing adds /api/ws.',
-                        helperMaxLines: 4,
-                        errorMaxLines: 5,
+                    child: viewportSelection(
+                      TextFormField(
+                        key: const Key('connection-chat-address'),
+                        controller: _chat,
+                        keyboardType: TextInputType.url,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: InputDecoration(
+                          labelText:
+                              MediaQuery.textScalerOf(context).scale(16) >= 24
+                              ? null
+                              : 'Chat gateway base address',
+                          helperText:
+                              'Use an http(s) base address. Wing adds /api/ws.',
+                          helperMaxLines: 4,
+                          errorMaxLines: 5,
+                        ),
+                        validator: widget.validateAddress,
                       ),
-                      validator: widget.validateAddress,
                     ),
                   ),
                   const SizedBox(height: 12),

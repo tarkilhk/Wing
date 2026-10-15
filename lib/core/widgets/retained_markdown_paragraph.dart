@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:flutter/material.dart';
 
 /// Retains stock Markdown paragraph text controls without changing its spans or
@@ -51,6 +52,8 @@ Widget _retainInlineRun(Widget child, int index) {
             text.textSpan!.children?.isEmpty != true &&
             text.key is UniqueKey)
           _ParagraphText(key: ValueKey((index, position)), text: text)
+        else if (text is SelectableText)
+          viewportSelection(text)
         else
           text,
     ],
@@ -124,12 +127,14 @@ class _ParagraphTextState extends State<_ParagraphText> {
     final text = widget.text;
     // These are the exact properties set by the stock paragraph builder. Its
     // original selection callback and current link recognizers remain intact.
-    return SelectableText.rich(
-      text.textSpan!,
-      textScaler: text.textScaler,
-      textAlign: text.textAlign,
-      onSelectionChanged: _selectionChanged,
-      onTap: text.onTap,
+    return viewportSelection(
+      SelectableText.rich(
+        text.textSpan!,
+        textScaler: text.textScaler,
+        textAlign: text.textAlign,
+        onSelectionChanged: _selectionChanged,
+        onTap: text.onTap,
+      ),
     );
   }
 }

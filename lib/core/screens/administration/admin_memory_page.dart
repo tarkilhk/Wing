@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:wing/core/widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -62,12 +63,14 @@ class _AdminMemoryPageState extends State<AdminMemoryPage> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Search memories',
-                prefixIcon: Icon(Icons.search),
+            viewportSelection(
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Search memories',
+                  prefixIcon: Icon(Icons.search),
+                ),
+                onChanged: session.searchFor,
               ),
-              onChanged: session.searchFor,
             ),
             const SizedBox(height: 12),
             Text('Read only', style: Theme.of(context).textTheme.bodySmall),
@@ -211,7 +214,7 @@ class _AdminMemoryDetailState extends State<AdminMemoryDetail> {
       builder: (data) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          SelectableText(data.content),
+          viewportSelection(SelectableText(data.content)),
           const SizedBox(height: 24),
           const AdminNotice(
             'Read only. Editing and deleting are unavailable in this Wing view.',

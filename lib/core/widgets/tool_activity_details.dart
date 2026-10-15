@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_loading.dart';
 import 'activity/activity_detail_actions.dart';
 import '../models/chat_output.dart';
@@ -984,14 +985,16 @@ class _ActivityDetailSectionState extends State<ActivityDetailSection> {
                   }
                 },
               )
-            : SelectableText.rich(
-                TextSpan(
-                  children: [
-                    for (var i = 0; i < lines.length; i++)
-                      _lineSpan(lines[i], i == 0, block, colors),
-                  ],
+            : viewportSelection(
+                SelectableText.rich(
+                  TextSpan(
+                    children: [
+                      for (var i = 0; i < lines.length; i++)
+                        _lineSpan(lines[i], i == 0, block, colors),
+                    ],
+                  ),
+                  style: style,
                 ),
-                style: style,
               );
         body = wrap || block.format == ToolDetailFormat.source
             ? content

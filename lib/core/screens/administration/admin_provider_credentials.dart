@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -61,12 +62,14 @@ class _AdminServiceKeyCatalogState extends State<AdminServiceKeyCatalog> {
       builder: (data) => ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          TextField(
-            decoration: const InputDecoration(
-              labelText: 'Find a service',
-              prefixIcon: Icon(Icons.search),
+          viewportSelection(
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Find a service',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: session.search,
             ),
-            onChanged: session.search,
           ),
           const SizedBox(height: 16),
           if (session.keys.isEmpty)
@@ -257,15 +260,17 @@ class _AdminSecretPageState extends State<AdminSecretPage> {
                   child: const Text('Refresh and review'),
                 ),
               ),
-            TextField(
-              controller: _input,
-              obscureText: true,
-              enabled: !session.busy,
-              autocorrect: false,
-              enableSuggestions: false,
-              autofillHints: const [AutofillHints.password],
-              decoration: const InputDecoration(labelText: 'New credential'),
-              onChanged: session.setDraft,
+            viewportSelection(
+              TextField(
+                controller: _input,
+                obscureText: true,
+                enabled: !session.busy,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.password],
+                decoration: const InputDecoration(labelText: 'New credential'),
+                onChanged: session.setDraft,
+              ),
             ),
             const SizedBox(height: 16),
             if (session.isSet)
@@ -373,9 +378,11 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
                   ),
                 if (session.pending) ...[
                   const SizedBox(height: 16),
-                  SelectableText(
-                    attempt.userCode,
-                    style: Theme.of(context).textTheme.headlineMedium,
+                  viewportSelection(
+                    SelectableText(
+                      attempt.userCode,
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
                   ),
                   StudioButtonPress(
                     child: IconButton(
@@ -387,7 +394,9 @@ class _AdminProviderSignInState extends State<AdminProviderSignIn> {
                     ),
                   ),
                   if (session.error != null)
-                    SelectableText(attempt.verificationUrl.toString()),
+                    viewportSelection(
+                      SelectableText(attempt.verificationUrl.toString()),
+                    ),
                   StudioButtonPress(
                     child: FilledButton(
                       onPressed: _openBrowser,

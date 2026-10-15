@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'studio_error.dart';
 
@@ -127,73 +128,41 @@ class _GatewaySensitivePromptPanelState
           const SizedBox(height: 12),
           Text(request.description),
           const SizedBox(height: 12),
-          TextField(
-            key: const Key('sensitive-prompt-field'),
-            controller: _controller,
-            enabled: _enabled,
-            obscureText: !showsCode && !savesLogin,
-            autocorrect: false,
-            enableSuggestions: false,
-            autofillHints: switch (request.kind) {
-              GatewaySensitivePromptKind.vaultSaveLogin => const [
-                AutofillHints.username,
-              ],
-              GatewaySensitivePromptKind.vaultCode => const [
-                AutofillHints.oneTimeCode,
-              ],
-              _ => const [AutofillHints.password],
-            },
-            keyboardType: showsCode ? TextInputType.number : null,
-            textInputAction: savesLogin
-                ? TextInputAction.next
-                : TextInputAction.done,
-            decoration: InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(borderRadius: WingRadius.control),
-              labelText: request.fieldLabel,
-            ),
-            onChanged: (_) {
-              if (_error != null) setState(() => _error = null);
-            },
-            onSubmitted: (value) {
-              if (!savesLogin &&
-                  widget.request.canRespond(
-                    value: _controller.text,
-                    password: _passwordController.text,
-                  )) {
-                _respond(
-                  widget.request.responseValue(
-                    value: _controller.text,
-                    password: _passwordController.text,
-                  ),
-                );
-              }
-            },
-          ),
-          if (savesLogin) ...[
-            const SizedBox(height: 12),
+          viewportSelection(
             TextField(
-              key: const Key('sensitive-prompt-password'),
-              controller: _passwordController,
+              key: const Key('sensitive-prompt-field'),
+              controller: _controller,
               enabled: _enabled,
-              obscureText: true,
+              obscureText: !showsCode && !savesLogin,
               autocorrect: false,
               enableSuggestions: false,
-              autofillHints: const [AutofillHints.password],
-              textInputAction: TextInputAction.done,
+              autofillHints: switch (request.kind) {
+                GatewaySensitivePromptKind.vaultSaveLogin => const [
+                  AutofillHints.username,
+                ],
+                GatewaySensitivePromptKind.vaultCode => const [
+                  AutofillHints.oneTimeCode,
+                ],
+                _ => const [AutofillHints.password],
+              },
+              keyboardType: showsCode ? TextInputType.number : null,
+              textInputAction: savesLogin
+                  ? TextInputAction.next
+                  : TextInputAction.done,
               decoration: InputDecoration(
                 isDense: true,
                 border: OutlineInputBorder(borderRadius: WingRadius.control),
-                labelText: 'Password',
+                labelText: request.fieldLabel,
               ),
               onChanged: (_) {
                 if (_error != null) setState(() => _error = null);
               },
-              onSubmitted: (_) {
-                if (widget.request.canRespond(
-                  value: _controller.text,
-                  password: _passwordController.text,
-                )) {
+              onSubmitted: (value) {
+                if (!savesLogin &&
+                    widget.request.canRespond(
+                      value: _controller.text,
+                      password: _passwordController.text,
+                    )) {
                   _respond(
                     widget.request.responseValue(
                       value: _controller.text,
@@ -202,6 +171,42 @@ class _GatewaySensitivePromptPanelState
                   );
                 }
               },
+            ),
+          ),
+          if (savesLogin) ...[
+            const SizedBox(height: 12),
+            viewportSelection(
+              TextField(
+                key: const Key('sensitive-prompt-password'),
+                controller: _passwordController,
+                enabled: _enabled,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.password],
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: WingRadius.control),
+                  labelText: 'Password',
+                ),
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+                onSubmitted: (_) {
+                  if (widget.request.canRespond(
+                    value: _controller.text,
+                    password: _passwordController.text,
+                  )) {
+                    _respond(
+                      widget.request.responseValue(
+                        value: _controller.text,
+                        password: _passwordController.text,
+                      ),
+                    );
+                  }
+                },
+              ),
             ),
           ],
           if (_error != null) ...[

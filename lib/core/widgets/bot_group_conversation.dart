@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:flutter/material.dart';
 
 import '../models/bots.dart';
@@ -210,27 +211,29 @@ class BotGroupComposer extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
-                child: TextField(
-                  key: const ValueKey('group-message-composer'),
-                  controller: controller,
-                  focusNode: focusNode,
-                  readOnly: readOnly,
-                  minLines: 1,
-                  maxLines: maxLines,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
-                  textCapitalization: TextCapitalization.sentences,
-                  decoration: InputDecoration(
-                    isDense: true,
-                    hintMaxLines: 1,
-                    hintText: controller.text.isEmpty
-                        ? 'Message the group'
-                        : null,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    filled: false,
-                    contentPadding: const EdgeInsets.all(12),
+                child: viewportSelection(
+                  TextField(
+                    key: const ValueKey('group-message-composer'),
+                    controller: controller,
+                    focusNode: focusNode,
+                    readOnly: readOnly,
+                    minLines: 1,
+                    maxLines: maxLines,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintMaxLines: 1,
+                      hintText: controller.text.isEmpty
+                          ? 'Message the group'
+                          : null,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      filled: false,
+                      contentPadding: const EdgeInsets.all(12),
+                    ),
                   ),
                 ),
               ),

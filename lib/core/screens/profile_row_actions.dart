@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import '../widgets/studio_form_actions.dart';
 import '../widgets/studio_error.dart';
 import '../theme/wing_theme.dart';
@@ -212,33 +213,35 @@ class _ChatRenameDialogState extends State<_ChatRenameDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
-                key: const ValueKey('chat-rename-title'),
-                controller: _title,
-                autofocus: true,
-                enabled: !state.submitting,
-                maxLength: 100,
-                textInputAction: TextInputAction.done,
-                onChanged: (_) => setState(() => _editRevision++),
-                onSubmitted: (_) {
-                  if (!pending &&
-                      widget.session.available &&
-                      _title.text.trim().isNotEmpty) {
-                    _save();
-                  }
-                },
-                decoration: InputDecoration(
-                  labelText: 'Chat title',
-                  suffixIcon: StudioButtonPress(
-                    child: IconButton(
-                      key: const ValueKey('chat-rename-ai'),
-                      tooltip: 'Auto rename',
-                      onPressed: pending || !widget.session.available
-                          ? null
-                          : _generate,
-                      icon: state.generatingTitle
-                          ? _progress('Generating chat title')
-                          : const Icon(Icons.auto_awesome_outlined),
+              viewportSelection(
+                TextField(
+                  key: const ValueKey('chat-rename-title'),
+                  controller: _title,
+                  autofocus: true,
+                  enabled: !state.submitting,
+                  maxLength: 100,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) => setState(() => _editRevision++),
+                  onSubmitted: (_) {
+                    if (!pending &&
+                        widget.session.available &&
+                        _title.text.trim().isNotEmpty) {
+                      _save();
+                    }
+                  },
+                  decoration: InputDecoration(
+                    labelText: 'Chat title',
+                    suffixIcon: StudioButtonPress(
+                      child: IconButton(
+                        key: const ValueKey('chat-rename-ai'),
+                        tooltip: 'Auto rename',
+                        onPressed: pending || !widget.session.available
+                            ? null
+                            : _generate,
+                        icon: state.generatingTitle
+                            ? _progress('Generating chat title')
+                            : const Icon(Icons.auto_awesome_outlined),
+                      ),
                     ),
                   ),
                 ),
@@ -429,28 +432,30 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                           ),
                           const SizedBox(height: 16),
                           if (widget.session.projects.isNotEmpty) ...[
-                            TextField(
-                              key: const ValueKey('project-picker-search'),
-                              controller: search,
-                              enabled: _moving == null,
-                              onChanged: (_) => setState(() {}),
-                              decoration: InputDecoration(
-                                hintText: 'Find a project',
-                                prefixIcon: const Icon(Icons.search),
-                                suffixIcon: search.text.isEmpty
-                                    ? null
-                                    : StudioButtonPress(
-                                        child: IconButton(
-                                          tooltip: 'Clear search',
-                                          onPressed: _moving == null
-                                              ? () {
-                                                  search.clear();
-                                                  setState(() {});
-                                                }
-                                              : null,
-                                          icon: const Icon(Icons.close),
+                            viewportSelection(
+                              TextField(
+                                key: const ValueKey('project-picker-search'),
+                                controller: search,
+                                enabled: _moving == null,
+                                onChanged: (_) => setState(() {}),
+                                decoration: InputDecoration(
+                                  hintText: 'Find a project',
+                                  prefixIcon: const Icon(Icons.search),
+                                  suffixIcon: search.text.isEmpty
+                                      ? null
+                                      : StudioButtonPress(
+                                          child: IconButton(
+                                            tooltip: 'Clear search',
+                                            onPressed: _moving == null
+                                                ? () {
+                                                    search.clear();
+                                                    setState(() {});
+                                                  }
+                                                : null,
+                                            icon: const Icon(Icons.close),
+                                          ),
                                         ),
-                                      ),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 12),

@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_error.dart';
@@ -379,11 +380,13 @@ class _ChatOutputsScreenState extends State<ChatOutputsScreen> {
                                     ),
                               )
                             else
-                              SelectableText(
-                                preview.text,
-                                style: WingTokens.of(
-                                  previewContext,
-                                ).typography.mono,
+                              viewportSelection(
+                                SelectableText(
+                                  preview.text,
+                                  style: WingTokens.of(
+                                    previewContext,
+                                  ).typography.mono,
+                                ),
                               ),
                           ],
                         ),

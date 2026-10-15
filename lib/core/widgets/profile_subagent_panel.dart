@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'activity/activity_detail_actions.dart';
 import 'subagent_timeline.dart';
 import 'studio_loading.dart';
@@ -259,14 +260,16 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                         if (current.acceptingSteer && canControl)
                           Padding(
                             padding: const EdgeInsets.all(WingSpacing.sm),
-                            child: TextField(
-                              controller: _steer,
-                              minLines: 1,
-                              maxLines: 3,
-                              enabled: !widget.session.state.steering,
-                              decoration: const InputDecoration(
-                                labelText: 'Steer subagent',
-                                hintText: 'Add guidance for the current task',
+                            child: viewportSelection(
+                              TextField(
+                                controller: _steer,
+                                minLines: 1,
+                                maxLines: 3,
+                                enabled: !widget.session.state.steering,
+                                decoration: const InputDecoration(
+                                  labelText: 'Steer subagent',
+                                  hintText: 'Add guidance for the current task',
+                                ),
                               ),
                             ),
                           ),

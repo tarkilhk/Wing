@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/activity/activity_detail_actions.dart';
@@ -79,13 +80,15 @@ class _AdminSkillLibraryPageState extends State<AdminSkillLibraryPage> {
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            TextField(
-              controller: _search,
-              decoration: const InputDecoration(
-                labelText: 'Search installed skills',
+            viewportSelection(
+              TextField(
+                controller: _search,
+                decoration: const InputDecoration(
+                  labelText: 'Search installed skills',
+                ),
+                onChanged: (value) =>
+                    setState(() => _query = value.toLowerCase()),
               ),
-              onChanged: (value) =>
-                  setState(() => _query = value.toLowerCase()),
             ),
             CompactSwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -367,17 +370,19 @@ class _AdminSkillEditorState extends State<AdminSkillEditor> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
-                  child: TextField(
-                    controller: _input,
-                    enabled: !state.busy,
-                    expands: true,
-                    minLines: null,
-                    maxLines: null,
-                    textAlignVertical: TextAlignVertical.top,
-                    decoration: const InputDecoration(
-                      labelText: 'Instructions',
+                  child: viewportSelection(
+                    TextField(
+                      controller: _input,
+                      enabled: !state.busy,
+                      expands: true,
+                      minLines: null,
+                      maxLines: null,
+                      textAlignVertical: TextAlignVertical.top,
+                      decoration: const InputDecoration(
+                        labelText: 'Instructions',
+                      ),
+                      onChanged: (value) => _session.edit(_route, value),
                     ),
-                    onChanged: (value) => _session.edit(_route, value),
                   ),
                 ),
               ),
@@ -446,13 +451,15 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: TextField(
-            decoration: const InputDecoration(
-              labelText: 'Search catalogs',
-              helperMaxLines: 4,
-              helperText: 'Submit to search configured sources.',
+          child: viewportSelection(
+            TextField(
+              decoration: const InputDecoration(
+                labelText: 'Search catalogs',
+                helperMaxLines: 4,
+                helperText: 'Submit to search configured sources.',
+              ),
+              onSubmitted: (value) => _session.refresh(query: value),
             ),
-            onSubmitted: (value) => _session.refresh(query: value),
           ),
         ),
         Expanded(

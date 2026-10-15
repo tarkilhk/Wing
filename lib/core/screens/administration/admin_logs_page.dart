@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
 import '../../models/administration_logs.dart';
@@ -94,13 +95,15 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                     },
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'Search logs',
-                      prefixIcon: Icon(Icons.search),
+                  viewportSelection(
+                    TextField(
+                      decoration: const InputDecoration(
+                        hintText: 'Search logs',
+                        prefixIcon: Icon(Icons.search),
+                      ),
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: _session.search,
                     ),
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: _session.search,
                   ),
                 ],
               ),
@@ -141,13 +144,15 @@ class _AdminLogsPageState extends State<AdminLogsPage> {
                                   padding: const EdgeInsets.all(16),
                                   child: Align(
                                     alignment: Alignment.centerLeft,
-                                    child: SelectableText(
-                                      snapshot.lines.isEmpty
-                                          ? 'No matching log entries.'
-                                          : snapshot.lines.join('\n'),
-                                      style: WingTokens.of(
-                                        context,
-                                      ).typography.mono,
+                                    child: viewportSelection(
+                                      SelectableText(
+                                        snapshot.lines.isEmpty
+                                            ? 'No matching log entries.'
+                                            : snapshot.lines.join('\n'),
+                                        style: WingTokens.of(
+                                          context,
+                                        ).typography.mono,
+                                      ),
                                     ),
                                   ),
                                 ),

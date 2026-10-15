@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:flutter/material.dart';
 import '../../widgets/studio_loading.dart';
@@ -326,27 +327,29 @@ class _BotsContentState extends State<BotsContent> {
                     child: ListView(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 88),
                       children: [
-                        TextField(
-                          key: const ValueKey('bots-search'),
-                          controller: _search,
-                          onChanged: (text) => _change(query: text),
-                          decoration: InputDecoration(
-                            hintText: view.tab == 0
-                                ? 'Search bots'
-                                : 'Search groups',
-                            prefixIcon: const Icon(Icons.search),
-                            suffixIcon: view.query.isEmpty
-                                ? null
-                                : StudioButtonPress(
-                                    child: IconButton(
-                                      tooltip: 'Clear search',
-                                      onPressed: () {
-                                        _search.clear();
-                                        _change(query: '');
-                                      },
-                                      icon: const Icon(Icons.close),
+                        viewportSelection(
+                          TextField(
+                            key: const ValueKey('bots-search'),
+                            controller: _search,
+                            onChanged: (text) => _change(query: text),
+                            decoration: InputDecoration(
+                              hintText: view.tab == 0
+                                  ? 'Search bots'
+                                  : 'Search groups',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: view.query.isEmpty
+                                  ? null
+                                  : StudioButtonPress(
+                                      child: IconButton(
+                                        tooltip: 'Clear search',
+                                        onPressed: () {
+                                          _search.clear();
+                                          _change(query: '');
+                                        },
+                                        icon: const Icon(Icons.close),
+                                      ),
                                     ),
-                                  ),
+                            ),
                           ),
                         ),
                         for (final error in state.errors)

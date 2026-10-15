@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -123,15 +124,17 @@ class _VoicePreferencesCardState extends State<VoicePreferencesCard>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          controller: _language,
-          enabled: state.saveManualLanguage != null,
-          decoration: const InputDecoration(
-            labelText: 'Recognition language',
-            hintText: 'Device language',
-            helperText:
-                'Language tag, e.g. en-US. Empty uses the device language.',
-            helperMaxLines: 3,
+        viewportSelection(
+          TextField(
+            controller: _language,
+            enabled: state.saveManualLanguage != null,
+            decoration: const InputDecoration(
+              labelText: 'Recognition language',
+              hintText: 'Device language',
+              helperText:
+                  'Language tag, e.g. en-US. Empty uses the device language.',
+              helperMaxLines: 3,
+            ),
           ),
         ),
         const Text(

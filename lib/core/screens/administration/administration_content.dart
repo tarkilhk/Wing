@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../models/scheduled_task.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../widgets/wing_app_bar.dart';
@@ -639,28 +640,30 @@ class _HermesAdministrationContentState
     ),
   ];
 
-  Widget _searchField() => TextField(
-    controller: _searchInput,
-    decoration: InputDecoration(
-      hintText: MediaQuery.textScalerOf(context).scale(16) >= 24
-          ? 'Search'
-          : 'Search settings',
-      prefixIcon: const Icon(Icons.search),
-      suffixIcon: _search.isEmpty
-          ? null
-          : StudioButtonPress(
-              child: IconButton(
-                tooltip: 'Clear search',
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  _searchInput.clear();
-                  setState(() => _search = '');
-                  FocusScope.of(context).unfocus();
-                },
+  Widget _searchField() => viewportSelection(
+    TextField(
+      controller: _searchInput,
+      decoration: InputDecoration(
+        hintText: MediaQuery.textScalerOf(context).scale(16) >= 24
+            ? 'Search'
+            : 'Search settings',
+        prefixIcon: const Icon(Icons.search),
+        suffixIcon: _search.isEmpty
+            ? null
+            : StudioButtonPress(
+                child: IconButton(
+                  tooltip: 'Clear search',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _searchInput.clear();
+                    setState(() => _search = '');
+                    FocusScope.of(context).unfocus();
+                  },
+                ),
               ),
-            ),
+      ),
+      onChanged: (value) => setState(() => _search = value),
     ),
-    onChanged: (value) => setState(() => _search = value),
   );
 
   Widget? _searchResults(ProfileAdministration? profile) {

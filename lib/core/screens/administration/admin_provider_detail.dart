@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:flutter/material.dart';
@@ -312,9 +313,11 @@ class AdminProviderInstructions extends StatelessWidget {
             const SizedBox(height: 24),
             const Text('Instructions supplied by Hermes'),
             const SizedBox(height: 8),
-            SelectableText(
-              command,
-              style: WingTokens.of(context).typography.mono,
+            viewportSelection(
+              SelectableText(
+                command,
+                style: WingTokens.of(context).typography.mono,
+              ),
             ),
             if (claude && !removal)
               const Padding(
@@ -413,15 +416,17 @@ class _AdminProviderFileRemovalState extends State<AdminProviderFileRemoval> {
               'Confirm where Claude Code stores this sign-in. Hermes reports a default path even when a custom location or system keychain is used.',
             ),
             const SizedBox(height: 16),
-            TextField(
-              controller: _path,
-              enabled: !_isBusy,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: const InputDecoration(
-                labelText: 'Credential file on server',
+            viewportSelection(
+              TextField(
+                controller: _path,
+                enabled: !_isBusy,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(
+                  labelText: 'Credential file on server',
+                ),
+                onChanged: _recovery.changeFilePath,
               ),
-              onChanged: _recovery.changeFilePath,
             ),
             const SizedBox(height: 12),
             CompactSwitchListTile(
@@ -447,9 +452,11 @@ class _AdminProviderFileRemovalState extends State<AdminProviderFileRemoval> {
             ),
             if (_reviewedFile != null) ...[
               const SizedBox(height: 16),
-              SelectableText(
-                _reviewedFile!.path,
-                style: WingTokens.of(context).typography.mono,
+              viewportSelection(
+                SelectableText(
+                  _reviewedFile!.path,
+                  style: WingTokens.of(context).typography.mono,
+                ),
               ),
               const SizedBox(height: 8),
               const Text(

@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'package:flutter/material.dart';
 import '../models/model_choice.dart';
 import '../presentation/chat_model_labels.dart';
@@ -326,65 +327,67 @@ class _ModelChooserState extends State<ModelChooser> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    key: Key('${widget.keyPrefix}-search'),
-                    enabled: widget.enabled,
-                    controller: _search,
-                    style: tokens.typography.body.copyWith(
-                      fontSize: 13,
-                      height: 1.25,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Search models or providers',
-                      hintStyle: tokens.typography.body.copyWith(
+                  child: viewportSelection(
+                    TextField(
+                      key: Key('${widget.keyPrefix}-search'),
+                      enabled: widget.enabled,
+                      controller: _search,
+                      style: tokens.typography.body.copyWith(
                         fontSize: 13,
                         height: 1.25,
-                        color: tokens.muted,
                       ),
-                      constraints: const BoxConstraints(minHeight: 36),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      prefixIconConstraints: const BoxConstraints(
-                        minWidth: 32,
-                        minHeight: 36,
-                      ),
-                      suffixIconConstraints: const BoxConstraints(
-                        minWidth: 36,
-                        minHeight: 36,
-                      ),
-                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : StudioButtonPress(
-                              child: IconButton(
-                                style: IconButton.styleFrom(
-                                  minimumSize: const Size(36, 36),
-                                  padding: EdgeInsets.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.standard,
+                      decoration: InputDecoration(
+                        hintText: 'Search models or providers',
+                        hintStyle: tokens.typography.body.copyWith(
+                          fontSize: 13,
+                          height: 1.25,
+                          color: tokens.muted,
+                        ),
+                        constraints: const BoxConstraints(minHeight: 36),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        prefixIconConstraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 36,
+                        ),
+                        suffixIconConstraints: const BoxConstraints(
+                          minWidth: 36,
+                          minHeight: 36,
+                        ),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : StudioButtonPress(
+                                child: IconButton(
+                                  style: IconButton.styleFrom(
+                                    minimumSize: const Size(36, 36),
+                                    padding: EdgeInsets.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    visualDensity: VisualDensity.standard,
+                                  ),
+                                  tooltip: 'Clear model search',
+                                  onPressed: () {
+                                    _search.clear();
+                                    setState(() {
+                                      _query = '';
+                                      _provider = _selectedProvider();
+                                    });
+                                  },
+                                  icon: const Icon(Icons.close_rounded),
                                 ),
-                                tooltip: 'Clear model search',
-                                onPressed: () {
-                                  _search.clear();
-                                  setState(() {
-                                    _query = '';
-                                    _provider = _selectedProvider();
-                                  });
-                                },
-                                icon: const Icon(Icons.close_rounded),
                               ),
-                            ),
-                      isDense: true,
+                        isDense: true,
+                      ),
+                      onChanged: (value) => setState(() {
+                        if (_query.trim().isEmpty && value.trim().isNotEmpty) {
+                          _provider = null;
+                        }
+                        _query = value;
+                      }),
                     ),
-                    onChanged: (value) => setState(() {
-                      if (_query.trim().isEmpty && value.trim().isNotEmpty) {
-                        _provider = null;
-                      }
-                      _query = value;
-                    }),
                   ),
                 ),
                 if (widget.onRefresh != null)

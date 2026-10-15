@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import '../theme/wing_theme.dart';
 import 'studio_error.dart';
@@ -316,9 +317,11 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                         color: Theme.of(
                           context,
                         ).colorScheme.surfaceContainerHighest,
-                        child: SelectableText(
-                          lines.join('\n'),
-                          style: WingTokens.of(context).typography.mono,
+                        child: viewportSelection(
+                          SelectableText(
+                            lines.join('\n'),
+                            style: WingTokens.of(context).typography.mono,
+                          ),
                         ),
                       ),
                     ],

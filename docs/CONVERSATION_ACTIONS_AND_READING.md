@@ -46,3 +46,10 @@ Messages show a local date/time in the footer when available. Long-press it for 
 A saved reply can show an approximate time beside **Used N tools**, measured from your saved sent message to the final saved reply. It includes thinking and tool work; missing timestamps leave it unavailable. See [Tool activity](TOOL_ACTIVITY.md#approximate-reply-time).
 
 Markdown, code and tables support copying and horizontal scrolling where needed. Literal source and output have a wrap control. Long content can be read separately and returned to the latest conversation. [Execution and search](EXECUTION_FIND_AND_OUTPUTS.md) explains Find and Activity; [Output viewers](OPENING_OUTPUT_FILES.md) covers files.
+
+### Selecting text in scrolling previews
+
+You can select and copy text in expanded tasks, activity details, code and
+conversation history. Selection handles appear for endpoints currently visible
+in the reader; scroll to bring another endpoint into view. Select all and Copy
+keep the complete selected text, including text outside the preview.

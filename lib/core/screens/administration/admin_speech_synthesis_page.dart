@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'dart:async';
@@ -126,12 +127,14 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
                   ),
                   const SizedBox(height: 12),
                   if (choices.length > 8) ...[
-                    TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'Search voices',
-                        prefixIcon: Icon(Icons.search),
+                    viewportSelection(
+                      TextField(
+                        decoration: const InputDecoration(
+                          labelText: 'Search voices',
+                          prefixIcon: Icon(Icons.search),
+                        ),
+                        onChanged: (value) => update(() => search = value),
                       ),
-                      onChanged: (value) => update(() => search = value),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -293,15 +296,17 @@ class _AdminSpeechSynthesisPageState extends State<AdminSpeechSynthesisPage>
                       onFocusChange: (focused) {
                         if (!focused && state.canEnterVoice) _customVoice();
                       },
-                      child: TextField(
-                        controller: _custom,
-                        enabled: state.canEnterVoice,
-                        maxLength: 256,
-                        decoration: const InputDecoration(
-                          labelText: 'Voice ID',
+                      child: viewportSelection(
+                        TextField(
+                          controller: _custom,
+                          enabled: state.canEnterVoice,
+                          maxLength: 256,
+                          decoration: const InputDecoration(
+                            labelText: 'Voice ID',
+                          ),
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) => _customVoice(),
                         ),
-                        textInputAction: TextInputAction.done,
-                        onSubmitted: (_) => _customVoice(),
                       ),
                     ),
                   if (ready) ..._credentials(provider),

@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'dart:math' as math;
 
@@ -138,26 +139,28 @@ class _ProjectIconPickerState extends State<ProjectIconPicker> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                child: TextField(
-                  key: const ValueKey('project-icon-search-field'),
-                  controller: _search,
-                  onChanged: (_) => _searchChanged(),
-                  decoration: InputDecoration(
-                    hintText: 'Search icons',
-                    labelText: 'Search icons',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _search.text.isEmpty
-                        ? null
-                        : StudioButtonPress(
-                            child: IconButton(
-                              tooltip: 'Clear icon search',
-                              onPressed: () {
-                                _search.clear();
-                                _searchChanged();
-                              },
-                              icon: const Icon(Icons.close),
+                child: viewportSelection(
+                  TextField(
+                    key: const ValueKey('project-icon-search-field'),
+                    controller: _search,
+                    onChanged: (_) => _searchChanged(),
+                    decoration: InputDecoration(
+                      hintText: 'Search icons',
+                      labelText: 'Search icons',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _search.text.isEmpty
+                          ? null
+                          : StudioButtonPress(
+                              child: IconButton(
+                                tooltip: 'Clear icon search',
+                                onPressed: () {
+                                  _search.clear();
+                                  _searchChanged();
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
                             ),
-                          ),
+                    ),
                   ),
                 ),
               ),

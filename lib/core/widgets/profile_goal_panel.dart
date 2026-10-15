@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'activity/activity_detail_actions.dart';
 import 'studio_error.dart';
@@ -397,27 +398,29 @@ class _AddCriterionDialogState extends State<_AddCriterionDialog> {
         child: StudioDialog(
           scrollable: true,
           title: const Text('Add criterion'),
-          content: TextField(
-            key: const ValueKey('goal-criterion-draft'),
-            controller: _draft,
-            enabled: !working,
-            autofocus: true,
-            minLines: 2,
-            maxLines: 5,
-            textInputAction: TextInputAction.done,
-            decoration: InputDecoration(
-              labelText: 'Criterion',
-              hintText: 'What must be true before this goal is done?',
-              errorText: widget.editor.error,
-              alignLabelWithHint: true,
-              border: const OutlineInputBorder(
-                borderRadius: WingRadius.control,
+          content: viewportSelection(
+            TextField(
+              key: const ValueKey('goal-criterion-draft'),
+              controller: _draft,
+              enabled: !working,
+              autofocus: true,
+              minLines: 2,
+              maxLines: 5,
+              textInputAction: TextInputAction.done,
+              decoration: InputDecoration(
+                labelText: 'Criterion',
+                hintText: 'What must be true before this goal is done?',
+                errorText: widget.editor.error,
+                alignLabelWithHint: true,
+                border: const OutlineInputBorder(
+                  borderRadius: WingRadius.control,
+                ),
               ),
+              onChanged: (value) {
+                widget.onDraftChanged(value);
+                setState(() {});
+              },
             ),
-            onChanged: (value) {
-              widget.onDraftChanged(value);
-              setState(() {});
-            },
           ),
           actions: [
             StudioFormActions(

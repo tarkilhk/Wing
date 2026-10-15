@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import '../../widgets/studio_form_actions.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -179,17 +180,19 @@ class _BotProfileEditorState extends State<BotProfileEditor>
                 ),
               ),
             ),
-            TextField(
-              controller: _title,
-              enabled: !_session.busy,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(
-                labelText: 'Bot name',
-                errorText: _session.title.trim().isEmpty
-                    ? 'Give your bot a name.'
-                    : null,
+            viewportSelection(
+              TextField(
+                controller: _title,
+                enabled: !_session.busy,
+                textCapitalization: TextCapitalization.words,
+                decoration: InputDecoration(
+                  labelText: 'Bot name',
+                  errorText: _session.title.trim().isEmpty
+                      ? 'Give your bot a name.'
+                      : null,
+                ),
+                onChanged: (text) => _session.change(title: text),
               ),
-              onChanged: (text) => _session.change(title: text),
             ),
             const SizedBox(height: 24),
             Text('Shape', style: Theme.of(context).textTheme.titleSmall),
@@ -307,21 +310,23 @@ class _BotProfileEditorState extends State<BotProfileEditor>
                 ),
               ],
             ),
-            TextField(
-              controller: _prompt,
-              enabled: !_session.busy,
-              minLines: 2,
-              maxLines: 4,
-              decoration: InputDecoration(
-                labelText: 'Describe an avatar',
-                hintText: 'A friendly midnight-blue owl',
-                suffixIcon: StudioButtonPress(
-                  child: IconButton(
-                    tooltip: 'Generate avatar',
-                    onPressed: _session.busy || _session.saving
-                        ? null
-                        : () => _session.generate(_prompt.text),
-                    icon: const Icon(Icons.auto_awesome_outlined),
+            viewportSelection(
+              TextField(
+                controller: _prompt,
+                enabled: !_session.busy,
+                minLines: 2,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: 'Describe an avatar',
+                  hintText: 'A friendly midnight-blue owl',
+                  suffixIcon: StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Generate avatar',
+                      onPressed: _session.busy || _session.saving
+                          ? null
+                          : () => _session.generate(_prompt.text),
+                      icon: const Icon(Icons.auto_awesome_outlined),
+                    ),
                   ),
                 ),
               ),

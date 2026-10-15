@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import '../widgets/studio_form_actions.dart';
 import '../models/project_icon.dart';
 import '../theme/project_icon_glyphs.dart';
@@ -372,15 +373,17 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: TextField(
-                    key: const ValueKey('project-name-field'),
-                    controller: _name,
-                    enabled: !_pending,
-                    maxLength: 200,
-                    onChanged: (_) => setState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Project name',
-                      counterText: '',
+                  child: viewportSelection(
+                    TextField(
+                      key: const ValueKey('project-name-field'),
+                      controller: _name,
+                      enabled: !_pending,
+                      maxLength: 200,
+                      onChanged: (_) => setState(() {}),
+                      decoration: const InputDecoration(
+                        labelText: 'Project name',
+                        counterText: '',
+                      ),
                     ),
                   ),
                 ),

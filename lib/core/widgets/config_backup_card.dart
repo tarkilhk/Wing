@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'studio_selection_tile.dart';
 import 'studio_error.dart';
@@ -65,35 +66,43 @@ class _ExportPassphraseSheetState extends State<ExportPassphraseSheet> {
           ),
         ),
         const SizedBox(height: 16),
-        TextField(
-          key: const Key('export_passphrase_field'),
-          controller: _passphrase,
-          obscureText: _obscure,
-          autofillHints: const [AutofillHints.newPassword],
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Passphrase (optional)',
-            border: const OutlineInputBorder(borderRadius: WingRadius.control),
-            suffixIcon: StudioButtonPress(
-              child: IconButton(
-                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                onPressed: () => setState(() => _obscure = !_obscure),
-                tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
+        viewportSelection(
+          TextField(
+            key: const Key('export_passphrase_field'),
+            controller: _passphrase,
+            obscureText: _obscure,
+            autofillHints: const [AutofillHints.newPassword],
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Passphrase (optional)',
+              border: const OutlineInputBorder(
+                borderRadius: WingRadius.control,
+              ),
+              suffixIcon: StudioButtonPress(
+                child: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                  tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
+                ),
               ),
             ),
           ),
         ),
         const SizedBox(height: 12),
-        TextField(
-          key: const Key('export_passphrase_confirm_field'),
-          controller: _confirm,
-          obscureText: _obscure,
-          autofillHints: const [AutofillHints.newPassword],
-          decoration: const InputDecoration(
-            labelText: 'Confirm passphrase',
-            border: OutlineInputBorder(borderRadius: WingRadius.control),
+        viewportSelection(
+          TextField(
+            key: const Key('export_passphrase_confirm_field'),
+            controller: _confirm,
+            obscureText: _obscure,
+            autofillHints: const [AutofillHints.newPassword],
+            decoration: const InputDecoration(
+              labelText: 'Confirm passphrase',
+              border: OutlineInputBorder(borderRadius: WingRadius.control),
+            ),
+            onSubmitted: (_) => _submit(),
           ),
-          onSubmitted: (_) => _submit(),
         ),
         if (_error != null) ...[
           const SizedBox(height: 12),
@@ -146,24 +155,30 @@ class _ImportOptionsSheetState extends State<ImportOptionsSheet> {
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 16),
-        TextField(
-          key: const Key('import_passphrase_field'),
-          controller: _passphrase,
-          obscureText: _obscure,
-          autofillHints: const [AutofillHints.password],
-          autofocus: true,
-          decoration: InputDecoration(
-            labelText: 'Passphrase (if encrypted)',
-            border: const OutlineInputBorder(borderRadius: WingRadius.control),
-            suffixIcon: StudioButtonPress(
-              child: IconButton(
-                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
-                onPressed: () => setState(() => _obscure = !_obscure),
-                tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
+        viewportSelection(
+          TextField(
+            key: const Key('import_passphrase_field'),
+            controller: _passphrase,
+            obscureText: _obscure,
+            autofillHints: const [AutofillHints.password],
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Passphrase (if encrypted)',
+              border: const OutlineInputBorder(
+                borderRadius: WingRadius.control,
+              ),
+              suffixIcon: StudioButtonPress(
+                child: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                  tooltip: _obscure ? 'Show passphrase' : 'Hide passphrase',
+                ),
               ),
             ),
+            onSubmitted: (_) => _submit(),
           ),
-          onSubmitted: (_) => _submit(),
         ),
         const SizedBox(height: 16),
         RadioGroup<ConfigImportMode>(

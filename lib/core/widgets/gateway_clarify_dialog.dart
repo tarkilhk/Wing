@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'studio_task_marker.dart';
 import 'studio_selection_tile.dart';
@@ -168,27 +169,31 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
               ),
             ],
             SizedBox(height: request.hasChoices ? 8 : 16),
-            TextField(
-              key: const Key('clarify-other-field'),
-              controller: _otherController,
-              enabled: !_submitting,
-              minLines: 1,
-              maxLines: 4,
-              textCapitalization: TextCapitalization.sentences,
-              textInputAction: TextInputAction.done,
-              decoration: InputDecoration(
-                isDense: true,
-                border: OutlineInputBorder(borderRadius: WingRadius.control),
-                labelText: request.hasChoices ? 'Other answer' : 'Your answer',
+            viewportSelection(
+              TextField(
+                key: const Key('clarify-other-field'),
+                controller: _otherController,
+                enabled: !_submitting,
+                minLines: 1,
+                maxLines: 4,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.done,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: OutlineInputBorder(borderRadius: WingRadius.control),
+                  labelText: request.hasChoices
+                      ? 'Other answer'
+                      : 'Your answer',
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _error = null;
+                    if (!request.multiSelect && value.trim().isNotEmpty) {
+                      _selectedIndex = null;
+                    }
+                  });
+                },
               ),
-              onChanged: (value) {
-                setState(() {
-                  _error = null;
-                  if (!request.multiSelect && value.trim().isNotEmpty) {
-                    _selectedIndex = null;
-                  }
-                });
-              },
             ),
             if (_error != null) ...[
               const SizedBox(height: 12),

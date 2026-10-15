@@ -1,3 +1,4 @@
+import '../widgets/selection_viewport.dart';
 import '../widgets/profile_subagent_panel.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import '../widgets/conversation_activity.dart';
@@ -2107,23 +2108,25 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       const SizedBox(height: WingSpacing.md),
                       Semantics(
                         label: 'Message text',
-                        child: TextFormField(
-                          key: const ValueKey('saved-message-edit-input'),
-                          initialValue: input,
-                          enabled: !submitting,
-                          autofocus: true,
-                          minLines: 3,
-                          maxLines: 8,
-                          keyboardType: TextInputType.multiline,
-                          textInputAction: TextInputAction.newline,
-                          style: theme.textTheme.bodyLarge,
-                          decoration: InputDecoration(
-                            fillColor: tokens.surface,
+                        child: viewportSelection(
+                          TextFormField(
+                            key: const ValueKey('saved-message-edit-input'),
+                            initialValue: input,
+                            enabled: !submitting,
+                            autofocus: true,
+                            minLines: 3,
+                            maxLines: 8,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            style: theme.textTheme.bodyLarge,
+                            decoration: InputDecoration(
+                              fillColor: tokens.surface,
+                            ),
+                            onChanged: (value) => setDialogState(() {
+                              input = value;
+                              inlineError = null;
+                            }),
                           ),
-                          onChanged: (value) => setDialogState(() {
-                            input = value;
-                            inlineError = null;
-                          }),
                         ),
                       ),
                       if (inlineError != null) ...[
@@ -2407,11 +2410,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                         },
                       ),
                     if (chat.markReadFailed)
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.symmetric(vertical: 8),
-                        child: SelectionArea(
-                          child: StudioError(
-                            ProfileWorkspaceController.markReadFailureNotice,
+                        child: viewportSelection(
+                          SelectionArea(
+                            child: StudioError(
+                              ProfileWorkspaceController.markReadFailureNotice,
+                            ),
                           ),
                         ),
                       ),
@@ -2605,83 +2610,85 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _composerFieldInputs = inputs;
     // Native editing listens to its controller. Answer growth does not change
     // field chrome; keep its subtree until an actual field capability changes.
-    return _composerField = TextField(
-      key: const Key('profile-message-composer'),
-      controller: _composer,
-      focusNode: _composerFocus,
-      enabled: !_voiceInput.active && chat.composer.actions().canEditText,
-      minLines: 1,
-      maxLines: 5,
-      keyboardType: TextInputType.multiline,
-      textInputAction: TextInputAction.newline,
-      contentInsertionConfiguration: _canPasteImage(chat)
-          ? ContentInsertionConfiguration(
-              allowedMimeTypes: ImageClipboard.mimeTypes,
-              onContentInserted: (content) => _run(() async {
-                if (!_canPasteImage(chat)) {
-                  throw StateError('Wait before adding another image.');
-                }
-                await controller.addPastedImage(
-                  chat,
-                  () => ImageClipboard.keyboardImage(content),
-                );
-              }),
-            )
-          : null,
-      contextMenuBuilder: (context, editableText) {
-        if (!_canPasteImage(chat)) {
-          return AdaptiveTextSelectionToolbar.editableText(
-            editableTextState: editableText,
-          );
-        }
-        return ImagePasteMenu(
-          editableText: editableText,
-          onPasteImage: () => _run(() async {
-            if (!_canPasteImage(chat)) {
-              throw StateError('Wait before adding another image.');
-            }
-            await controller.addPastedImage(chat, ImageClipboard.readImage);
-          }),
-        );
-      },
-      onChanged: (value) {
-        if (chat.composer.observation.editingEntry != null) {
-          _queuedEditErrors.remove(chat.key);
-          controller.updateQueuedPromptEdit(chat, value);
-          return;
-        }
-        unawaited(
-          controller.updateDraft(chat, value).catchError((_) {
-            if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: StudioError(
-                    'This draft could not be saved on the device.',
-                  ),
-                ),
-              );
-            }
-          }),
-        );
-      },
-      decoration: InputDecoration(
-        suffixIcon: chat.composer.observation.editingEntry == null
-            ? _dictationButton(chat)
+    return _composerField = viewportSelection(
+      TextField(
+        key: const Key('profile-message-composer'),
+        controller: _composer,
+        focusNode: _composerFocus,
+        enabled: !_voiceInput.active && chat.composer.actions().canEditText,
+        minLines: 1,
+        maxLines: 5,
+        keyboardType: TextInputType.multiline,
+        textInputAction: TextInputAction.newline,
+        contentInsertionConfiguration: _canPasteImage(chat)
+            ? ContentInsertionConfiguration(
+                allowedMimeTypes: ImageClipboard.mimeTypes,
+                onContentInserted: (content) => _run(() async {
+                  if (!_canPasteImage(chat)) {
+                    throw StateError('Wait before adding another image.');
+                  }
+                  await controller.addPastedImage(
+                    chat,
+                    () => ImageClipboard.keyboardImage(content),
+                  );
+                }),
+              )
             : null,
-        isDense: true,
-        hintMaxLines: 1,
-        hintText: chat.composer.observation.editingEntry != null
-            ? 'Edit queued message'
-            : chat.runtime.blocksTurnAdmission
-            ? 'Draft your next message'
-            : 'Message Hermes or type /',
-        border: InputBorder.none,
-        enabledBorder: InputBorder.none,
-        focusedBorder: InputBorder.none,
-        filled: false,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 12,
+        contextMenuBuilder: (context, editableText) {
+          if (!_canPasteImage(chat)) {
+            return AdaptiveTextSelectionToolbar.editableText(
+              editableTextState: editableText,
+            );
+          }
+          return ImagePasteMenu(
+            editableText: editableText,
+            onPasteImage: () => _run(() async {
+              if (!_canPasteImage(chat)) {
+                throw StateError('Wait before adding another image.');
+              }
+              await controller.addPastedImage(chat, ImageClipboard.readImage);
+            }),
+          );
+        },
+        onChanged: (value) {
+          if (chat.composer.observation.editingEntry != null) {
+            _queuedEditErrors.remove(chat.key);
+            controller.updateQueuedPromptEdit(chat, value);
+            return;
+          }
+          unawaited(
+            controller.updateDraft(chat, value).catchError((_) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: StudioError(
+                      'This draft could not be saved on the device.',
+                    ),
+                  ),
+                );
+              }
+            }),
+          );
+        },
+        decoration: InputDecoration(
+          suffixIcon: chat.composer.observation.editingEntry == null
+              ? _dictationButton(chat)
+              : null,
+          isDense: true,
+          hintMaxLines: 1,
+          hintText: chat.composer.observation.editingEntry != null
+              ? 'Edit queued message'
+              : chat.runtime.blocksTurnAdmission
+              ? 'Draft your next message'
+              : 'Message Hermes or type /',
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
         ),
       ),
     );

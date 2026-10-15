@@ -6510,6 +6510,15 @@
       "source": "test/hermes_question_card_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/selection_viewport_test.dart",
+      "kind": "host-test",
+      "path": "test/selection_viewport_test.dart",
+      "purpose": "Native handle clipping and restoration preserve selection and Copy",
+      "source": "test/selection_viewport_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -14992,6 +15001,16 @@
       "path": "test/hermes_question_history_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/selection_viewport.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/selection_viewport_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

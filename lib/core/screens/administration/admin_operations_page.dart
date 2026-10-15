@@ -1,3 +1,4 @@
+import '../../widgets/selection_viewport.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../../models/profile_session_key.dart';
 import '../../models/administration_operation.dart';
@@ -191,11 +192,13 @@ class _AdminActionPageState extends State<AdminActionPage> {
                   children: [
                     Align(
                       alignment: Alignment.centerLeft,
-                      child: SelectableText(
-                        observation.lines.isEmpty
-                            ? 'No output yet.'
-                            : observation.lines.join('\n'),
-                        style: WingTokens.of(context).typography.mono,
+                      child: viewportSelection(
+                        SelectableText(
+                          observation.lines.isEmpty
+                              ? 'No output yet.'
+                              : observation.lines.join('\n'),
+                          style: WingTokens.of(context).typography.mono,
+                        ),
                       ),
                     ),
                   ],

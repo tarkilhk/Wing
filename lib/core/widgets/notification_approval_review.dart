@@ -1,3 +1,4 @@
+import 'selection_viewport.dart';
 import 'studio_form_actions.dart';
 import 'package:flutter/material.dart';
 
@@ -98,7 +99,9 @@ class _ReviewState extends State<NotificationApprovalReview> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SelectableText(widget.request.command),
+                        viewportSelection(
+                          SelectableText(widget.request.command),
+                        ),
                         if (widget.request.description.isNotEmpty)
                           ExpansionTile(
                             tilePadding: EdgeInsets.zero,
