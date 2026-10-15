@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
-from scripts.test_native_bots import require_completed_cases
+from scripts.test_native_bots import input_view_visible, require_completed_cases
 from scripts.test_native_recents import require_completed_cases as require_recents
 from tools.qa.check_background_monitoring import require_single_monitoring_card
 from tools.qa import check_notification_revamp as notification_ui
@@ -176,6 +176,24 @@ class NativeDriverGuards(unittest.TestCase):
                     )
                     self.assertNotEqual(result.returncode, 0)
                     self.assertIn('Native acceptance requires Python assertions', result.stderr)
+
+
+class NativeBotsKeyboard(unittest.TestCase):
+    def test_stale_show_request_does_not_make_hidden_input_view_visible(self):
+        self.assertFalse(input_view_visible(
+            'mInputShown=true\n  mWindowVisible=false mIsInputViewShown=false mStatusIcon=0'))
+
+    def test_retained_input_view_does_not_make_hidden_ime_window_visible(self):
+        self.assertFalse(input_view_visible(
+            'mInputShown=false\n  mWindowVisible=false mIsInputViewShown=true mStatusIcon=0'))
+
+    def test_actual_input_view_is_visible(self):
+        self.assertTrue(input_view_visible(
+            'mInputShown=true\n  mWindowVisible=true mIsInputViewShown=true mStatusIcon=0'))
+
+    def test_missing_actual_view_state_is_not_assumed_hidden(self):
+        with self.assertRaises(RuntimeError):
+            input_view_visible('mInputShown=false')
 
 
 class NativeBotsCompletion(unittest.TestCase):

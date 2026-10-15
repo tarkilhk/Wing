@@ -28,7 +28,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   final supervisionRequests = <(String, Map<String, dynamic>)>[];
   final administrationReads = <(String, Map<String, String>)>[];
   final administrationRequests = <(String, Map<String, dynamic>)>[];
-  final profileConfigureRequests = <Map<String, dynamic>>[];
+  final profileIdentityWrites = <(String, Map<String, dynamic>)>[];
   final backendUpdatePosts = <(String, Map<String, dynamic>)>[];
   final diagnosticPosts = <(String, Map<String, dynamic>)>[];
   final diagnosticPids = <String, int>{};
@@ -252,19 +252,6 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               'soul': profileSoul,
               'skills': const [],
               'toolsets': const [],
-            };
-          case 'profiles.configure':
-            administrationRequests.add((
-              method,
-              Map<String, dynamic>.from(params),
-            ));
-            profileConfigureRequests.add(Map<String, dynamic>.from(params));
-            if (params['description'] case final String description) {
-              profileDescription = description.trim();
-            }
-            return {
-              'ok': false,
-              'applied': const {'description': true, 'soul': false},
             };
           case 'session.context_breakdown':
             return {

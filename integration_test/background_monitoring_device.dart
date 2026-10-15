@@ -166,6 +166,14 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
         final profile = event['profile'] as String;
         final chat = chats[profile]!;
         final state = event['state'] as String;
+        final reply = '**Reply ready.** ${'More readable context. ' * 20}';
+        if (state == 'idle') {
+          // Both synthetic chats have the same saved reply. A preference-driven
+          // reconnect may recover it through history before the live event.
+          host.history = [
+            {'id': 1, 'role': 'assistant', 'content': reply},
+          ];
+        }
         host.workingProfiles.remove(profile);
         host.waitingProfiles.remove(profile);
         if (state == 'working') host.workingProfiles.add(profile);
@@ -184,10 +192,7 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
               sessionId: chat.runtime.runtimeId,
               data: state == 'waiting'
                   ? {'request_id': 'question-$profile', 'question': 'Continue?'}
-                  : {
-                      'text':
-                          '**Reply ready.** ${'More readable context. ' * 20}',
-                    },
+                  : {'text': reply},
             ),
           );
         }

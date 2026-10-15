@@ -648,7 +648,7 @@ void main() {
       await tester.pageBack();
       await _settleScreen(tester);
       expect(find.text('Improve the conversation list'), findsWidgets);
-      await tester.tap(find.byIcon(Icons.arrow_back).first);
+      await tester.binding.handlePopRoute();
       await _settleScreen(tester);
       expect(find.text('Chats'), findsWidgets);
 
@@ -730,25 +730,24 @@ void main() {
       await tester.ensureVisible(find.byKey(const ValueKey('nav-analytics')));
       await tester.tap(find.byKey(const ValueKey('nav-analytics')));
       await _settleScreen(tester);
-      await _waitFor(
-        tester,
-        find.textContaining('Could not load model totals.'),
-      );
-      expect(
-        find.textContaining('Could not load model totals.'),
-        findsOneWidget,
-      );
       expect(find.text('Unavailable'), findsWidgets);
-      await _capture('$label-analytics-unavailable');
-
-      observations.analyticsUnavailable = false;
-      final refresh = find.byTooltip('Refresh usage');
       final analyticsScroll = find
           .descendant(
             of: find.byType(UsageDashboard),
             matching: find.byType(Scrollable),
           )
           .first;
+      final unavailable = find.textContaining('Could not load model totals.');
+      await tester.scrollUntilVisible(
+        unavailable,
+        250,
+        scrollable: analyticsScroll,
+      );
+      expect(unavailable.hitTestable(), findsOneWidget);
+      await _capture('$label-analytics-unavailable');
+
+      observations.analyticsUnavailable = false;
+      final refresh = find.byTooltip('Refresh usage');
       await tester.scrollUntilVisible(
         refresh,
         250,
@@ -756,6 +755,7 @@ void main() {
       );
       await tester.tap(refresh);
       await _settleScreen(tester);
+      expect(unavailable, findsNothing);
       await tester.scrollUntilVisible(
         find.text('639K'),
         -250,

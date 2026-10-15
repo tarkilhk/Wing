@@ -225,10 +225,15 @@ def main():
         # before this monitoring-only fixture starts work. Permission denial and
         # retry are exercised separately by the native voice-permission driver.
         shell('pm', 'grant', package, 'android.permission.RECORD_AUDIO')
+        # Completed onboarding is required before working-state/Doze checks.
+        # Otherwise Android's startup battery dialog leaves the app inactive.
+        # Startup prompting is a separate acceptance boundary.
+        shell('dumpsys', 'deviceidle', 'whitelist', f'+{package}')
         shell('input', 'keyevent', 'KEYCODE_WAKEUP')
         shell('wm', 'dismiss-keyguard')
         launch()
-        until(lambda: request()['ready'], 'Fixture did not establish its gateway')
+        until(lambda: request()['ready'] and request()['lifecycle'] == 'resumed',
+              'Fixture did not establish its gateway in the foreground')
         generation = request()['generation']
         stopped()
         assert polling_status()['notificationPoll']['active'] == 0, 'Idle startup scheduled notification polling'

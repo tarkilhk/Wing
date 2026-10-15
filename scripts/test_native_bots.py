@@ -15,6 +15,17 @@ STAGE = "code_cache/wing-bots-stage.json"
 ACK = "code_cache/wing-bots-ack"
 
 
+def input_view_visible(state):
+    """API36 IME window and input view must both actually be displayed."""
+    fields = {}
+    for name in ('mWindowVisible', 'mIsInputViewShown'):
+        value = re.search(r'\b' + name + r'=(true|false)', state)
+        if value is None:
+            raise RuntimeError("Android did not report actual input-view visibility")
+        fields[name] = value[1] == 'true'
+    return all(fields.values())
+
+
 def require_completed_cases(records, name=None):
     expected = {
         f'{theme}-{size}-complete'
@@ -54,8 +65,7 @@ def main():
         raise ValueError("Use an exclusively allocated disposable emulator")
 
     def keyboard_visible():
-        return bool(re.search(r"mInputShown=true|mIsInputViewShown=true",
-                              shell("dumpsys", "input_method")))
+        return input_view_visible(shell("dumpsys", "input_method"))
 
     original = {"size": shell("wm", "size"), "density": shell("wm", "density"),
                 "font": shell("settings", "get", "system", "font_scale"),
@@ -145,8 +155,11 @@ def main():
                 elif action != "capture":
                     raise ValueError("Unknown native action " + action)
                 stage["keyboard_visible"] = keyboard_visible()
-                if "keyboard" in stage and stage["keyboard"] != stage["keyboard_visible"]:
-                    raise RuntimeError("Unexpected native keyboard state at " + name)
+                if "keyboard" in stage:
+                    end = time.monotonic() + 5
+                    while stage["keyboard_visible"] != stage["keyboard"] and time.monotonic() < end:
+                        time.sleep(.1)
+                        stage["keyboard_visible"] = keyboard_visible()
                 window = shell("dumpsys", "window")
                 focus = "\n".join(line for line in window.splitlines()
                                   if "mCurrentFocus=" in line)
@@ -155,6 +168,11 @@ def main():
                 if not png.startswith(b"\x89PNG"):
                     raise RuntimeError("Android screenshot was not PNG")
                 (output / (name + ".png")).write_bytes(png)
+                if "keyboard" in stage and stage["keyboard"] != stage["keyboard_visible"]:
+                    (output / (name + "-input-method.txt")).write_text(
+                        shell("dumpsys", "input_method"))
+                    (output / (name + "-window.txt")).write_text(window)
+                    raise RuntimeError("Unexpected native keyboard state at " + name)
                 if re.search(r"Application Error|Application Not Responding|ANR", focus,
                              flags=re.IGNORECASE):
                     (output / (name + "-window.txt")).write_text(window)

@@ -159,7 +159,8 @@ void main() {
         final fixture = BotsFixture(server: administration.server);
         fixture.profiles.first['name'] = 'personal';
         fixture.profiles.first['display_name'] = 'personal';
-        fixture.profiles.first['canonical_session']['id'] = 'pin-one';
+        fixture.profiles.first['canonical_session']['id'] = 'pinned';
+        fixture.profiles.first['canonical_session']['resolved_id'] = 'pinned';
         addTearDown(() async {
           await tester.pumpWidget(const SizedBox());
           await tester.pump();
@@ -271,7 +272,13 @@ void main() {
           () => visible(find.byKey(const ValueKey('profile-message-composer'))),
           'the canonical bot conversation',
         );
-        expect(controller.current!.chat!.key.sessionId, 'pin-one');
+        expect(controller.current!.chat!.key.sessionId, 'pinned');
+        await until(
+          () =>
+              controller.current!.chat!.title == 'Plan the Android workspace' &&
+              !controller.current!.chat!.runtime.opening,
+          'the canonical bot session metadata and history',
+        );
         await _native(tester, '$label-chat-back', action: 'back');
         await roster();
         expect(find.byType(BotsContent), findsOneWidget);
@@ -444,10 +451,8 @@ void main() {
           'the group roster',
         );
         await tester.tap(rosterTitle('Research team').hitTestable());
-        final groupComposer = find.byWidgetPredicate(
-          (widget) =>
-              widget is TextField &&
-              widget.decoration?.hintText == 'Message the group',
+        final groupComposer = find.byKey(
+          const ValueKey('group-message-composer'),
         );
         await until(() => visible(groupComposer), 'the group conversation');
         await tester.tap(groupComposer);
@@ -476,8 +481,11 @@ void main() {
         );
         expect(find.byTooltip('Retry same message'), findsOneWidget);
         expect(tester.widget<TextField>(groupComposer).readOnly, true);
-        await _native(tester, '$label-group-hide', action: 'hide-keyboard');
+        // Making the pending message read-only dismisses the IME itself.
+        // Wait for that transition before native capture; Back during stale
+        // Flutter insets can otherwise pop the group after Android hid it.
         await keyboardClosed();
+        await _native(tester, '$label-group-hide', keyboard: false);
         expect(tester.view.viewInsets.bottom, 0);
         await _native(tester, '$label-retry');
         await tester.tap(find.byTooltip('Retry same message'));
