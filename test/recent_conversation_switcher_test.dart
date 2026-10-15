@@ -354,6 +354,52 @@ Future<void> _capture(WidgetTester tester, GlobalKey key, String name) async {
   await _captureCurrent(tester, key, name);
 }
 
+Future<void> _expectArrivalWhileTyping(
+  WidgetTester tester, {
+  required Finder composer,
+  required ValueNotifier<ChatNoticeActivity?> activity,
+  required RecentConversationKey target,
+  required int sequence,
+  required GlobalKey frame,
+  required String captureName,
+}) async {
+  await tester.showKeyboard(composer);
+  tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+  await tester.pump();
+  final field = tester.widget<TextField>(composer);
+  final value = field.controller!.value;
+  final bounds = tester.getRect(composer);
+  expect(field.focusNode!.hasFocus, isTrue);
+  final visit = tester
+      .widget<RecentConversationSwitcher>(
+        find.byType(RecentConversationSwitcher),
+      )
+      .session;
+  final selected = visit.selected;
+  for (final kind in ConversationActivityKind.values) {
+    activity.value = ChatNoticeActivity(
+      key: target,
+      kind: kind,
+      identity: 'typing-${kind.name}',
+      sequence: sequence++,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(
+      find.byKey(const ValueKey('recent-conversation-nudge')),
+      findsOneWidget,
+      reason: 'A fresh ${kind.name} must remain visible while typing.',
+    );
+    expect(field.focusNode!.hasFocus, isTrue);
+    expect(field.controller!.value, value);
+    expect(tester.getRect(composer), bounds);
+    expect(visit.selected, selected);
+    await _captureCurrent(tester, frame, '$captureName-${kind.name}');
+  }
+  await tester.pump(const Duration(seconds: 4));
+  expect(find.byKey(const ValueKey('recent-conversation-nudge')), findsNothing);
+}
+
 Future<void> _captureCurrent(
   WidgetTester tester,
   GlobalKey key,
@@ -3837,6 +3883,15 @@ void main() {
           await tester.pump();
           final composerFocus = tester.widget<TextField>(field).focusNode!;
           expect(composerFocus.hasFocus, isTrue);
+          await _expectArrivalWhileTyping(
+            tester,
+            composer: field,
+            activity: activity,
+            target: visit.entries.firstWhere((e) => e.key != groupKey).key,
+            sequence: 1,
+            frame: frame,
+            captureName: 'group-typing-arrival-${brightness.name}-$scale',
+          );
           await _chatGesture(tester);
           expect(composerFocus.hasFocus, isFalse);
           tester.view.viewInsets = FakeViewPadding.zero;
@@ -4356,6 +4411,18 @@ void main() {
               'pond-ripples-${brightness.name}-$scale',
             );
           }
+          await _expectArrivalWhileTyping(
+            tester,
+            composer: find.widgetWithText(TextField, 'Keep this draft'),
+            activity: activity,
+            target: other,
+            sequence: 3,
+            frame: frame,
+            captureName: 'chat-typing-arrival-${brightness.name}-$scale',
+          );
+          FocusManager.instance.primaryFocus?.unfocus();
+          tester.view.viewInsets = FakeViewPadding.zero;
+          await tester.pump();
           await _chatGesture(tester, pinch: false);
           expect(
             find.byKey(const ValueKey('recent-conversation-nudge')),

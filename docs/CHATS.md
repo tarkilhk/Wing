@@ -55,6 +55,9 @@ Inside a chat or bot group, pinch inward to open the same conversations shown in
 including bot groups. Cards follow message freshness: left is newer, right is
 older, with the oldest and newest linked in a circle.
 Unread cards carry the same quiet tint as the Recents list.
+Soft edge ripples indicate replies or requests for input in other recent
+conversations, including while you type with the keyboard open. Reduced motion
+suppresses the ripples.
 A two-finger horizontal swipe switches to the adjacent conversation directly, including
 before the first pinch. Icon-only controls also
 support keyboard and accessibility navigation. Opening a group shows its group

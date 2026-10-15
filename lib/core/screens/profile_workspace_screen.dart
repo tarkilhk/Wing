@@ -551,10 +551,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   bool _restoreComposerFocus = false;
   final _composerSelections = <ProfileSessionKey, TextSelection>{};
 
-  final _composerEditing = ValueNotifier<bool>(false);
-  void _composerFocusChanged() =>
-      _composerEditing.value = _composerFocus.hasFocus;
-
   void _disposeRecentVisit() {
     _pendingRecentVisit?.dispose();
     _pendingRecentVisit = null;
@@ -778,50 +774,45 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       _recentRenderedChat = chat;
     }
     final visit = _recentVisit!;
-    return ValueListenableBuilder<bool>(
-      valueListenable: _composerEditing,
+    return RecentConversationSwitcher(
+      key: _recentSwitcher,
+      session: visit,
+      chatKey: RecentConversationKey.chat(chat.key),
+      previewBuilder: _recentPreview,
+      gesturesEnabled:
+          _hasWorkspaceFocus &&
+          !_voiceInput.active &&
+          _voiceOutput.owner == null &&
+          chat.composer.observation.editingEntry == null,
+      nudgesEnabled:
+          _hasWorkspaceFocus &&
+          !_voiceInput.active &&
+          _voiceOutput.owner == null,
+      onPresentationChanged: (obscured, stack) {
+        final wasObscured = _conversationObscured;
+        _conversationObscured = obscured;
+        if (stack && _composerFocus.hasFocus) {
+          // A focused Android field can retain focus after Back hides its
+          // keyboard. Preserve the visible editing state when leaving cards.
+          _restoreComposerFocus = MediaQuery.viewInsetsOf(context).bottom > 0;
+          _composerFocus.unfocus();
+        }
+        controller.setRouteVisibility(this, _hasChatFocus);
+        if (wasObscured && !obscured) {
+          // Recheck actual answer visibility once the normal transcript is
+          // revealed. Captures and passive cards never acknowledge a read.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _hasChatFocus) setState(() {});
+          });
+        }
+        if (!obscured && _restoreComposerFocus) {
+          _restoreComposerFocus = false;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _hasChatFocus) _composerFocus.requestFocus();
+          });
+        }
+      },
       child: child,
-      builder: (context, editing, conversation) => RecentConversationSwitcher(
-        key: _recentSwitcher,
-        session: visit,
-        chatKey: RecentConversationKey.chat(chat.key),
-        previewBuilder: _recentPreview,
-        gesturesEnabled:
-            _hasWorkspaceFocus &&
-            !_voiceInput.active &&
-            _voiceOutput.owner == null &&
-            chat.composer.observation.editingEntry == null,
-        nudgesEnabled:
-            _hasWorkspaceFocus &&
-            !editing &&
-            !_voiceInput.active &&
-            _voiceOutput.owner == null,
-        onPresentationChanged: (obscured, stack) {
-          final wasObscured = _conversationObscured;
-          _conversationObscured = obscured;
-          if (stack && _composerFocus.hasFocus) {
-            // A focused Android field can retain focus after Back hides its
-            // keyboard. Preserve the visible editing state when leaving cards.
-            _restoreComposerFocus = MediaQuery.viewInsetsOf(context).bottom > 0;
-            _composerFocus.unfocus();
-          }
-          controller.setRouteVisibility(this, _hasChatFocus);
-          if (wasObscured && !obscured) {
-            // Recheck actual answer visibility once the normal transcript is
-            // revealed. Captures and passive cards never acknowledge a read.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _hasChatFocus) setState(() {});
-            });
-          }
-          if (!obscured && _restoreComposerFocus) {
-            _restoreComposerFocus = false;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted && _hasChatFocus) _composerFocus.requestFocus();
-            });
-          }
-        },
-        child: conversation!,
-      ),
     );
   }
 
@@ -859,7 +850,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       _pendingChatLoadingLabel = 'Opening bot chat';
       _pendingBot = bot;
     }
-    _composerFocus.addListener(_composerFocusChanged);
     _appIsActive =
         WidgetsBinding.instance.lifecycleState == null ||
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
@@ -958,8 +948,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _disposeRecentVisit();
     _recentsOwner?.dispose();
     _botsOwner?.dispose();
-    _composerFocus.removeListener(_composerFocusChanged);
-    _composerEditing.dispose();
     _conversationBody.dispose();
     if (_renderedReadingFocus case final rendered?) {
       rendered.$1.releaseReadingFocus(rendered.$2);

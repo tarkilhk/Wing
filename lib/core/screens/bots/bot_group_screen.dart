@@ -82,20 +82,19 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _voiceInput.retainTarget(_visible ? _session.voiceTarget : null);
   }
 
-  void _composerFocusChanged() {
+  void _reportRecording() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ConversationPresentationScope.maybeOf(context)?.onInputActivityChanged((
-          editing: _focus.hasFocus,
-          recording: _voiceInput.active,
-        ));
+        ConversationPresentationScope.maybeOf(
+          context,
+        )?.onRecordingChanged(_voiceInput.active);
       }
     });
   }
 
   void _voiceChanged() {
     _changed();
-    _composerFocusChanged();
+    _reportRecording();
   }
 
   void _composerChanged() {
@@ -218,7 +217,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _session.addListener(_changed);
     _composer.addListener(_composerChanged);
     _voiceInput.addListener(_voiceChanged);
-    _focus.addListener(_composerFocusChanged);
     _session.setVisible(true);
   }
 
@@ -515,7 +513,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _session.dispose();
     _composer.removeListener(_composerChanged);
     _composer.dispose();
-    _focus.removeListener(_composerFocusChanged);
     _focus.dispose();
     super.dispose();
   }

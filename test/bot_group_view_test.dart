@@ -1589,7 +1589,7 @@ void main() {
           valueListenable: visible,
           builder: (_, value, child) => ConversationPresentationScope(
             visible: value,
-            onInputActivityChanged: (_) {},
+            onRecordingChanged: (_) {},
             child: child!,
           ),
           child: screen,

@@ -30,7 +30,7 @@ class _GroupConversationSwitcherState extends State<GroupConversationSwitcher>
     with WidgetsBindingObserver {
   late final _session = widget.createSession();
   final _switcher = GlobalKey<RecentConversationSwitcherState>();
-  bool _foreground = true, _obscured = false, _editing = false;
+  bool _foreground = true, _obscured = false;
   bool _recording = false;
   @override
   void initState() {
@@ -68,20 +68,17 @@ class _GroupConversationSwitcherState extends State<GroupConversationSwitcher>
         chatKey: widget.groupKey,
         previewBuilder: widget.previewBuilder,
         gesturesEnabled: _foreground && current && !_recording,
-        nudgesEnabled: _foreground && current && !_editing && !_recording,
+        nudgesEnabled: _foreground && current && !_recording,
         onPresentationChanged: (obscured, stack) {
           if (_obscured == obscured) return;
           setState(() => _obscured = obscured);
         },
         child: ConversationPresentationScope(
           visible: !_obscured && _foreground && current,
-          onInputActivityChanged: (activity) {
-            if (mounted &&
-                (activity.editing != _editing ||
-                    activity.recording != _recording)) {
+          onRecordingChanged: (recording) {
+            if (mounted && recording != _recording) {
               setState(() {
-                _editing = activity.editing;
-                _recording = activity.recording;
+                _recording = recording;
               });
             }
           },
