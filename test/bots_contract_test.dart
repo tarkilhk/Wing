@@ -1627,6 +1627,80 @@ void main() {
     },
   );
 
+  for (final initialCatalog in ['empty', 'previous connection']) {
+    test(
+      'profile chat entry discovers a source after $initialCatalog catalog',
+      () async {
+        final fixture = BotsFixture();
+        final previousScope = WorkspaceScope(
+          connectionId: 'host',
+          connectionIdentity: 'previous-identity',
+          profileName: 'default',
+        );
+        var sources = <BotsRepository>[
+          if (initialCatalog == 'previous connection')
+            BotsRepository(
+              scope: previousScope,
+              instance: 'Previous connection',
+              groupObservations: GroupObservations(previousScope),
+              read: fixture.read,
+              command: fixture.command,
+              ownership: fixture.ownership,
+              savedHistory: fixture.savedHistory,
+            ),
+        ];
+        final session = BotsSession((_) async => sources);
+        addTearDown(session.dispose);
+        await session.refresh();
+        sources = [fixture.repository];
+        final scope = WorkspaceScope(
+          connectionId: 'host',
+          connectionIdentity: 'instance-1',
+          profileName: 'mira',
+        );
+        expect(
+          await session.openProfile(scope, canUse: () => true),
+          ProfileSessionKey(scope, 'mira-chat'),
+        );
+        expect(fixture.commands, isEmpty);
+      },
+    );
+  }
+
+  for (final failure in ['sources', 'roster']) {
+    test(
+      'profile chat entry retries failed $failure discovery immediately',
+      () async {
+        final fixture = BotsFixture();
+        var fail = true;
+        final session = BotsSession((_) async {
+          if (fail && failure == 'sources') throw StateError('Offline');
+          return [fixture.repository];
+        });
+        addTearDown(session.dispose);
+        fixture.readHook = (_, method, _) async {
+          if (fail && failure == 'roster') throw StateError('Offline');
+          return null;
+        };
+        final scope = WorkspaceScope(
+          connectionId: 'host',
+          connectionIdentity: 'instance-1',
+          profileName: 'mira',
+        );
+        await expectLater(
+          session.openProfile(scope, canUse: () => true),
+          throwsStateError,
+        );
+        fail = false;
+        expect(
+          await session.openProfile(scope, canUse: () => true),
+          ProfileSessionKey(scope, 'mira-chat'),
+        );
+        expect(fixture.commands, isEmpty);
+      },
+    );
+  }
+
   test(
     'profile chat entry retired during discovery cannot create a chat',
     () async {
@@ -3186,6 +3260,7 @@ void main() {
       fixture.readHook = (_, method, _) async => throw StateError('Offline');
       expect(await session.botForConversation(key), isNull);
       expect(session.state.errors, isEmpty);
+      expect(retains - releases, 1); // The retained catalog owner.
       final held = Completer<Map<String, dynamic>?>();
       final started = Completer<void>();
       fixture.readHook = (_, method, _) async {
@@ -3195,10 +3270,11 @@ void main() {
       now = now.add(const Duration(seconds: 30));
       final reading = session.botForConversation(key);
       await started.future;
+      expect(retains - releases, 2); // Catalog plus the in-flight read.
       session.dispose();
+      expect(retains - releases, 1); // Only the unfinished read remains.
       held.complete(null);
       expect(await reading, isNull);
-      expect(retains, 3);
       expect(releases, retains);
       expect(fixture.commands, isEmpty);
     },
