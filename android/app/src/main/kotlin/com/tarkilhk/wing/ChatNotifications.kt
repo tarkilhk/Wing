@@ -274,9 +274,13 @@ object ChatNotifications {
             .setContentIntent(intent(context, data, NotificationInteractionSchema.contentTap(data))).setDeleteIntent(deleteIntent(context, data))
         if (data["alert"] == true) builder.setDefaults(NotificationCompat.DEFAULT_ALL)
         else builder.setSilent(true)
+        val largeText = context.resources.configuration.fontScale > 1.3f
+        val command = data["expanded"] as String
+        val preview = if (data["kind"] == "approval")
+            NotificationInteractionSchema.approvalPreview(command, largeText) else command
         val expanded = listOf(
             when { busy -> "Sending decision…"; !error.isNullOrEmpty() -> error; else -> pending },
-            data["expanded"] as String,
+            preview,
         ).filter { it.isNotEmpty() }.joinToString("\n")
         if ((data["payload"] as String).isNotEmpty()) {
             val user = Person.Builder().setName("You").setKey("wing-user").build()
@@ -307,7 +311,7 @@ object ChatNotifications {
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
         }
         for (action in NotificationInteractionSchema.visibleActions(
-            data, context.resources.configuration.fontScale > 1.3f)) {
+            data, largeText)) {
             val review = action == "review"
             val label = when (action) { "once" -> "Once"; "deny" -> "Deny"; else -> "Review" }
             builder.addAction(0, label, intent(context, data, if (review) "" else action, review))

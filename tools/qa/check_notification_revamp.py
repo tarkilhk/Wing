@@ -429,6 +429,11 @@ def run(output, tap_only=False):
 
 
 def check_direct_actions(output):
+    # The layout matrix ends at enlarged text, where Once intentionally requires
+    # Review. Direct-action acceptance starts in the short-command configuration.
+    adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
+    adb('shell', 'cmd', 'uimode', 'night', 'no')
+    time.sleep(.7)
     state('/fail', {'enabled': False})
     state('/preview', {'enabled': True})
     state('/remote', {})

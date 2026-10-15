@@ -114,6 +114,211 @@ void main() {
   });
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'group command selection stays inside preview ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final fixture = BotsFixture();
+          fixture.events.addAll([
+            for (var i = 1; i <= 10; i++)
+              _event(
+                i,
+                'message.user',
+                'you',
+                'Review the changes and continue.',
+              ),
+          ]);
+          final command = List.generate(
+            60,
+            (i) => i == 30
+                ? 'verify("café 🦋", ${'source; ' * 80})'
+                : 'line $i: verify exact source',
+          ).join('\n');
+          fixture.pending.add({
+            'kind': 'approval',
+            'task_id': 'task-1',
+            'member_id': 'atlas',
+            'request_id': 'approval-1',
+            'execution_generation': 1,
+            'approval': {
+              'command': command,
+              'description':
+                  'Write to protected agent-instruction file(s): AGENTS.md. These files steer future agent behavior; approval is always required (not bypassed by auto-approve).',
+              'choices': ['once', 'deny'],
+            },
+          });
+          final group = (await readFixtureGroups(
+            fixture.repository,
+            groupMessages: null,
+          )).first;
+          late BotGroupSession session;
+          final frame = GlobalKey();
+          Widget route() => RepaintBoundary(
+            key: frame,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: DefaultTextStyle(
+                  style: const TextStyle(fontFamily: WingTypography.sans),
+                  child: child!,
+                ),
+              ),
+              home: BotGroupScreen(
+                stopVoicePlayback: () async {},
+                voiceInputSettings: () =>
+                    const LocalVoiceInputSettings(language: ''),
+                createSession: () => session = BotGroupSession(
+                  fixture.repository,
+                  group,
+                  reads: BotGroupReadState(),
+                  preferences: groupPreferences,
+                  groupMessages: null,
+                  appearances: FixedGroupAppearances(const []),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpWidget(route());
+          await _settleGroupMarkdown(tester);
+          final approvalKey = session.pendingApprovals.single.key;
+          String? copied;
+          final messenger =
+              TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+          messenger.setMockMethodCallHandler(SystemChannels.platform, (
+            call,
+          ) async {
+            if (call.method == 'Clipboard.setData') {
+              copied = (call.arguments as Map)['text'] as String;
+            }
+            if (call.method == 'Clipboard.getData') return {'text': copied};
+            return null;
+          });
+          addTearDown(
+            () => messenger.setMockMethodCallHandler(
+              SystemChannels.platform,
+              null,
+            ),
+          );
+
+          Future<void> selectAndCheck(String stage) async {
+            final preview = find.byKey(
+              ValueKey(('group-approval-command', approvalKey)),
+            );
+            final editable = find.descendant(
+              of: preview,
+              matching: find.byType(EditableText),
+            );
+            final state = tester.state<EditableTextState>(editable);
+            final internalScroll = tester.state<ScrollableState>(
+              find.descendant(of: editable, matching: find.byType(Scrollable)),
+            );
+            internalScroll.position.jumpTo(
+              internalScroll.position.maxScrollExtent / 2,
+            );
+            await tester.pump();
+            final composer = tester.getRect(
+              find.byKey(const ValueKey('group-message-composer')),
+            );
+            await tester.longPressAt(tester.getRect(preview).center);
+            await tester.pump();
+            state.contextMenuButtonItems
+                .firstWhere(
+                  (item) => item.type == ContextMenuButtonType.selectAll,
+                )
+                .onPressed!();
+            await tester.pump();
+
+            void checkHandles() {
+              final render = state.renderEditable;
+              final viewport = tester.getRect(preview).deflate(8);
+              expect(
+                render.size.height,
+                lessThanOrEqualTo(viewport.height + 1),
+              );
+              final endpoints = render.getEndpointsForSelection(
+                render.selection!,
+              );
+              for (final entry in [
+                (endpoints.first, render.selectionStartInViewport.value),
+                (endpoints.last, render.selectionEndInViewport.value),
+              ]) {
+                if (entry.$2) {
+                  final point = render.localToGlobal(entry.$1.point);
+                  expect(
+                    point.dy,
+                    inInclusiveRange(viewport.top - 1, viewport.bottom + 1),
+                    reason:
+                        'A visible selection handle must stay inside the command preview',
+                  );
+                }
+              }
+              expect(
+                tester.getRect(
+                  find.byKey(const ValueKey('group-message-composer')),
+                ),
+                composer,
+              );
+            }
+
+            checkHandles();
+            for (final fraction in [0.0, 0.5, 1.0]) {
+              internalScroll.position.jumpTo(
+                internalScroll.position.maxScrollExtent * fraction,
+              );
+              await tester.pump();
+              checkHandles();
+              await _render(
+                tester,
+                frame,
+                'selection-$stage-${brightness.name}-$scale-$fraction',
+              );
+            }
+            final card = find.byKey(ValueKey(('group-approval', approvalKey)));
+            for (final details in tester.widgetList<SingleChildScrollView>(
+              find.descendant(
+                of: card,
+                matching: find.byType(SingleChildScrollView),
+              ),
+            )) {
+              details.controller!.jumpTo(
+                details.controller!.position.maxScrollExtent,
+              );
+              await tester.pump();
+              checkHandles();
+            }
+            expect(
+              state.widget.controller.selection,
+              TextSelection(baseOffset: 0, extentOffset: command.length),
+            );
+            state.contextMenuButtonItems
+                .firstWhere((item) => item.type == ContextMenuButtonType.copy)
+                .onPressed!();
+            await tester.pump();
+            expect(copied, command);
+            expect(tester.takeException(), isNull);
+          }
+
+          await selectAndCheck('pending');
+          fixture.pending.clear();
+          await session.refresh();
+          final transcript = tester
+              .widget<ListView>(
+                find.byKey(const ValueKey('profile-transcript')),
+              )
+              .controller!;
+          transcript.jumpTo(0);
+          await _settleGroupMarkdown(tester);
+          expect(find.text('No longer pending'), findsOneWidget);
+          await selectAndCheck('settled');
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
       testWidgets('group approval remains visible ${brightness.name} $scale', (
         tester,
       ) async {

@@ -22,6 +22,14 @@ class NotificationInteractionSecurityTest {
         assertNull(store.readNavigation("forged"))
     }
 
+    @Test fun longApprovalPreviewsLeaveRoomForPlatformActions() {
+        val command = "x".repeat(1000)
+        assertEquals("x".repeat(120) + "…", NotificationInteractionSchema.approvalPreview(command, false))
+        assertEquals("x".repeat(60) + "…", NotificationInteractionSchema.approvalPreview(command, true))
+        assertEquals("echo first…", NotificationInteractionSchema.approvalPreview("echo first\necho second", false))
+        assertEquals("echo ready", NotificationInteractionSchema.approvalPreview("echo ready", true))
+    }
+
     @Test fun platformActionsNeverGrantHiddenOrTruncatedCommands() {
         fun actions(command: String = "echo ready", choices: List<String> = listOf("once", "deny"),
             preview: Boolean = true, busy: Boolean = false, large: Boolean = false) =

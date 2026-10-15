@@ -20,6 +20,11 @@ internal object NotificationInteractionSchema {
             .put("command", (data["expanded"] as String).take(800))
             .put("chat", data["chat"]).put("revision", data["revision"]).put("notification_id", data["id"])
 
+    fun approvalPreview(command: String, largeText: Boolean): String {
+        val preview = command.lineSequence().first().take(if (largeText) 60 else 120)
+        return if (preview.length < command.length) "$preview…" else preview
+    }
+
     fun visibleActions(data: Map<*, *>, largeText: Boolean): List<String> {
         val choices = data["choices"] as? List<*> ?: emptyList<String>()
         if (data["kind"] != "approval" || data["preview"] != true || choices.isEmpty()) {

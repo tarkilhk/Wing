@@ -109,6 +109,23 @@ class NotificationDismissalTest(unittest.TestCase):
             self.exercise('', selected_is_target=False)
 
 
+class DirectActionConfigurationTest(unittest.TestCase):
+    def test_restores_normal_text_before_posting_direct_action_request(self):
+        calls = []
+        def state(path='/', data=None):
+            if path == '/approval':
+                calls.append(('approval',))
+                raise RuntimeError('request reached')
+            return {'decisions': []}
+        with patch.object(driver, 'adb', side_effect=lambda *args: calls.append(args)), \
+             patch.object(driver, 'state', side_effect=state), \
+             patch.object(driver, 'until'), patch.object(driver.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, 'request reached'):
+                driver.check_direct_actions(Path('unused'))
+        self.assertLess(calls.index(('shell', 'settings', 'put', 'system', 'font_scale', '1.0')),
+                        calls.index(('approval',)))
+
+
 class GroupBodyDestinationTest(unittest.TestCase):
     def exercise(self, visible_answer):
         def until(check, message, **kwargs):
