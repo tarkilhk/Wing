@@ -956,6 +956,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
       var geometryStable = true;
       var focusHeld = focus.hasFocus;
       final run = ++_run;
+      CompletionDiagnostics.reset();
       _frames.clear();
       _collecting = true;
       final startUs = developer.Timeline.now;
@@ -1070,6 +1071,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         'devicePixelRatio': view.devicePixelRatio,
         'textScaleAt14': _textScaleAt14(),
         'nativeDraftStorage': false,
+        'completionDiagnostics': CompletionDiagnostics.snapshot(),
         'valid':
             exactSource &&
             !_chat!.runtime.blocksTurnAdmission &&

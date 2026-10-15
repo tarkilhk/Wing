@@ -393,13 +393,17 @@ void main() {
       expect(find.byTooltip('Scroll horizontally'), findsOneWidget);
     }
     final before = tester.state(find.byType(SourceCodeText));
-    final sourceController = tester
-        .widget<CodeEditor>(find.byType(CodeEditor))
-        .controller!;
+    final originalEditor = tester.widget<CodeEditor>(find.byType(CodeEditor));
+    final sourceController = originalEditor.controller!;
     sourceController.selectAll();
     final originalEditorValue = sourceController.value;
     final originalSelection = sourceController.selectedText;
     await tester.pumpMarkdownWidget(app('$python# latest', streaming: false));
+    expect(
+      tester.widget<CodeEditor>(find.byType(CodeEditor)),
+      same(originalEditor),
+      reason: 'Final highlighting does not rebuild an unchanged editor view.',
+    );
     expect(
       sourceController.value,
       same(originalEditorValue),

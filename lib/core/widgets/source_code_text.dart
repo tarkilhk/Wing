@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:re_editor/re_editor.dart';
 
 import '../presentation/source_highlighting.dart';
+import '../services/completion_diagnostics.dart';
 import '../theme/wing_theme.dart';
 
 /// A read-only viewport over exact source, shared by chat and Activity viewers.
@@ -55,6 +56,8 @@ class _SourceCodeTextState extends State<SourceCodeText> {
   bool? _overflow;
   bool _refreshing = false;
   CodeIndicatorValueNotifier? _viewport;
+  (TextStyle, bool)? _editorInputs;
+  Widget? _editorView;
 
   @override
   void initState() {
@@ -185,6 +188,75 @@ class _SourceCodeTextState extends State<SourceCodeText> {
     child: ExcludeSemantics(child: child),
   );
 
+  Widget _editor(TextStyle style) {
+    final inputs = (style, widget.wrap);
+    if (_editorInputs == inputs) return _editorView!;
+    _editorInputs = inputs;
+    // Highlighting only changes the controller's paint spans. Keep unchanged
+    // editor configuration out of the completion rebuild; real style/wrap
+    // changes still refresh it, and text changes notify through the controller.
+    if (CompletionDiagnostics.enabled) {
+      CompletionDiagnostics.event('source.editor.build');
+    }
+    return _editorView = CodeEditor(
+      controller: _controller,
+      indicatorBuilder: (_, _, _, notifier) {
+        _viewport = notifier;
+        return const SizedBox.shrink();
+      },
+      scrollController: _scroll,
+      readOnly: true,
+      showCursorWhenReadOnly: false,
+      wordWrap: widget.wrap,
+      chunkAnalyzer: const NonCodeChunkAnalyzer(),
+      padding: EdgeInsets.zero,
+      margin: EdgeInsets.zero,
+      style: CodeEditorStyle(
+        fontSize: style.fontSize,
+        fontFamily: style.fontFamily,
+        fontFamilyFallback: style.fontFamilyFallback,
+        fontHeight: style.height,
+        textColor: style.color,
+        backgroundColor: Colors.transparent,
+        cursorLineColor: Colors.transparent,
+      ),
+      toolbarController: MobileSelectionToolbarController(
+        builder:
+            ({
+              required context,
+              required anchors,
+              required controller,
+              required onDismiss,
+              required onRefresh,
+            }) => AdaptiveTextSelectionToolbar(
+              anchors: anchors,
+              children: [
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Copy selection',
+                    icon: const Icon(Icons.copy_outlined),
+                    onPressed: () {
+                      controller.copy();
+                      onDismiss();
+                    },
+                  ),
+                ),
+                StudioButtonPress(
+                  child: IconButton(
+                    tooltip: 'Select all',
+                    icon: const Icon(Icons.select_all),
+                    onPressed: () {
+                      controller.selectAll();
+                      onRefresh();
+                    },
+                  ),
+                ),
+              ],
+            ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, bounds) {
@@ -248,65 +320,7 @@ class _SourceCodeTextState extends State<SourceCodeText> {
             });
             return false;
           },
-          child: _accessible(
-            CodeEditor(
-              controller: _controller,
-              indicatorBuilder: (_, _, _, notifier) {
-                _viewport = notifier;
-                return const SizedBox.shrink();
-              },
-              scrollController: _scroll,
-              readOnly: true,
-              showCursorWhenReadOnly: false,
-              wordWrap: widget.wrap,
-              chunkAnalyzer: const NonCodeChunkAnalyzer(),
-              padding: EdgeInsets.zero,
-              margin: EdgeInsets.zero,
-              style: CodeEditorStyle(
-                fontSize: style.fontSize,
-                fontFamily: style.fontFamily,
-                fontFamilyFallback: style.fontFamilyFallback,
-                fontHeight: style.height,
-                textColor: style.color,
-                backgroundColor: Colors.transparent,
-                cursorLineColor: Colors.transparent,
-              ),
-              toolbarController: MobileSelectionToolbarController(
-                builder:
-                    ({
-                      required context,
-                      required anchors,
-                      required controller,
-                      required onDismiss,
-                      required onRefresh,
-                    }) => AdaptiveTextSelectionToolbar(
-                      anchors: anchors,
-                      children: [
-                        StudioButtonPress(
-                          child: IconButton(
-                            tooltip: 'Copy selection',
-                            icon: const Icon(Icons.copy_outlined),
-                            onPressed: () {
-                              controller.copy();
-                              onDismiss();
-                            },
-                          ),
-                        ),
-                        StudioButtonPress(
-                          child: IconButton(
-                            tooltip: 'Select all',
-                            icon: const Icon(Icons.select_all),
-                            onPressed: () {
-                              controller.selectAll();
-                              onRefresh();
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-              ),
-            ),
-          ),
+          child: _accessible(_editor(style)),
         ),
       );
     },
