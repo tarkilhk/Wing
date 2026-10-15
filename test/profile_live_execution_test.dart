@@ -180,6 +180,63 @@ void main() {
       durationSeconds: .4,
     ),
   );
+  testWidgets(
+    'reasoning is readable between independently collapsed tool runs',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: ProfileLiveExecution(
+                entries: [
+                  tool('first'),
+                  const ChatReasoningEntry(
+                    identity: 'plan',
+                    text: 'Check the **received evidence**.',
+                    source: 'reasoning.delta',
+                    running: true,
+                  ),
+                  tool('second'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.settleMarkdown();
+      expect(
+        find.text('Check the received evidence.', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.byType(ProfileReasoningDisclosure), findsNothing);
+      expect(find.byType(ProfileToolCall, skipOffstage: false), findsNothing);
+      expect(find.byType(ProfileActivitySection), findsNWidgets(2));
+      final blocks = find.text('Activity · 1 tool');
+      final reasoning = find.text(
+        'Check the received evidence.',
+        findRichText: true,
+      );
+      expect(
+        tester.getTopLeft(blocks.first).dy,
+        lessThan(tester.getTopLeft(reasoning).dy),
+      );
+      expect(
+        tester.getTopLeft(reasoning).dy,
+        lessThan(tester.getTopLeft(blocks.last).dy),
+      );
+      await tester.tap(blocks.first);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<ProfileToolCall>(find.byType(ProfileToolCall))
+            .call
+            .callId,
+        'first',
+      );
+      expect(reasoning, findsOneWidget);
+    },
+  );
   testWidgets('all 12 earlier tools remain visible beside 3 later calls', (
     tester,
   ) async {
@@ -225,8 +282,8 @@ void main() {
           .map((call) => call.call.callId),
       [for (var i = 0; i < 15; i++) 'call-$i'],
     );
-    expect(find.text('Activity · 12 tools'), findsNothing);
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.text('Activity · 12 tools'), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNWidgets(2));
   });
   testWidgets('one live reply keeps every completed cycle readable', (
     tester,
@@ -259,9 +316,9 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.openLiveActivity();
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNWidgets(2));
     expect(find.text('Activity'), findsNothing);
-    expect(find.text('Activity · 1 tool'), findsNothing);
+    expect(find.text('Activity · 1 tool'), findsNWidgets(2));
     expect(find.text('Timeline'), findsNWidgets(2));
     await tester.settleMarkdown();
     expect(find.text('First reasoning', findRichText: true), findsOneWidget);
@@ -387,7 +444,7 @@ void main() {
       ),
       tool('second'),
     ]);
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNWidgets(2));
     expect(find.byType(ProfileReasoningDisclosure), findsNothing);
     expect(find.byType(ToolActivityDetailsView), findsOneWidget);
     expect(
@@ -472,7 +529,7 @@ void main() {
       find.text('Confirm the cancellation policy.', findRichText: true),
       findsOneWidget,
     );
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNWidgets(2));
   });
   testWidgets(
     'live segmentation retains existing tool cards and expansion state',
@@ -515,7 +572,7 @@ void main() {
       );
       await show([first, reasoning, tool('second')]);
       expect(find.byType(ProfileReasoningDisclosure), findsNothing);
-      expect(find.byType(ProfileActivitySection), findsOneWidget);
+      expect(find.byType(ProfileActivitySection), findsNWidgets(2));
       expect(find.text('Timeline'), findsNWidgets(2));
       expect(find.byType(ProfileActivityGuide), findsNWidgets(2));
       for (final tabs in tester.widgetList<ProfileActivityTabs>(

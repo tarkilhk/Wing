@@ -127,7 +127,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNWidgets(2));
     expect(find.text('Timeline'), findsNothing);
     await tester.openLiveActivity();
     expect(
@@ -164,8 +164,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
-    expect(find.text('Activity · 2 tools'), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNWidgets(3));
+    expect(find.text('Activity · 1 tool'), findsNWidgets(2));
+    expect(find.byType(ProfileReasoningDisclosure), findsNothing);
+    await tester.openLiveActivity();
     expect(
       find.text('Later live reasoning', findRichText: true),
       findsOneWidget,
@@ -591,6 +593,23 @@ void main() {
         );
         await tester.ensureVisible(agents);
         await settle();
+        // Anchored expansion can retain the header while large tabs extend
+        // below the viewport. Scroll the actual tab into reach before tapping.
+        for (
+          var i = 0;
+          i < 10 && agents.hitTestable().evaluate().isEmpty;
+          i++
+        ) {
+          final viewport = tester.getRect(find.byType(ProfileTranscript));
+          final movement = (viewport.center.dy - tester.getCenter(agents).dy)
+              .clamp(-150.0, 150.0);
+          await tester.drag(
+            find.byType(ProfileTranscript),
+            Offset(0, movement),
+          );
+          await settle();
+        }
+        expect(agents.hitTestable(), findsOneWidget);
         await tester.tap(agents);
         await settle();
         expect(
@@ -714,6 +733,7 @@ void main() {
           await settle();
           expect(find.text('Timeline'), findsNothing);
           expect(find.text('Activity · 1 tool'), findsOneWidget);
+          await picture('tools-collapsed');
           await tester.openLiveActivity();
           await settle();
           expect(find.text('Timeline'), findsOneWidget);
@@ -747,7 +767,21 @@ void main() {
           expect(find.text('Thinking'), findsNothing);
           expect(find.text(heading, findRichText: true), findsOneWidget);
           expect(find.text('Reasoning'), findsOneWidget);
-          expect(find.byType(ProfileActivitySection), findsOneWidget);
+          expect(find.byType(ProfileActivitySection), findsNWidgets(2));
+          expect(find.byType(ProfileToolCall), findsOneWidget);
+          // Opening the earlier run preserves its header. Move through the
+          // viewport to inspect the reasoning and the next collapsed run.
+          await tester.ensureVisible(
+            find.text(reasoningBody, findRichText: true),
+          );
+          await settle();
+          final latest = find.byKey(const ValueKey('jump-to-latest'));
+          if (latest.evaluate().isNotEmpty) {
+            await tester.tap(latest);
+            await settle();
+          }
+          await picture('tool-handoff-collapsed');
+          await tester.openLiveActivity();
           expect(find.text('Timeline'), findsNWidgets(2));
           expect(find.byType(ProfileToolCall), findsNWidgets(2));
           expect(tester.getRect(composer), bounds);
@@ -789,7 +823,8 @@ void main() {
             });
           }
           await settle();
-          expect(find.byType(ProfileActivitySection), findsOneWidget);
+          expect(find.byType(ProfileActivitySection), findsNWidgets(3));
+          await tester.openLiveActivity();
           expect(find.text(heading, findRichText: true), findsOneWidget);
           expect(
             find.text(
@@ -828,8 +863,9 @@ void main() {
           ];
           await controller.refreshHistory(chat);
           await settle();
-          expect(find.byType(ProfileActivitySection), findsOneWidget);
-          expect(find.text('Activity · 17 tools'), findsOneWidget);
+          expect(find.byType(ProfileActivitySection), findsNWidgets(4));
+          expect(find.text('Activity · 12 tools'), findsOneWidget);
+          expect(find.text('Activity · 4 tools'), findsOneWidget);
           expect(find.text(heading, findRichText: true), findsOneWidget);
           expect(
             find.text(
@@ -845,8 +881,11 @@ void main() {
           );
           await settle();
           await picture('history-refreshed-readable');
-          // The open outer Activity retains both live reasoning blocks; newly
-          // reconciled saved reasoning keeps its own compact disclosure.
+          // Live prose stays readable while newly reconciled saved Activity
+          // starts folded independently. Open it to inspect its saved reasoning.
+          expect(find.byType(ProfileReasoningDisclosure), findsNothing);
+          await tester.openLiveActivity();
+          await settle();
           expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
           expect(find.text('Timeline'), findsNWidgets(4));
           final reasoningLabel = find.descendant(

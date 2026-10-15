@@ -470,48 +470,13 @@ final class _WorkspaceRecentConversationSource
     ProfileSessionKey key,
     bool Function() isCurrent,
     Completer<void> revealed,
-  ) => controller._retainWorkspaceOperation(() async {
-    ProfileChat? retained;
-    final token = Object();
-    try {
-      await controller._openSession(
-        key,
-        isCurrentRequest: isCurrent,
-        propagateHistoryFailure: true,
-        onRetainedReading: (chat) {
-          retained = chat;
-          chat._recentRefresh = token;
-          chat._runtime.beginOpening();
-          revealed.complete();
-        },
-      );
-    } catch (failure) {
-      final chat = retained;
-      if (chat == null) rethrow;
-      if (_ownsRefresh(chat, key, token)) {
-        chat._runtime.finishOpening(
-          error: controller._isMissingSessionFailure(failure)
-              ? 'This conversation is no longer available. Your saved messages are kept.'
-              : 'Conversation could not be refreshed. Retry to check for new messages.',
-        );
-      }
-    } finally {
-      final chat = retained;
-      if (chat != null && _ownsRefresh(chat, key, token)) {
-        chat._recentRefresh = null;
-        if (chat.runtime.opening && chat.runtime.openingError == null) {
-          chat._runtime.finishOpening();
-        }
-        controller._changed();
-      }
-    }
-  });
-
-  bool _ownsRefresh(ProfileChat chat, ProfileSessionKey key, Object token) =>
-      admits(RecentConversationKey.chat(key)) &&
-      identical(
-        controller._resources[key.workspace]?._chats[key.sessionId],
-        chat,
-      ) &&
-      identical(chat._recentRefresh, token);
+  ) async {
+    await controller.openSessionForReading(
+      key,
+      isCurrentRequest: isCurrent,
+      onReadingAvailable: (_) {
+        if (!revealed.isCompleted) revealed.complete();
+      },
+    );
+  }
 }

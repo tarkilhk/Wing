@@ -1497,9 +1497,8 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
-    // Opening the initially closed Activity reveals received reasoning/tool
-    // order without hiding the independently streaming answer.
-    expect(find.text('Activity · 2 tools'), findsOneWidget);
+    // Reasoning is readable immediately; each tool run stays initially closed.
+    expect(find.text('Activity · 1 tool'), findsNWidgets(2));
     expect(find.byType(ProfileToolCall), findsNothing);
     expect(
       find.text('The native response.', findRichText: true),

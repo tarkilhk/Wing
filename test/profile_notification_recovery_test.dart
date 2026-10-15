@@ -125,7 +125,7 @@ void main() {
       expect(controller.notificationChat, isNull);
       expect(controller.current!.chat, same(chat));
       expect(chat.composer.observation.text, 'My unsent follow-up');
-      expect(find.text('Retry connection'), findsNothing);
+      expect(find.byTooltip('Retry'), findsNothing);
       expect(
         host.calls
             .where((call) => call.$2 == 'session.resume')
@@ -216,7 +216,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.text('Retry connection').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Retry').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         if (capture) {
           final render =
@@ -255,7 +255,7 @@ void main() {
       await tester.pump();
       expect(chat.runtime.openingError, isNotNull);
       expect(chat.reading.messages.single['content'], 'a completed');
-      expect(find.text('Retry connection'), findsOneWidget);
+      expect(find.byTooltip('Retry'), findsOneWidget);
       expect(
         controller.connectionStatus.phase,
         ServerConnectionPhase.disconnected,
@@ -282,7 +282,7 @@ void main() {
 
       host.resumeError = null;
       host.resumeDelay = Completer<void>();
-      await tester.tap(find.text('Retry connection'));
+      await tester.tap(find.byTooltip('Retry'));
       await tester.pump();
       expect(
         controller.connectionStatus.phase,
@@ -450,7 +450,7 @@ void main() {
     expect(chat.runtime.opening, isFalse);
     expect(controller.notificationChat, isNull);
     expect(chat.composer.observation.text, 'My unsent follow-up');
-    expect(find.text('Retry connection'), findsNothing);
+    expect(find.byTooltip('Retry'), findsNothing);
     expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -480,7 +480,7 @@ void main() {
       expect(chat.runtime.opening, isFalse);
       expect(controller.notificationChat, isNull);
       expect(chat.composer.observation.text, 'My unsent follow-up');
-      expect(find.text('Retry connection'), findsNothing);
+      expect(find.byTooltip('Retry'), findsNothing);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
     },

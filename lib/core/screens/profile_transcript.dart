@@ -83,6 +83,17 @@ class ProfileTranscript extends StatefulWidget {
   State<ProfileTranscript> createState() => _ProfileTranscriptState();
 }
 
+// Geometry belongs to the retained reader, not to a particular route mount.
+// Weak keys release this cache with the reader; it contains no widgets, render
+// objects, persisted bookmarks or transport state.
+final _retainedTranscriptLayouts = Expando<_RetainedTranscriptLayout>();
+
+class _RetainedTranscriptLayout {
+  final heights = <Object, double>{};
+  Object? readingThrough;
+  String? segment;
+}
+
 class _ProfileTranscriptState extends State<ProfileTranscript> {
   late final _scroll = ExpansionScrollController(
     preserveViewportPosition: () => !widget.presentation.needsInput,
@@ -92,6 +103,13 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     restoreInitialOffset:
         widget.focusedMessageId == null && widget.presentation.scrollOffset > 0,
   );
+  late double _lastScrollOffset = widget.presentation.scrollOffset;
+
+  void _recordScrollOffset(double offset) {
+    _lastScrollOffset = offset;
+    widget.presentation.recordScrollOffset(offset);
+  }
+
   final _viewport = GlobalKey();
   final _focusedRow = GlobalKey();
   final _tail = GlobalKey();
@@ -143,6 +161,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         .where((entry) => !entry.streaming)
         .lastOrNull
         ?.presentationId;
+    final retained =
+        _retainedTranscriptLayouts[widget.presentation.readingIdentity];
+    if (widget.focusedMessageId == null &&
+        widget.presentation.scrollOffset > 0 &&
+        retained?.segment == widget.presentation.segment) {
+      _readingThrough = retained?.readingThrough;
+      _hasNewContent = _readingThrough != null && _readingThrough != _newestId;
+    }
     _streaming = widget.presentation.streaming;
     _streamingPresentationId = widget.presentation.timeline.entries
         .where((entry) => entry.streaming)
@@ -208,7 +234,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (!pending) {
       _cancelMarkdownRestoration();
       if (_scroll.hasClients) {
-        widget.presentation.recordScrollOffset(_scroll.offset);
+        _recordScrollOffset(_scroll.offset);
       }
     }
   }
@@ -440,7 +466,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         return;
       }
       if (!_restoringMarkdown) {
-        widget.presentation.recordScrollOffset(_scroll.offset);
+        _recordScrollOffset(_scroll.offset);
       }
       _updateJump();
     });
@@ -502,7 +528,20 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (widget.focusedMessageId == null &&
         !_restoringMarkdown &&
         _scroll.hasClients) {
-      widget.presentation.recordScrollOffset(_scroll.offset);
+      _recordScrollOffset(_scroll.offset);
+    }
+    if (widget.focusedMessageId == null && !_restoringMarkdown) {
+      final retained = _RetainedTranscriptLayout()
+        ..segment = widget.presentation.segment
+        ..readingThrough = _lastScrollOffset > 0
+            ? _readingThrough ?? _newestId
+            : null;
+      for (final entry in _rows.entries) {
+        final height = _rowHeights[entry.value];
+        if (height != null) retained.heights[entry.key] = height;
+      }
+      _retainedTranscriptLayouts[widget.presentation.readingIdentity] =
+          retained;
     }
     _scroll.dispose();
     _jumpLabel.dispose();
@@ -658,6 +697,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       for (final id in presentations) {
         _rows[id] = key;
       }
+      if (existing == null) {
+        final retained =
+            _retainedTranscriptLayouts[presentation.readingIdentity];
+        if (retained?.segment == presentation.segment) {
+          final height = retained?.heights[presentations.last];
+          if (height != null) _rowHeights[key] = height;
+        }
+      }
       keys.add(key);
       usedKeys.add(key);
     }
@@ -707,7 +754,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         onNotification: (event) {
           if (event.depth == 0) {
             if (!_restoringMarkdown) {
-              widget.presentation.recordScrollOffset(event.metrics.pixels);
+              _recordScrollOffset(event.metrics.pixels);
             }
             _updateJump();
           }
@@ -727,7 +774,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               _scroll.releaseExpansionAnchor();
             }
             if (!_restoringMarkdown) {
-              widget.presentation.recordScrollOffset(event.metrics.pixels);
+              _recordScrollOffset(event.metrics.pixels);
             }
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _updateJump();
@@ -1166,9 +1213,10 @@ class ProfileTranscriptOpening extends StatelessWidget {
           ],
           if (!waiting)
             StudioButtonPress(
-              child: TextButton(
+              child: IconButton(
+                tooltip: 'Retry',
                 onPressed: onRetry,
-                child: const Text('Retry connection'),
+                icon: const Icon(Icons.refresh),
               ),
             ),
         ],

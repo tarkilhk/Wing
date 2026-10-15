@@ -244,8 +244,14 @@ void main() {
         for (var i = 0; i < 12; i++) {
           await tester.pump(const Duration(milliseconds: 30));
         }
+        await tester.settleMarkdown();
         expect(session.runtime.activityEntries, hasLength(81));
-        expect(find.text('Activity · 99 tools'), findsOneWidget);
+        expect(
+          find.text('Live reasoning stays split.', findRichText: true),
+          findsOneWidget,
+        );
+        expect(find.text('Activity · 19 tools'), findsOneWidget);
+        expect(find.text('Activity · 80 tools'), findsOneWidget);
         expect(find.text('Timeline'), findsNothing);
         expect(
           find.byType(ProfileExecutionActivity, skipOffstage: false),
@@ -266,19 +272,19 @@ void main() {
           'history-entry-live-collapsed-${brightness.name}-$scale',
         );
         final section = find.ancestor(
-          of: find.text('Activity · 99 tools'),
+          of: find.text('Activity · 80 tools'),
           matching: find.byType(ProfileActivitySection),
         );
-        await tester.tap(find.text('Activity · 99 tools'));
+        await tester.tap(find.text('Activity · 80 tools'));
         await tester.pump(const Duration(milliseconds: 300));
         expect(
           find.descendant(of: section, matching: find.text('Timeline')),
           findsWidgets,
         );
         expect(find.byType(ProfileExecutionActivity), findsWidgets);
-        await tester.ensureVisible(find.text('Activity · 99 tools'));
+        await tester.ensureVisible(find.text('Activity · 80 tools'));
         await tester.pump();
-        await tester.tap(find.text('Activity · 99 tools'));
+        await tester.tap(find.text('Activity · 80 tools'));
         await tester.pump(const Duration(milliseconds: 300));
         event('tool.complete', {
           'tool_id': 'later',
@@ -287,7 +293,7 @@ void main() {
         });
         await session.refreshLive();
         await tester.pump(const Duration(milliseconds: 30));
-        expect(find.text('Activity · 100 tools'), findsOneWidget);
+        expect(find.text('Activity · 81 tools'), findsOneWidget);
         expect(find.text('Timeline'), findsNothing);
         expect(fixture.commands, isEmpty);
         expect(tester.takeException(), isNull);
@@ -550,9 +556,9 @@ void main() {
                 .label,
             'Thinking… · 1 subagent active',
           );
-          expect(find.text('Activity'), findsOneWidget);
-          expect(find.text('Thinking'), findsNothing);
-          await tester.openLiveActivity();
+          expect(find.byType(ProfileActivitySection), findsNothing);
+          expect(find.text('Thinking'), findsOneWidget);
+          await tester.settleMarkdown();
           expect(
             find.textContaining('Inspecting the work', findRichText: true),
             findsWidgets,
@@ -560,13 +566,17 @@ void main() {
           expect(find.byType(StudioWorkingIndicator), findsWidgets);
           await liveFrames();
           final reasoning = find
-              .textContaining('Inspecting the work', findRichText: true)
+              .textContaining(
+                'Reasoning stays visible while the bot streams.',
+                findRichText: true,
+              )
               .first;
           final viewport = tester.getRect(find.byType(ProfileTranscript));
           expect(
             tester.getRect(reasoning).overlaps(viewport),
             isTrue,
-            reason: 'Opening live Activity must reveal its contents on screen.',
+            reason:
+                'Live reasoning must be readable without opening a disclosure.',
           );
           await _render(
             tester,

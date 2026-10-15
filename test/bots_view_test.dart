@@ -55,6 +55,8 @@ const _export = bool.fromEnvironment('STUDIO_REVIEW');
 
 class _BotConversationBrowser extends ProfileBrowserFixture {
   Completer<void>? resumeDelay;
+  Completer<void>? markReadDelay;
+  List<Map<String, dynamic>>? openingHistory;
 
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
@@ -63,6 +65,16 @@ class _BotConversationBrowser extends ProfileBrowserFixture {
       scope: scope,
       discover: base.discover,
       get: base.read,
+      ownedPatch: markReadDelay == null
+          ? null
+          : (path, body, canDispatch, onDispatched) async {
+              if (!canDispatch()) {
+                throw StateError('Retired read acknowledgement');
+              }
+              onDispatched();
+              await markReadDelay!.future;
+              return {'ok': true, ...body};
+            },
       rpc: (method, params) async {
         if (method == 'session.resume') await resumeDelay?.future;
         return base.call(method, params);
@@ -78,7 +90,7 @@ class _BotConversationBrowser extends ProfileBrowserFixture {
       'title': 'Bot Chat',
       'profile': profile,
       'last_active': now,
-      'unread': false,
+      'unread': markReadDelay != null,
     },
     {
       'id': 'canonical-tip',
@@ -97,14 +109,17 @@ class _BotConversationBrowser extends ProfileBrowserFixture {
   ];
 
   @override
-  List<Map<String, dynamic>> historyRows(String profile, String id) => [
-    {'id': 1, 'role': 'user', 'content': 'Can you help me plan my week?'},
-    {
-      'id': 2,
-      'role': 'assistant',
-      'content': 'Of course. What would you like to make time for this week?',
-    },
-  ];
+  List<Map<String, dynamic>> historyRows(String profile, String id) =>
+      openingHistory ??
+      [
+        {'id': 1, 'role': 'user', 'content': 'Can you help me plan my week?'},
+        {
+          'id': 2,
+          'role': 'assistant',
+          'content':
+              'Of course. What would you like to make time for this week?',
+        },
+      ];
 }
 
 class _RoomPicturePicker extends BotAvatarIo {
@@ -2998,7 +3013,7 @@ void main() {
               await tester.pump();
             }
             expect(find.byType(StudioLoading), findsOneWidget);
-            await tester.tap(find.byTooltip('Back'));
+            await tester.binding.handlePopRoute();
             await tester.pump();
             await tester.pump();
             expect(find.byType(BotsContent), findsOneWidget);
@@ -3021,6 +3036,283 @@ void main() {
     }
   }
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final entry in [
+        'fresh',
+        'retained',
+        'refresh pending',
+        'read acknowledgement pending',
+        'new messages',
+      ]) {
+        final revisit =
+            entry == 'retained' ||
+            entry == 'refresh pending' ||
+            entry == 'new messages';
+        testWidgets(
+          'Bot entry preserves reading $entry ${brightness.name} $scale',
+          (tester) async {
+            SharedPreferences.setMockInitialValues({});
+            final preferences = await SharedPreferences.getInstance();
+            final appPreferences = AppPreferences(preferences);
+            final browser = _BotConversationBrowser()
+              ..openingHistory = [
+                for (var i = 1; i <= 30; i++)
+                  {
+                    'id': i,
+                    'role': 'assistant',
+                    'content':
+                        'Earlier reply $i. ${'A paragraph of previous conversation. ' * 12}',
+                  },
+                {
+                  'id': 31,
+                  'role': 'user',
+                  'content': 'Latest request visible on opening',
+                },
+              ];
+            if (entry == 'read acknowledgement pending') {
+              browser.markReadDelay = Completer<void>();
+            }
+            addTearDown(() {
+              for (final held in [browser.resumeDelay, browser.markReadDelay]) {
+                if (held != null && !held.isCompleted) held.complete();
+              }
+            });
+            final controller = ProfileWorkspaceController(
+              access: ConnectionAccess(
+                connection: SavedConnection(
+                  id: 'host',
+                  label: 'Home server',
+                  host: 'localhost',
+                  port: 1,
+                  apiKey: '',
+                ),
+                dashboardOAuth: null,
+              ),
+              connectionIdentity: 'instance-1',
+              preferences: preferences,
+              appPreferences: appPreferences,
+              gatewayFactory: browser.gateway,
+            );
+            addTearDown(controller.dispose);
+            addTearDown(appPreferences.dispose);
+            await controller.initialize();
+            final bots = BotsFixture();
+            bots.profiles
+              ..clear()
+              ..add(BotsFixture.profile('personal', 'Atlas'));
+            bots.profiles.single['canonical_session']['id'] = 'canonical-root';
+            tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            final frame = GlobalKey();
+            await tester.pumpWidget(
+              RepaintBoundary(
+                key: frame,
+                child: MaterialApp(
+                  theme: wingTheme(brightness),
+                  builder: (context, child) => MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(scale)),
+                    child: child!,
+                  ),
+                  home: ProfileWorkspaceScreen(
+                    controller: controller,
+                    initialDestination: AppDestination.bots,
+                    createBotsSession: () =>
+                        BotsSession((_) async => [bots.repository]),
+                  ),
+                ),
+              ),
+            );
+            await tester.pumpAndSettle();
+            Future<void> open() async {
+              await tester.tap(find.text('Atlas').last);
+              await tester.pumpAndSettle();
+              await tester.settleMarkdown();
+            }
+
+            if (entry == 'read acknowledgement pending') {
+              await tester.tap(find.text('Atlas').last);
+              for (var i = 0; i < 20; i++) {
+                await tester.pump();
+              }
+              await tester.settleMarkdown();
+              expect(
+                find
+                    .text(
+                      'Latest request visible on opening',
+                      findRichText: true,
+                    )
+                    .hitTestable(),
+                findsOneWidget,
+              );
+              expect(find.byType(StudioLoading), findsOneWidget);
+              await _capture(
+                tester,
+                frame,
+                'bot-read-ready-${brightness.name}-$scale',
+                motion: true,
+              );
+              browser.markReadDelay!.complete();
+              await tester.pumpAndSettle();
+            } else {
+              await open();
+            }
+            Object? anchorId;
+            double? anchorTop;
+            Finder anchor() => find.byWidgetPredicate(
+              (widget) =>
+                  widget is ProfileMessage && widget.message.id == anchorId,
+            );
+            void expectReadingPoint() {
+              expect(
+                anchor(),
+                findsOneWidget,
+                reason:
+                    'Saved message $anchorId, visible IDs ${tester.widgetList<ProfileMessage>(find.byType(ProfileMessage)).map((message) => message.message.id).toList()}, offset ${controller.current!.chat!.reading.historyScrollOffset}, previous top $anchorTop',
+              );
+              final viewport = tester.getRect(
+                find.byKey(const ValueKey('profile-transcript')),
+              );
+              expect(
+                tester.getRect(anchor()).top - viewport.top,
+                closeTo(anchorTop!, 2),
+                reason: 'The same message stays at the reading point',
+              );
+            }
+
+            if (revisit) {
+              await tester.drag(
+                find.byKey(const ValueKey('profile-transcript')),
+                const Offset(0, 600),
+              );
+              await tester.pumpAndSettle();
+              await tester.settleMarkdown();
+              expect(
+                find.byKey(const ValueKey('jump-to-latest')),
+                findsOneWidget,
+              );
+              final viewport = tester.getRect(
+                find.byKey(const ValueKey('profile-transcript')),
+              );
+              final visible = find
+                  .byType(ProfileMessage)
+                  .evaluate()
+                  .where(
+                    (element) => tester
+                        .getRect(find.byWidget(element.widget))
+                        .overlaps(viewport),
+                  )
+                  .toList();
+              visible.sort(
+                (a, b) => tester
+                    .getRect(find.byWidget(b.widget))
+                    .intersect(viewport)
+                    .height
+                    .compareTo(
+                      tester
+                          .getRect(find.byWidget(a.widget))
+                          .intersect(viewport)
+                          .height,
+                    ),
+              );
+              anchorId = (visible.first.widget as ProfileMessage).message.id;
+              anchorTop = tester.getRect(anchor()).top - viewport.top;
+              await tester.binding.handlePopRoute();
+              await tester.pumpAndSettle();
+              expect(find.byType(BotsContent), findsOneWidget);
+              if (entry == 'new messages') {
+                browser.openingHistory!.addAll([
+                  for (var id = 32; id <= 36; id++)
+                    {
+                      'id': id,
+                      'role': 'assistant',
+                      'content':
+                          'New reply $id. ${'New content while away. ' * 8}',
+                    },
+                ]);
+              }
+              if (entry == 'refresh pending') {
+                final refresh = browser.resumeDelay = Completer<void>();
+                await tester.tap(find.text('Atlas').last);
+                for (var i = 0; i < 20; i++) {
+                  await tester.pump();
+                }
+                await tester.settleMarkdown();
+                expectReadingPoint();
+                expect(find.byType(StudioLoading), findsOneWidget);
+                await _capture(
+                  tester,
+                  frame,
+                  'bot-retained-refresh-${brightness.name}-$scale',
+                  motion: true,
+                );
+                refresh.complete();
+                await tester.pumpAndSettle();
+              } else {
+                await open();
+              }
+            }
+            if (revisit) {
+              expectReadingPoint();
+              expect(
+                find.byKey(const ValueKey('jump-to-latest')),
+                findsOneWidget,
+              );
+            } else {
+              expect(
+                find
+                    .text(
+                      'Latest request visible on opening',
+                      findRichText: true,
+                    )
+                    .hitTestable(),
+                findsOneWidget,
+              );
+              expect(
+                find.byKey(const ValueKey('jump-to-latest')),
+                findsNothing,
+              );
+            }
+            expect(find.byType(StudioLoading), findsNothing);
+            await _capture(
+              tester,
+              frame,
+              'bot-reading-$entry-${brightness.name}-$scale',
+            );
+            if (entry == 'new messages') {
+              await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
+              await tester.pumpAndSettle();
+              await tester.settleMarkdown();
+              final newest = find.byWidgetPredicate(
+                (widget) => widget is ProfileMessage && widget.message.id == 36,
+              );
+              expect(newest, findsOneWidget);
+              expect(
+                tester
+                    .getRect(newest)
+                    .overlaps(
+                      tester.getRect(
+                        find.byKey(const ValueKey('profile-transcript')),
+                      ),
+                    ),
+                isTrue,
+                reason: 'Latest reveals the messages received while away',
+              );
+              expect(
+                find.byKey(const ValueKey('jump-to-latest')),
+                findsNothing,
+              );
+            }
+            expect(tester.takeException(), isNull);
+            await tester.pumpWidget(const SizedBox());
+          },
+        );
+      }
+    }
+  }
   testWidgets(
     'Bots drawer opens a canonical chat and Back retains the roster search',
     (tester) async {
@@ -3848,7 +4140,17 @@ void main() {
             await tester.pump();
           }
           expect(find.byType(StudioLoading), findsOneWidget);
-          expect(find.byTooltip('Retry'), findsNothing);
+          expect(
+            tester
+                .widget<IconButton>(
+                  find.byWidgetPredicate(
+                    (widget) =>
+                        widget is IconButton && widget.tooltip == 'Retry',
+                  ),
+                )
+                .onPressed,
+            isNull,
+          );
           retryHistory.complete();
           await tester.pumpAndSettle();
           expect(find.byType(StudioLoading), findsNothing);
@@ -3870,8 +4172,19 @@ void main() {
             }
             await openDirectChat();
             expect(find.byType(StudioLoading), findsOneWidget);
-            expect(find.byType(ProfileMessage), findsNothing);
-            await tester.tap(find.byTooltip('Back'));
+            await _capture(
+              tester,
+              frame,
+              'group-chat-held-$stage-${brightness.name}-$scale',
+              motion: true,
+            );
+            expect(
+              find.byKey(const ValueKey('profile-transcript')),
+              stage == 'identity' ? findsNothing : findsOneWidget,
+              reason:
+                  'The retained transcript is admitted while $stage is held',
+            );
+            await tester.binding.handlePopRoute();
             if (stage == 'history') held.complete();
             for (var i = 0; i < 12; i++) {
               await tester.pump(const Duration(milliseconds: 100));
