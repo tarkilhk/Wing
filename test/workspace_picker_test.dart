@@ -121,6 +121,9 @@ void main() {
 
   final status = find.byKey(const ValueKey('connection-status-target'));
   final picker = find.byKey(const ValueKey('workspace-picker-target'));
+  final analyticsPicker = find.byKey(
+    const ValueKey('analytics-profile-picker-target'),
+  );
   final work = find.byKey(const ValueKey('workspace-profile-work'));
 
   Future<void> screenshot(WidgetTester tester, String name) async {
@@ -354,10 +357,36 @@ void main() {
   testWidgets(
     'drawer analytics defaults to All and filters without switching workspace',
     (tester) async {
-      await show(tester, destination: AppDestination.analytics);
-      expect(find.text('Claw · All'), findsOneWidget);
-      expect(find.byTooltip('Choose profile'), findsOneWidget);
+      String? selectedInstance;
+      await show(
+        tester,
+        destination: AppDestination.analytics,
+        onConnection: (connection, destination) async {
+          selectedInstance = connection.id;
+          expect(destination, AppDestination.analytics);
+        },
+      );
+      expect(find.text('Claw'), findsOneWidget);
+      expect(find.byTooltip('Choose instance'), findsOneWidget);
+      expect(
+        tester.getRect(picker).overlaps(tester.getRect(analyticsPicker)),
+        isFalse,
+      );
       await tester.tap(picker);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('workspace-all-profiles')),
+        findsNothing,
+      );
+      expect(work, findsNothing);
+      await tester.tap(
+        find.byKey(const ValueKey('workspace-connection-travel')),
+      );
+      await tester.pumpAndSettle();
+      expect(selectedInstance, 'travel');
+      expect(find.text('All'), findsOneWidget);
+      expect(find.byTooltip('Choose profile'), findsOneWidget);
+      await tester.tap(analyticsPicker);
       await tester.pumpAndSettle();
       expect(work, findsOneWidget);
       final all = find.byKey(const ValueKey('workspace-all-profiles'));
@@ -374,15 +403,18 @@ void main() {
       await tester.tap(work);
       await tester.pumpAndSettle();
       expect(controller.current!.scope.profileName, 'personal');
-      expect(find.text('Claw · work'), findsOneWidget);
+      expect(
+        find.descendant(of: analyticsPicker, matching: find.text('work')),
+        findsOneWidget,
+      );
       expect(find.text('Hermes analytics'), findsOneWidget);
       expect(find.byType(HermesAnalyticsContent), findsOneWidget);
       expect(find.byTooltip('Refresh profile status'), findsNothing);
-      await tester.tap(picker);
+      await tester.tap(analyticsPicker);
       await tester.pumpAndSettle();
       await tester.tap(all);
       await tester.pumpAndSettle();
-      expect(find.text('Claw · All'), findsOneWidget);
+      expect(find.text('All'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -433,10 +465,19 @@ void main() {
             brightness: brightness,
             scale: scale,
           );
-          expect(find.text('Claw · All'), findsOneWidget);
+          expect(find.text('All'), findsOneWidget);
+          expect(find.text('Claw'), findsOneWidget);
+          expect(
+            tester.getSize(analyticsPicker).height,
+            greaterThanOrEqualTo(48),
+          );
+          expect(
+            tester.getRect(picker).overlaps(tester.getRect(analyticsPicker)),
+            isFalse,
+          );
           expect(find.text('USD 10.00'), findsOneWidget);
           await screenshot(tester, 'analytics-all-${brightness.name}-$scale');
-          await tester.tap(picker);
+          await tester.tap(analyticsPicker);
           await tester.pumpAndSettle();
           final all = find.byKey(const ValueKey('workspace-all-profiles'));
           final selected = find.descendant(
@@ -457,7 +498,10 @@ void main() {
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
           expect(find.byType(StudioLoading), findsNothing);
-          expect(find.text('Claw · work'), findsOneWidget);
+          expect(
+            find.descendant(of: analyticsPicker, matching: find.text('work')),
+            findsOneWidget,
+          );
           expect(controller.current!.scope.profileName, 'personal');
           await screenshot(
             tester,
@@ -467,7 +511,7 @@ void main() {
           expect(find.byType(StudioLoading), findsNothing);
           expect(find.text('USD 7.00'), findsOneWidget);
           expect(administration.requests.length, cachedReads);
-          await tester.tap(picker);
+          await tester.tap(analyticsPicker);
           await tester.pumpAndSettle();
           await tester.tap(all);
           await tester.pumpAndSettle();

@@ -3683,20 +3683,36 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               context: context,
 
               title: Text(_destination.label, maxLines: 6, softWrap: true),
-              contextRow:
-                  _destination == AppDestination.activity ||
-                      _destination == AppDestination.health ||
-                      _destination == AppDestination.analytics
+              contextRow: _destination == AppDestination.analytics
+                  ? Row(
+                      children: [
+                        Flexible(child: _instanceHeader()),
+                        const SizedBox(width: 16),
+                        Flexible(
+                          child: WorkspaceProfilePicker(
+                            label: _analyticsProfileName == null
+                                ? 'All'
+                                : controller.discovery
+                                          ?.named(_analyticsProfileName!)
+                                          ?.label ??
+                                      _analyticsProfileName!,
+                            onPressed: (anchor) => unawaited(
+                              _pickWorkspace(
+                                anchor,
+                                mode: WorkspacePickerMode.analytics,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  : _destination == AppDestination.activity ||
+                        _destination == AppDestination.health
                   ? ServerConnectionLabel(
                       label: controller.connection.label,
                       icon: controller.connection.icon,
-                      pickerMode: _destination == AppDestination.analytics
-                          ? WorkspacePickerMode.analytics
-                          : null,
                       suffix: _destination == AppDestination.activity
                           ? null
-                          : _destination == AppDestination.analytics
-                          ? _analyticsProfileName ?? 'All'
                           : controller.current?.scope.profileName,
                       status: controller.connectionStatus,
                     )

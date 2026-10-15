@@ -76,9 +76,9 @@ The toolbar warning triangle appears only while issues need attention. Tap it to
 
 ## Analytics
 
-**All** is selected by default and sums usage across every profile on the current connection. Choose a named profile in the header to focus on its usage. This filter does not switch your chat workspace. Profile reads run concurrently, with up to ten requests in flight. If a profile cannot be read, the affected total stays unavailable or retains the previous complete observation, with a notice and Refresh to retry.
+**All** is selected by default and sums usage across every profile on the current connection. Use the instance name in the header to change servers. The separate profile picker beside it offers All and every profile on that instance; choose a named profile to focus on its usage. This filter does not switch your chat workspace. Profile reads run concurrently, with up to ten requests in flight. If a profile cannot be read, the affected total stays unavailable or retains the previous complete observation, with a notice and Refresh to retry.
 
-Analytics offers **1D, 7D, 30D, 90D and 365D** periods, a daily token grid and model/token breakdowns. Chart titles and Tokens/Cost controls change the displayed grouping. Recently viewed data is cached for five minutes across profile changes and screen visits. Older data stays visible while it refreshes in the background; the Updated time shows its age. Refresh requests fresh observations. Missing costs and partial coverage remain identified.
+Analytics offers **1D, 7D, 30D, 90D and 365D** periods, a daily token grid and model/token breakdowns. Daily tooltips use compact token counts, such as 298M. Chart titles and Tokens/Cost controls change the displayed grouping. Recently viewed data is cached for five minutes across profile changes and screen visits. Older data stays visible while it refreshes in the background; the Updated time shows its age. Refresh requests fresh observations. Missing costs and partial coverage remain identified.
 
 Token totals and model breakdowns can appear before the activity year finishes. Sections stay in place while loading. Scroll within the model breakdown for
 additional models; the selected daily range includes days with no recorded usage.
