@@ -6,6 +6,60 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NotificationInteractionSecurityTest {
+    @Test fun conversationShortcutsCannotCarryPermissionAuthority() {
+        var persisted: String? = null
+        val store = NotificationHandleStore({ persisted }, { persisted = it; true })
+        assertNull(store.issue(42, NotificationHandleStore.navigationPurpose, action("once")))
+        val navigation = store.issue(42, NotificationHandleStore.navigationPurpose, action("", true))!!
+        assertEquals("", store.readNavigation(navigation)!!.getString("choice"))
+        assertNotNull(store.readNavigation(navigation))
+        store.replace(42, "new revision", "new revision")
+        assertEquals(navigation, store.issue(42, NotificationHandleStore.navigationPurpose, action("", true)))
+        store.invalidate(42)
+        assertNotNull(store.readNavigation(navigation))
+        val decision = store.issue(42, NotificationHandleStore.actionPurpose, action("once"))!!
+        assertNull(store.readNavigation(decision))
+        assertNull(store.readNavigation("forged"))
+    }
+
+    @Test fun platformActionsNeverGrantHiddenOrTruncatedCommands() {
+        fun actions(command: String = "echo ready", choices: List<String> = listOf("once", "deny"),
+            preview: Boolean = true, busy: Boolean = false, large: Boolean = false) =
+            NotificationInteractionSchema.visibleActions(mapOf("kind" to "approval", "preview" to preview,
+                "expanded" to command, "choices" to choices, "submitting" to busy, "pending" to "1 approval"), large)
+        assertEquals(listOf("once", "deny"), actions())
+        assertEquals(listOf("once", "review", "deny"), actions(choices = listOf("once", "session", "always", "deny")))
+        for (command in listOf("", "echo\nnext", "x".repeat(41), "echo…")) {
+            assertEquals(listOf("review", "deny"), actions(command))
+        }
+        assertEquals(listOf("review", "deny"), actions(large = true))
+        assertEquals(listOf("review"), actions(preview = false))
+        assertEquals(emptyList<String>(), actions(busy = true))
+    }
+
+    @Test fun bodyTapCapturedByAndroidSurvivesReplacementBeforeActionActivityStarts() {
+        var persisted: String? = null
+        val store = NotificationHandleStore({ persisted }, { persisted = it; true })
+        val original = action("", true)
+        val body = store.issue(42, NotificationHandleStore.actionPurpose, original)!!
+        val decision = store.issue(42, NotificationHandleStore.actionPurpose, action("once"))!!
+        assertTrue(store.replace(42, original.getString("payload"), "next-revision"))
+        assertEquals(original.toString(), store.consume(body, NotificationHandleStore.actionPurpose)?.toString())
+        assertNull(store.consume(decision, NotificationHandleStore.actionPurpose))
+    }
+
+    @Test fun replacedBodyTapHasABoundedHandoffWindow() {
+        var persisted: String? = null
+        var time = 1000L
+        val store = NotificationHandleStore({ persisted }, { persisted = it; true }, { time })
+        val body = store.issue(42, NotificationHandleStore.actionPurpose, action("", true))!!
+        store.invalidate(42)
+        time += 4 * 60 * 1000
+        store.invalidate(42)
+        time += 60 * 1000
+        assertNull(store.consume(body, NotificationHandleStore.actionPurpose))
+    }
+
     @Test fun acceptedBodyTapSurvivesReadCancellationButPermissionChoicesDoNot() {
         var persisted: String? = null
         fun store() = NotificationHandleStore({ persisted }, { persisted = it; true })
@@ -16,7 +70,7 @@ class NotificationInteractionSecurityTest {
         assertNotNull(store().consume(navigation, NotificationHandleStore.mainPurpose))
         assertNull(store().consume(navigation, NotificationHandleStore.mainPurpose))
         assertNull(store().consume(decision, NotificationHandleStore.mainPurpose))
-        assertNull(store().consume(privateAction, NotificationHandleStore.actionPurpose))
+        assertNotNull(store().consume(privateAction, NotificationHandleStore.actionPurpose))
     }
 
     @Test fun tappedConversationSurvivesANewerReplyBeforeMainResumes() {

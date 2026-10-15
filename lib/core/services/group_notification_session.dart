@@ -107,10 +107,13 @@ class GroupNotificationSession extends ChangeNotifier {
   Timer? _timer;
 
   bool get hasActiveGroups => _groups.values.any((group) => group.active);
-  Iterable<({String title, String state})> get monitoringGroups sync* {
-    for (final group in _groups.values) {
+  Iterable<({String roomId, String title, String state})>
+  get monitoringGroups sync* {
+    for (final entry in _groups.entries) {
+      final group = entry.value;
       if (group.active) {
         yield (
+          roomId: entry.key,
           title: group.title,
           state: group.uncertain
               ? 'reconnecting'

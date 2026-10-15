@@ -4,6 +4,12 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+- Open the exact chat or group when tapping an Android notification, including
+  after a restart or an alert update. Keep conversation alerts individually
+  tappable in the shade. Watching chats opens its single conversation, or
+  Recents when monitoring multiple conversations. Approval notifications use
+  Android’s Once, Review and Deny actions; Review exposes broader choices in Wing.
+
 - Open a member’s Bot Chat by tapping its avatar or name in Edit group; Back preserves unsaved group edits.
 
 - Show a separate Wing pulse while Refresh group reads messages and activity,

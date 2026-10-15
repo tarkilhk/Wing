@@ -5,17 +5,15 @@ import android.content.*
 import android.content.res.Configuration
 import android.os.Handler
 import android.os.Looper
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.text.Layout
-import android.text.StaticLayout
-import android.text.TextPaint
-import android.view.View
-import android.widget.RemoteViews
 import android.widget.Toast
+import androidx.core.app.Person
+import androidx.core.content.pm.ShortcutInfoCompat
+import androidx.core.content.pm.ShortcutManagerCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.engine.FlutterEngine
@@ -27,6 +25,7 @@ import java.lang.ref.WeakReference
 /** Render and deliver interactions on the retained app engine, including cold starts. */
 object ChatNotifications {
     const val handleExtra = "wing_notification_handle"
+    private const val navigationExtra = "wing_conversation_navigation"
     private const val publicRawExtra = "wing_notification_interaction"
     private const val channelName = "com.tarkilhk.wing/chat_notifications"
     private const val turnChannel = "wing_turn_notifications"
@@ -131,6 +130,7 @@ object ChatNotifications {
                             val id = (call.arguments as Number).toInt()
                             check(handles(context).invalidate(id))
                             displayed.remove(id)
+                            ShortcutManagerCompat.removeLongLivedShortcuts(context, listOf("wing-chat-$id"))
                             context.getSystemService(NotificationManager::class.java).cancel(id)
                             result.success(null)
                         }
@@ -183,7 +183,11 @@ object ChatNotifications {
     fun handleMainIntent(context: Context, intent: Intent?) {
         // MainActivity is exported. Raw JSON can never authorize an interaction.
         try { intent?.removeExtra(publicRawExtra) } catch (_: Exception) { return }
-        val value = consumeIntent(context, intent, NotificationHandleStore.mainPurpose) ?: return
+        val navigation = try { intent?.getStringExtra(navigationExtra) } catch (_: Exception) { null }
+        try { intent?.removeExtra(navigationExtra) } catch (_: Exception) { return }
+        val value = if (navigation != null) handles(context).readNavigation(navigation)
+            else consumeIntent(context, intent, NotificationHandleStore.mainPurpose)
+        value ?: return
         if (context is Activity && value.optString("choice").isNotEmpty() && !value.optBoolean("review")) {
             directActionHost = value.getInt("notification_id") to WeakReference(context)
         }
@@ -222,6 +226,20 @@ object ChatNotifications {
         val intent = Intent(context, NotificationActionActivity::class.java).setData(identity).putExtra(handleExtra, token)
         return PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
     }
+    fun monitoringIntent(context: Context, id: Int, payload: String): PendingIntent {
+        if (payload.isEmpty()) {
+            return PendingIntent.getActivity(context, id,
+                Intent(context, MainActivity::class.java)
+                    .setAction("com.tarkilhk.wing.action.ACTIVITY")
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        }
+        val data = mapOf("id" to id, "payload" to payload, "chat" to payload,
+            "revision" to "monitoring", "expanded" to "")
+        check(handles(context).replace(id, payload, "monitoring"))
+        return intent(context, data, NotificationInteractionSchema.contentTap(data))
+    }
+
     private fun deleteIntent(context: Context, data: Map<*, *>): PendingIntent {
         val value = JSONObject().put("dismiss", true).put("chat", data["chat"]).put("revision", data["revision"])
         // Local test alerts do not own a chat dismissal.
@@ -235,9 +253,6 @@ object ChatNotifications {
         createChannels(context)
         val id = (data["id"] as Number).toInt()
         check(handles(context).replace(id, data["payload"] as? String, data["revision"] as? String))
-        val kind = data["kind"] as? String
-        val choices = data["choices"] as? List<*> ?: emptyList<String>()
-        val approval = kind == "approval" && data["preview"] == true && choices.isNotEmpty()
         val pending = data["pending"] as? String ?: ""
         val error = data["error"] as? String
         val busy = data["submitting"] == true
@@ -259,38 +274,43 @@ object ChatNotifications {
             .setContentIntent(intent(context, data, NotificationInteractionSchema.contentTap(data))).setDeleteIntent(deleteIntent(context, data))
         if (data["alert"] == true) builder.setDefaults(NotificationCompat.DEFAULT_ALL)
         else builder.setSilent(true)
-        if (approval) {
-            val large = context.resources.configuration.fontScale > 1.3f
-            val views = RemoteViews(context.packageName, if (large) R.layout.notification_approval_grid else R.layout.notification_approval_row)
-            val command = data["expanded"] as String
-            views.setTextViewText(R.id.notice_title, data["title"] as String)
-            views.setTextViewText(R.id.notice_pending, when { busy -> "Sending decision…"; !error.isNullOrEmpty() -> error; else -> pending })
-            views.setTextViewText(R.id.notice_command, command)
-            val metrics = context.resources.displayMetrics
-            val paint = TextPaint().apply { textSize = 15f * metrics.scaledDensity; typeface = Typeface.MONOSPACE }
-            val width = ((context.resources.configuration.screenWidthDp - 100) * metrics.density).toInt().coerceAtLeast(1)
-            val layout = StaticLayout.Builder.obtain(command, 0, command.length, paint, width).setAlignment(Layout.Alignment.ALIGN_NORMAL).build()
-            val needsReview = layout.lineCount > (if (large) 1 else 3)
-                || command.isBlank() || command.endsWith("…")
-            views.setViewVisibility(R.id.review_actions, if (needsReview) View.VISIBLE else View.GONE)
-            views.setViewVisibility(R.id.approval_actions, if (needsReview) View.GONE else View.VISIBLE)
-            views.setBoolean(R.id.review, "setEnabled", !busy)
-            if (needsReview) views.setOnClickPendingIntent(R.id.review, intent(context, data, "", true))
-            views.setViewVisibility(R.id.review_deny, if (choices.contains("deny")) View.VISIBLE else View.GONE)
-            views.setBoolean(R.id.review_deny, "setEnabled", !busy)
-            if (needsReview && choices.contains("deny")) views.setOnClickPendingIntent(R.id.review_deny, intent(context, data, "deny", false))
-            views.setViewVisibility(R.id.notice_scope, if (!needsReview && choices.contains("session")) View.VISIBLE else View.GONE)
-            for ((choice, viewId) in listOf("once" to R.id.once, "session" to R.id.session, "always" to R.id.always, "deny" to R.id.deny)) {
-                val visible = !needsReview && choices.contains(choice)
-                views.setViewVisibility(viewId, if (visible) View.VISIBLE else View.GONE)
-                views.setBoolean(viewId, "setEnabled", !busy)
-                if (visible) views.setOnClickPendingIntent(viewId, intent(context, data, choice, choice == "always"))
-            }
-            builder.setStyle(NotificationCompat.DecoratedCustomViewStyle()).setCustomBigContentView(views)
+        val expanded = listOf(
+            when { busy -> "Sending decision…"; !error.isNullOrEmpty() -> error; else -> pending },
+            data["expanded"] as String,
+        ).filter { it.isNotEmpty() }.joinToString("\n")
+        if ((data["payload"] as String).isNotEmpty()) {
+            val user = Person.Builder().setName("You").setKey("wing-user").build()
+            val sender = Person.Builder().setName(data["title"] as String).setBot(true).build()
+            val shortcut = "wing-chat-$id"
+            val navigation = handles(context).issue(id, NotificationHandleStore.navigationPurpose,
+                NotificationInteractionSchema.contentTap(data))
+                ?: throw IllegalStateException("Conversation navigation could not be stored")
+            val shortcutIntent = Intent(context, MainActivity::class.java)
+                .setAction(Intent.ACTION_VIEW)
+                .setData(Uri.parse("wing-conversation://chat/$id"))
+                .putExtra(navigationExtra, navigation)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            check(ShortcutManagerCompat.pushDynamicShortcut(context,
+                ShortcutInfoCompat.Builder(context, shortcut)
+                    .setShortLabel(data["title"] as String)
+                    .setLongLived(true)
+                    .setPersons(arrayOf(user, sender))
+                    .setIcon(IconCompat.createWithResource(context, R.mipmap.ic_launcher))
+                    .setIntent(shortcutIntent)
+                    .build()))
+            builder.setShortcutId(shortcut)
+                .setStyle(NotificationCompat.MessagingStyle(user)
+                    .setConversationTitle(data["title"] as String)
+                    .setGroupConversation(JSONObject(data["payload"] as String).has("room"))
+                    .addMessage(expanded, System.currentTimeMillis(), sender))
         } else {
-            val expanded = listOf(pending, data["expanded"] as String).filter { it.isNotEmpty() }.joinToString("\n")
             builder.setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
-            if (pending.isNotEmpty()) builder.addAction(0, "Review", intent(context, data, "", true))
+        }
+        for (action in NotificationInteractionSchema.visibleActions(
+            data, context.resources.configuration.fontScale > 1.3f)) {
+            val review = action == "review"
+            val label = when (action) { "once" -> "Once"; "deny" -> "Deny"; else -> "Review" }
+            builder.addAction(0, label, intent(context, data, if (review) "" else action, review))
         }
         NotificationManagerCompat.from(context).notify(id, builder.build())
         displayed[id] = data

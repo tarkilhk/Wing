@@ -39,7 +39,8 @@ object MonitoringRuntime {
                     "start" -> {
                         val values = call.arguments as? Map<*, *>
                         val next = mapOf("title" to (values?.get("title") as? String ?: "Watching chats"),
-                            "text" to (values?.get("text") as? String ?: "Connecting to Hermes"))
+                            "text" to (values?.get("text") as? String ?: "Connecting to Hermes"),
+                            "payload" to (values?.get("payload") as? String ?: ""))
                         if (next != summary) {
                             summary = next
                             BackgroundMonitoringService.instance?.updateSummary()

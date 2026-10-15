@@ -11,6 +11,12 @@ import 'package:wing/core/models/group_notification.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/notification_focus.dart';
 import 'package:wing/core/services/native_notification_sink.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/bots_repository.dart';
+import 'package:wing/core/services/android_launch_intent_service.dart';
+import '../test/support/bots_fixture.dart';
+import '../test/support/host_resources_fixture.dart';
 import 'package:wing/core/services/turn_notification_service.dart';
 
 import 'dart:async';
@@ -70,6 +76,7 @@ Future<void> main() async {
         : (jsonDecode(savedApprovals) as List)
               .map((row) => Map<String, dynamic>.from(row as Map))
               .toList();
+  final otherHost = Host()..running = false;
   final savedDecisions = prefs.getString('notification_qa_decisions');
   if (savedDecisions != null) {
     for (final row in jsonDecode(savedDecisions) as List) {
@@ -99,17 +106,72 @@ Future<void> main() async {
   }
 
   host.onApprovalResponse = persistApprovalState;
+  final groups = BotsFixture();
+  for (final row in groups.profiles) {
+    row['canonical_session'] = null;
+  }
+  groups.events.add({
+    'room_id': 'room-1',
+    'seq': 1,
+    'kind': 'message.member',
+    'created_at': 1791818730.0,
+    'actor': {
+      'kind': 'member',
+      'id': 'atlas',
+      'profile': 'atlas',
+      'display_name': 'Atlas',
+    },
+    'payload': {'text': 'The shared discussion reached its exact destination.'},
+  });
+  final groupHost = Host();
+  ProfileGateway gateway(WorkspaceScope scope) {
+    final base = groupHost.gateway(scope);
+    return ProfileGateway(
+      scope: scope,
+      discover: groupHost.discover,
+      get: base.read,
+      rpc: (method, params) =>
+          method.startsWith('groups.') || method == 'profiles.list'
+          ? groups.read(scope.profileName, method, params)
+          : base.call(method, params),
+    );
+  }
+
+  final launchIntents = AndroidLaunchIntentService();
+  await launchIntents.initialize();
   final app = GlobalKey<WingAppState>();
   runApp(
     WingApp(
       appPreferences: AppPreferences(prefs),
       key: app,
+      launchIntents: launchIntents,
       connManager: manager,
-      gatewayFactory: (_, scope) => host.gateway(scope),
+      gatewayFactory: (_, scope) =>
+          (scope.profileName == 'b' ? otherHost : host).gateway(scope),
     ),
   );
   await WidgetsBinding.instance.endOfFrame;
   final controller = await app.currentState!.profileController(connection);
+  final resources = HostResourcesFixture(
+    identity: controller.connectionIdentity,
+  );
+  controller.healthSession(
+    repository: AdministrationRepository(
+      connectionId: connection.id,
+      connectionIdentity: controller.connectionIdentity,
+      connectionLabel: connection.label,
+      request: resources.server.request,
+      settingsWrite: resources.server.settingsWrite,
+      ownedMutation: resources.server.ownedMutation,
+      gateway: (profile) => gateway(
+        WorkspaceScope(
+          connectionId: connection.id,
+          connectionIdentity: controller.connectionIdentity,
+          profileName: profile,
+        ),
+      ),
+    ),
+  );
   await controller.initialize();
   await controller.switchProfile('a');
   final chat = await controller.createChat(canDispatch: () => true);
@@ -124,7 +186,7 @@ Future<void> main() async {
     'session_id': other.key.sessionId,
     'title': 'Weekly report',
   });
-  final otherGateway = host.gateways['b']!;
+  final otherGateway = otherHost.gateways['b']!;
   void event(ProfileChat target, String type, Map<String, dynamic> data) {
     (identical(target, chat) ? chatGateway : otherGateway).onEvent!(
       StreamEvent(type: type, sessionId: target.runtime.runtimeId, data: data),
@@ -139,9 +201,14 @@ Future<void> main() async {
       connectionIdentity: controller.connectionIdentity,
       profileName: 'a',
     ),
-    'native-render-qa-room',
+    'room-1',
   );
   final nativeGroupChat = jsonEncode(nativeGroupTarget.toJson());
+  final monitoredGroup = BotsRepository.decodeGroup(
+    nativeGroupTarget.scope,
+    connection.label,
+    groups.room,
+  );
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 18766);
   await for (final request in server) {
     try {
@@ -149,6 +216,31 @@ Future<void> main() async {
           ? jsonDecode(await utf8.decoder.bind(request).join()) as Map
           : const {};
       switch (request.uri.path) {
+        case '/native-group-answer':
+          final answerTarget = data['room'] is String
+              ? GroupNotificationTarget(
+                  nativeGroupTarget.scope,
+                  data['room'] as String,
+                )
+              : nativeGroupTarget;
+          final notification = TurnNotification.chat(
+            title: data['title'] as String? ?? 'Research team',
+            content: ChatNotificationContent.reply(
+              'The shared discussion reached its exact destination.',
+            ),
+            showPreview: true,
+            scopeLabel: 'Home server / Group',
+            payload: jsonEncode({
+              ...answerTarget.toJson(),
+              'focus': const NotificationFocus('answer', '1').toJson(),
+            }),
+            focus: const NotificationFocus('answer', '1'),
+            chatIdentity: jsonEncode(answerTarget.toJson()),
+            revision: 'answer:1',
+          );
+          await const MethodChannel(
+            NativeNotificationSink.channelName,
+          ).invokeMethod<void>('show', notification.toJson());
         case '/native-group-approval':
           final action = BotGroupAction(
             kind: 'approval',
@@ -199,7 +291,20 @@ Future<void> main() async {
         case '/release-history':
           notificationHistory?.complete();
           notificationHistory = null;
+        case '/monitor-group':
+          await controller.beginGroupSend(monitoredGroup, 'qa-monitored-send');
+        case '/stop-monitor-group':
+          await controller.finishGroupSend(
+            monitoredGroup,
+            'qa-monitored-send',
+            dispatched: false,
+          );
+        case '/work-primary':
+          host.running = true;
+          chat.composer.editText('Update the website');
+          await controller.send(chat);
         case '/work':
+          otherHost.running = true;
           other.composer.editText('Prepare the weekly report');
           await controller.send(other);
         case '/approval':
@@ -240,6 +345,7 @@ Future<void> main() async {
             'notification_qa_reply_history',
             jsonEncode(host.historyMessages),
           );
+          host.running = false;
           event(chat, 'message.complete', {'text': answer});
         case '/error':
           event(chat, 'turn.error', {
@@ -274,6 +380,7 @@ Future<void> main() async {
           );
           app.currentState!.refreshPreferences();
         case '/stop':
+          otherHost.running = false;
           event(other, 'message.complete', {
             'text': 'The weekly report is ready to read.',
           });
@@ -307,6 +414,9 @@ Future<void> main() async {
       request.response.write(
         jsonEncode({
           'ready': true,
+          'group_notification_id': TurnNotificationService.notificationIdFor(
+            nativeGroupChat,
+          ),
           'history_held':
               notificationHistory != null &&
               !notificationHistory.isCompleted &&
@@ -323,6 +433,8 @@ Future<void> main() async {
           'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
           'chat_visible': controller.visible,
           'selected_chat': controller.current?.chat?.key.sessionId,
+          'selected_profile':
+              controller.current?.chat?.key.workspace.profileName,
           'read_target': chat.reading.notificationReadTarget?.toJson(),
           'read_guards': {
             'opening': chat.runtime.opening,

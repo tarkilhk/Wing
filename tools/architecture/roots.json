@@ -6841,16 +6841,6 @@
       "provenance": "tracked"
     },
     {
-      "path": "android/app/src/main/res/layout/notification_approval_grid.xml",
-      "area": "android",
-      "provenance": "tracked"
-    },
-    {
-      "path": "android/app/src/main/res/layout/notification_approval_row.xml",
-      "area": "android",
-      "provenance": "tracked"
-    },
-    {
       "path": "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
       "area": "android",
       "provenance": "tracked"
@@ -6901,11 +6891,6 @@
       "provenance": "tracked"
     },
     {
-      "path": "android/app/src/main/res/values-night/notification_colors.xml",
-      "area": "android",
-      "provenance": "tracked"
-    },
-    {
       "path": "android/app/src/main/res/values-night/styles.xml",
       "area": "android",
       "provenance": "tracked"
@@ -6917,11 +6902,6 @@
     },
     {
       "path": "android/app/src/main/res/values/colors.xml",
-      "area": "android",
-      "provenance": "tracked"
-    },
-    {
-      "path": "android/app/src/main/res/values/notification_colors.xml",
       "area": "android",
       "provenance": "tracked"
     },
@@ -14899,31 +14879,6 @@
       "path": "tools/architecture/rules/compact_dialog_layout.dart",
       "area": "tools",
       "provenance": "tracked"
-    },
-    {
-      "path": "android/app/src/main/res/drawable/ic_notice_always.xml",
-      "area": "android",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "android/app/src/main/res/drawable/ic_notice_deny.xml",
-      "area": "android",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "android/app/src/main/res/drawable/ic_notice_once.xml",
-      "area": "android",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "android/app/src/main/res/drawable/ic_notice_review.xml",
-      "area": "android",
-      "provenance": "intentional-untracked"
-    },
-    {
-      "path": "android/app/src/main/res/drawable/ic_notice_session.xml",
-      "area": "android",
-      "provenance": "intentional-untracked"
     },
     {
       "path": "tools/qa/run_notification_gate.py",

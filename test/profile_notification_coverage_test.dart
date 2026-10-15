@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -382,6 +383,9 @@ void main() {
       expect(controller.notificationMonitoringChats.toList(), [
         (
           key: ProfileSessionKey(controller.current!.scope, 'outside'),
+          payload: jsonEncode(
+            ProfileSessionKey(controller.current!.scope, 'outside').toJson(),
+          ),
           title: 'Outside task',
           state: 'working',
         ),
