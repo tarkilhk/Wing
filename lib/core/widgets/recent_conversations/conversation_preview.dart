@@ -329,6 +329,7 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
               )
             : BotGroupMessage(
                 group: group,
+                senderAvatarVisible: true,
                 message: messages[messages.length - 1 - index],
                 appearance:
                     widget

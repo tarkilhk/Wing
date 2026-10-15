@@ -60,6 +60,7 @@ class ProfileMessage extends StatelessWidget {
   final bool streaming;
   final bool showCopyHeader;
   final BotRecord? senderAppearance;
+  final bool senderAvatarVisible;
   final BotBubbleColors? botBubbleColors;
   final void Function(BuildContext anchor)? onSenderTap;
 
@@ -83,6 +84,7 @@ class ProfileMessage extends StatelessWidget {
     this.streaming = false,
     this.showCopyHeader = true,
     this.senderAppearance,
+    this.senderAvatarVisible = true,
     this.botBubbleColors,
     this.onSenderTap,
     this.loadImages = true,
@@ -359,60 +361,66 @@ class ProfileMessage extends StatelessWidget {
                   PositionedDirectional(
                     start: BotConversationScope.avatarInset + 1,
                     top: -22,
-                    child: Builder(
-                      builder: (anchor) {
-                        final portrait = Container(
-                          key: ValueKey((
-                            'bot-message-avatar-frame',
-                            message.id,
-                          )),
-                          width: BotConversationScope.avatarSize,
-                          height: BotConversationScope.avatarSize,
-                          decoration: BoxDecoration(
-                            color: tile,
-                            borderRadius: WingRadius.card,
-                            border: Border.all(color: frame),
-                            boxShadow: [
-                              BoxShadow(
-                                color: theme.colorScheme.surface,
-                                spreadRadius:
-                                    BotConversationScope.avatarSurround,
-                              ),
-                            ],
-                          ),
-                          alignment: Alignment.center,
-                          child: Semantics(
-                            label: '$name avatar',
-                            image: true,
-                            child: appearance == null
-                                ? Icon(
-                                    Icons.smart_toy_outlined,
-                                    size: 34,
-                                    color: seed,
-                                  )
-                                : BorrowedBotAvatar(
-                                    bot: appearance,
-                                    name: name,
-                                    size: 34,
-                                  ),
-                          ),
-                        );
-                        return tap == null
-                            ? portrait
-                            : Tooltip(
-                                message: 'Options for $name',
-                                child: Semantics(
-                                  button: true,
-                                  child: StudioButtonPress(
-                                    child: InkWell(
-                                      borderRadius: WingRadius.card,
-                                      onTap: () => tap(anchor),
-                                      child: portrait,
+                    child: Visibility(
+                      visible: senderAvatarVisible,
+                      maintainState: true,
+                      maintainAnimation: true,
+                      maintainSize: true,
+                      child: Builder(
+                        builder: (anchor) {
+                          final portrait = Container(
+                            key: ValueKey((
+                              'bot-message-avatar-frame',
+                              message.id,
+                            )),
+                            width: BotConversationScope.avatarSize,
+                            height: BotConversationScope.avatarSize,
+                            decoration: BoxDecoration(
+                              color: tile,
+                              borderRadius: WingRadius.card,
+                              border: Border.all(color: frame),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: theme.colorScheme.surface,
+                                  spreadRadius:
+                                      BotConversationScope.avatarSurround,
+                                ),
+                              ],
+                            ),
+                            alignment: Alignment.center,
+                            child: Semantics(
+                              label: '$name avatar',
+                              image: true,
+                              child: appearance == null
+                                  ? Icon(
+                                      Icons.smart_toy_outlined,
+                                      size: 34,
+                                      color: seed,
+                                    )
+                                  : BorrowedBotAvatar(
+                                      bot: appearance,
+                                      name: name,
+                                      size: 34,
+                                    ),
+                            ),
+                          );
+                          return tap == null
+                              ? portrait
+                              : Tooltip(
+                                  message: 'Options for $name',
+                                  child: Semantics(
+                                    button: true,
+                                    child: StudioButtonPress(
+                                      child: InkWell(
+                                        borderRadius: WingRadius.card,
+                                        onTap: () => tap(anchor),
+                                        child: portrait,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              );
-                      },
+                                );
+                        },
+                      ),
                     ),
                   ),
                 ],

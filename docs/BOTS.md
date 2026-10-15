@@ -167,6 +167,9 @@ does not create a New answer cue or a reply notification.
 Tap a bot's avatar in the discussion to open a compact card over it, with the
 bot's saved avatar and name above three icon-and-text actions: **View working
 history**, **Chat directly** and **Bot settings**.
+The menu opens over the tapped avatar, showing a single face. The original tile
+returns when you close the menu or return to the discussion.
+
 Working history opens with that member selected. Direct chat immediately opens
 the bot's private conversation screen, with the Wing pulse while it loads and
 Retry there if loading fails; settings apply to its profile across chats.

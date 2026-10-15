@@ -1874,9 +1874,10 @@ void main() {
                 debugShowCheckedModeBanner: false,
                 theme: wingTheme(brightness),
                 builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(
-                    context,
-                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(scale),
+                    disableAnimations: scale == 2,
+                  ),
                   child: child!,
                 ),
                 home: BotGroupScreen(
@@ -1903,6 +1904,12 @@ void main() {
           await tester.enterText(input, 'Keep my room draft');
           await tester.pumpAndSettle();
           final avatar = find.byTooltip('Options for Mira');
+          final sourceMessage = find.ancestor(
+            of: avatar,
+            matching: find.byType(ProfileMessage),
+          );
+          bool sourceAvatarVisible() =>
+              tester.widget<ProfileMessage>(sourceMessage).senderAvatarVisible;
           expect(tester.getSize(avatar), const Size(54, 54));
           final anchor = tester.getRect(avatar);
           final avatarBounds = tester.getRect(
@@ -1910,6 +1917,16 @@ void main() {
           );
           await tester.tap(avatar);
           await tester.pumpAndSettle();
+          expect(sourceAvatarVisible(), isFalse);
+          expect(tester.getRect(avatar), anchor);
+          final otherMessage = find.ancestor(
+            of: find.byTooltip('Options for Atlas'),
+            matching: find.byType(ProfileMessage),
+          );
+          expect(
+            tester.widget<ProfileMessage>(otherMessage).senderAvatarVisible,
+            isTrue,
+          );
           final buttons = [
             for (final action in ['history', 'chat', 'settings'])
               find.byKey(ValueKey(('group-bot-action', action))),
@@ -1957,7 +1974,6 @@ void main() {
             lessThanOrEqualTo(tester.view.physicalSize.width - 8),
           );
           expect(panelRect.bottom, lessThanOrEqualTo(844 - 8));
-          expect(panelRect.left, closeTo(avatarBounds.left, 1));
           expect(panelRect.contains(anchor.center), isTrue);
           expect(panelRect.top, lessThanOrEqualTo(avatarBounds.top));
           expect(panelRect.bottom, greaterThanOrEqualTo(anchor.top));
@@ -1969,6 +1985,21 @@ void main() {
           );
           expect(face.name, 'Mira');
           expect(face.size, 32);
+          final menuAvatar = find.descendant(
+            of: identity,
+            matching: find.byType(BotAvatar),
+          );
+          expect(
+            tester.getCenter(menuAvatar).dx,
+            closeTo(anchor.center.dx, .1),
+          );
+          if (scale == 1) {
+            expect(
+              tester.getCenter(menuAvatar).dy,
+              closeTo(anchor.center.dy, .1),
+            );
+            expect(panelRect.size, const Size(240, 201));
+          }
           expect(
             find.descendant(of: identity, matching: find.text('Mira')),
             findsOneWidget,
@@ -1984,8 +2015,11 @@ void main() {
           await tester.pump(const Duration(seconds: 5));
           expect(reads, pausedReads);
           await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pump();
+          if (scale == 1) expect(sourceAvatarVisible(), isFalse);
           await tester.pumpAndSettle();
           expect(find.text('Chat directly'), findsNothing);
+          expect(sourceAvatarVisible(), isTrue);
           expect(reads, greaterThan(pausedReads));
           expect(actions, isEmpty);
           for (final (label, page, action) in [
@@ -2013,6 +2047,7 @@ void main() {
             expect(reads, coveredReads);
             navigator.currentState!.pop();
             await tester.pumpAndSettle();
+            expect(sourceAvatarVisible(), isTrue);
             expect(
               tester.widget<TextField>(input).controller!.text,
               'Keep my room draft',
@@ -2047,8 +2082,14 @@ void main() {
           );
           expect(fixture.commands, isEmpty);
           expect(tester.takeException(), isNull);
+          expect(sourceAvatarVisible(), isTrue);
+          await tester.tap(avatar);
+          await tester.pumpAndSettle();
+          expect(sourceAvatarVisible(), isFalse);
           semantics.dispose();
           await tester.pumpWidget(const SizedBox());
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
         },
       );
     }

@@ -148,12 +148,14 @@ class BotGroupMessage extends StatelessWidget {
     required this.group,
     required this.message,
     required this.appearance,
+    required this.senderAvatarVisible,
     this.loadImages = true,
     this.onSenderTap,
   });
   final BotGroup group;
   final TranscriptMessage message;
   final BotRecord? appearance;
+  final bool senderAvatarVisible;
   final bool loadImages;
   final void Function(BuildContext anchor)? onSenderTap;
 
@@ -163,6 +165,7 @@ class BotGroupMessage extends StatelessWidget {
     child: ProfileMessage(
       message: message,
       senderAppearance: appearance,
+      senderAvatarVisible: senderAvatarVisible,
       botBubbleColors: message.sender == null
           ? null
           : _GroupBubblePalette.forMessage(context, message.senderHandle),

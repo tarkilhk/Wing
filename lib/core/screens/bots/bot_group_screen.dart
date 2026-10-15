@@ -12,6 +12,7 @@ import 'bot_group_history_screen.dart';
 import '../../models/bots.dart';
 import '../../widgets/server_connection_label.dart';
 import '../../widgets/bot_avatar.dart';
+import '../../widgets/profile_message.dart';
 import '../../widgets/conversation_activity_status.dart';
 import '../../widgets/composer_icon_button.dart';
 import '../../models/composer_reference.dart';
@@ -70,6 +71,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   final _transcript = ConversationTranscriptController();
   bool _capturing = false, _foreground = true;
   bool _inspectingDetails = false, _refreshingGroup = false;
+  Object? _inspectedAvatarMessage;
   bool _presentationVisible = true, _restoreComposerFocus = false;
   bool get _visible =>
       _presentationVisible &&
@@ -202,9 +204,12 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       appearance: user || member == null
           ? null
           : _session.appearance(member.profile),
+      senderAvatarVisible: _inspectedAvatarMessage != entry.presentationId,
       onSenderTap: user || member == null
           ? null
-          : (anchor) => unawaited(_showBotActions(anchor, member)),
+          : (anchor) => unawaited(
+              _showBotActions(anchor, member, entry.presentationId),
+            ),
     );
   }
 
@@ -526,6 +531,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
   Future<void> _showBotActions(
     BuildContext anchor,
     BotGroupMember member,
+    Object messageIdentity,
   ) async {
     if (!_visible) return;
     final bot = _session.appearance(member.profile);
@@ -534,12 +540,13 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     final overlay =
         Navigator.of(context).overlay!.context.findRenderObject()! as RenderBox;
     final box = anchor.findRenderObject()! as RenderBox;
+    const menuAvatarSize = 32.0;
     RelativeRect position() {
       final rect = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
       return RelativeRect.fromRect(
         Rect.fromLTWH(
-          rect.center.dx - 17,
-          rect.center.dy - 17 - WingSpacing.xs,
+          rect.center.dx - WingSpacing.md - menuAvatarSize / 2,
+          rect.top,
           0,
           0,
         ),
@@ -548,7 +555,11 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     }
 
     var lastPosition = position();
-    _inspectingDetails = true;
+    ModalRoute<dynamic>? menuRoute;
+    setState(() {
+      _inspectedAvatarMessage = messageIdentity;
+      _inspectingDetails = true;
+    });
     _syncVisibility();
     try {
       final action = await showMenu<_GroupBotAction>(
@@ -578,26 +589,45 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             : const AnimationStyle(duration: Duration(milliseconds: 160)),
         items: [
           _GroupMenuEntry<_GroupBotAction>(
-            child: Row(
-              key: const ValueKey('group-bot-card-identity'),
-              children: [
-                ExcludeSemantics(
-                  child: BorrowedBotAvatar(bot: bot, name: name, size: 32),
-                ),
-                const SizedBox(width: WingSpacing.sm),
-                Expanded(
-                  child: Text(
-                    name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.onSurface,
+            child: Builder(
+              builder: (menuContext) {
+                menuRoute = ModalRoute.of(menuContext);
+                return Row(
+                  key: const ValueKey('group-bot-card-identity'),
+                  children: [
+                    ExcludeSemantics(
+                      child: Transform.translate(
+                        // Center the face on the 54 dp invoking tile without
+                        // changing the existing header or card dimensions.
+                        offset: const Offset(
+                          0,
+                          (BotConversationScope.avatarSize - menuAvatarSize) /
+                                  2 -
+                              WingSpacing.xs * 2,
+                        ),
+                        child: BorrowedBotAvatar(
+                          bot: bot,
+                          name: name,
+                          size: menuAvatarSize,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ],
+                    const SizedBox(width: WingSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           const PopupMenuDivider(height: 9),
@@ -674,11 +704,24 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     } catch (error) {
       if (mounted) showStudioError(context, error.toString());
     } finally {
+      unawaited(_restoreBotAvatar(menuRoute, messageIdentity));
       _inspectingDetails = false;
       if (mounted) {
         _syncVisibility();
         _acknowledgeLatest();
       }
+    }
+  }
+
+  Future<void> _restoreBotAvatar(
+    ModalRoute<dynamic>? menuRoute,
+    Object messageIdentity,
+  ) async {
+    // showMenu returns when dismissal starts. Keep the original hidden until
+    // the popup has finished painting its closing animation.
+    await menuRoute?.completed;
+    if (mounted && _inspectedAvatarMessage == messageIdentity) {
+      setState(() => _inspectedAvatarMessage = null);
     }
   }
 
