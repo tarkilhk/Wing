@@ -12,7 +12,7 @@ import 'profile_execution_activity.dart';
 import 'profile_activity_tabs.dart';
 import 'profile_tool_activity.dart';
 
-/// One reply owns one folded Activity, followed by its current live work.
+/// Keep the parent's live reasoning and tool runs visible in received order.
 class ProfileLiveExecution extends StatefulWidget {
   const ProfileLiveExecution({
     super.key,
@@ -39,7 +39,7 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution> {
   final _runKeys = <Object, GlobalKey>{};
 
   Widget _run(List<ChatActivityEntry> entries) => ProfileExecutionActivity(
-    // A tool run keeps its actual cards as it moves into the reply's Activity.
+    // Later reasoning and tool events must not replace existing tool cards.
     key: _runKeys.putIfAbsent(entries.first.identity, GlobalKey.new),
     entries: entries,
     loadImage: widget.loadImage,
@@ -71,51 +71,37 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution> {
     final identities = groups.map((group) => group.first.identity).toSet();
     _runKeys.removeWhere((identity, _) => !identities.contains(identity));
 
-    final lastReasoning = groups.lastIndexWhere(
-      (group) => group.first is ChatReasoningEntry,
-    );
-    final historyLength = lastReasoning < 0
-        ? 0
-        : lastReasoning +
-              ((groups[lastReasoning].first as ChatReasoningEntry).running
-                  ? 0
-                  : 1);
-    final history = groups.take(historyLength).toList();
     final saved = widget.savedActivity;
-    final toolCount =
-        (saved?.toolCount ?? 0) +
-        history.expand((group) => group).whereType<ChatToolEntry>().length;
+    final toolCount = saved?.toolCount ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (history.isNotEmpty || saved != null)
+        if (saved != null)
           ProfileActivitySection(
             key: ValueKey((
               'live-history',
               widget.entries.firstOrNull?.identity ??
-                  saved!.presentationIds.first,
+                  saved.presentationIds.first,
             )),
             label: toolCount == 0
                 ? 'Activity'
                 : 'Activity · $toolCount ${toolCount == 1 ? 'tool' : 'tools'}',
-            subtitle: (saved?.reviewCount ?? 0) == 0
+            subtitle: saved.reviewCount == 0
                 ? null
                 : Text(
-                    '${saved!.reviewCount} ${saved.reviewCount == 1 ? 'review' : 'reviews'}',
+                    '${saved.reviewCount} ${saved.reviewCount == 1 ? 'review' : 'reviews'}',
                   ),
-            // The body stays mounted even before its first opening. Otherwise
-            // a visible tool would lose state when joining a never-opened group.
             retainDetails: true,
             detailsBuilder: (_) => ProfileActivityContents(
               section: saved,
-              currentActivity: [for (final group in history) _run(group)],
+              currentActivity: const [],
               noticeBuilder: widget.noticeBuilder,
               loadImage: widget.loadImage,
               onOpenResource: widget.onOpenResource,
               onShareResource: widget.onShareResource,
             ),
           ),
-        for (final group in groups.skip(historyLength))
+        for (final group in groups)
           if (group.first case final ChatReasoningEntry reasoning)
             Padding(
               key: ValueKey(('live-reasoning', reasoning.identity)),
@@ -135,7 +121,7 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Thinking',
+                        reasoning.running ? 'Thinking' : 'Reasoning',
                         style: WingTokens.of(context).typography.label.copyWith(
                           fontSize: 11,
                           color: WingTokens.of(context).muted,
@@ -146,7 +132,7 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution> {
                   const SizedBox(height: 8),
                   MarkdownMessageContent(
                     data: reasoning.text,
-                    streaming: true,
+                    streaming: reasoning.running,
                     loadImages: false,
                   ),
                 ],

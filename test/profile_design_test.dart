@@ -444,7 +444,7 @@ void main() {
   });
 
   testWidgets(
-    'live reasoning stays visible outside the sealed tool disclosure',
+    'live reasoning and tools remain readable independently of saved Activity',
     (tester) async {
       final chat = await controller.createChat(canDispatch: () => true);
       chat.reading.installSavedHistory([
@@ -471,40 +471,20 @@ void main() {
       await show(tester);
       expect(
         find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-        findsNWidgets(2),
+        findsOneWidget,
       );
-      expect(find.text('Running command'), findsNothing);
+      expect(find.text('Running command'), findsOneWidget);
       expect(find.text('Current private reasoning'), findsOneWidget);
       expect(
         find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-        findsNWidgets(2),
+        findsOneWidget,
       );
       expect(find.text('Visible saved reply'), findsOneWidget);
-      expect(
-        tester
-            .getTopLeft(
-              find
-                  .textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$'))
-                  .first,
-            )
-            .dx,
-        closeTo(
-          tester
-              .getTopLeft(
-                find
-                    .textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$'))
-                    .last,
-              )
-              .dx,
-          0.1,
-        ),
+      final savedHeader = find.textContaining(
+        RegExp(r'^Activity(?: · \d+ tools?)?$'),
       );
-
-      final currentHeader = find.descendant(
-        of: find.byType(ProfileLiveExecution),
-        matching: find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-      );
-      await tester.tap(currentHeader);
+      await tester.ensureVisible(savedHeader);
+      await tester.tap(savedHeader);
       await tester.pumpAndSettle();
       expect(find.text('Running command'), findsOneWidget);
       expect(find.text('Thinking'), findsOneWidget);
@@ -519,13 +499,13 @@ void main() {
 
       // The floating Back to latest control can cover the middle of a long
       // header in the test font. Tap the leading title outside that control.
-      await tester.tapAt(tester.getTopLeft(currentHeader) + const Offset(8, 8));
+      await tester.tapAt(tester.getTopLeft(savedHeader) + const Offset(8, 8));
       await tester.pumpAndSettle();
-      expect(find.text('Running command'), findsNothing);
+      expect(find.text('Running command'), findsOneWidget);
       expect(find.text('Current private reasoning'), findsOneWidget);
       expect(
         find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-        findsNWidgets(2),
+        findsOneWidget,
       );
       expect(find.text('Visible saved reply'), findsOneWidget);
     },

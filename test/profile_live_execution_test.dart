@@ -15,6 +15,110 @@ import 'package:wing/core/widgets/tool_activity_details.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 void main() {
+  test('reasoning overlap requires exact call ownership and received text', () {
+    final runtime = execution.ChatRuntime(runtimeId: 'reasoning-scope');
+    runtime.beginTurn(submitting: false);
+    runtime.observeReasoning('reasoning.delta', {'text': 'Streamed plan'});
+    runtime.observeReasoning('reasoning.available', {'text': 'Saved summary'});
+    runtime.observeTool('tool.start', {
+      'tool_id': 'current',
+      'name': 'read_file',
+    });
+    final matched = <String, dynamic>{
+      'id': 1,
+      'role': 'assistant',
+      'content': '',
+      'reasoning': 'Saved summary',
+      'tool_calls': [
+        {
+          'id': 'current',
+          'function': {'name': 'read_file', 'arguments': '{}'},
+        },
+      ],
+    };
+    final distinct = [
+      {...matched, 'id': 2, 'reasoning': 'Unobserved saved reasoning'},
+      {...matched, 'id': 3, 'content': 'A saved answer'},
+      {...matched, 'id': 4, 'tool_calls': <Object>[]},
+      {
+        ...matched,
+        'id': 5,
+        'tool_calls': [
+          {'id': 'earlier-turn'},
+        ],
+      },
+      {
+        ...matched,
+        'id': 6,
+        'tool_calls': [
+          {'id': 'current'},
+          {'id': 'unobserved'},
+        ],
+      },
+    ];
+    final projection = ChatTranscriptProjection(
+      savedRows: [matched, ...distinct],
+      streamingMessage: null,
+      runtime: runtime.observation,
+      presentationId: (row) => row['id']!,
+      liveAnswering: true,
+    );
+    expect(projection.rows.map((row) => row['id']), [2, 3, 4, 5, 6]);
+    expect(projection.activity, hasLength(2));
+  });
+  test('live history refresh does not replay reasoning before its tools', () {
+    final runtime = execution.ChatRuntime(runtimeId: 'reasoning-receipts');
+    runtime.beginTurn(submitting: false);
+    final rows = <Map<String, dynamic>>[
+      {'id': 1, 'role': 'user', 'content': 'Check both sources.'},
+    ];
+    for (var i = 0; i < 2; i++) {
+      runtime.observeReasoning('reasoning.available', {'text': 'Plan $i'});
+      runtime.observeTool('tool.complete', {
+        'tool_id': 'call-$i',
+        'name': 'read_file',
+        'result': 'Result $i',
+      });
+      rows.addAll([
+        {
+          'id': 2 + i * 2,
+          'role': 'assistant',
+          'content': '',
+          'reasoning': 'Plan $i',
+          'tool_calls': [
+            {
+              'id': 'call-$i',
+              'function': {'name': 'read_file', 'arguments': '{}'},
+            },
+          ],
+        },
+        {
+          'id': 3 + i * 2,
+          'role': 'tool',
+          'tool_call_id': 'call-$i',
+          'content': 'Result $i',
+        },
+      ]);
+    }
+    ChatTranscriptProjection project(bool live) => ChatTranscriptProjection(
+      savedRows: rows,
+      streamingMessage: null,
+      runtime: runtime.observation,
+      presentationId: (row) => row['id']!,
+      liveAnswering: live,
+    );
+    final live = project(true);
+    expect(live.rows.map((row) => row['id']), [1]);
+    expect(live.activity, hasLength(4));
+    expect(
+      live.timeline.sections.where((section) => section.isActivity),
+      isEmpty,
+    );
+    expect(rows, hasLength(5));
+    final saved = project(false);
+    expect(saved.rows, hasLength(5));
+    expect(saved.timeline.sections.last.toolCount, 2);
+  });
   test('live Activity association respects conversation boundaries', () {
     final work = <Map<String, dynamic>>[
       {'id': 1, 'role': 'user', 'content': 'Find local lunch.'},
@@ -76,7 +180,54 @@ void main() {
       durationSeconds: .4,
     ),
   );
-  testWidgets('one live reply keeps completed cycles in a single Activity', (
+  testWidgets('all 12 earlier tools remain visible beside 3 later calls', (
+    tester,
+  ) async {
+    final runtime = execution.ChatRuntime(runtimeId: '12-plus-3');
+    runtime.beginTurn(submitting: false);
+    void complete(int index) => runtime.observeTool('tool.complete', {
+      'tool_id': 'call-$index',
+      'name': 'read_file',
+      'result': 'Result $index',
+    });
+    for (var i = 0; i < 12; i++) {
+      complete(i);
+    }
+    runtime.observeReasoning('reasoning.available', {
+      'text': 'Check the remaining three sources.',
+    });
+    for (var i = 12; i < 15; i++) {
+      complete(i);
+    }
+    expect(runtime.observation.execution, ChatExecution.running);
+    expect(
+      runtime.observation.activityEntries.whereType<ChatToolEntry>(),
+      hasLength(15),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ProfileLiveExecution(
+              entries: runtime.observation.activityEntries,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileToolCall), findsNWidgets(15));
+    expect(
+      tester
+          .widgetList<ProfileToolCall>(find.byType(ProfileToolCall))
+          .map((call) => call.call.callId),
+      [for (var i = 0; i < 15; i++) 'call-$i'],
+    );
+    expect(find.text('Activity · 12 tools'), findsNothing);
+    expect(find.byType(ProfileActivitySection), findsNothing);
+  });
+  testWidgets('one live reply keeps every completed cycle readable', (
     tester,
   ) async {
     final runtime = execution.ChatRuntime(runtimeId: 'repeated-cycles');
@@ -106,14 +257,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNothing);
     expect(find.text('Activity'), findsNothing);
-    expect(find.text('Activity · 1 tool'), findsOneWidget);
-    expect(find.text('Timeline'), findsOneWidget);
-    expect(find.byType(ProfileToolCall), findsOneWidget);
-    await tester.tap(find.text('Activity · 1 tool'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(2));
+    expect(find.text('Activity · 1 tool'), findsNothing);
+    expect(find.text('Timeline'), findsNWidgets(2));
+    await tester.settleMarkdown();
+    expect(find.text('First reasoning', findRichText: true), findsOneWidget);
+    expect(find.text('Second reasoning', findRichText: true), findsOneWidget);
+    expect(find.byType(ProfileReasoningDisclosure), findsNothing);
     expect(find.byType(ProfileToolCall), findsNWidgets(2));
   });
   testWidgets('tool-only live run has no intermediary Activity row', (
@@ -154,7 +305,7 @@ void main() {
     expect(find.byType(ProfileToolCall), findsNWidgets(2));
     expect(tester.element(find.byType(ProfileToolCall).first), same(original));
   });
-  testWidgets('completed live reasoning is contained in Activity', (
+  testWidgets('completed reasoning remains readable during a live turn', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -182,22 +333,13 @@ void main() {
     await tester.settleMarkdown();
     expect(
       find.text('Searching for Tokyo hotels', findRichText: true),
-      findsNothing,
-    );
-    await tester.tap(find.text('Activity'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
-    expect(
-      find.ancestor(
-        of: find.byType(ProfileReasoningDisclosure),
-        matching: find.byType(ProfileActivitySection),
-      ),
       findsOneWidget,
     );
+    expect(find.text('Reasoning'), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNothing);
+    expect(find.byType(ProfileReasoningDisclosure), findsNothing);
   });
-  testWidgets('never-opened Activity retains expanded tools across cycles', (
-    tester,
-  ) async {
+  testWidgets('live reasoning cycles retain expanded tools', (tester) async {
     final firstReasoning = const ChatReasoningEntry(
       identity: 'first-reasoning',
       text: 'Check local lunch options.',
@@ -232,11 +374,8 @@ void main() {
       ),
       tool('second'),
     ]);
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
-    expect(find.byType(ToolActivityDetailsView), findsNothing);
-    await tester.tap(find.text('Activity · 1 tool'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(2));
+    expect(find.byType(ProfileActivitySection), findsNothing);
+    expect(find.byType(ProfileReasoningDisclosure), findsNothing);
     expect(find.byType(ToolActivityDetailsView), findsOneWidget);
     expect(
       tester.element(
@@ -248,7 +387,7 @@ void main() {
       same(original),
     );
   });
-  testWidgets('tool handoff folds reasoning while the turn remains running', (
+  testWidgets('reasoning remains readable while the turn remains running', (
     tester,
   ) async {
     final runtime = execution.ChatRuntime(runtimeId: 'handoff');
@@ -291,13 +430,35 @@ void main() {
     await show();
     expect(
       find.text('Searching for Tokyo hotels', findRichText: true),
-      findsNothing,
+      findsOneWidget,
     );
     expect(find.text('Timeline'), findsOneWidget);
     expect(find.byType(ProfileToolCall), findsOneWidget);
-    await tester.tap(find.text('Activity'));
-    await tester.pumpAndSettle();
-    expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNothing);
+    runtime.observeTool('tool.complete', {
+      'tool_id': 'booking',
+      'name': 'read_file',
+      'result': 'Booking pages',
+    });
+    runtime.observeReasoning('reasoning.available', {
+      'text': 'Confirm the cancellation policy.',
+    });
+    runtime.observeTool('tool.start', {
+      'tool_id': 'policy',
+      'name': 'web_search',
+    });
+    runtime.reconcileHistoricalActivity();
+    await show();
+    expect(runtime.observation.execution, ChatExecution.running);
+    expect(
+      find.text('Searching for Tokyo hotels', findRichText: true),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Confirm the cancellation policy.', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.byType(ProfileActivitySection), findsNothing);
   });
   testWidgets(
     'live segmentation retains existing tool cards and expansion state',
@@ -338,11 +499,7 @@ void main() {
       );
       await show([first, reasoning, tool('second')]);
       expect(find.byType(ProfileReasoningDisclosure), findsNothing);
-      expect(find.byType(ProfileActivitySection), findsOneWidget);
-      final activity = find.text('Activity · 1 tool');
-      await tester.tap(activity.first);
-      await tester.pumpAndSettle();
-      await tester.settleMarkdown();
+      expect(find.byType(ProfileActivitySection), findsNothing);
       expect(find.text('Timeline'), findsNWidgets(2));
       expect(find.byType(ProfileActivityGuide), findsNWidgets(2));
       for (final tabs in tester.widgetList<ProfileActivityTabs>(
@@ -368,8 +525,8 @@ void main() {
       );
       expect((tester.widget<ProfileToolCall>(firstCard)).call.callId, 'first');
       await show([first, reasoning.sealed(), tool('second')]);
-      expect(find.text('Why', findRichText: true), findsNothing);
-      expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
+      expect(find.text('Why', findRichText: true), findsOneWidget);
+      expect(find.byType(ProfileReasoningDisclosure), findsNothing);
       expect(tester.element(firstCard), same(original));
       expect(output, findsOneWidget);
       expect(tester.takeException(), isNull);

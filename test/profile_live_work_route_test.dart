@@ -81,7 +81,7 @@ void main() {
           .load();
     }
   });
-  testWidgets('saved partial history shares the live reply Activity', (
+  testWidgets('saved partial history preserves readable live reasoning', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -127,12 +127,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(ProfileActivitySection), findsOneWidget);
-    expect(find.text('Activity · 1 tool'), findsOneWidget);
+    expect(find.byType(ProfileActivitySection), findsNothing);
+    expect(find.text('Activity · 1 tool'), findsNothing);
     expect(find.text('Activity'), findsNothing);
-    await tester.tap(find.text('Activity · 1 tool'));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
+    expect(
+      find.text('Later live reasoning', findRichText: true),
+      findsOneWidget,
+    );
     final currentTool = tester.element(
       find.byWidgetPredicate(
         (widget) => widget is ProfileToolCall && widget.call.callId == 'two',
@@ -146,14 +147,42 @@ void main() {
         'content': '',
         'reasoning': 'Earlier saved reasoning',
       },
+      {
+        'id': 3,
+        'role': 'assistant',
+        'content': '',
+        'reasoning': 'Later live reasoning',
+        'tool_calls': [
+          {
+            'id': 'two',
+            'function': {'name': 'web_extract', 'arguments': '{}'},
+          },
+        ],
+      },
     ];
     await controller.refreshHistory(chat);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(ProfileActivitySection), findsOneWidget);
-    expect(find.text('Activity'), findsNothing);
-    expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(2));
+    expect(find.text('Activity'), findsOneWidget);
+    expect(
+      find.text('Later live reasoning', findRichText: true),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(find.text('Activity'));
+    await tester.tap(find.text('Activity'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
+    expect(
+      tester
+          .widget<ProfileReasoningDisclosure>(
+            find.byType(ProfileReasoningDisclosure),
+          )
+          .text,
+      'Earlier saved reasoning',
+    );
+    expect(chat.reading.messages.any((row) => row['id'] == 3), isTrue);
     expect(
       tester.element(
         find.byWidgetPredicate(
@@ -302,9 +331,8 @@ void main() {
         expect(find.text('Tasks 3/7'), findsNothing);
         expect(find.text('2 subagents'), findsOneWidget);
         expect(find.byType(ProfileReasoningDisclosure), findsNothing);
-        // The earlier run is folded by the reasoning boundary; its existing
-        // tool renderer is lazy until the user opens it.
-        expect(find.byType(ProfileToolCall), findsOneWidget);
+        // Both tool runs stay visible around the received reasoning.
+        expect(find.byType(ProfileToolCall), findsNWidgets(2));
         await tester.enterText(
           find.byKey(const Key('profile-message-composer')),
           'Keep my draft',
@@ -425,7 +453,7 @@ void main() {
         // The transcript is lazy: inspect retention while the tool is visible,
         // rather than expecting an offscreen row to remain mounted.
         await tester.scrollUntilVisible(
-          find.byType(ProfileToolCall),
+          find.byType(ProfileToolCall).last,
           120,
           scrollable: find
               .descendant(
@@ -435,10 +463,13 @@ void main() {
               .first,
         );
         await settle();
-        final liveTool = tester.element(find.byType(ProfileToolCall));
+        final liveTool = tester.element(find.byType(ProfileToolCall).last);
         host.event('a', 'message.delta', {'text': 'The first answer text.'});
         await settle();
-        expect(tester.element(find.byType(ProfileToolCall)), same(liveTool));
+        expect(
+          tester.element(find.byType(ProfileToolCall).last),
+          same(liveTool),
+        );
         // The shorter direct Timeline may already be at the newest edge.
         final latest = find.byType(TranscriptLatestButton);
         if (latest.evaluate().isNotEmpty) {
@@ -680,9 +711,9 @@ void main() {
           final bounds = tester.getRect(composer);
           await picture('tools-only');
           const heading = 'Searching for Tokyo hotels';
+          const reasoningBody = 'Check the official booking pages for Gotanda.';
           host.event('a', 'reasoning.delta', {
-            'text':
-                '**$heading**\n\nCheck the official booking pages for Gotanda.',
+            'text': '**$heading**\n\n$reasoningBody',
           });
           await settle();
           expect(find.text('Thinking'), findsOneWidget);
@@ -697,20 +728,18 @@ void main() {
           await settle();
           expect(chat.runtime.executionActive, isTrue);
           expect(find.text('Thinking'), findsNothing);
-          expect(find.text(heading, findRichText: true), findsNothing);
-          expect(find.text('Activity · 1 tool'), findsOneWidget);
-          expect(find.text('Timeline'), findsOneWidget);
-          expect(
-            find.descendant(
-              of: find.byType(ProfileActivitySection),
-              matching: find.byIcon(Icons.keyboard_arrow_right_rounded),
-            ),
-            findsOneWidget,
-          );
-          expect(find.byType(ProfileToolCall), findsOneWidget);
+          expect(find.text(heading, findRichText: true), findsOneWidget);
+          expect(find.text('Reasoning'), findsOneWidget);
+          expect(find.byType(ProfileActivitySection), findsNothing);
+          expect(find.text('Timeline'), findsNWidgets(2));
+          expect(find.byType(ProfileToolCall), findsNWidgets(2));
           expect(tester.getRect(composer), bounds);
           expect(chat.composer.observation.displayedText, 'Keep my draft');
-          await picture('folded');
+          await tester.ensureVisible(
+            find.text(reasoningBody, findRichText: true),
+          );
+          await settle();
+          await picture('tool-handoff-readable');
           host.event('a', 'tool.complete', {
             'tool_id': 'booking',
             'name': 'web_search',
@@ -743,11 +772,23 @@ void main() {
             });
           }
           await settle();
-          expect(find.byType(ProfileActivitySection), findsOneWidget);
-          expect(find.text('Activity · 13 tools'), findsOneWidget);
-          expect(find.text('Timeline'), findsOneWidget);
+          expect(find.byType(ProfileActivitySection), findsNothing);
+          expect(find.text(heading, findRichText: true), findsOneWidget);
+          expect(
+            find.text(
+              'Check the restaurant menu and opening hours.',
+              findRichText: true,
+            ),
+            findsOneWidget,
+          );
+          expect(find.text('Timeline'), findsNWidgets(3));
+          expect(find.byType(ProfileToolCall), findsNWidgets(17));
           expect(tester.getRect(composer), bounds);
-          await picture('multiple-cycles-folded');
+          await tester.ensureVisible(
+            find.text(reasoningBody, findRichText: true),
+          );
+          await settle();
+          await picture('multiple-cycles-readable');
           host.historyMessages = [
             {
               'id': 1,
@@ -771,43 +812,37 @@ void main() {
           await controller.refreshHistory(chat);
           await settle();
           expect(find.byType(ProfileActivitySection), findsOneWidget);
-          expect(find.text('Activity · 13 tools'), findsOneWidget);
-          expect(find.text('Activity'), findsNothing);
+          expect(find.text('Activity'), findsOneWidget);
+          expect(find.text(heading, findRichText: true), findsOneWidget);
+          expect(
+            find.text(
+              'Check the restaurant menu and opening hours.',
+              findRichText: true,
+            ),
+            findsOneWidget,
+          );
           expect(chat.reading.messages.any((row) => row['id'] == 3), isTrue);
           expect(tester.getRect(composer), bounds);
-          await picture('history-refreshed-folded');
-          await tester.ensureVisible(find.text('Activity · 13 tools'));
+          await tester.ensureVisible(
+            find.text(reasoningBody, findRichText: true),
+          );
+          await settle();
+          await picture('history-refreshed-readable');
+          await tester.ensureVisible(find.text('Activity'));
           await settle();
           // Use the header's leading edge, clear of the centered Latest overlay
           // when the ordinary test font wraps it at enlarged text.
-          final activityTitle = tester.getRect(
-            find.text('Activity · 13 tools'),
-          );
+          final activityTitle = tester.getRect(find.text('Activity'));
           await tester.tapAt(
             Offset(activityTitle.left + 4, activityTitle.center.dy),
           );
           await settle();
-          expect(find.byType(ProfileReasoningDisclosure), findsNWidgets(3));
-          final archive = tester.element(find.byType(ProfileActivitySection));
-          for (var i = 0; i < 3; i++) {
-            expect(
-              tester.element(
-                find.ancestor(
-                  of: find.byType(ProfileReasoningDisclosure).at(i),
-                  matching: find.byType(ProfileActivitySection),
-                ),
-              ),
-              same(archive),
-            );
-          }
-          expect(find.text('Timeline'), findsNWidgets(2));
-          final streamedReasoning = find.byWidgetPredicate(
-            (widget) =>
-                widget is ProfileReasoningDisclosure &&
-                widget.text.startsWith('**$heading**'),
-          );
+          // Only authoritative saved reasoning is folded. Neither live block
+          // moves into Activity when tools or saved receipts arrive.
+          expect(find.byType(ProfileReasoningDisclosure), findsOneWidget);
+          expect(find.text('Timeline'), findsNWidgets(4));
           final reasoningLabel = find.descendant(
-            of: streamedReasoning,
+            of: find.byType(ProfileReasoningDisclosure),
             matching: find.text('Reasoning'),
           );
           await tester.ensureVisible(reasoningLabel);
@@ -820,13 +855,21 @@ void main() {
             Offset(reasoningTitle.left + 4, reasoningTitle.center.dy),
           );
           await settle();
-          expect(find.text(heading, findRichText: true), findsOneWidget);
+          expect(
+            find.text(
+              'Saved planning before the first tool.',
+              findRichText: true,
+            ),
+            findsWidgets,
+          );
           expect(find.byTooltip('Copy Reasoning'), findsOneWidget);
           await tester.ensureVisible(find.byTooltip('Copy Reasoning'));
           await settle();
           await tester.ensureVisible(find.text(heading, findRichText: true));
           await settle();
           await picture('reasoning');
+          expect(find.text(heading, findRichText: true), findsOneWidget);
+          expect(chat.runtime.executionActive, isTrue);
           expect(tester.getRect(composer), bounds);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());

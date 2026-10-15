@@ -620,11 +620,36 @@ final class ChatTranscriptProjection {
     final activeCalls = active
         .whereType<ChatToolEntry>()
         .map((e) => e.activity.toolId)
+        .whereType<String>()
         .toSet();
+    final activeReasoning = <String>{
+      for (final entry in active.whereType<ChatReasoningEntry>()) ...[
+        entry.text.trim(),
+        if (entry.availableText case final text?) text.trim(),
+      ],
+    }..remove('');
+    bool isLiveReasoningReceipt(Map<String, dynamic> row) {
+      if (row['role'] != 'assistant' ||
+          (row['display_content'] ?? row['content'] ?? '') != '' ||
+          !activeReasoning.contains(_reasoning(row).trim())) {
+        return false;
+      }
+      final calls = row['tool_calls'];
+      // Text alone cannot identify a turn. All calls must belong to the live
+      // sequence, which already supplies this reasoning at its received position.
+      return calls is List &&
+          calls.isNotEmpty &&
+          calls.every(
+            (call) => call is Map && activeCalls.contains(call['id']),
+          );
+    }
+
     rows = List.unmodifiable(
       captured.where(
         (row) =>
-            row['role'] != 'tool' || !activeCalls.contains(row['tool_call_id']),
+            (row['role'] != 'tool' ||
+                !activeCalls.contains(row['tool_call_id'])) &&
+            !isLiveReasoningReceipt(row),
       ),
     );
     timeline = TranscriptTimeline.project(

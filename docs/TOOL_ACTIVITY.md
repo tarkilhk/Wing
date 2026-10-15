@@ -1,12 +1,10 @@
 # Tool activity
 
 While a reply streams, current tool calls appear directly under **Timeline**.
-Streaming reasoning appears in the conversation between tool runs. Once it
-stops streaming, reasoning folds into **Activity** with the preceding tools,
-even while Hermes continues working. One Activity gathers the earlier reasoning
-and tools for that reply, including work loaded during a history refresh.
-Current tools continue directly under Timeline. Expand Activity to read the
-earlier work again. Use the compact
+Streaming reasoning appears in the conversation between tool runs. Reasoning
+and tools stay visible until Hermes finishes the response, including while
+later tools run. After the response finishes, reasoning folds into **Activity**.
+Expand Activity to read it again. Use the compact
 **Subagents / Tasks** bar above your draft for live work. Tap a side to open its
 drawer, swipe left/right to switch, and tap the selected side or outside to close.
 Tasks shows completed/total; cancelled tasks do not count as completed.
