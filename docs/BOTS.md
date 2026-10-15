@@ -154,6 +154,12 @@ tool timeline, Tasks/Agents viewers and working Wing. Group discussions show the
 public room messages and room status supplied by Hermes; select a member’s
 Working history to inspect that bot’s private activity.
 
+Working history displays received messages before waiting on older pages or live
+activity. Activity starts collapsed and loads its contents when you open it.
+Live activity arrives separately, with progress in the header while it loads.
+Current Tasks and Subagents remain in the bottom dock through waiting and idle
+states; refreshing or opening activity keeps the messages readable.
+
 When a bot passes its turn, the discussion shows a **Passed** bubble with that
 bot's name, avatar and timestamp. Recents cards include these bubbles. A pass
 does not create a New answer cue or a reply notification.

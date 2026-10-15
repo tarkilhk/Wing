@@ -217,6 +217,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.openLiveActivity();
     expect(find.byType(ProfileToolCall), findsNWidgets(15));
     expect(
       tester
@@ -225,7 +226,7 @@ void main() {
       [for (var i = 0; i < 15; i++) 'call-$i'],
     );
     expect(find.text('Activity · 12 tools'), findsNothing);
-    expect(find.byType(ProfileActivitySection), findsNothing);
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
   });
   testWidgets('one live reply keeps every completed cycle readable', (
     tester,
@@ -257,7 +258,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(ProfileActivitySection), findsNothing);
+    await tester.openLiveActivity();
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
     expect(find.text('Activity'), findsNothing);
     expect(find.text('Activity · 1 tool'), findsNothing);
     expect(find.text('Timeline'), findsNWidgets(2));
@@ -267,44 +269,52 @@ void main() {
     expect(find.byType(ProfileReasoningDisclosure), findsNothing);
     expect(find.byType(ProfileToolCall), findsNWidgets(2));
   });
-  testWidgets('tool-only live run has no intermediary Activity row', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: wingTheme(Brightness.dark),
-        home: Scaffold(body: ProfileLiveExecution(entries: [tool('first')])),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Timeline'), findsOneWidget);
-    expect(find.text('Activity · 1 tool'), findsNothing);
-    expect(find.byType(ProfileToolCall), findsOneWidget);
-    final original = tester.element(find.byType(ProfileToolCall));
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: wingTheme(Brightness.dark),
-        home: Scaffold(
-          body: ProfileLiveExecution(
-            entries: [
-              tool('first'),
-              const ChatReasoningEntry(
-                identity: 'empty',
-                text: ' \n ',
-                source: 'reasoning.available',
-              ),
-              tool('second'),
-            ],
+  testWidgets(
+    'tool-only live run starts collapsed and retains cards after opening',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(body: ProfileLiveExecution(entries: [tool('first')])),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Timeline'), findsNothing);
+      expect(find.byType(ProfileToolCall, skipOffstage: false), findsNothing);
+      expect(find.text('Activity · 1 tool'), findsOneWidget);
+      await tester.openLiveActivity();
+      expect(find.text('Timeline'), findsOneWidget);
+      expect(find.byType(ProfileToolCall), findsOneWidget);
+      final original = tester.element(find.byType(ProfileToolCall));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: ProfileLiveExecution(
+              entries: [
+                tool('first'),
+                const ChatReasoningEntry(
+                  identity: 'empty',
+                  text: ' \n ',
+                  source: 'reasoning.available',
+                ),
+                tool('second'),
+              ],
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.byType(ProfileActivitySection), findsNothing);
-    expect(find.text('Timeline'), findsOneWidget);
-    expect(find.byType(ProfileToolCall), findsNWidgets(2));
-    expect(tester.element(find.byType(ProfileToolCall).first), same(original));
-  });
+      );
+      await tester.pumpAndSettle();
+      await tester.openLiveActivity();
+      expect(find.byType(ProfileActivitySection), findsOneWidget);
+      expect(find.text('Timeline'), findsOneWidget);
+      expect(find.byType(ProfileToolCall), findsNWidgets(2));
+      expect(
+        tester.element(find.byType(ProfileToolCall).first),
+        same(original),
+      );
+    },
+  );
   testWidgets('completed reasoning remains readable during a live turn', (
     tester,
   ) async {
@@ -330,13 +340,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.openLiveActivity();
     await tester.settleMarkdown();
     expect(
       find.text('Searching for Tokyo hotels', findRichText: true),
       findsOneWidget,
     );
     expect(find.text('Reasoning'), findsOneWidget);
-    expect(find.byType(ProfileActivitySection), findsNothing);
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
     expect(find.byType(ProfileReasoningDisclosure), findsNothing);
   });
   testWidgets('live reasoning cycles retain expanded tools', (tester) async {
@@ -357,12 +368,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.openLiveActivity();
     }
 
     await show([firstReasoning, tool('first')]);
     final original = tester.element(find.byType(ProfileToolCall));
     await tester.tap(find.text('Read file'));
     await tester.pumpAndSettle();
+    await tester.openLiveActivity();
     expect(find.byType(ToolActivityDetailsView), findsOneWidget);
     await show([
       firstReasoning,
@@ -374,7 +387,7 @@ void main() {
       ),
       tool('second'),
     ]);
-    expect(find.byType(ProfileActivitySection), findsNothing);
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
     expect(find.byType(ProfileReasoningDisclosure), findsNothing);
     expect(find.byType(ToolActivityDetailsView), findsOneWidget);
     expect(
@@ -409,6 +422,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.openLiveActivity();
       await tester.settleMarkdown();
     }
 
@@ -434,7 +448,7 @@ void main() {
     );
     expect(find.text('Timeline'), findsOneWidget);
     expect(find.byType(ProfileToolCall), findsOneWidget);
-    expect(find.byType(ProfileActivitySection), findsNothing);
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
     runtime.observeTool('tool.complete', {
       'tool_id': 'booking',
       'name': 'read_file',
@@ -458,7 +472,7 @@ void main() {
       find.text('Confirm the cancellation policy.', findRichText: true),
       findsOneWidget,
     );
-    expect(find.byType(ProfileActivitySection), findsNothing);
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
   });
   testWidgets(
     'live segmentation retains existing tool cards and expansion state',
@@ -479,6 +493,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        await tester.openLiveActivity();
         await tester.settleMarkdown();
       }
 
@@ -488,6 +503,7 @@ void main() {
       expect(retained.call.callId, 'first');
       await tester.tap(find.text('Read file'));
       await tester.pumpAndSettle();
+      await tester.openLiveActivity();
       await tester.settleMarkdown();
       final output = find.byType(ToolActivityDetailsView);
       expect(output, findsOneWidget);
@@ -499,7 +515,7 @@ void main() {
       );
       await show([first, reasoning, tool('second')]);
       expect(find.byType(ProfileReasoningDisclosure), findsNothing);
-      expect(find.byType(ProfileActivitySection), findsNothing);
+      expect(find.byType(ProfileActivitySection), findsOneWidget);
       expect(find.text('Timeline'), findsNWidgets(2));
       expect(find.byType(ProfileActivityGuide), findsNWidgets(2));
       for (final tabs in tester.widgetList<ProfileActivityTabs>(

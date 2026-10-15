@@ -32,6 +32,7 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
   final _dock = GlobalKey<ProfileLiveWorkDockState>();
   late final _session = widget.createSession();
   String? _reportedError;
+  Object? _paintedReading, _hydratingReading;
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _errorNotice;
 
   @override
@@ -55,7 +56,18 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
   void _changed() {
     if (!mounted) return;
     setState(() {});
-    final error = _session.reader.historyError;
+    final reader = _session.reader;
+    if (reader.historyAvailable && !identical(_paintedReading, reader)) {
+      _paintedReading = reader;
+      // First paint the saved conversation and closed Activity. Live replay is
+      // independent enrichment and may complete while older pages still load.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && identical(_session.reader, reader)) {
+          unawaited(_hydrateActivity(reader));
+        }
+      });
+    }
+    final error = reader.historyError;
     if (error == null) {
       _errorNotice?.close();
       _errorNotice = null;
@@ -74,6 +86,17 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
       );
     }
     _reportedError = error;
+  }
+
+  Future<void> _hydrateActivity(Object reader) async {
+    setState(() => _hydratingReading = reader);
+    try {
+      await _session.refreshLive();
+    } finally {
+      if (mounted && identical(_hydratingReading, reader)) {
+        setState(() => _hydratingReading = null);
+      }
+    }
   }
 
   @override
@@ -131,7 +154,8 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
         ),
         body: SafeArea(
           child: StudioPageLoading(
-            active: reader.historyLoading && !reader.historyPaging,
+            active: !reader.historyPaging &&
+                (reader.historyLoading || identical(_hydratingReading, reader)),
             label: _session.historyAvailable
                 ? 'Refreshing working history'
                 : 'Loading working history',

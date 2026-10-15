@@ -23,7 +23,7 @@ class ProfileActivitySection extends StatefulWidget {
     this.subtitle,
     this.trailing,
     this.initiallyExpanded = false,
-    this.retainDetails = false,
+    this.anchorExpansion = true,
   });
 
   final WidgetBuilder detailsBuilder;
@@ -31,14 +31,14 @@ class ProfileActivitySection extends StatefulWidget {
   final Widget? trailing;
   final Widget? subtitle;
   final bool initiallyExpanded;
-  final bool retainDetails;
+  final bool anchorExpansion;
 
   @override
   State<ProfileActivitySection> createState() => _ProfileActivitySectionState();
 }
 
 class _ProfileActivitySectionState extends State<ProfileActivitySection> {
-  late bool _visited = widget.initiallyExpanded || widget.retainDetails;
+  late bool _visited = widget.initiallyExpanded;
 
   @override
   Widget build(BuildContext context) => ConversationGestureBoundary(
@@ -49,8 +49,9 @@ class _ProfileActivitySectionState extends State<ProfileActivitySection> {
       trailing: widget.trailing,
       summary: widget.subtitle,
       initiallyExpanded: widget.initiallyExpanded,
-      // Saved bodies are lazy until first expansion. Live transfers mount
-      // immediately; later collapse retains tabs and nested disclosure state.
+      anchorExpansion: widget.anchorExpansion,
+      // Both live and saved bodies are lazy until first expansion. Later
+      // collapse retains tabs and nested disclosure state.
       maintainState: _visited,
       onExpansionChanged: (expanded) {
         if (expanded && !_visited) setState(() => _visited = true);

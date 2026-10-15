@@ -68,7 +68,10 @@ class BotGroupHistorySession extends ChangeNotifier
     _poll?.cancel();
     _poll = null;
     if (_closed || !_visible) return;
-    _poll = Timer(Duration(milliseconds: liveAnswering ? 500 : 3000), () async {
+    final working =
+        liveAnswering ||
+        liveError == null && subagents.any((agent) => !agent.isTerminal);
+    _poll = Timer(Duration(milliseconds: working ? 500 : 3000), () async {
       await refreshLive(discover: true);
       _schedulePoll();
     });
@@ -78,7 +81,9 @@ class BotGroupHistorySession extends ChangeNotifier
   Future<void> refreshLive({bool discover = false}) async {
     final member = _member;
     final reading = _reading;
-    if (_closed || member == null || reading._loading) return;
+    if (_closed || member == null || reading._loading && !reading._available) {
+      return;
+    }
     if (reading._session == null) {
       if (!discover) return;
       await _load(refresh: true, quiet: true);
@@ -301,7 +306,8 @@ class BotGroupHistorySession extends ChangeNotifier
     notifyListeners();
     try {
       if (!reading._available) await _load(refresh: true);
-      if (!_closed && identical(reading, _reading)) await refreshLive();
+      // The screen admits initial live enrichment after its first readable
+      // frame; selecting saved history must never await that independent read.
     } finally {
       reading._explicitRead = false;
       if (!_closed && identical(reading, _reading)) {
@@ -337,6 +343,7 @@ class BotGroupHistorySession extends ChangeNotifier
     final member = _member!;
     final reading = _reading;
     final generation = ++_generation;
+    final initial = refresh && !reading._available;
     // Only settled successful readings can be borrowed by another selection.
     _savedReadings.remove((member.id, member.profile));
     reading._loading = !quiet;
@@ -378,6 +385,12 @@ class BotGroupHistorySession extends ChangeNotifier
           rows[id] = Map.unmodifiable(row);
         }
         older = page.nextOffset;
+        if (initial) {
+          // Publish each received page before waiting on older messages. The
+          // transcript renders their Activity lazily while backfill continues.
+          reading.installNewestPage(session, rows, older);
+          notifyListeners();
+        }
         if (older == null ||
             !refresh ||
             quiet ||
@@ -390,15 +403,7 @@ class BotGroupHistorySession extends ChangeNotifier
         offset = older;
       } while (true);
       if (refresh) {
-        reading._reading.installSavedPage(
-          ProfileHistoryPage(
-            session,
-            [for (final id in rows.keys.toList()..sort()) rows[id]!],
-            0,
-            rows.length,
-            isComplete: older == null,
-          ),
-        );
+        reading.installNewestPage(session, rows, older);
       } else {
         final merged = <int, Map<String, dynamic>>{
           for (final row in reading.messages)
@@ -471,6 +476,7 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   int _sequence = 0;
   bool _partialLive = false;
   int? _todoRevision;
+  bool _receivedLiveTodos = false;
   List<GatewayTodo> _todos = const [];
   final _agents = <String, GatewaySubagentActivity>{};
 
@@ -483,6 +489,7 @@ final class _BotGroupHistoryReading implements TranscriptReader {
               next.revision! >= _todoRevision!)) {
         _todos = List.unmodifiable(next.todos);
         _todoRevision = next.revision;
+        _receivedLiveTodos = true;
       }
     }
     final agent = GatewaySubagentActivity.fromGatewayEvent(type, data);
@@ -491,7 +498,29 @@ final class _BotGroupHistoryReading implements TranscriptReader {
     }
   }
 
+  void installNewestPage(
+    String session,
+    Map<int, Map<String, dynamic>> rows,
+    int? older,
+  ) {
+    _reading.installSavedPage(
+      ProfileHistoryPage(
+        session,
+        [for (final id in rows.keys.toList()..sort()) rows[id]!],
+        0,
+        rows.length,
+        isComplete: older == null,
+      ),
+    );
+    _session = session;
+    _older = older;
+    _available = true;
+  }
+
   void restoreWork() {
+    // History backfill can finish after a newer live snapshot. These older
+    // receipts must not replace that snapshot, including an empty live list.
+    if (_receivedLiveTodos) return;
     final todoCalls = <String>{};
     for (final row in messages) {
       if (row['tool_calls'] case final List calls) {

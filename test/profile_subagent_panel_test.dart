@@ -13,7 +13,6 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_live_work_dock.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
-import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
@@ -614,7 +613,7 @@ void main() {
 
   for (final status in ['running', 'completed']) {
     testWidgets(
-      'idle conversation keeps $status subagents in Activity Agents',
+      'idle conversation keeps $status subagents in the bottom dock',
       (tester) async {
         fixture.rows = [
           {
@@ -644,20 +643,19 @@ void main() {
         await tester.pumpAndSettle();
         expect(chat.runtime.executionActive, isFalse);
         expect(chat.reading.streamingMessage, isNull);
-        expect(find.byType(ProfileLiveWorkDock), findsNothing);
+        expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
         expect(find.byType(ProfileLiveExecution), findsNothing);
-        expect(find.text('Activity'), findsOneWidget);
+        expect(find.text('Activity'), findsNothing);
         expect(find.byType(ProfileSubagentPanel), findsNothing);
-        await tester.tap(find.text('Activity'));
+        await tester.tap(
+          find.byKey(const ValueKey(('live-work-tab', 0, false))),
+        );
+        await tester.pump();
         await tester.pumpAndSettle();
         expect(
-          find.text('Agents ${status == 'completed' ? 0 : 1}/1'),
-          findsOneWidget,
+          find.byKey(const ValueKey(('activity-tab', 'agents'))),
+          findsNothing,
         );
-        final tabs = tester.widget<ProfileActivityTabs>(
-          find.byType(ProfileActivityTabs),
-        );
-        expect(tabs.tabs.map((tab) => tab.id), contains('agents'));
         expect(find.byType(ProfileSubagentPanel), findsOneWidget);
         expect(
           find.text(status == 'completed' ? 'Completed' : 'Running'),

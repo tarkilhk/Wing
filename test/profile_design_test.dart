@@ -368,6 +368,7 @@ void main() {
         });
       }
       await show(tester);
+      await tester.openLiveActivity();
       expect(find.text('Memory and skills review'), findsNothing);
       final live = find.byType(ProfileLiveExecution);
       expect(live, findsOneWidget);
@@ -444,7 +445,7 @@ void main() {
   });
 
   testWidgets(
-    'live reasoning and tools remain readable independently of saved Activity',
+    'live Activity opens and collapses independently of saved Activity',
     (tester) async {
       final chat = await controller.createChat(canDispatch: () => true);
       chat.reading.installSavedHistory([
@@ -469,44 +470,56 @@ void main() {
       });
 
       await show(tester);
+      await tester.openLiveActivity();
       expect(
         find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+        findsNWidgets(2),
+      );
+      expect(find.text('Running command', skipOffstage: false), findsOneWidget);
+      expect(
+        find.text('Current private reasoning', skipOffstage: false),
         findsOneWidget,
       );
-      expect(find.text('Running command'), findsOneWidget);
-      expect(find.text('Current private reasoning'), findsOneWidget);
       expect(
         find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-        findsOneWidget,
+        findsNWidgets(2),
       );
       expect(find.text('Visible saved reply'), findsOneWidget);
-      final savedHeader = find.textContaining(
-        RegExp(r'^Activity(?: · \d+ tools?)?$'),
+      final savedHeader = find.descendant(
+        of: find.byType(ProfileToolActivitySection),
+        matching: find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
       );
       await tester.ensureVisible(savedHeader);
       await tester.tap(savedHeader);
       await tester.pumpAndSettle();
-      expect(find.text('Running command'), findsOneWidget);
-      expect(find.text('Thinking'), findsOneWidget);
-      expect(find.text('Current private reasoning'), findsOneWidget);
+      expect(find.text('Running command', skipOffstage: false), findsOneWidget);
+      expect(find.text('Thinking', skipOffstage: false), findsOneWidget);
+      expect(
+        find.text('Current private reasoning', skipOffstage: false),
+        findsOneWidget,
+      );
 
       await tester.enterText(
         find.byKey(const Key('profile-message-composer')),
         'Typing must not collapse current activity',
       );
       await tester.pump();
-      expect(find.text('Running command'), findsOneWidget);
+      expect(find.text('Running command', skipOffstage: false), findsOneWidget);
 
       // The floating Back to latest control can cover the middle of a long
       // header in the test font. Tap the leading title outside that control.
       await tester.tapAt(tester.getTopLeft(savedHeader) + const Offset(8, 8));
       await tester.pumpAndSettle();
-      expect(find.text('Running command'), findsOneWidget);
-      expect(find.text('Current private reasoning'), findsOneWidget);
+      expect(find.text('Running command', skipOffstage: false), findsOneWidget);
       expect(
-        find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
+        find.text('Current private reasoning', skipOffstage: false),
         findsOneWidget,
       );
+      expect(
+        find.byType(ProfileLiveExecution, skipOffstage: false),
+        findsOneWidget,
+      );
+      expect(chat.reading.messages.any((row) => row['id'] == 1), isTrue);
       expect(find.text('Visible saved reply'), findsOneWidget);
     },
   );

@@ -12,7 +12,7 @@ import 'profile_execution_activity.dart';
 import 'profile_activity_tabs.dart';
 import 'profile_tool_activity.dart';
 
-/// Keep the parent's live reasoning and tool runs visible in received order.
+/// One lazy, collapsible Activity keeps the parent's received work in order.
 class ProfileLiveExecution extends StatefulWidget {
   const ProfileLiveExecution({
     super.key,
@@ -35,7 +35,12 @@ class ProfileLiveExecution extends StatefulWidget {
   State<ProfileLiveExecution> createState() => _ProfileLiveExecutionState();
 }
 
-class _ProfileLiveExecutionState extends State<ProfileLiveExecution> {
+class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
+    with AutomaticKeepAliveClientMixin {
+  // Only the current execution row is retained. Scrolling away must not reset
+  // the user's disclosure or tool choices when another live event arrives.
+  @override
+  bool get wantKeepAlive => true;
   final _runKeys = <Object, GlobalKey>{};
 
   Widget _run(List<ChatActivityEntry> entries) => ProfileExecutionActivity(
@@ -49,6 +54,27 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    final saved = widget.savedActivity;
+    final count =
+        (saved?.toolCount ?? 0) +
+        widget.entries.whereType<ChatToolEntry>().length;
+    return ProfileActivitySection(
+      key: const ValueKey('live-activity'),
+      anchorExpansion: false,
+      label: count == 0
+          ? 'Activity'
+          : 'Activity · $count ${count == 1 ? 'tool' : 'tools'}',
+      subtitle: (saved?.reviewCount ?? 0) == 0
+          ? null
+          : Text(
+              '${saved!.reviewCount} ${saved.reviewCount == 1 ? 'review' : 'reviews'}',
+            ),
+      detailsBuilder: _contents,
+    );
+  }
+
+  Widget _contents(BuildContext context) {
     final groups = <List<ChatActivityEntry>>[];
     var tools = <ChatActivityEntry>[];
     void flush() {
@@ -72,34 +98,17 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution> {
     _runKeys.removeWhere((identity, _) => !identities.contains(identity));
 
     final saved = widget.savedActivity;
-    final toolCount = saved?.toolCount ?? 0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (saved != null)
-          ProfileActivitySection(
-            key: ValueKey((
-              'live-history',
-              widget.entries.firstOrNull?.identity ??
-                  saved.presentationIds.first,
-            )),
-            label: toolCount == 0
-                ? 'Activity'
-                : 'Activity · $toolCount ${toolCount == 1 ? 'tool' : 'tools'}',
-            subtitle: saved.reviewCount == 0
-                ? null
-                : Text(
-                    '${saved.reviewCount} ${saved.reviewCount == 1 ? 'review' : 'reviews'}',
-                  ),
-            retainDetails: true,
-            detailsBuilder: (_) => ProfileActivityContents(
-              section: saved,
-              currentActivity: const [],
-              noticeBuilder: widget.noticeBuilder,
-              loadImage: widget.loadImage,
-              onOpenResource: widget.onOpenResource,
-              onShareResource: widget.onShareResource,
-            ),
+          ProfileActivityContents(
+            section: saved,
+            currentActivity: const [],
+            noticeBuilder: widget.noticeBuilder,
+            loadImage: widget.loadImage,
+            onOpenResource: widget.onOpenResource,
+            onShareResource: widget.onShareResource,
           ),
         for (final group in groups)
           if (group.first case final ChatReasoningEntry reasoning)
@@ -139,18 +148,15 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution> {
               ),
             )
           else
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: ProfileActivityTabs(
-                key: ValueKey(('live-timeline', group.first.identity)),
-                tabs: [
-                  ProfileActivityTab(
-                    id: 'timeline',
-                    label: 'Timeline',
-                    child: _run(group),
-                  ),
-                ],
-              ),
+            ProfileActivityTabs(
+              key: ValueKey(('live-timeline', group.first.identity)),
+              tabs: [
+                ProfileActivityTab(
+                  id: 'timeline',
+                  label: 'Timeline',
+                  child: _run(group),
+                ),
+              ],
             ),
       ],
     );

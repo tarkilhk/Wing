@@ -11,6 +11,7 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
     this.summary,
     this.trailing,
     this.initiallyExpanded = false,
+    this.anchorExpansion = true,
     this.isError = false,
     this.maintainState = true,
     this.onExpansionChanged,
@@ -23,6 +24,7 @@ class ProfileTranscriptDisclosure extends StatefulWidget {
   final Widget? summary;
   final List<Widget> children;
   final bool initiallyExpanded;
+  final bool anchorExpansion;
   final bool isError;
   final bool maintainState;
   final ValueChanged<bool>? onExpansionChanged;
@@ -45,6 +47,7 @@ class _ProfileTranscriptDisclosureState
       horizontalTitleGap: 0,
       child: AnchoredExpansionTile(
         initiallyExpanded: widget.initiallyExpanded,
+        anchorExpansion: widget.anchorExpansion,
         maintainState: widget.maintainState,
         minTileHeight: widget.trailing == null ? 28 : 48,
         tilePadding: EdgeInsets.zero,
