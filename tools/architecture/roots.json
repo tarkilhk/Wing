@@ -14944,6 +14944,26 @@
       "path": "lib/core/widgets/conversation_activity.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/models/transcript_presentation.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_loading_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/transcript_presentation_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/conversation_routes_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     }
   ],
   "direct_dependencies": {

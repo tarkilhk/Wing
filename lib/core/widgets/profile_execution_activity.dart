@@ -16,6 +16,8 @@ import '../theme/wing_theme.dart';
 import 'profile_transcript_disclosure.dart';
 import 'compact_activity_row.dart';
 import 'activity_time.dart';
+import 'activity/activity_detail_actions.dart';
+import 'anchored_expansion_tile.dart';
 import 'chat_model_controls.dart';
 
 /// Native event order is supplied by the owners; rendering never sorts it.
@@ -127,22 +129,9 @@ class ProfileTodoPanel extends StatelessWidget {
         children: [
           for (final todo in todos)
             Padding(
+              key: ValueKey(('todo', todo.id)),
               padding: EdgeInsets.only(left: todo.parent == null ? 0 : 12),
-              child: ActivityDetailSection(
-                copyable: false,
-                viewable: false,
-                leading: _TodoStatusIcon(status: todo.status),
-                block: ToolDetailBlock(
-                  label:
-                      '${todo.parent == null ? '' : 'Subtask · '}${switch (todo.status) {
-                        GatewayTodoStatus.pending => 'Pending',
-                        GatewayTodoStatus.inProgress => 'In progress',
-                        GatewayTodoStatus.completed => 'Completed',
-                        GatewayTodoStatus.cancelled => 'Cancelled',
-                      }}',
-                  text: todo.content,
-                ),
-              ),
+              child: _TodoDisclosure(todo: todo),
             ),
         ],
       ),
@@ -158,6 +147,106 @@ class ProfileTodoPanel extends StatelessWidget {
       icon: Icons.format_list_bulleted,
       label: 'Tasks $completed/${todos.length}',
       children: children,
+    );
+  }
+}
+
+/// Task identity owns disclosure state; status and list position may change.
+/// Collapsed rows never build the selectable, scrollable task body.
+class _TodoDisclosure extends StatefulWidget {
+  const _TodoDisclosure({required this.todo});
+  final GatewayTodo todo;
+
+  @override
+  State<_TodoDisclosure> createState() => _TodoDisclosureState();
+}
+
+class _TodoDisclosureState extends State<_TodoDisclosure> {
+  bool _expanded = false;
+
+  void _toggle() {
+    ExpansionAnchorNotification(
+      context,
+      allowBottomGap: !_expanded,
+    ).dispatch(context);
+    setState(() => _expanded = !_expanded);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final todo = widget.todo;
+    final colors = WingTokens.of(context);
+    final status =
+        '${todo.parent == null ? '' : 'Subtask · '}${switch (todo.status) {
+          GatewayTodoStatus.pending => 'Pending',
+          GatewayTodoStatus.inProgress => 'In progress',
+          GatewayTodoStatus.completed => 'Completed',
+          GatewayTodoStatus.cancelled => 'Cancelled',
+        }}';
+    return ExpansionSizeObserver(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: colors.border)),
+            ),
+            padding: const EdgeInsets.only(left: WingSpacing.sm),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: WingSpacing.sm,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            _TodoStatusIcon(status: todo.status),
+                            const SizedBox(width: WingSpacing.sm),
+                            Expanded(
+                              child: Text(
+                                status,
+                                style: colors.typography.label,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (!_expanded) ...[
+                          const SizedBox(height: WingSpacing.xs),
+                          Text(
+                            todo.content,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: colors.typography.body,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                Semantics(
+                  expanded: _expanded,
+                  child: ActivityDetailAction(
+                    label: _expanded ? 'Collapse task' : 'Expand task',
+                    onPressed: _toggle,
+                    icon: _expanded ? Icons.expand_more : Icons.chevron_right,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_expanded)
+            ActivityDetailSection(
+              showHeader: false,
+              copyable: false,
+              viewable: false,
+              block: ToolDetailBlock(label: status, text: todo.content),
+            ),
+        ],
+      ),
     );
   }
 }

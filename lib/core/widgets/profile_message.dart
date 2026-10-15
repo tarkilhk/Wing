@@ -57,7 +57,7 @@ class BotConversationScope extends InheritedTheme {
 /// server paths are resolved only by the owning chat's loader.
 class ProfileMessage extends StatelessWidget {
   final TranscriptMessage message;
-  final bool streaming;
+  bool get streaming => message.streaming;
   final bool showCopyHeader;
   final BotRecord? senderAppearance;
   final bool senderAvatarVisible;
@@ -81,7 +81,6 @@ class ProfileMessage extends StatelessWidget {
   const ProfileMessage({
     super.key,
     required this.message,
-    this.streaming = false,
     this.showCopyHeader = true,
     this.senderAppearance,
     this.senderAvatarVisible = true,

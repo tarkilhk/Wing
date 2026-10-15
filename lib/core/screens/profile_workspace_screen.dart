@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_presentation.dart';
 import '../widgets/conversation_activity.dart';
 import '../widgets/studio_form_actions.dart';
 import '../widgets/profile_live_work_dock.dart';
@@ -1834,7 +1835,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     bool allowSavedActions = true,
   }) {
     if (entry.suppressed) return const SizedBox.shrink();
-    final streaming = entry.streaming;
     final displayedHistory = capturedRows;
     // Resolve only the captured immutable input used by existing runtime commands.
     // The ordinal itself never admits an execution or a replacement chat.
@@ -1877,7 +1877,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ProfileMessage(
           key: ValueKey(entry.presentationId),
           message: entry.message,
-          streaming: streaming,
           showCopyHeader: showCopyHeader,
           onReadAloud: entry.message.role == 'assistant'
               ? () => _run(() => _requestReadAloud(chat, message))
@@ -2185,10 +2184,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     _readingFocus(chat)?.offset,
                     _readingFocus(chat)?.rowId,
                   )),
-                  reader: chat.reading,
-                  identity: chat.key,
-                  needsInput: chat.runtime.needsInput,
-                  turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                  presentation: TranscriptPresentation.capture(
+                    identity: chat.key,
+                    reader: chat.reading,
+                    timeline: timeline,
+                    needsInput: chat.runtime.needsInput,
+                    turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                  ),
                   openingContent: chat.runtime.opening
                       ? ProfileTranscriptOpening(
                           status: controller.connectionStatus,
@@ -2201,7 +2203,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       controller.notificationAnswerVisible(chat, target),
                   onRefreshHistory: () => controller.refreshHistory(chat),
                   onLoadOlder: () => controller.loadOlderMessages(chat),
-                  timeline: timeline,
                   activityTrailingBuilder: (section) {
                     if (bot != null) return null;
                     final reply = activityReplies[section.presentationIds.last];

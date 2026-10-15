@@ -311,11 +311,13 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                             const ProfileTodoPanel(
                               todos: [
                                 GatewayTodo(
+                                  id: 'task-1',
                                   content:
                                       'Check the full list of available properties and compare privacy.',
                                   status: GatewayTodoStatus.completed,
                                 ),
                                 GatewayTodo(
+                                  id: 'task-2',
                                   content: 'Review alternatives',
                                   status: GatewayTodoStatus.pending,
                                 ),

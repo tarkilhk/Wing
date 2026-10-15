@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_presentation.dart';
 import '../profile_transcript.dart';
 import '../../models/transcript_timeline.dart';
 import '../../widgets/studio_loading.dart';
@@ -841,17 +842,14 @@ class _BotGroupScreenState extends State<BotGroupScreen>
           child: ProfileTranscript(
             key: ValueKey(('discussion', _session.group.id)),
             controller: _transcript,
-            reader: reading,
-            identity: null,
-            // Pending decisions stay in the fixed footer, outside this viewport.
-            needsInput: false,
-            turnAdmissionBlocked: _session.runtime?.working == true,
-            openingContent: null,
-            notificationReading: null,
-            onAnswerVisible: null,
+            presentation: TranscriptPresentation.capture(
+              identity: _session.group.key,
+              reader: reading,
+              timeline: timeline,
+              needsInput: false,
+              turnAdmissionBlocked: _session.runtime?.working == true,
+            ),
             onRefreshHistory: _refreshGroup,
-            onLoadOlder: () async {},
-            timeline: timeline,
             messageBuilder: _message,
             onCaptureChanged: _captureChanged,
             onLatestVisible: _acknowledgeLatest,

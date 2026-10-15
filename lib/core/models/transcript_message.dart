@@ -28,6 +28,7 @@ final class TranscriptMessage {
     required this.kind,
     required this.role,
     required this.id,
+    required this.streaming,
     this.text = '',
     this.copyText = '',
     this.noticeResult,
@@ -51,6 +52,7 @@ final class TranscriptMessage {
 
   final TranscriptMessageKind kind;
   final String role;
+  final bool streaming;
   final Object? id;
   final String text;
   final String copyText;
@@ -79,6 +81,7 @@ final class TranscriptMessage {
         .where((member) => member.id == event.memberId)
         .firstOrNull;
     return TranscriptMessage._(
+      streaming: false,
       kind: event.isPass
           ? TranscriptMessageKind.discussionPass
           : TranscriptMessageKind.discussion,
@@ -99,12 +102,16 @@ final class TranscriptMessage {
     );
   }
 
-  factory TranscriptMessage.fromRow(Map<String, dynamic> row) {
+  factory TranscriptMessage.fromRow(
+    Map<String, dynamic> row, {
+    bool streaming = false,
+  }) {
     final role = row['role']?.toString() ?? '';
     final rawId = row['id'];
     final id = rawId is int || rawId is String ? rawId : null;
     if (isHiddenAnswerMessage(row)) {
       return TranscriptMessage._(
+        streaming: streaming,
         kind: TranscriptMessageKind.hidden,
         role: role,
         id: id,
@@ -113,6 +120,7 @@ final class TranscriptMessage {
     final delivery = transcriptUserDelivery(row);
     if (delivery?.kind == 'agent_message') {
       return TranscriptMessage._(
+        streaming: streaming,
         kind: TranscriptMessageKind.botMessage,
         role: role,
         id: id,
@@ -126,6 +134,7 @@ final class TranscriptMessage {
     final notice = transcriptNoticeText(row);
     if (notice != null) {
       return TranscriptMessage._(
+        streaming: streaming,
         kind: TranscriptMessageKind.notice,
         role: role,
         id: id,
@@ -146,6 +155,7 @@ final class TranscriptMessage {
     final review = reviewMessageText(row);
     if (review != null) {
       return TranscriptMessage._(
+        streaming: streaming,
         kind: TranscriptMessageKind.review,
         role: role,
         id: id,
@@ -155,6 +165,7 @@ final class TranscriptMessage {
     final steering = steeringMessageText(row);
     if (steering != null) {
       return TranscriptMessage._(
+        streaming: streaming,
         kind: TranscriptMessageKind.steering,
         role: role,
         id: id,
@@ -167,6 +178,7 @@ final class TranscriptMessage {
         (row['display_content'] ?? row['content'] ?? '').toString();
     if (content.isEmpty && (user?.attachments.isEmpty ?? true)) {
       return TranscriptMessage._(
+        streaming: streaming,
         kind: TranscriptMessageKind.hidden,
         role: role,
         id: id,
@@ -178,6 +190,7 @@ final class TranscriptMessage {
       final output = slash == null ? content : slash.group(2)!.trim();
       final multiline = output.contains('\n');
       return TranscriptMessage._(
+        streaming: streaming,
         kind: TranscriptMessageKind.system,
         role: role,
         id: id,
@@ -189,6 +202,7 @@ final class TranscriptMessage {
     }
     if (role == 'tool') {
       return TranscriptMessage._(
+        streaming: streaming,
         kind: TranscriptMessageKind.tool,
         role: role,
         id: id,
@@ -196,6 +210,7 @@ final class TranscriptMessage {
       );
     }
     return TranscriptMessage._(
+      streaming: streaming,
       kind: TranscriptMessageKind.dialogue,
       role: role,
       id: id,

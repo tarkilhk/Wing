@@ -83,6 +83,7 @@ class BotGroupSession extends ChangeNotifier {
       for (var limit = RecentGroupMessages.messageLimit; limit > 0; limit--) {
         final tail = cache.borrow(group, limit: limit);
         if (tail == null) continue;
+        _historyAvailable = true;
         for (final event in tail) {
           _events[event.sequence] = event;
         }
@@ -377,7 +378,10 @@ class BotGroupSession extends ChangeNotifier {
   int _cursor = 0;
   bool _closed = false, _sending = false, _visible = false;
   Completer<void>? _readCompletion;
-  bool get loading => _readCompletion != null && _runtime == null;
+  bool _historyAvailable = false;
+  bool get loading =>
+      _readCompletion != null &&
+      (_runtime == null || !reading.historyAvailable);
   bool get sending => _sending;
   String? _readError, _actionError;
   String? get error => _actionError ?? _draftError ?? _readError;
@@ -526,6 +530,7 @@ class BotGroupSession extends ChangeNotifier {
           observation.publish();
         }
       }
+      _historyAvailable = true;
       _readError = null;
     } catch (_) {
       if (!_closed && revision == _recoveryRevision) {
@@ -876,7 +881,9 @@ final class BotGroupTranscriptReading implements TranscriptReader {
   @override
   bool get historyUnavailable => false;
   @override
-  bool get historyAvailable => _session.runtime != null || messages.isNotEmpty;
+  bool get historyAvailable =>
+      _session._historyAvailable ||
+      _session._events.values.any((event) => event.isTranscriptEntry);
   @override
   double get historyScrollOffset => _offset;
   @override

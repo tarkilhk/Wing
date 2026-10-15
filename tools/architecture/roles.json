@@ -2470,6 +2470,11 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/conversation_activity.dart"
+    },
+    "lib/core/models/transcript_presentation.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/transcript_presentation.dart"
     }
   }
 }

@@ -25,6 +25,44 @@ Map<String, dynamic> _message(int id, String text) => {
   'timestamp': 1791756000.0,
 };
 
+class _WorkerReplay {
+  _WorkerReplay(BotsFixture fixture) {
+    fixture.readHook = (_, method, params) async => switch (method) {
+      'session.active_list' => {
+        'sessions': [
+          if (present)
+            {
+              'id': 'atlas-live',
+              'session_key': 'atlas-tip',
+              'title': 'Group: room-1',
+              'status': status,
+            },
+        ],
+      },
+      'session.events.since' => {
+        'events': events
+            .where((e) => (e['seq'] as int) > (params['last_seen'] as int))
+            .toList(),
+        'latest_seq': events.length,
+        'truncated': false,
+        'epoch': 'recovery-test',
+        'open_requests': [],
+      },
+      _ => null,
+    };
+  }
+  bool present = true;
+  String status = 'working';
+  final events = <Map<String, dynamic>>[];
+  void add(String type, [Map<String, dynamic> payload = const {}]) =>
+      events.add({
+        'seq': events.length + 1,
+        'session_id': 'atlas-live',
+        'type': type,
+        'payload': payload,
+      });
+}
+
 void main() {
   late BotsFixture fixture;
   late BotGroup group;
@@ -40,6 +78,155 @@ void main() {
     fixture.workerRows['mira'] = [_worker('mira')];
   });
   tearDown(() => session.dispose());
+
+  test(
+    'quiet history refresh bridges a new tool tail to retained messages',
+    () async {
+      fixture.workerMessages['atlas'] = [
+        for (var id = 1; id <= 20; id++) _message(id, 'Retained $id'),
+      ];
+      await session.select(group.members.first);
+      fixture.workerMessages['atlas']!.addAll([
+        for (var id = 21; id <= 60; id++)
+          {'id': id, 'role': 'tool', 'content': 'New receipt $id'},
+      ]);
+      await session.refreshLive(discover: true);
+      expect(
+        session.reader.messages.where((row) => row['role'] == 'assistant'),
+        hasLength(20),
+      );
+      expect(session.reader.messages.last['id'], 60);
+      expect(session.reader.nextHistoryOffset, 60);
+    },
+  );
+
+  test(
+    'quiet overlap retains older prefix and advances its paging cursor',
+    () async {
+      fixture.workerMessages['atlas'] = [
+        for (var id = 1; id <= 60; id++) _message(id, 'Answer $id'),
+      ];
+      await session.select(group.members.first);
+      await session.loadOlder();
+      expect(session.reader.messages.first['id'], 21);
+      fixture.workerMessages['atlas']!.addAll([
+        for (var id = 61; id <= 65; id++) _message(id, 'New answer $id'),
+      ]);
+      await session.refreshLive(discover: true);
+      expect(session.reader.messages.first['id'], 21);
+      expect(session.reader.nextHistoryOffset, 45);
+      await session.loadOlder();
+      expect(fixture.historyReads.last.$3, 45);
+      expect(session.reader.messages.first['id'], 1);
+      expect(session.reader.messages.last['id'], 65);
+    },
+  );
+
+  test(
+    'disappeared worker keeps partial answer until saved recovery succeeds',
+    () async {
+      final replay = _WorkerReplay(fixture)
+        ..add('message.start')
+        ..add('message.delta', {'text': 'Visible partial answer'});
+      await session.select(group.members.first);
+      await session.refreshLive();
+      replay.present = false;
+      fixture.historyHook = (_, _, _) async =>
+          throw StateError('Offline history');
+      await session.refreshLive();
+      expect(session.reader.streaming, 'Visible partial answer');
+      expect(session.reader.historyError, isNotNull);
+      expect(session.liveAnswering, isFalse);
+      fixture.historyHook = null;
+      fixture.workerMessages['atlas'] = [_message(1, 'Saved completed answer')];
+      await session.refreshLive();
+      expect(session.reader.streaming, isEmpty);
+      expect(
+        session.reader.messages.single['content'],
+        'Saved completed answer',
+      );
+      expect(session.reader.historyError, isNull);
+    },
+  );
+
+  test(
+    'idle worker retries a failed terminal history reconciliation',
+    () async {
+      final replay = _WorkerReplay(fixture)
+        ..add('message.start')
+        ..add('message.delta', {'text': 'Completed answer'});
+      await session.select(group.members.first);
+      await session.refreshLive();
+      replay
+        ..status = 'idle'
+        ..add('message.complete', {'text': 'Completed answer'});
+      fixture.historyHook = (_, _, _) async =>
+          throw StateError('Offline history');
+      await session.refreshLive();
+      expect(session.reader.historyError, isNotNull);
+      final failedReads = fixture.historyReads.length;
+      fixture.historyHook = null;
+      fixture.workerMessages['atlas'] = [_message(1, 'Completed answer')];
+      await session.refreshLive();
+      expect(fixture.historyReads.length, greaterThan(failedReads));
+      expect(session.reader.historyError, isNull);
+      expect(session.reader.messages.single['id'], 1);
+    },
+  );
+
+  test(
+    'terminal reconciliation waits for initial progressive backfill',
+    () async {
+      final older = Completer<ProfileHistoryPage>();
+      addTearDown(() {
+        if (!older.isCompleted) older.completeError(StateError('Retired'));
+      });
+      var newestReads = 0;
+      fixture.historyHook = (_, id, offset) async {
+        if (offset > 0) return older.future;
+        newestReads++;
+        return ProfileHistoryPage(
+          id,
+          [
+            _message(101, 'Existing latest answer'),
+            for (var id = 102; id <= 120; id++)
+              {'id': id, 'role': 'tool', 'content': 'Receipt'},
+          ],
+          0,
+          20,
+        );
+      };
+      final replay = _WorkerReplay(fixture)
+        ..add('message.start')
+        ..add('message.delta', {'text': 'New live answer'});
+      final selecting = session.select(group.members.first);
+      await Future<void>.delayed(Duration.zero);
+      await session.refreshLive();
+      replay
+        ..status = 'idle'
+        ..add('message.complete', {'text': 'New live answer'});
+      final reconciling = session.refreshLive();
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        newestReads,
+        1,
+        reason: 'Do not cancel or overtake held initial backfill',
+      );
+      older.complete(
+        ProfileHistoryPage(
+          'atlas-tip',
+          [for (var id = 1; id <= 19; id++) _message(id, 'Older answer')],
+          20,
+          20,
+        ),
+      );
+      await selecting;
+      await reconciling;
+      expect(session.reader.messages.any((row) => row['id'] == 1), isTrue);
+      expect(session.reader.historyLoading, isFalse);
+      expect(newestReads, 2);
+    },
+  );
 
   test(
     'saved selection does not await or start initial live hydration',

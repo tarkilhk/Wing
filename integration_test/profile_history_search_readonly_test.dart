@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_presentation.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/chat_runtime.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
@@ -182,10 +183,22 @@ void main() {
                   listenable: readingChanges,
                   builder: (_, _) => ProfileTranscript(
                     key: ValueKey(chat.key),
-                    reader: chat.reading,
-                    identity: chat.key,
-                    needsInput: chat.runtime.needsInput,
-                    turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                    presentation: TranscriptPresentation.capture(
+                      identity: chat.key,
+                      reader: chat.reading,
+                      timeline: TranscriptTimeline.project(
+                        [
+                          ...chat.reading.messages,
+                          ?chat.reading.streamingMessage,
+                        ],
+                        presentationId: chat.reading.messagePresentationId,
+                        liveMessageIndex: chat.reading.streamingMessage == null
+                            ? null
+                            : chat.reading.messages.length,
+                      ),
+                      needsInput: chat.runtime.needsInput,
+                      turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                    ),
                     openingContent: chat.runtime.opening
                         ? ProfileTranscriptOpening(
                             status: controller.connectionStatus,
@@ -198,20 +211,7 @@ void main() {
                         controller.notificationAnswerVisible(chat, target),
                     onRefreshHistory: () => controller.refreshHistory(chat),
                     onLoadOlder: () => loadOlderReading(),
-                    timeline: TranscriptTimeline.project(
-                      [
-                        ...chat.reading.messages,
-                        ?chat.reading.streamingMessage,
-                      ],
-                      presentationId: chat.reading.messagePresentationId,
-                      liveMessageIndex: chat.reading.streamingMessage == null
-                          ? null
-                          : chat.reading.messages.length,
-                    ),
-                    messageBuilder: (m) => ProfileMessage(
-                      message: m.message,
-                      streaming: m.streaming,
-                    ),
+                    messageBuilder: (m) => ProfileMessage(message: m.message),
                     tail: const [],
                   ),
                 ),

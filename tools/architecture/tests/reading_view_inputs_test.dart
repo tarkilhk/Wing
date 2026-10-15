@@ -11,7 +11,8 @@ const transcript = 'lib/core/screens/profile_transcript.dart';
 const runtime = 'lib/core/services/profile_workspace_controller.dart';
 const runtimePart = 'lib/core/services/profile_workspace_notifications.dart';
 const canonicalImport = "import '../models/transcript_message.dart';\n";
-const timelineImport = "import '../models/transcript_timeline.dart';\n";
+const timelineImport =
+    "import '../models/transcript_timeline.dart'; import '../models/transcript_presentation.dart';\n";
 
 class _Case {
   const _Case(
@@ -21,7 +22,8 @@ class _Case {
     this.exit, {
     this.imports = canonicalImport,
     this.extra = '',
-    this.timelineType = 'TranscriptTimeline',
+    this.timelineType = 'TranscriptPresentation',
+    this.presentationTimelineType = 'TranscriptTimeline',
     this.sectionType = 'TranscriptTimelineSection',
     this.timelineImports = timelineImport,
     this.timelineExtra = '',
@@ -35,6 +37,7 @@ class _Case {
     ],
   });
   final String name, messageType, resultsType, imports, extra;
+  final String presentationTimelineType;
   final String timelineType,
       sectionType,
       timelineImports,
@@ -46,6 +49,14 @@ class _Case {
 }
 
 const cases = [
+  _Case(
+    'raw-timeline-in-presentation',
+    'TranscriptMessage',
+    'List<TranscriptToolResult>',
+    1,
+    presentationTimelineType: 'List<Map<String, dynamic>>',
+    subjects: ['TranscriptPresentation.timeline'],
+  ),
   _Case(
     'original-wire-inputs',
     'Map<String, dynamic>',
@@ -87,8 +98,8 @@ const cases = [
     imports:
         "import 'package:wing/core/widgets/../models/transcript_message.dart' as facts show TranscriptMessage, TranscriptToolResult;\nimport 'dart:core' as core;\n",
     timelineImports:
-        "import 'package:wing/core/screens/../models/transcript_timeline.dart' as timeline show TranscriptTimeline, TranscriptTimelineSection;\n",
-    timelineType: 'timeline.TranscriptTimeline',
+        "import 'package:wing/core/screens/../models/transcript_timeline.dart' as timeline show TranscriptTimeline, TranscriptTimelineSection; import 'package:wing/core/models/transcript_presentation.dart' as presentation;\n",
+    timelineType: 'presentation.TranscriptPresentation',
     sectionType: 'timeline.TranscriptTimelineSection',
     unrelatedRuntime: true,
   ),
@@ -114,7 +125,7 @@ const cases = [
     timelineType: 'List<Map<String, dynamic>>',
     sectionType: 'List<List<Map<String, dynamic>>>',
     subjects: [
-      'ProfileTranscript.timeline',
+      'ProfileTranscript.presentation',
       'ProfileToolActivitySection.section',
     ],
   ),
@@ -123,10 +134,10 @@ const cases = [
     'TranscriptMessage',
     'List<TranscriptToolResult>',
     1,
-    timelineType: 'TranscriptTimeline?',
+    timelineType: 'TranscriptPresentation?',
     sectionType: 'dynamic',
     subjects: [
-      'ProfileTranscript.timeline',
+      'ProfileTranscript.presentation',
       'ProfileToolActivitySection.section',
     ],
   ),
@@ -135,10 +146,10 @@ const cases = [
     'TranscriptMessage',
     'List<TranscriptToolResult>',
     1,
-    timelineExtra: 'class TranscriptTimeline {}',
+    timelineExtra: 'class TranscriptPresentation {}',
     sectionExtra: 'class TranscriptTimelineSection {}',
     subjects: [
-      'ProfileTranscript.timeline',
+      'ProfileTranscript.presentation',
       'ProfileToolActivitySection.section',
     ],
   ),
@@ -327,6 +338,8 @@ Future<void> _proofMain() async {
             'final class TranscriptMessage {} final class TranscriptToolResult {}',
         rule.timelineModel:
             'final class TranscriptTimeline {} final class TranscriptTimelineSection {}',
+        rule.presentationModel:
+            "import 'transcript_timeline.dart';\nfinal class TranscriptPresentation { final ${fixture.presentationTimelineType} timeline; }",
         message:
             '${fixture.imports}${fixture.part ? "part 'reading_part.dart';\n" : ''}'
             'class ProfileMessage { ${fixture.missing ? '' : 'final ${fixture.messageType} message;'} }\n'
@@ -337,7 +350,7 @@ Future<void> _proofMain() async {
             '${fixture.sectionExtra}\n',
         transcript:
             '${fixture.unrelatedRuntime ? "import '../services/profile_workspace_controller.dart';\n" : ''}'
-            '${fixture.timelineImports}class ProfileTranscript { final ${fixture.timelineType} timeline; }\n'
+            '${fixture.timelineImports}class ProfileTranscript { final ${fixture.timelineType} presentation; }\n'
             '${fixture.timelineExtra}\n',
         if (fixture.unrelatedRuntime) ...{
           runtime:
@@ -390,14 +403,17 @@ Future<void> _proofMain() async {
           for (final subject in fixture.subjects)
             (
               rule.id,
-              subject.startsWith('ProfileMessage.')
+              subject == 'TranscriptPresentation.timeline'
+                  ? rule.presentationModel
+                  : subject.startsWith('ProfileMessage.')
                   ? message
                   : subject.startsWith('ProfileTranscript.')
                   ? transcript
                   : tools,
               subject == 'ProfileTranscript.needsInput'
                   ? 3
-                  : subject.startsWith('ProfileMessage.') ||
+                  : subject == 'TranscriptPresentation.timeline' ||
+                        subject.startsWith('ProfileMessage.') ||
                         subject.startsWith('ProfileTranscript.')
                   ? 2
                   : subject.startsWith('ProfileToolActivitySection.')

@@ -428,11 +428,10 @@ class _ReplayState extends State<_Replay> with WidgetsBindingObserver {
                 valueListenable: _source,
                 builder: (_, data, _) => ProfileMessage(
                   key: _message,
-                  streaming: true,
                   message: TranscriptMessage.fromRow({
                     'role': 'assistant',
                     'content': data,
-                  }),
+                  }, streaming: true),
                 ),
               ),
             ),

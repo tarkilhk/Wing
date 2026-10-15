@@ -316,7 +316,8 @@ final class TranscriptTimelineEntry {
       transcriptNoticeKind(_row) == 'async_delegation_complete';
   final TranscriptMessage Function(Map<String, dynamic>)? messageProjection;
   late final TranscriptMessage message =
-      messageProjection?.call(_row) ?? TranscriptMessage.fromRow(_row);
+      messageProjection?.call(_row) ??
+      TranscriptMessage.fromRow(_row, streaming: streaming);
   late final TranscriptToolResult? tool = role == 'tool'
       ? TranscriptToolResult.fromRow(_row, exchangeReceipts: exchangeReceipts)
       : null;

@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_presentation.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'dart:async';
 import 'package:wing/core/services/app_preferences.dart';
@@ -64,10 +65,19 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ProfileTranscript(
-            reader: chat.reading,
-            identity: chat.key,
-            needsInput: chat.runtime.needsInput,
-            turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+            presentation: TranscriptPresentation.capture(
+              identity: chat.key,
+              reader: chat.reading,
+              timeline: TranscriptTimeline.project(
+                [...chat.reading.messages, ?chat.reading.streamingMessage],
+                presentationId: chat.reading.messagePresentationId,
+                liveMessageIndex: chat.reading.streamingMessage == null
+                    ? null
+                    : chat.reading.messages.length,
+              ),
+              needsInput: chat.runtime.needsInput,
+              turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+            ),
             openingContent: chat.runtime.opening
                 ? ProfileTranscriptOpening(
                     status: controller.connectionStatus,
@@ -81,13 +91,6 @@ void main() {
             onRefreshHistory: () => controller.refreshHistory(chat),
             onLoadOlder: () => controller.loadOlderMessages(chat),
             tail: tail,
-            timeline: TranscriptTimeline.project(
-              [...chat.reading.messages, ?chat.reading.streamingMessage],
-              presentationId: chat.reading.messagePresentationId,
-              liveMessageIndex: chat.reading.streamingMessage == null
-                  ? null
-                  : chat.reading.messages.length,
-            ),
             messageBuilder: (row) =>
                 SizedBox(height: 120, child: Text(row.message.text)),
           ),

@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_presentation.dart';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
@@ -185,10 +186,13 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: ProfileTranscript(
-            reader: chat.reading,
-            identity: chat.key,
-            needsInput: chat.runtime.needsInput,
-            turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+            presentation: TranscriptPresentation.capture(
+              identity: chat.key,
+              reader: chat.reading,
+              timeline: timeline,
+              needsInput: chat.runtime.needsInput,
+              turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+            ),
             openingContent: chat.runtime.opening
                 ? ProfileTranscriptOpening(
                     status: controller.connectionStatus,
@@ -200,7 +204,6 @@ void main() {
             onAnswerVisible: (target) =>
                 controller.notificationAnswerVisible(chat, target),
             onRefreshHistory: () => controller.refreshHistory(chat),
-            timeline: timeline,
             onLoadOlder: () async {},
             tail: const [],
             messageBuilder: (entry) =>

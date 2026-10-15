@@ -238,10 +238,12 @@ Widget _contentExecutionScreen() {
         const ProfileTodoPanel(
           todos: [
             GatewayTodo(
+              id: 'native-reading-one',
               content: 'Inspect the wide table and code controls',
               status: GatewayTodoStatus.completed,
             ),
             GatewayTodo(
+              id: 'native-reading-two',
               content: 'Open and return from the SVG preview',
               status: GatewayTodoStatus.inProgress,
               parent: 'native-reading-one',

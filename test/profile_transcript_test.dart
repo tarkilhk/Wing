@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_presentation.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/services/chat_runtime.dart';
@@ -143,10 +144,19 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
               listenable: controller,
               builder: (_, _) => ProfileTranscript(
                 key: ValueKey(chat.key),
-                reader: chat.reading,
-                identity: chat.key,
-                needsInput: chat.runtime.needsInput,
-                turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                presentation: TranscriptPresentation.capture(
+                  identity: chat.key,
+                  reader: chat.reading,
+                  timeline: TranscriptTimeline.project(
+                    [...chat.reading.messages, ?chat.reading.streamingMessage],
+                    presentationId: chat.reading.messagePresentationId,
+                    liveMessageIndex: chat.reading.streamingMessage == null
+                        ? null
+                        : chat.reading.messages.length,
+                  ),
+                  needsInput: chat.runtime.needsInput,
+                  turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                ),
                 openingContent: chat.runtime.opening
                     ? ProfileTranscriptOpening(
                         status: controller.connectionStatus,
@@ -160,15 +170,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                 onRefreshHistory: () => controller.refreshHistory(chat),
                 onLoadOlder:
                     loadOlder ?? () => controller.loadOlderMessages(chat),
-                timeline: TranscriptTimeline.project(
-                  [...chat.reading.messages, ?chat.reading.streamingMessage],
-                  presentationId: chat.reading.messagePresentationId,
-                  liveMessageIndex: chat.reading.streamingMessage == null
-                      ? null
-                      : chat.reading.messages.length,
-                ),
                 messageBuilder: (m) => realisticMessages
-                    ? ProfileMessage(message: m.message, streaming: m.streaming)
+                    ? ProfileMessage(message: m.message)
                     : SizedBox(
                         key: ValueKey('body-${m.message.id}'),
                         height: 60 + ((m.message.id as int?) ?? 0) % 3 * 20,
@@ -455,10 +458,22 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                 final generation = callbackGeneration;
                 return ProfileTranscript(
                   key: ValueKey(chat.key),
-                  reader: chat.reading,
-                  identity: chat.key,
-                  needsInput: chat.runtime.needsInput,
-                  turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                  presentation: TranscriptPresentation.capture(
+                    identity: chat.key,
+                    reader: chat.reading,
+                    timeline: TranscriptTimeline.project(
+                      [
+                        ...chat.reading.messages,
+                        ?chat.reading.streamingMessage,
+                      ],
+                      presentationId: chat.reading.messagePresentationId,
+                      liveMessageIndex: chat.reading.streamingMessage == null
+                          ? null
+                          : chat.reading.messages.length,
+                    ),
+                    needsInput: chat.runtime.needsInput,
+                    turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                  ),
                   openingContent: chat.runtime.opening
                       ? ProfileTranscriptOpening(
                           status: controller.connectionStatus,
@@ -472,17 +487,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                   onRefreshHistory: () => controller.refreshHistory(chat),
                   onLoadOlder:
                       loadOlder ?? () => controller.loadOlderMessages(chat),
-                  timeline: TranscriptTimeline.project(
-                    [...chat.reading.messages, ?chat.reading.streamingMessage],
-                    presentationId: chat.reading.messagePresentationId,
-                    liveMessageIndex: chat.reading.streamingMessage == null
-                        ? null
-                        : chat.reading.messages.length,
-                  ),
-                  messageBuilder: (message) => ProfileMessage(
-                    message: message.message,
-                    streaming: message.streaming,
-                  ),
+                  messageBuilder: (message) =>
+                      ProfileMessage(message: message.message),
 
                   tail: [
                     ProfileActivityTabs(
@@ -1645,10 +1651,16 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             body: ListenableBuilder(
               listenable: controller,
               builder: (_, _) => ProfileTranscript(
-                reader: chat.reading,
-                identity: chat.key,
-                needsInput: chat.runtime.needsInput,
-                turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                presentation: TranscriptPresentation.capture(
+                  identity: chat.key,
+                  reader: chat.reading,
+                  timeline: TranscriptTimeline.project(
+                    nearby,
+                    presentationId: chat.reading.messagePresentationId,
+                  ),
+                  needsInput: chat.runtime.needsInput,
+                  turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                ),
                 openingContent: chat.runtime.opening
                     ? ProfileTranscriptOpening(
                         status: controller.connectionStatus,
@@ -1662,10 +1674,6 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                 onRefreshHistory: () => controller.refreshHistory(chat),
                 onLoadOlder:
                     loadOlder ?? () => controller.loadOlderMessages(chat),
-                timeline: TranscriptTimeline.project(
-                  nearby,
-                  presentationId: chat.reading.messagePresentationId,
-                ),
                 messageBuilder: (message) => Text(message.message.text),
                 tail: const [],
 

@@ -7,9 +7,11 @@ import '../model.dart';
 const id = 'ARCH_READING_VIEW_INPUT';
 const model = 'lib/core/models/transcript_message.dart';
 const timelineModel = 'lib/core/models/transcript_timeline.dart';
+const presentationModel = 'lib/core/models/transcript_presentation.dart';
 const models = {
   model: {'TranscriptMessage', 'TranscriptToolResult'},
   timelineModel: {'TranscriptTimeline', 'TranscriptTimelineSection'},
+  presentationModel: {'TranscriptPresentation'},
 };
 const inputs = [
   (
@@ -31,6 +33,14 @@ const inputs = [
   (
     'lib/core/screens/profile_transcript.dart',
     'ProfileTranscript',
+    'presentation',
+    'TranscriptPresentation',
+    false,
+    presentationModel,
+  ),
+  (
+    presentationModel,
+    'TranscriptPresentation',
     'timeline',
     'TranscriptTimeline',
     false,

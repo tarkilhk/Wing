@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_presentation.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -133,10 +134,19 @@ Widget _screen(
             listenable: controller,
             builder: (_, _) => ProfileTranscript(
               key: ValueKey(chat.key),
-              reader: chat.reading,
-              identity: chat.key,
-              needsInput: chat.runtime.needsInput,
-              turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+              presentation: TranscriptPresentation.capture(
+                identity: chat.key,
+                reader: chat.reading,
+                timeline: TranscriptTimeline.project(
+                  [...chat.reading.messages, ?chat.reading.streamingMessage],
+                  presentationId: chat.reading.messagePresentationId,
+                  liveMessageIndex: chat.reading.streamingMessage == null
+                      ? null
+                      : chat.reading.messages.length,
+                ),
+                needsInput: chat.runtime.needsInput,
+                turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+              ),
               openingContent: chat.runtime.opening
                   ? ProfileTranscriptOpening(
                       status: controller.connectionStatus,
@@ -149,17 +159,7 @@ Widget _screen(
                   controller.notificationAnswerVisible(chat, target),
               onRefreshHistory: () => controller.refreshHistory(chat),
               onLoadOlder: () => controller.loadOlderMessages(chat),
-              timeline: TranscriptTimeline.project(
-                [...chat.reading.messages, ?chat.reading.streamingMessage],
-                presentationId: chat.reading.messagePresentationId,
-                liveMessageIndex: chat.reading.streamingMessage == null
-                    ? null
-                    : chat.reading.messages.length,
-              ),
-              messageBuilder: (row) => ProfileMessage(
-                message: row.message,
-                streaming: row.streaming,
-              ),
+              messageBuilder: (row) => ProfileMessage(message: row.message),
               tail: const [],
             ),
           ),

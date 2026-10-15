@@ -3378,11 +3378,6 @@
       "kind": "any"
     },
     {
-      "library": "lib/core/models/gateway_todo.dart",
-      "symbol": "GatewayTodo.id",
-      "kind": "any"
-    },
-    {
       "library": "lib/core/models/profile_voice.dart",
       "symbol": "ProfileVoiceState.acknowledgement",
       "kind": "any"

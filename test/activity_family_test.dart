@@ -385,10 +385,12 @@ void main() {
             embedded: true,
             todos: [
               GatewayTodo(
+                id: 'task-1',
                 content: 'Read the report and check the dates',
                 status: GatewayTodoStatus.completed,
               ),
               GatewayTodo(
+                id: 'task-2',
                 content: 'Review the remaining record',
                 status: GatewayTodoStatus.pending,
                 parent: 'review',

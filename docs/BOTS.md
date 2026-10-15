@@ -323,3 +323,8 @@ Unavailable history is labelled separately from a failed read. Send messages
 from the shared group or the bot's continuing chat.
 
 [Administration](ADMINISTRATION.md) · [Chats](CHATS.md)
+
+Working history uses the shared conversation renderer. If a refresh fails,
+received text stays visible while Wing retries reading the saved answer.
+Image previews use the same renderer as the other conversation screens,
+including inside Activity details.

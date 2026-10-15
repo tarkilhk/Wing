@@ -84,15 +84,7 @@ class BotGroupHistorySession extends ChangeNotifier
     if (_closed || member == null || reading._loading && !reading._available) {
       return;
     }
-    if (reading._session == null) {
-      if (!discover) return;
-      await _load(refresh: true, quiet: true);
-      if (_closed ||
-          !identical(reading, _reading) ||
-          reading._session == null) {
-        return;
-      }
-    }
+    if (reading._session == null && !discover) return;
     if (reading._livePending case final pending?) return pending;
     final generation = _liveGeneration;
     bool current() =>
@@ -103,6 +95,10 @@ class BotGroupHistorySession extends ChangeNotifier
     reading._livePending = done.future;
     repository.retain();
     try {
+      if (reading._session == null) {
+        await _load(refresh: true, quiet: true);
+        if (!current() || reading._session == null) return;
+      }
       final response = await repository.groupMemberObservation(
         group,
         member,
@@ -127,15 +123,15 @@ class BotGroupHistorySession extends ChangeNotifier
       }
       final live = matches.firstOrNull;
       if (live == null) {
-        if (discover ||
-            runtime.executionActive ||
-            reading._reading.streaming.isNotEmpty) {
-          await _load(refresh: true, quiet: true);
+        reading._needsHistoryReconciliation |=
+            runtime.executionActive || reading._reading.streaming.isNotEmpty;
+        // Runtime absence settles the work indicator independently of whether
+        // the saved replacement can be read. Preserve received text on failure.
+        reading._runtime.observeExecutionSnapshot({'running': false});
+        if (discover || reading._needsHistoryReconciliation) {
+          final reconciled = await _load(refresh: true, quiet: true);
           if (!current()) return;
-          reading._runtime.observeExecutionSnapshot({'running': false});
-          reading._reading.updateStreaming('');
-          reading._partialLive = false;
-          reading._runtime.reconcileHistoricalActivity();
+          if (reconciled) reading.reconcileSavedHistory();
         }
         reading._liveError = null;
         return;
@@ -234,16 +230,14 @@ class BotGroupHistorySession extends ChangeNotifier
           'running': status != 'idle',
         });
       }
-      if (terminal ||
+      reading._needsHistoryReconciliation |=
+          terminal ||
           status == 'idle' &&
-              (wasActive || reading._reading.streaming.isNotEmpty)) {
-        await _load(refresh: true, quiet: true);
+              (wasActive || reading._reading.streaming.isNotEmpty);
+      if (reading._needsHistoryReconciliation && !runtime.executionActive) {
+        final reconciled = await _load(refresh: true, quiet: true);
         if (!current()) return;
-        if (reading._error == null) {
-          reading._reading.updateStreaming('');
-          reading._partialLive = false;
-          reading._runtime.reconcileHistoricalActivity();
-        }
+        if (reconciled) reading.reconcileSavedHistory();
       }
       reading._liveError = reading._partialLive
           ? 'Earlier live activity is unavailable. Showing saved history and received updates.'
@@ -339,10 +333,39 @@ class BotGroupHistorySession extends ChangeNotifier
     await _load(refresh: false);
   }
 
-  Future<void> _load({required bool refresh, bool quiet = false}) async {
+  Future<bool> _load({required bool refresh, bool quiet = false}) async {
+    final reading = _reading;
+    final generation = _generation;
+    bool current() =>
+        !_closed && generation == _generation && identical(reading, _reading);
+    // Live replay remains independent of progressive history. Its terminal
+    // reconciliation queues behind backfill, then reads a fresh saved tail.
+    // Joining the older read would miss messages persisted after it started.
+    while (reading._historyPending != null) {
+      await reading._historyPending;
+      if (!current()) return false;
+    }
+    if (!current()) return false;
+    final done = Completer<bool>();
+    reading._historyPending = done.future;
+    var success = false;
+    try {
+      success = await _readHistory(refresh: refresh, quiet: quiet);
+      return success;
+    } finally {
+      reading._historyPending = null;
+      done.complete(success);
+    }
+  }
+
+  Future<bool> _readHistory({
+    required bool refresh,
+    required bool quiet,
+  }) async {
     final member = _member!;
     final reading = _reading;
-    final generation = ++_generation;
+    final generation = _generation;
+    if (!refresh && reading._older == null) return true;
     final initial = refresh && !reading._available;
     // Only settled successful readings can be borrowed by another selection.
     _savedReadings.remove((member.id, member.profile));
@@ -355,16 +378,19 @@ class BotGroupHistorySession extends ChangeNotifier
       final session = refresh
           ? await repository.groupMemberSession(group, member)
           : reading._session;
-      if (_closed || generation != _generation) return;
+      if (_closed || generation != _generation) return false;
       if (session == null) {
         reading._session = null;
         reading._older = null;
         reading._reading.installSavedHistory(const []);
         reading._available = true;
-        return;
+        return true;
       }
       // Raw pages can contain only invisible assistant calls and folded tools.
       // Stage the full read before replacing a previously readable snapshot.
+      final retainedIds = reading._session == session
+          ? reading.messages.map((row) => row['id']).whereType<int>().toSet()
+          : const <int>{};
       final rows = <int, Map<String, dynamic>>{};
       var offset = refresh ? 0 : reading._older!;
       int? older;
@@ -375,7 +401,7 @@ class BotGroupHistorySession extends ChangeNotifier
           session,
           offset,
         );
-        if (_closed || generation != _generation) return;
+        if (_closed || generation != _generation) return false;
         final pageIds = <int>{};
         for (final row in page.rows) {
           final id = row['id'];
@@ -391,10 +417,13 @@ class BotGroupHistorySession extends ChangeNotifier
           reading.installNewestPage(session, rows, older);
           notifyListeners();
         }
+        final coversRetained =
+            retainedIds.isNotEmpty && rows.keys.any(retainedIds.contains);
         if (older == null ||
             !refresh ||
-            quiet ||
-            _conversationCount(rows) >= 20) {
+            (quiet && coversRetained) ||
+            ((!quiet || retainedIds.isEmpty) &&
+                _conversationCount(rows) >= 20)) {
           break;
         }
         if (older <= offset) {
@@ -416,13 +445,15 @@ class BotGroupHistorySession extends ChangeNotifier
       }
       reading.restoreWork();
       reading._session = session;
-      reading._older = older;
+      if (!refresh) reading._older = older;
       reading._available = true;
+      return true;
     } catch (_) {
       if (!_closed && generation == _generation) {
         reading._error =
             'Working history could not load. Refresh to try again.';
       }
+      return false;
     } finally {
       repository.release();
       if (!_closed && generation == _generation) {
@@ -472,6 +503,16 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   final TranscriptReading _reading;
   final ChatRuntime _runtime;
   Future<void>? _livePending;
+  Future<bool>? _historyPending;
+  bool _needsHistoryReconciliation = false;
+
+  void reconcileSavedHistory() {
+    _needsHistoryReconciliation = false;
+    _reading.updateStreaming('');
+    _partialLive = false;
+    _runtime.reconcileHistoricalActivity();
+  }
+
   String? _runtimeId, _epoch, _liveError;
   int _sequence = 0;
   bool _partialLive = false;
@@ -513,7 +554,11 @@ final class _BotGroupHistoryReading implements TranscriptReader {
       ),
     );
     _session = session;
-    _older = older;
+    // The adopted page may retain an older prefix already on screen. Its raw
+    // row count, rather than the newest request's offset, is the next cursor.
+    _older = older == null
+        ? null
+        : messages.where((row) => row['id'] is int).length;
     _available = true;
   }
 

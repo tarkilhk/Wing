@@ -1,3 +1,4 @@
+import 'package:wing/core/models/transcript_presentation.dart';
 import '../../widgets/conversation_activity.dart';
 import '../../widgets/profile_live_work_dock.dart';
 import '../../models/bots.dart';
@@ -154,7 +155,8 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
         ),
         body: SafeArea(
           child: StudioPageLoading(
-            active: !reader.historyPaging &&
+            active:
+                !reader.historyPaging &&
                 (reader.historyLoading || identical(_hydratingReading, reader)),
             label: _session.historyAvailable
                 ? 'Refreshing working history'
@@ -211,16 +213,19 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
                     name: _session.member?.name,
                     child: ProfileTranscript(
                       key: ValueKey(('worker-history', _session.member?.id)),
-                      reader: reader,
-                      identity: _session.key,
-                      needsInput: runtime.needsInput,
-                      turnAdmissionBlocked: _session.liveAnswering,
-                      openingContent: null,
-                      notificationReading: null,
-                      onAnswerVisible: null,
+                      presentation: TranscriptPresentation.capture(
+                        identity: (
+                          'worker-history',
+                          _session.group.key,
+                          _session.member?.id,
+                        ),
+                        reader: reader,
+                        timeline: timeline,
+                        needsInput: runtime.needsInput,
+                        turnAdmissionBlocked: _session.liveAnswering,
+                      ),
                       onRefreshHistory: _session.refresh,
                       onLoadOlder: _session.loadOlder,
-                      timeline: timeline,
                       activity: activity,
                       emptyContent: Padding(
                         padding: const EdgeInsets.all(24),
@@ -230,11 +235,8 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
                         ),
                       ),
                       tail: const [],
-                      messageBuilder: (entry) => ProfileMessage(
-                        message: entry.message,
-                        loadImages: false,
-                        attachmentImagesAvailable: false,
-                      ),
+                      messageBuilder: (entry) =>
+                          ProfileMessage(message: entry.message),
                     ),
                   ),
                 ),

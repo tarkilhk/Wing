@@ -973,6 +973,7 @@ void main() {
       ],
     });
     expect(chat.todoRevision, 3);
+    expect(chat.todos.map((todo) => todo.id), ['one', 'two']);
     expect(chat.todos.map((todo) => todo.status), [
       GatewayTodoStatus.completed,
       GatewayTodoStatus.cancelled,
@@ -1091,20 +1092,24 @@ void main() {
                   embedded: true,
                   todos: [
                     GatewayTodo(
+                      id: 'task-1',
                       content: 'Inspect the rental conditions',
                       status: GatewayTodoStatus.completed,
                     ),
                     GatewayTodo(
+                      id: 'task-2',
                       content: 'Check the permitted travel area',
                       status: GatewayTodoStatus.inProgress,
                       parent: 'inspect',
                     ),
                     GatewayTodo(
+                      id: 'task-3',
                       content:
                           'Compare the available pickup locations and opening hours',
                       status: GatewayTodoStatus.pending,
                     ),
                     GatewayTodo(
+                      id: 'task-4',
                       content: 'Check an alternative supplier',
                       status: GatewayTodoStatus.cancelled,
                     ),
@@ -1125,7 +1130,17 @@ void main() {
         expect(find.text('Pending'), findsOneWidget);
         expect(find.text('Cancelled'), findsOneWidget);
         expect(find.byType(Checkbox), findsNothing);
-        expect(find.byType(IconButton), findsNothing);
+        expect(find.byTooltip('Expand task'), findsNWidgets(4));
+        expect(find.byType(SelectableText), findsNothing);
+        for (final id in ['task-1', 'task-2', 'task-3', 'task-4']) {
+          final control = find.descendant(
+            of: find.byKey(ValueKey(('todo', id))),
+            matching: find.byTooltip('Expand task'),
+          );
+          await tester.ensureVisible(control);
+          await tester.tap(control);
+          await tester.pumpAndSettle();
+        }
         expect(find.byType(SelectableText), findsNWidgets(4));
         final texts = tester
             .widgetList<SelectableText>(find.byType(SelectableText))
@@ -1157,6 +1172,7 @@ void main() {
               const ProfileTodoPanel(
                 todos: [
                   GatewayTodo(
+                    id: 'task-5',
                     content: 'Inspect contract',
                     status: GatewayTodoStatus.completed,
                   ),

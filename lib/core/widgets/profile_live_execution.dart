@@ -61,6 +61,7 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
         widget.entries.whereType<ChatToolEntry>().length;
     return ProfileActivitySection(
       key: const ValueKey('live-activity'),
+      initiallyExpanded: false,
       anchorExpansion: false,
       label: count == 0
           ? 'Activity'

@@ -118,3 +118,12 @@ and notice.
 Reference documents appear when Hermes provides a valid file listing. Their
 content may carry a truncation notice. Available profile activity counts and
 read-request counts describe different things; missing records stay unknown.
+
+Activity starts collapsed, including while a reply streams. New reasoning and
+tool events do not open it automatically; expand it whenever you want to read
+the details.
+
+Tasks start individually collapsed with a short preview and status. Use each
+task's chevron to expand its full selectable text. Live updates and reordering
+retain the correct task's expansion. Hermes supplies the list order and nesting,
+but no task creation timestamps for chronological sorting.

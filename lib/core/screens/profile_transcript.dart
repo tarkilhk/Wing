@@ -4,7 +4,6 @@ import '../widgets/scroll_capture_viewport.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/recent_conversations/conversation_gestures.dart';
 import '../models/chat_output.dart';
-import '../models/profile_session_key.dart';
 import '../services/server_connection_status.dart';
 import '../models/notification_focus.dart';
 import '../models/transcript_timeline.dart' as timeline_facts;
@@ -14,7 +13,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import '../theme/wing_theme.dart';
-import '../models/transcript_reader.dart';
+import '../models/transcript_presentation.dart';
 import '../services/transcript_reading.dart';
 import '../services/completion_diagnostics.dart';
 import '../utils/expansion_scroll_controller.dart';
@@ -34,12 +33,7 @@ final class ConversationTranscriptController {
 /// Reversed layout opens at the newest row. Older pages grow at the far end;
 /// a visible durable row anchors the viewport when streaming changes the tail.
 class ProfileTranscript extends StatefulWidget {
-  final TranscriptReader reader;
-  // Keys execution presentation only; it grants no transport authority.
-  final ProfileSessionKey? identity;
-  // Input controls inside the scrolling viewport need separate navigation.
-  final bool needsInput;
-  final bool turnAdmissionBlocked;
+  final TranscriptPresentation presentation;
   final Widget? openingContent;
   final TranscriptReading? notificationReading;
   final void Function(NotificationFocus)? onAnswerVisible;
@@ -48,7 +42,7 @@ class ProfileTranscript extends StatefulWidget {
   final Widget? Function(timeline_facts.TranscriptTimelineSection)?
   activityTrailingBuilder;
   final List<Widget> tail;
-  final Future<void> Function() onLoadOlder;
+  final Future<void> Function()? onLoadOlder;
   final ConversationActivity? activity;
   final List<ProfileActivityTab> additionalActivityTabs;
   final ValueChanged<bool>? onCaptureChanged;
@@ -58,24 +52,19 @@ class ProfileTranscript extends StatefulWidget {
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
-  final timeline_facts.TranscriptTimeline timeline;
   final int? focusedMessageId;
   final VoidCallback? onBackToLatest;
   final Map<String, GlobalKey> notificationAnchors;
   const ProfileTranscript({
     super.key,
-    required this.reader,
-    required this.identity,
-    required this.needsInput,
-    required this.turnAdmissionBlocked,
-    required this.openingContent,
-    required this.notificationReading,
-    required this.onAnswerVisible,
+    required this.presentation,
+    this.openingContent,
+    this.notificationReading,
+    this.onAnswerVisible,
     required this.onRefreshHistory,
-    required this.onLoadOlder,
+    this.onLoadOlder,
     required this.messageBuilder,
     this.activityTrailingBuilder,
-    required this.timeline,
     required this.tail,
     this.activity,
     this.additionalActivityTabs = const [],
@@ -96,13 +85,12 @@ class ProfileTranscript extends StatefulWidget {
 
 class _ProfileTranscriptState extends State<ProfileTranscript> {
   late final _scroll = ExpansionScrollController(
-    preserveViewportPosition: () => !widget.needsInput,
+    preserveViewportPosition: () => !widget.presentation.needsInput,
     initialScrollOffset: widget.focusedMessageId == null
-        ? widget.reader.historyScrollOffset
+        ? widget.presentation.scrollOffset
         : 0,
     restoreInitialOffset:
-        widget.focusedMessageId == null &&
-        widget.reader.historyScrollOffset > 0,
+        widget.focusedMessageId == null && widget.presentation.scrollOffset > 0,
   );
   final _viewport = GlobalKey();
   final _focusedRow = GlobalKey();
@@ -140,9 +128,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   Object? _streamingPresentationId;
   String? _segment;
   late bool _restoringMarkdown =
-      widget.focusedMessageId == null && widget.reader.historyScrollOffset > 0;
+      widget.focusedMessageId == null && widget.presentation.scrollOffset > 0;
   late final _jumpLabel = ValueNotifier<String?>(
-    widget.focusedMessageId == null && widget.reader.historyScrollOffset > 48
+    widget.focusedMessageId == null && widget.presentation.scrollOffset > 48
         ? 'Latest'
         : null,
   );
@@ -151,16 +139,16 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   void initState() {
     super.initState();
     widget.controller?._state = this;
-    _newestId = widget.timeline.entries
+    _newestId = widget.presentation.timeline.entries
         .where((entry) => !entry.streaming)
         .lastOrNull
         ?.presentationId;
-    _streaming = widget.reader.streaming;
-    _streamingPresentationId = widget.timeline.entries
+    _streaming = widget.presentation.streaming;
+    _streamingPresentationId = widget.presentation.timeline.entries
         .where((entry) => entry.streaming)
         .firstOrNull
         ?.presentationId;
-    _segment = widget.reader.historySessionId;
+    _segment = widget.presentation.segment;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.focusedMessageId == null) {
         _updateJump();
@@ -174,21 +162,31 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   // Scroll-end can be delivered during viewport layout. Owner commands may
   // publish synchronously, so issue this request only after the current frame.
   void _scheduleLoadOlder() {
-    if (_olderLoadScheduled) return;
+    if (_olderLoadScheduled ||
+        widget.onLoadOlder == null ||
+        !widget.presentation.history.hasOlder) {
+      return;
+    }
     _olderLoadScheduled = true;
-    final reader = widget.reader;
+    final presentation = widget.presentation;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _olderLoadScheduled = false;
       if (!mounted ||
-          !identical(widget.reader, reader) ||
+          !identical(
+            widget.presentation.readingIdentity,
+            presentation.readingIdentity,
+          ) ||
           !_scroll.hasClients ||
           _scroll.position.extentAfter >= 180 ||
           _scroll.position.pixels <= 0 ||
-          reader.historyLoading ||
-          reader.historyError != null) {
+          widget.presentation.history.loading ||
+          widget.presentation.history.error != null) {
         return;
       }
-      unawaited(widget.onLoadOlder());
+      final load = widget.onLoadOlder;
+      if (load != null && widget.presentation.history.hasOlder) {
+        unawaited(load());
+      }
     });
   }
 
@@ -210,7 +208,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (!pending) {
       _cancelMarkdownRestoration();
       if (_scroll.hasClients) {
-        widget.reader.recordScrollOffset(_scroll.offset);
+        widget.presentation.recordScrollOffset(_scroll.offset);
       }
     }
   }
@@ -237,8 +235,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (target.kind == 'answer' || target.kind == 'status') {
       final answer =
           timeline_facts.TranscriptTimeline.notificationAnswerPresentation(
-            widget.reader.messages,
-            presentationId: widget.reader.messagePresentationId,
+            widget.notificationReading!.messages,
+            presentationId: widget.notificationReading!.messagePresentationId,
             messageId: target.messageId,
           );
       return answer == null ? null : _rows[answer];
@@ -255,7 +253,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           !_scroll.hasClients ||
           widget.focusedMessageId != null ||
           (widget.openingContent != null) ||
-          widget.reader.historyLoading) {
+          widget.presentation.history.loading) {
         return;
       }
       final notification = widget.notificationReading!;
@@ -344,7 +342,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         widget.onLatestVisible?.call();
       }
     }
-    final attention = widget.needsInput;
+    final attention = widget.presentation.needsInput;
     _jumpLabel.value =
         distance <= 24 || (distance <= 48 && !_hasNewContent && !attention)
         ? null
@@ -386,19 +384,19 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         (_jumping ||
             (_scroll.offset.abs() <= 0.5 &&
                 !_scroll.position.isScrollingNotifier.value));
-    final newest = widget.timeline.entries
+    final newest = widget.presentation.timeline.entries
         .where((entry) => !entry.streaming)
         .lastOrNull
         ?.presentationId;
-    final segmentChanged = _segment != widget.reader.historySessionId;
+    final segmentChanged = _segment != widget.presentation.segment;
     final growingRow =
         _rows[_streamingPresentationId]?.currentContext?.findRenderObject()
             as TranscriptAnchorBox?;
     if (!atBottom &&
         !segmentChanged &&
         ((_newestId != null && newest != null && newest != _newestId) ||
-            (widget.reader.streaming.isNotEmpty &&
-                widget.reader.streaming != _streaming))) {
+            (widget.presentation.streaming.isNotEmpty &&
+                widget.presentation.streaming != _streaming))) {
       _hasNewContent = true;
     }
     if (segmentChanged ||
@@ -407,27 +405,28 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       _readingThrough = null;
     } else if (_readingThrough == null &&
         newest != _newestId &&
-        !oldWidget.timeline.hasLiveMessage &&
-        !widget.timeline.hasLiveMessage &&
+        !oldWidget.presentation.timeline.hasLiveMessage &&
+        !widget.presentation.timeline.hasLiveMessage &&
         oldWidget.activity?.live != true &&
         widget.activity?.live != true) {
-      _readingThrough = oldWidget.timeline.entries
+      _readingThrough = oldWidget.presentation.timeline.entries
           .where((entry) => !entry.streaming)
           .lastOrNull
           ?.presentationId;
     }
     _newestId = newest;
-    _streaming = widget.reader.streaming;
-    _segment = widget.reader.historySessionId;
+    _streaming = widget.presentation.streaming;
+    _segment = widget.presentation.segment;
     if (_scroll.hasExpansionAnchor &&
-        oldWidget.timeline.hasLiveMessage != widget.timeline.hasLiveMessage) {
+        oldWidget.presentation.timeline.hasLiveMessage !=
+            widget.presentation.timeline.hasLiveMessage) {
       // First-token insertion can move an expanded sibling without changing
       // its height. Retain its content position across this structural change.
       _scroll.preserveReaderAnchor(_scroll.expansionRow);
     } else {
       _preserveReaderAnchor(growingRow);
     }
-    _streamingPresentationId = widget.timeline.entries
+    _streamingPresentationId = widget.presentation.timeline.entries
         .where((entry) => entry.streaming)
         .firstOrNull
         ?.presentationId;
@@ -441,7 +440,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         return;
       }
       if (!_restoringMarkdown) {
-        widget.reader.recordScrollOffset(_scroll.offset);
+        widget.presentation.recordScrollOffset(_scroll.offset);
       }
       _updateJump();
     });
@@ -503,7 +502,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     if (widget.focusedMessageId == null &&
         !_restoringMarkdown &&
         _scroll.hasClients) {
-      widget.reader.recordScrollOffset(_scroll.offset);
+      widget.presentation.recordScrollOffset(_scroll.offset);
     }
     _scroll.dispose();
     _jumpLabel.dispose();
@@ -534,11 +533,11 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final buildStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
-    final reader = widget.reader;
+    final presentation = widget.presentation;
     _scheduleNoticeVisibility();
     final timeline = _readingThrough == null
-        ? widget.timeline
-        : widget.timeline.through(_readingThrough!);
+        ? widget.presentation.timeline
+        : widget.presentation.timeline.through(_readingThrough!);
     _joinedLiveActivity =
         widget.activity?.live == true && widget.activity!.entries.isNotEmpty
         ? timeline.adjacentLiveActivity
@@ -569,12 +568,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             label: (widget.activity?.toolCount ?? 0) > 0
                 ? 'Activity · ${(widget.activity?.toolCount ?? 0)} ${(widget.activity?.toolCount ?? 0) == 1 ? 'tool' : 'tools'}'
                 : 'Activity',
-            key: ValueKey((
-              'activity',
-              widget.identity ??
-                  widget.reader.historySessionId ??
-                  widget.reader,
-            )),
+            key: ValueKey(('activity', widget.presentation.identity)),
             detailsBuilder: (_) => ProfileActivityTabs(
               tabs: [
                 if (_currentActivity.isNotEmpty)
@@ -618,16 +612,16 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     ];
     final showOpening =
         (widget.openingContent != null) &&
-        reader.messages.isEmpty &&
-        reader.streaming.isEmpty;
+        !presentation.hasMessages &&
+        presentation.streaming.isEmpty;
     final showWelcome =
         !(widget.openingContent != null) &&
-        reader.messages.isEmpty &&
+        !presentation.hasMessages &&
         !_historyBlocksReading &&
-        reader.historyError == null &&
-        reader.nextHistoryOffset == null &&
-        reader.streaming.isEmpty &&
-        !widget.turnAdmissionBlocked &&
+        presentation.history.error == null &&
+        !presentation.history.hasOlder &&
+        presentation.streaming.isEmpty &&
+        !widget.presentation.turnAdmissionBlocked &&
         tail.isEmpty &&
         executionIndex == null;
     final keysStarted = CompletionDiagnostics.enabled
@@ -713,7 +707,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         onNotification: (event) {
           if (event.depth == 0) {
             if (!_restoringMarkdown) {
-              widget.reader.recordScrollOffset(event.metrics.pixels);
+              widget.presentation.recordScrollOffset(event.metrics.pixels);
             }
             _updateJump();
           }
@@ -733,7 +727,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
               _scroll.releaseExpansionAnchor();
             }
             if (!_restoringMarkdown) {
-              widget.reader.recordScrollOffset(event.metrics.pixels);
+              widget.presentation.recordScrollOffset(event.metrics.pixels);
             }
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _updateJump();
@@ -742,8 +736,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     event is ScrollEndNotification) &&
                 event.metrics.extentAfter < 180 &&
                 event.metrics.pixels > 0 &&
-                !reader.historyLoading &&
-                reader.historyError == null) {
+                !presentation.history.loading &&
+                presentation.history.error == null) {
               _scheduleLoadOlder();
             }
             return false;
@@ -917,7 +911,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
             )
           : const SizedBox.shrink(),
     );
-    final needsInput = widget.needsInput;
+    final needsInput = widget.presentation.needsInput;
     if (CompletionDiagnostics.enabled) {
       CompletionDiagnostics.finish(
         'transcript.build_setup_sync',
@@ -926,8 +920,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           'newIdlessKeys': newIdlessKeys,
           'newDurableKeys': newDurableKeys,
           'sections': rows.length,
-          'streaming': reader.streaming.isNotEmpty ? 1 : 0,
-          'busy': widget.turnAdmissionBlocked ? 1 : 0,
+          'streaming': presentation.streaming.isNotEmpty ? 1 : 0,
+          'busy': widget.presentation.turnAdmissionBlocked ? 1 : 0,
         },
       );
     }
@@ -989,7 +983,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   Widget _nearbyMessages(BuildContext context) {
     final targetId = widget.focusedMessageId!;
-    final timeline = widget.timeline.nearby(targetId);
+    final timeline = widget.presentation.timeline.nearby(targetId);
     if (timeline == null) return _missingSearchResult();
     final sections = timeline.sections;
     return Column(
@@ -1084,46 +1078,41 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     ),
   );
 
-  bool get _historyBlocksReading {
-    final reader = widget.reader;
-    return reader.historyLoading &&
-        (reader.historyPaging ||
-            !reader.historyAvailable &&
-                reader.messages.isEmpty &&
-                reader.streaming.isEmpty);
-  }
+  bool get _historyBlocksReading => widget.presentation.blocksReading;
 
   Widget _historyEdge() {
-    final reader = widget.reader;
-    if (reader.historyUnavailable) return const SizedBox.shrink();
-    if (_historyBlocksReading && !reader.historyPaging) {
+    final presentation = widget.presentation;
+    if (presentation.history.unavailable) return const SizedBox.shrink();
+    if (_historyBlocksReading && !presentation.history.paging) {
       return const SizedBox.shrink();
     }
-    if (reader.historyError != null) {
+    if (presentation.history.error != null) {
       return Column(
         children: [
-          StudioError(reader.historyError!),
+          StudioError(presentation.history.error!),
           StudioButtonPress(
             child: TextButton(
               onPressed: widget.onRefreshHistory,
               child: const Text('Refresh history'),
             ),
           ),
-          if (reader.nextHistoryOffset != null)
+          if (presentation.history.hasOlder && widget.onLoadOlder != null)
             StudioButtonPress(
               child: TextButton(
-                onPressed: () => widget.onLoadOlder(),
+                onPressed: presentation.history.loading
+                    ? null
+                    : widget.onLoadOlder,
                 child: const Text('Retry older messages'),
               ),
             ),
         ],
       );
     }
-    return reader.nextHistoryOffset == null
+    return !presentation.history.hasOlder || widget.onLoadOlder == null
         ? Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              reader.messages.isEmpty
+              !presentation.hasMessages
                   ? 'Start a conversation'
                   : 'Start of loaded history',
               textAlign: TextAlign.center,
@@ -1134,7 +1123,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           )
         : StudioButtonPress(
             child: TextButton(
-              onPressed: reader.historyLoading ? null : widget.onLoadOlder,
+              onPressed: presentation.history.loading
+                  ? null
+                  : widget.onLoadOlder,
               child: const Text('Load older messages'),
             ),
           );
