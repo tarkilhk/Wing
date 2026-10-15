@@ -5,6 +5,34 @@ import 'package:flutter_test/flutter_test.dart';
 import '../tools/testing/test_batches.dart';
 
 void main() {
+  for (final control in [
+    "if (configureGlobalState()) { test('case', () {}); }",
+    "for (final item in installGlobalFixture()) { test('case', () {}); }",
+    "for (var i = initializeGlobalState(); i < 1; i++) { test('case', () {}); }",
+    "for (var i = 0; shouldRegisterNext(); i++) { test('case', () {}); }",
+    "for (var i = 0; i < 1; resetGlobalState()) { test('case', () {}); }",
+  ]) {
+    test('registration control effects remain isolated: $control', () {
+      expect(
+        canBatch('test/example_test.dart', 'void main() { $control }'),
+        isFalse,
+      );
+    });
+  }
+
+  test('literal case matrices remain eligible for batching', () {
+    expect(
+      canBatch('test/example_test.dart', '''
+void main() {
+  for (final enabled in [true, false]) {
+    if (enabled) { test('enabled case', () {}); }
+  }
+}
+'''),
+      isTrue,
+    );
+  });
+
   test(
     'dispatcher discovers every proof main and rejects unknown signatures',
     () {

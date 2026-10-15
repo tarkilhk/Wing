@@ -78,35 +78,35 @@ class _Fixture {
 }
 
 void main() {
-  test(
-    'wire routing is deeply frozen and canonical malformed data is rejected',
-    () {
-      final route = <String, Object?>{
-        'provider': 'p',
-        'model': 'one',
-        'routing': {
-          'headers': ['private'],
-        },
-      };
-      final value = FallbackModel.fromWire(route);
-      (route['routing'] as Map)['headers'] = ['changed'];
-      expect((value.toWire()['routing'] as Map)['headers'], ['private']);
-      for (final invalid in [
-        null,
-        'p/one',
-        3,
-        {'provider': 'p'},
-        {'provider': true, 'model': 'one'},
-      ]) {
-        expect(
-          () => FallbackModel.fromConfig({
-            'fallback_providers': [invalid],
-          }),
-          throwsFormatException,
-        );
-      }
-    },
-  );
+  test('wire routing is deeply frozen', () {
+    final route = <String, Object?>{
+      'provider': 'p',
+      'model': 'one',
+      'routing': {
+        'headers': ['private'],
+      },
+    };
+    final value = FallbackModel.fromWire(route);
+    (route['routing'] as Map)['headers'] = ['changed'];
+    expect((value.toWire()['routing'] as Map)['headers'], ['private']);
+  });
+
+  for (final invalid in [
+    null,
+    'p/one',
+    3,
+    {'provider': 'p'},
+    {'provider': true, 'model': 'one'},
+  ]) {
+    test('canonical fallback rejects malformed row $invalid', () {
+      expect(
+        () => FallbackModel.fromConfig({
+          'fallback_providers': [invalid],
+        }),
+        throwsFormatException,
+      );
+    });
+  }
 
   test(
     'fallback catalogs are immutable on initial and refreshed reads',

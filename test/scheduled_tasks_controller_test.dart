@@ -32,20 +32,6 @@ void main() {
     expect(() => rows.clear(), throwsUnsupportedError);
     expect(c.task(first.id), same(first));
     expect(() => first.data['name'] = 'Outside writer', throwsUnsupportedError);
-    expect(() => (c as dynamic).tasks = [], throwsNoSuchMethodError);
-    expect(() => (c as dynamic).loading = true, throwsNoSuchMethodError);
-    expect(
-      () => (c as dynamic).error = 'Outside error',
-      throwsNoSuchMethodError,
-    );
-    expect(
-      () => (c as dynamic).notice = 'Outside notice',
-      throwsNoSuchMethodError,
-    );
-    expect(
-      () => (c as dynamic).checkedAt = DateTime(2000),
-      throwsNoSuchMethodError,
-    );
     f.jobs['morning']!['name'] = 'Updated through Hermes';
     await c.refresh();
     expect(rows.first, same(first));

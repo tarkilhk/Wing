@@ -469,7 +469,9 @@ void main() {
       await session.continueCloud();
       expect(session.value.leaving, isFalse);
       expect(cloud.signIns, 1);
-      expect(probe.calls.length, 3);
+      expect(session.value.check.verified, isTrue);
+      expect(session.value.step, ConnectionSetupStep.review);
+      expect(probe.connectedProfile?.name, 'work');
       expect(writes, isEmpty);
     },
   );

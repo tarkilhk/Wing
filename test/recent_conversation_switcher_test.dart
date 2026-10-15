@@ -4450,6 +4450,7 @@ void main() {
             ..unreadSessions.addAll(['chat-1', 'chat-2']);
           Completer<void>? heldResume, resumeStarted;
           final reads = <String>[];
+          final acknowledgedSessions = <ProfileSessionKey>[];
           final controller = ProfileWorkspaceController(
             access: ConnectionAccess(
               connection: SavedConnection(
@@ -4470,6 +4471,18 @@ void main() {
                 scope: scope,
                 discover: base.discover,
                 get: base.read,
+                ownedPatch: (path, body, canDispatch, onDispatched) async {
+                  if (path != 'sessions/chat-0' ||
+                      body.length != 2 ||
+                      body['profile'] != scope.profileName ||
+                      body['unread'] != false ||
+                      !canDispatch()) {
+                    throw StateError('Unexpected read acknowledgement');
+                  }
+                  onDispatched();
+                  acknowledgedSessions.add(ProfileSessionKey(scope, 'chat-0'));
+                  return {'ok': true};
+                },
                 rpc: (method, params) async {
                   if (method == 'session.resume' && heldResume != null) {
                     final delay = heldResume!;
@@ -4677,7 +4690,27 @@ void main() {
           }
           expect(resumeStarted.isCompleted, isTrue);
           expect(first.refreshingConversation, isTrue);
-          expect(find.byType(StudioLoading), findsNothing);
+          final refreshWing = find.descendant(
+            of: find.byKey(const ValueKey('studio-loading-slot')),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is StudioLoading &&
+                  widget.label == 'Refreshing conversation',
+            ),
+          );
+          expect(refreshWing, findsOneWidget);
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(
+            tester
+                .getRect(refreshWing)
+                .overlaps(
+                  Offset.zero &
+                      (tester.view.physicalSize / tester.view.devicePixelRatio),
+                ),
+            isTrue,
+            reason:
+                'The pending user action keeps visible header feedback over cached reading',
+          );
           expect(
             find.widgetWithText(TextField, 'Return to this draft'),
             findsOneWidget,
@@ -4705,7 +4738,20 @@ void main() {
           expect(restored.selection.baseOffset, 6);
           expect(controller.visible, isTrue);
           if (brightness == Brightness.dark && scale == 1) {
+            expect(
+              reads,
+              isEmpty,
+              reason: 'Revealing cached reading does not read the answer',
+            );
+            expect(acknowledgedSessions, isEmpty);
+            await tester.drag(
+              find.byKey(const ValueKey('profile-transcript')),
+              const Offset(0, -120),
+            );
+            await _finishFrames(tester);
             expect(reads, ['answer:3']);
+            expect(acknowledgedSessions, [first.key]);
+            expect(first.markReadFailed, isFalse);
           }
           await _chatGesture(tester);
           await tester.binding.handlePopRoute();

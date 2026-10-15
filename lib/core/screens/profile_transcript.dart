@@ -10,6 +10,8 @@ import '../models/notification_focus.dart';
 import '../models/transcript_timeline.dart' as timeline_facts;
 import '../widgets/studio_error.dart';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show listEquals;
+import '../models/chat_runtime.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent, ScrollDirection;
@@ -636,12 +638,54 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   timeline_facts.TranscriptTimelineSection? _joinedLiveActivity;
 
-  Widget? get _liveExecution => widget.activity?.liveExecution(
-    savedActivity: _joinedLiveActivity,
-    loadImage: widget.loadImage,
-    onOpenResource: widget.onOpenResource,
-    onShareResource: widget.onShareResource,
-  );
+  Object? _liveExecutionInputs;
+  List<ChatActivityEntry>? _liveExecutionEntries;
+  Widget? _liveExecutionView;
+
+  // Callbacks borrow the current route configuration. Replacing an equivalent
+  // closure during answer publication must not rebuild unchanged work; later
+  // actions still dispatch through the current callback, never a captured one.
+  Future<Uint8List> _loadActivityImage(String path) => widget.loadImage!(path);
+  Future<void> _openActivityResource(ChatOutput output) =>
+      widget.onOpenResource!(output);
+  Future<void> _shareActivityResource(ChatOutput output) =>
+      widget.onShareResource!(output);
+
+  Widget? get _liveExecution {
+    final activity = widget.activity;
+    if (activity == null ||
+        !activity.live ||
+        (activity.entries.isEmpty && _joinedLiveActivity == null)) {
+      _liveExecutionInputs = null;
+      _liveExecutionEntries = null;
+      _liveExecutionView = null;
+      return null;
+    }
+    final inputs = (
+      widget.presentation.identity,
+      _joinedLiveActivity,
+      widget.loadImage != null,
+      widget.onOpenResource != null,
+      widget.onShareResource != null,
+    );
+    if (_liveExecutionInputs == inputs &&
+        listEquals(_liveExecutionEntries, activity.entries)) {
+      return _liveExecutionView;
+    }
+    _liveExecutionInputs = inputs;
+    _liveExecutionEntries = List.of(activity.entries);
+    return _liveExecutionView = activity.liveExecution(
+      savedActivity: _joinedLiveActivity,
+      loadImage: widget.loadImage == null ? null : _loadActivityImage,
+      onOpenResource: widget.onOpenResource == null
+          ? null
+          : _openActivityResource,
+      onShareResource: widget.onShareResource == null
+          ? null
+          : _shareActivityResource,
+    );
+  }
+
   List<Widget> get _currentActivity =>
       widget.activity?.currentActivity(
         loadImage: widget.loadImage,

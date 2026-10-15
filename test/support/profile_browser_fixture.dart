@@ -183,7 +183,19 @@ class ProfileBrowserFixture {
     ),
     get: (path, query) async {
       reads.add((path, query));
+      if (RegExp(r'^sessions/[^/]+/mutation-snapshot$').hasMatch(path)) {
+        return {
+          'session_id': Uri.decodeComponent(path.split('/')[1]),
+          'exists': true,
+          'runtime_revision': 0,
+          'runtime_generation': 0,
+        };
+      }
       if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
+      // Browser-only scenarios expose no configured models. Model-selection
+      // scenarios override these explicit observations with their own catalog.
+      if (path == 'model/options') return {'providers': <Object>[]};
+      if (path == 'model/info') return <String, dynamic>{};
       final offset = int.parse(query['offset'] ?? '0');
       final limit = int.parse(query['limit'] ?? '50');
       if (path.endsWith('/messages')) {

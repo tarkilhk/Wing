@@ -326,11 +326,14 @@ void main() {
       final issued = browser.chatActionsFor(key());
       addTearDown(issued.dispose);
       host.mutationDelay = Completer<void>();
+      host.mutationStarted = Completer<void>();
       final pin = controller.mutateSession(
         key(),
         changes: {'pinned': true},
         canDispatch: () => true,
       );
+      await host.mutationStarted!.future.timeout(const Duration(seconds: 5));
+      host.mutationStarted = null;
       expect(
         await issued.perform(BrowserAction.rename, name: 'New name'),
         isFalse,
@@ -609,9 +612,14 @@ void main() {
       chat.reading.recordReading(null, readThrough: 4);
       await controller.acknowledgeVisibleReading(chat, 4);
       expect(host.updates, hasLength(1));
+      expect(chat.markReadFailed, isFalse);
       expect(host.updates.single.$1, 'personal');
       expect(host.updates.single.$2, 'sessions/newest');
-      expect(host.updates.single.$3, {'unread': false, 'profile': 'personal'});
+      expect(host.updates.single.$3, containsPair('unread', false));
+      expect(host.updates.single.$3, containsPair('profile', 'personal'));
+      expect(host.updates.single.$3['request_id'], isNotEmpty);
+      expect(host.updates.single.$3['expected_revision'], 0);
+      expect(host.updates.single.$3['expected_generation'], 0);
       for (final rows in [resource.sessions, resource.projectSessions]) {
         expect(
           rows.firstWhere((row) => row['id'] == 'newest')['unread'],

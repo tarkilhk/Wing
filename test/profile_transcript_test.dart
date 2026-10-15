@@ -7,6 +7,11 @@ import 'package:wing/core/models/transcript_timeline.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:wing/core/models/chat_runtime.dart' as facts;
+import 'package:wing/core/models/chat_output.dart';
+import 'package:wing/core/services/profile_supervision_session.dart';
+import 'package:wing/core/widgets/conversation_activity.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'dart:ui' as ui;
 import 'package:wing/core/models/transcript_reading.dart';
 import 'support/composer_fixture.dart';
@@ -612,6 +617,160 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       expect(tester.takeException(), isNull);
     },
   );
+
+  Future<void> showLiveActivity(
+    WidgetTester tester, {
+    required List<facts.ChatActivityEntry> entries,
+    Future<void> Function(ChatOutput)? onShare,
+    Brightness brightness = Brightness.light,
+    double scale = 1,
+  }) async {
+    final session = ProfileSupervisionSession(
+      controller: controller,
+      chat: chat,
+    );
+    addTearDown(session.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(brightness),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: ProfileTranscript(
+            presentation: TranscriptPresentation.capture(
+              identity: chat.key,
+              reader: chat.reading,
+              timeline: TranscriptTimeline.project(
+                const [],
+                presentationId: chat.reading.messagePresentationId,
+              ),
+              needsInput: false,
+              turnAdmissionBlocked: false,
+            ),
+            onRefreshHistory: () async {},
+            messageBuilder: (entry) => ProfileMessage(message: entry.message),
+            tail: const [],
+            onShareResource: onShare,
+            activity: ConversationActivity(
+              runtime: chat.runtime,
+              entries: entries,
+              todos: const [],
+              inspection: session,
+              agentsBuilder: () => const SizedBox.shrink(),
+              live: true,
+              taskCount: 0,
+              agentCount: 0,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  List<facts.ChatActivityEntry> liveFile(String result) => [
+    facts.ChatToolEntry(
+      GatewayToolActivity(
+        toolId: 'retained-file',
+        name: 'read_file',
+        phase: GatewayToolActivityPhase.completed,
+        arguments: '{"path":"/tmp/retained.md"}',
+        result: jsonEncode({'content': result}),
+      ),
+    ),
+  ];
+
+  Future<void> openLiveFile(WidgetTester tester) async {
+    await tester.tap(find.text('Activity · 1 tool'));
+    await tester.pumpAndSettle();
+    final tool = find.byWidgetPredicate(
+      (widget) =>
+          widget is ProfileToolCall && widget.call.callId == 'retained-file',
+    );
+    final header = find.descendant(of: tool, matching: find.byType(ListTile));
+    expect(header, findsOneWidget);
+    await tester.ensureVisible(header);
+    await tester.pumpAndSettle();
+    expect(header.hitTestable(), findsOneWidget);
+    await tester.tap(header);
+    await tester.pumpAndSettle();
+    await tester.settleMarkdown();
+  }
+
+  testWidgets('retained live Activity shares through the current callback', (
+    tester,
+  ) async {
+    final entries = liveFile('Received file content');
+    final shared = <String>[];
+    await showLiveActivity(
+      tester,
+      entries: entries,
+      onShare: (output) async => shared.add('old:${output.path}'),
+    );
+    await openLiveFile(tester);
+    await showLiveActivity(
+      tester,
+      entries: entries,
+      onShare: (output) async => shared.add('current:${output.path}'),
+    );
+    final share = find.byTooltip('Share file');
+    await tester.ensureVisible(share);
+    await tester.pumpAndSettle();
+    expect(share.hitTestable(), findsOneWidget);
+    await tester.tap(share);
+    await tester.pumpAndSettle();
+    expect(shared, ['current:/tmp/retained.md']);
+  });
+
+  testWidgets(
+    'live Activity removes sharing when the current route withdraws it',
+    (tester) async {
+      final entries = liveFile('Received file content');
+      await showLiveActivity(tester, entries: entries, onShare: (_) async {});
+      await openLiveFile(tester);
+      await tester.ensureVisible(find.byTooltip('Share file'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Share file').hitTestable(), findsOneWidget);
+      await showLiveActivity(tester, entries: entries);
+      expect(find.byTooltip('Share file'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'live Activity replaces the received result for an existing tool',
+    (tester) async {
+      await showLiveActivity(tester, entries: liveFile('Earlier result'));
+      await openLiveFile(tester);
+      expect(find.text('Earlier result', findRichText: true), findsWidgets);
+      await showLiveActivity(tester, entries: liveFile('Updated result'));
+      expect(find.text('Earlier result', findRichText: true), findsNothing);
+      await tester.settleMarkdown();
+      expect(find.text('Updated result', findRichText: true), findsWidgets);
+    },
+  );
+
+  testWidgets('live Activity replaces reasoning with the same identity', (
+    tester,
+  ) async {
+    List<facts.ChatActivityEntry> reasoning(String text) => [
+      facts.ChatReasoningEntry(
+        identity: 'thought',
+        text: text,
+        source: 'event',
+      ),
+    ];
+    await showLiveActivity(tester, entries: reasoning('Earlier reasoning'));
+    await tester.settleMarkdown();
+    expect(find.text('Earlier reasoning', findRichText: true), findsWidgets);
+    await showLiveActivity(tester, entries: reasoning('Updated reasoning'));
+    await tester.settleMarkdown();
+    expect(find.text('Earlier reasoning', findRichText: true), findsNothing);
+    expect(find.text('Updated reasoning', findRichText: true), findsWidgets);
+  });
 
   testWidgets('empty greeting yields to messages and history states', (
     tester,
@@ -1590,35 +1749,57 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     },
   );
 
-  for (final kind in GatewaySensitivePromptKind.values) {
-    testWidgets('older-history reading signals ${kind.name} input', (
-      tester,
-    ) async {
-      await show(tester);
-      await tester.drag(list, const Offset(0, 450));
-      await tester.pumpAndSettle();
-      final request = GatewaySensitivePromptRequest.fromEventData(
-        kind: kind,
+  testWidgets('pending secure input stays discoverable while reading', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.drag(list, const Offset(0, 450));
+    await tester.pumpAndSettle();
+    final request = GatewaySensitivePromptRequest.fromEventData(
+      kind: GatewaySensitivePromptKind.vaultSaveLogin,
+      data: {'request_id': 'reading-request', 'site': 'Fixture site'},
+    )!;
+    runtime.receiveSecure(request);
+    await rebuildPresentation(tester);
+    expect(find.byTooltip('Input needed'), findsOneWidget);
+    final before = host.calls.length;
+    await tester.tap(jump);
+    await tester.pumpAndSettle();
+    expect(chat.reading.readingPosition.resume, isNull);
+    expect(chat.runtime.secureInput?.requestId, request.requestId);
+    expect(chat.runtime.secureInput?.kind, request.kind);
+    expect(host.calls.length, before);
+  });
+
+  testWidgets('closed secure input signals new activity while reading', (
+    tester,
+  ) async {
+    realisticMessages = true;
+    await show(tester);
+    await tester.drag(list, const Offset(0, 450));
+    await tester.pumpAndSettle();
+    runtime.receiveSecure(
+      GatewaySensitivePromptRequest.fromEventData(
+        kind: GatewaySensitivePromptKind.vaultSaveLogin,
         data: {'request_id': 'reading-request', 'site': 'Fixture site'},
-      )!;
-      runtime.receiveSecure(request);
-      await rebuildPresentation(tester);
-      expect(find.byTooltip('Input needed'), findsOneWidget);
-      runtime.reconcileOpenRequests(const []);
-      await rebuildPresentation(tester);
-      expect(find.byTooltip('Input needed'), findsNothing);
-      expect(find.byTooltip('Latest'), findsOneWidget);
-      runtime.receiveSecure(request);
-      await rebuildPresentation(tester);
-      final before = host.calls.length;
-      await tester.tap(jump);
-      await tester.pumpAndSettle();
-      expect(chat.reading.readingPosition.resume, isNull);
-      expect(chat.runtime.secureInput?.requestId, request.requestId);
-      expect(chat.runtime.secureInput?.kind, request.kind);
-      expect(host.calls.length, before);
-    });
-  }
+      )!,
+    );
+    await rebuildPresentation(tester);
+    expect(find.byTooltip('Input needed'), findsOneWidget);
+    final before = host.calls.length;
+
+    runtime.reconcileOpenRequests(const []);
+    await rebuildPresentation(tester);
+
+    expect(find.byTooltip('Input needed'), findsNothing);
+    expect(find.byTooltip('New activity').hitTestable(), findsOneWidget);
+    expect(chat.reading.readingPosition.resume, isNotNull);
+    await tester.tap(jump);
+    await tester.pumpAndSettle();
+    expect(chat.reading.readingPosition.resume, isNull);
+    expect(chat.runtime.secureInput, isNull);
+    expect(host.calls.length, before);
+  });
 
   testWidgets(
     'search context keeps its header visible and expands the matched tool result',

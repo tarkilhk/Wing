@@ -3399,10 +3399,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     required bool hasAttachments,
     required VoidCallback? onPressed,
   }) {
-    final button = IconButton(
-      tooltip: hasAttachments ? null : 'Steer queued message',
-      onPressed: onPressed,
-      icon: const Icon(Icons.explore_outlined),
+    final button = StudioButtonPress(
+      child: IconButton(
+        tooltip: hasAttachments ? null : 'Steer queued message',
+        onPressed: onPressed,
+        icon: const Icon(Icons.explore_outlined),
+      ),
     );
     if (!hasAttachments) return button;
     return Semantics(
@@ -3448,21 +3450,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             confirmLabel: 'Save queued message',
             progressLabel: 'Saving queued message',
             leadingActions: [
-              StudioButtonPress(
-                child: _queuedSteerButton(
-                  hasAttachments: prompt.attachments.isNotEmpty,
-                  onPressed: saving || !canSteer
-                      ? null
-                      : () => _runQueuedEdit(chat, () async {
-                          final accepted = await controller
-                              .steerQueuedPromptEdit(chat);
-                          if (!accepted) {
-                            throw StateError(
-                              'Hermes rejected the steering message.',
-                            );
-                          }
-                        }),
-                ),
+              _queuedSteerButton(
+                hasAttachments: prompt.attachments.isNotEmpty,
+                onPressed: saving || !canSteer
+                    ? null
+                    : () => _runQueuedEdit(chat, () async {
+                        final accepted = await controller.steerQueuedPromptEdit(
+                          chat,
+                        );
+                        if (!accepted) {
+                          throw StateError(
+                            'Hermes rejected the steering message.',
+                          );
+                        }
+                      }),
               ),
               const SizedBox(width: WingSpacing.sm),
             ],
@@ -3540,10 +3541,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                               style: Theme.of(context).textTheme.titleMedium,
                             ),
                           ),
-                          IconButton(
-                            tooltip: 'Close queued message actions',
-                            onPressed: () => Navigator.pop(sheetContext),
-                            icon: const Icon(Icons.close),
+                          StudioButtonPress(
+                            child: IconButton(
+                              tooltip: 'Close queued message actions',
+                              onPressed: () => Navigator.pop(sheetContext),
+                              icon: const Icon(Icons.close),
+                            ),
                           ),
                         ],
                       ),
@@ -3565,12 +3568,14 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          IconButton(
-                            tooltip: 'Edit queued message',
-                            onPressed: actions.canEdit
-                                ? () => Navigator.pop(sheetContext, 'edit')
-                                : null,
-                            icon: const Icon(Icons.edit_outlined),
+                          StudioButtonPress(
+                            child: IconButton(
+                              tooltip: 'Edit queued message',
+                              onPressed: actions.canEdit
+                                  ? () => Navigator.pop(sheetContext, 'edit')
+                                  : null,
+                              icon: const Icon(Icons.edit_outlined),
+                            ),
                           ),
                           _queuedSteerButton(
                             hasAttachments: prompt.attachments.isNotEmpty,
@@ -3578,20 +3583,26 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                 ? () => Navigator.pop(sheetContext, 'steer')
                                 : null,
                           ),
-                          IconButton(
-                            tooltip: 'Delete queued message',
-                            onPressed: actions.canDelete
-                                ? () => Navigator.pop(sheetContext, 'delete')
-                                : null,
-                            icon: const Icon(Icons.delete_outline),
+                          StudioButtonPress(
+                            child: IconButton(
+                              tooltip: 'Delete queued message',
+                              onPressed: actions.canDelete
+                                  ? () => Navigator.pop(sheetContext, 'delete')
+                                  : null,
+                              icon: const Icon(Icons.delete_outline),
+                            ),
                           ),
                           if (chat.composer.observation.paused)
-                            IconButton(
-                              tooltip: 'Resume queued messages',
-                              onPressed: chat.composer.actions().canResumeQueue
-                                  ? () => Navigator.pop(sheetContext, 'resume')
-                                  : null,
-                              icon: const Icon(Icons.play_arrow),
+                            StudioButtonPress(
+                              child: IconButton(
+                                tooltip: 'Resume queued messages',
+                                onPressed:
+                                    chat.composer.actions().canResumeQueue
+                                    ? () =>
+                                          Navigator.pop(sheetContext, 'resume')
+                                    : null,
+                                icon: const Icon(Icons.play_arrow),
+                              ),
                             ),
                         ],
                       ),

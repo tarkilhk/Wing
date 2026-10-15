@@ -584,7 +584,18 @@ void main() {
         }),
       );
 
-      expect(client.apiGet('model/info'), throwsA(isA<Exception>()));
+      await expectLater(
+        client.apiGet('model/info'),
+        throwsA(
+          isA<DashboardHttpException>()
+              .having((error) => error.statusCode, 'status', 401)
+              .having(
+                (error) => error.endpoint,
+                'endpoint',
+                'auth/password-login',
+              ),
+        ),
+      );
       client.close();
     });
 
@@ -1152,18 +1163,17 @@ void main() {
 
     test('fails a gateway.ready waiter when the socket closes first', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final socketSeen = Completer<WebSocket>();
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
-            Timer(const Duration(milliseconds: 50), () {
-              unawaited(socket.close(WebSocketStatus.goingAway, 'no ready'));
-            });
+            socketSeen.complete(socket);
           });
       final client = WsClient('http://127.0.0.1:${server.port}');
 
       try {
         await client.connect();
-        await expectLater(
+        final failed = expectLater(
           client.waitForGatewayReady(timeout: const Duration(seconds: 5)),
           throwsA(
             isA<JsonRpcError>()
@@ -1171,6 +1181,9 @@ void main() {
                 .having((error) => error.reason, 'reason', 'connection_closed'),
           ),
         );
+        final socket = await socketSeen.future;
+        await socket.close(WebSocketStatus.goingAway, 'no ready');
+        await failed;
       } finally {
         client.close();
         await socketSubscription.cancel();
@@ -1322,6 +1335,7 @@ void main() {
         final connectionChanges = <bool>[];
         final disconnected = Completer<void>();
         final serverSocketClosed = Completer<void>();
+        final socketSeen = Completer<WebSocket>();
         final firstFrame = <String, dynamic>{
           'jsonrpc': '2.0',
           'method': 'event',
@@ -1345,20 +1359,7 @@ void main() {
               );
               socket.add(jsonEncode(firstFrame));
               socket.add(jsonEncode(firstFrame));
-              Timer(const Duration(milliseconds: 100), () {
-                socket.add(
-                  jsonEncode({
-                    'jsonrpc': '2.0',
-                    'method': 'event',
-                    'params': {
-                      'type': 'gateway.ready',
-                      'payload': {
-                        'capabilities': ['turn.resume', 'unexpected'],
-                      },
-                    },
-                  }),
-                );
-              });
+              socketSeen.complete(socket);
             });
         final client = WsClient('http://127.0.0.1:${server.port}')
           ..onStreamEvent = applicationEvents.add
@@ -1373,6 +1374,19 @@ void main() {
         try {
           await client.connect();
           expect(await client.waitForGatewayReady(), firstFrame);
+          final socket = await socketSeen.future;
+          socket.add(
+            jsonEncode({
+              'jsonrpc': '2.0',
+              'method': 'event',
+              'params': {
+                'type': 'gateway.ready',
+                'payload': {
+                  'capabilities': ['turn.resume', 'unexpected'],
+                },
+              },
+            }),
+          );
           await disconnected.future.timeout(const Duration(seconds: 5));
           await serverSocketClosed.future.timeout(const Duration(seconds: 5));
 

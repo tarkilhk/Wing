@@ -320,117 +320,129 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final semantics = tester.ensureSemantics();
-        var busy = false;
-        var taps = 0;
-        late StateSetter change;
-        final frame = GlobalKey();
-        await tester.pumpWidget(
-          MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: wingTheme(brightness),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(scale)),
-              child: RepaintBoundary(key: frame, child: child!),
-            ),
-            home: Scaffold(
-              appBar: AppBar(title: const Text('Action icons')),
-              body: StatefulBuilder(
-                builder: (_, setState) {
-                  change = setState;
-                  return ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      TextButton(
-                        key: const Key('compact-action'),
-                        onPressed: busy ? null : () => taps++,
-                        child: StudioActionLabel.compact(
-                          'Open',
-                          busy: busy,
-                          icon: Icons.open_in_new,
+        try {
+          var busy = false;
+          var taps = 0;
+          late StateSetter change;
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: Scaffold(
+                appBar: AppBar(title: const Text('Action icons')),
+                body: StatefulBuilder(
+                  builder: (_, setState) {
+                    change = setState;
+                    return ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        TextButton(
+                          key: const Key('compact-action'),
+                          onPressed: busy ? null : () => taps++,
+                          child: StudioActionLabel.compact(
+                            'Open',
+                            busy: busy,
+                            icon: Icons.open_in_new,
+                          ),
                         ),
-                      ),
-                      TextButton(
-                        key: const Key('row-action'),
-                        onPressed: busy ? null : () => taps++,
-                        child: StudioActionLabel.row(
-                          'Support Wing',
-                          busy: busy,
-                          icon: Icons.favorite_outline,
+                        TextButton(
+                          key: const Key('row-action'),
+                          onPressed: busy ? null : () => taps++,
+                          child: StudioActionLabel.row(
+                            'Support Wing',
+                            busy: busy,
+                            icon: Icons.favorite_outline,
+                          ),
                         ),
-                      ),
-                      ActivityDetailAction(
-                        label: 'Preview file',
-                        icon: Icons.visibility_outlined,
-                        busy: busy,
-                        onPressed: () => taps++,
-                      ),
-                      TextButton(
-                        onPressed: () => taps++,
-                        child: const Text('Cancel'),
-                      ),
-                    ],
-                  );
-                },
+                        ActivityDetailAction(
+                          label: 'Preview file',
+                          icon: Icons.visibility_outlined,
+                          busy: busy,
+                          onPressed: () => taps++,
+                        ),
+                        TextButton(
+                          onPressed: () => taps++,
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        );
-        final iconRects = {
-          for (final icon in [
-            Icons.open_in_new,
-            Icons.favorite_outline,
-            Icons.visibility_outlined,
-          ])
-            icon: tester.getRect(find.byIcon(icon)),
-        };
-        final buttonRect = tester.getRect(find.byTooltip('Preview file'));
-        for (final phase in ['pending', 'ready']) {
-          change(() => busy = phase == 'pending');
-          await tester.pump(const Duration(milliseconds: 350));
-          for (final icon in iconRects.keys) {
-            expect(find.byIcon(icon), findsOneWidget);
-            expect(tester.getRect(find.byIcon(icon)), iconRects[icon]);
+          );
+          final iconRects = {
+            for (final icon in [
+              Icons.open_in_new,
+              Icons.favorite_outline,
+              Icons.visibility_outlined,
+            ])
+              icon: tester.getRect(find.byIcon(icon)),
+          };
+          final buttonRect = tester.getRect(find.byTooltip('Preview file'));
+          for (final phase in ['pending', 'ready']) {
+            change(() => busy = phase == 'pending');
+            await tester.pump(const Duration(milliseconds: 350));
+            for (final icon in iconRects.keys) {
+              if (busy && icon == Icons.visibility_outlined) {
+                expect(find.byIcon(icon), findsNothing);
+                expect(find.byType(CircularProgressIndicator), findsOneWidget);
+              } else {
+                expect(find.byIcon(icon), findsOneWidget);
+                expect(tester.getRect(find.byIcon(icon)), iconRects[icon]);
+              }
+            }
+            expect(tester.getRect(find.byTooltip('Preview file')), buttonRect);
+            if (busy) {
+              await tester.tap(find.byTooltip('Preview file'));
+              expect(taps, 0);
+            }
+            expect(find.byType(StudioLoading), findsNothing);
+            final action = find.byWidgetPredicate(
+              (w) => w is IconButton && w.tooltip == 'Preview file',
+            );
+            expect(
+              tester.widget<IconButton>(action).onPressed,
+              busy ? isNull : isNotNull,
+            );
+            expect(
+              find.bySemanticsLabel(busy ? 'Open, in progress' : 'Open'),
+              findsOneWidget,
+            );
+            await tester.tap(find.text('Cancel'));
+            expect(taps, phase == 'pending' ? 1 : 2);
+            expect(tester.takeException(), isNull);
+            if (const bool.fromEnvironment('STUDIO_LOADING_REVIEW')) {
+              await tester.runAsync(() async {
+                final boundary =
+                    frame.currentContext!.findRenderObject()!
+                        as RenderRepaintBoundary;
+                final pixels = await boundary.toImage();
+                final bytes = await pixels.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final directory = Directory(
+                  'build/design-previews/loading-family/site/actions',
+                )..createSync(recursive: true);
+                await File(
+                  '${directory.path}/${brightness.name}-$scale-$phase.png',
+                ).writeAsBytes(bytes!.buffer.asUint8List());
+                pixels.dispose();
+              });
+            }
           }
-          expect(tester.getRect(find.byTooltip('Preview file')), buttonRect);
-          expect(find.byType(StudioLoading), findsNothing);
-          final action = find.byWidgetPredicate(
-            (w) => w is IconButton && w.tooltip == 'Preview file',
-          );
-          expect(
-            tester.widget<IconButton>(action).onPressed,
-            busy ? isNull : isNotNull,
-          );
-          expect(
-            find.bySemanticsLabel(busy ? 'Open, in progress' : 'Open'),
-            findsOneWidget,
-          );
-          await tester.tap(find.text('Cancel'));
-          expect(taps, phase == 'pending' ? 1 : 2);
-          expect(tester.takeException(), isNull);
-          if (const bool.fromEnvironment('STUDIO_LOADING_REVIEW')) {
-            await tester.runAsync(() async {
-              final boundary =
-                  frame.currentContext!.findRenderObject()!
-                      as RenderRepaintBoundary;
-              final pixels = await boundary.toImage();
-              final bytes = await pixels.toByteData(
-                format: ui.ImageByteFormat.png,
-              );
-              final directory = Directory(
-                'build/design-previews/loading-family/site/actions',
-              )..createSync(recursive: true);
-              await File(
-                '${directory.path}/${brightness.name}-$scale-$phase.png',
-              ).writeAsBytes(bytes!.buffer.asUint8List());
-              pixels.dispose();
-            });
-          }
+          await tester.tap(find.byTooltip('Preview file'));
+          expect(taps, 3);
+        } finally {
+          semantics.dispose();
         }
-        await tester.tap(find.byTooltip('Preview file'));
-        expect(taps, 3);
-        semantics.dispose();
       });
     }
   }
