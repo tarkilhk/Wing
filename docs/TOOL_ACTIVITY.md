@@ -1,22 +1,21 @@
 # Tool activity
 
-While a reply streams, current tool calls appear directly under **Timeline**.
-Streaming reasoning appears in the conversation between tool runs. Reasoning
-and tools stay visible until Hermes finishes the response, including while
-later tools run. After the response finishes, reasoning folds into **Activity**.
-Expand Activity to read it again. Use the compact
-**Subagents / Tasks** bar above your draft for live work. Tap a side to open its
-drawer, swipe left/right to switch, and tap the selected side or outside to close.
-Tasks shows completed/total; cancelled tasks do not count as completed.
+**Activity** starts collapsed, including while a reply is streaming. Open it to
+read tool calls and separate Markdown reasoning blocks in their received order.
+The open section keeps updating as work arrives and keeps your expanded tool
+details. Close it to return to a compact conversation.
 
-Past answers keep **Activity** with Timeline, Tasks, Agents and Work. Only
-categories with available content appear. Known goals, recurring work and
-processes retain their existing panels. Activity adds the available tool count.
-Expand a row to see what was requested and what Hermes returned. Available
-controls use icons with accessible labels and tooltips. Long content can open
-in a fuller reader; reusable code, commands, and output offer copying and wrap
-controls. Raw details retains received inputs and results, including fields
-not summarized in the compact view.
+Use the compact **Subagents / Tasks** bar above your draft, or at the bottom of
+Working history. It remains available while Hermes waits for subagents and after
+the parent response finishes. Tap a side to open its drawer, swipe left/right to
+switch, and tap the selected side or outside to close. Tasks shows completed/total;
+cancelled tasks do not count as completed. Empty categories stay hidden.
+
+Past answers retain their received Activity and Work details. Activity shows the
+available tool count. Expand a row to see what was requested and what Hermes
+returned. Controls use icons with accessible labels and tooltips. Long content
+can open in a fuller reader; reusable code, commands and output offer copying
+and wrap controls. Raw details retains exact received inputs and results.
 
 ## Timeline and reasoning
 

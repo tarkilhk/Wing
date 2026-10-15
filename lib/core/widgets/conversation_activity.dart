@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../models/chat_runtime.dart';
@@ -7,7 +6,6 @@ import '../models/chat_output.dart';
 import '../models/gateway_todo.dart';
 import '../services/profile_supervision_session.dart';
 import 'profile_activity_status.dart';
-import 'profile_activity_tabs.dart';
 import 'profile_execution_activity.dart';
 import 'profile_live_execution.dart';
 import 'profile_live_work_dock.dart';
@@ -35,8 +33,7 @@ final class ConversationActivity {
   final int? taskCount;
   final int? agentCount;
 
-  bool get hasDock =>
-      live && (todos.isNotEmpty || inspection.state.subagents.isNotEmpty);
+  bool get hasDock => todos.isNotEmpty || inspection.state.subagents.isNotEmpty;
   int get completedTasks =>
       todos.where((todo) => todo.status == GatewayTodoStatus.completed).length;
   int get toolCount => live ? 0 : entries.whereType<ChatToolEntry>().length;
@@ -86,24 +83,6 @@ final class ConversationActivity {
   Widget get tasks => ProfileTodoPanel(todos: todos, embedded: true);
   Widget get agents =>
       ProfileSubagentPanel(session: inspection, embedded: true);
-  List<ProfileActivityTab> get tabs => live
-      ? const []
-      : [
-          if (todos.isNotEmpty)
-            ProfileActivityTab(
-              id: 'tasks',
-              label: 'Tasks $completedTasks/${todos.length}',
-              child: tasks,
-            ),
-          if (inspection.state.subagents.isNotEmpty)
-            ProfileActivityTab(
-              id: 'agents',
-              label:
-                  'Agents ${inspection.state.subagents.where((agent) => !agent.isTerminal).length}/${inspection.state.subagents.length}',
-              onSelected: () => unawaited(inspection.refreshSubagents()),
-              child: agents,
-            ),
-        ];
 
   Widget status({Key? key, required bool saving}) => ProfileActivityStatus(
     key: key,

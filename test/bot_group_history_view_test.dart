@@ -1,5 +1,6 @@
 import 'package:wing/core/widgets/profile_live_work_dock.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_activity_status.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,6 +26,7 @@ import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'support/bots_fixture.dart';
+import 'helpers/pump_markdown_widget.dart';
 
 const _capture = bool.fromEnvironment('CAPTURE_BOT_GROUPS');
 
@@ -84,6 +86,214 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('history renders messages before backfill and folds live replay '
+          '${brightness.name} $scale', (tester) async {
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        Future<void> entryFrames() async {
+          for (var i = 0; i < 16; i++) {
+            await tester.pump(const Duration(milliseconds: 30));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+          }
+        }
+
+        final fixture = BotsFixture();
+        final group = (await readFixtureGroups(
+          fixture.repository,
+          groupMessages: null,
+        )).single;
+        fixture.workerRows['atlas'] = [
+          {
+            'id': 'atlas-root',
+            'resolved_id': 'atlas-tip',
+            'title': 'Group: room-1',
+            'source': 'bot_room',
+          },
+        ];
+        final older = Completer<ProfileHistoryPage>();
+        final replay = Completer<void>();
+        addTearDown(() {
+          if (!older.isCompleted) {
+            older.completeError(StateError('Retired history'));
+          }
+          if (!replay.isCompleted) replay.complete();
+        });
+        fixture.historyHook = (_, id, offset) async => offset == 0
+            ? ProfileHistoryPage(
+                id,
+                [
+                  {
+                    'id': 101,
+                    'role': 'user',
+                    'content': 'The conversation is already readable.',
+                  },
+                  for (var id = 102; id <= 120; id++)
+                    {'id': id, 'role': 'tool', 'content': 'Saved tool receipt'},
+                ],
+                0,
+                20,
+              )
+            : older.future;
+        final events = <Map<String, dynamic>>[];
+        void event(String type, Map<String, dynamic> payload) => events.add({
+          'type': type,
+          'payload': payload,
+          'session_id': 'atlas-live',
+          'seq': events.length + 1,
+        });
+        event('message.start', {});
+        event('reasoning.delta', {'text': '**Live reasoning stays split.**'});
+        for (var id = 0; id < 80; id++) {
+          event('tool.complete', {
+            'tool_id': 'call-$id',
+            'name': 'read_file',
+            'args': {'path': 'file-$id.txt'},
+            'result': 'Read complete',
+          });
+        }
+        var replayStarted = false;
+        fixture.readHook = (_, method, params) async {
+          if (method == 'session.active_list') {
+            return {
+              'sessions': [
+                {
+                  'id': 'atlas-live',
+                  'session_key': 'atlas-tip',
+                  'title': 'Group: room-1',
+                  'status': 'working',
+                },
+              ],
+            };
+          }
+          if (method == 'session.events.since') {
+            replayStarted = true;
+            await replay.future;
+            return {
+              'events': events
+                  .where(
+                    (e) => (e['seq'] as int) > (params['last_seen'] as int),
+                  )
+                  .toList(),
+              'latest_seq': events.length,
+              'truncated': false,
+              'epoch': 'entry-test',
+              'open_requests': [],
+            };
+          }
+          return null;
+        };
+        final frame = GlobalKey();
+        late BotGroupHistorySession session;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                disableAnimations: true,
+              ),
+              child: RepaintBoundary(key: frame, child: child!),
+            ),
+            home: BotGroupHistoryScreen(
+              appearanceForMember: (_) => null,
+              createSession: () =>
+                  session = BotGroupHistorySession(fixture.repository, group),
+            ),
+          ),
+        );
+        await entryFrames();
+        expect(older.isCompleted, isFalse);
+        expect(
+          replayStarted,
+          isTrue,
+          reason:
+              'Live hydration starts after the first readable frame, independently of older history.',
+        );
+        expect(
+          find.textContaining(
+            'The conversation is already readable.',
+            findRichText: true,
+          ),
+          findsWidgets,
+        );
+        expect(find.byType(ProfileExecutionActivity), findsNothing);
+        await _render(
+          tester,
+          frame,
+          'history-entry-backfill-${brightness.name}-$scale',
+        );
+        older.complete(ProfileHistoryPage('atlas-tip', const [], 20, 20));
+        await entryFrames();
+        expect(replayStarted, isTrue);
+        expect(
+          find.textContaining(
+            'The conversation is already readable.',
+            findRichText: true,
+          ),
+          findsWidgets,
+        );
+        await _render(
+          tester,
+          frame,
+          'history-entry-live-held-${brightness.name}-$scale',
+        );
+        replay.complete();
+        for (var i = 0; i < 12; i++) {
+          await tester.pump(const Duration(milliseconds: 30));
+        }
+        expect(session.runtime.activityEntries, hasLength(81));
+        expect(find.text('Activity · 99 tools'), findsOneWidget);
+        expect(find.text('Timeline'), findsNothing);
+        expect(
+          find.byType(ProfileExecutionActivity, skipOffstage: false),
+          findsNothing,
+          reason:
+              'Closed activity must not construct or lay out the 80 replayed tool rows.',
+        );
+        expect(
+          find.textContaining(
+            'The conversation is already readable.',
+            findRichText: true,
+          ),
+          findsWidgets,
+        );
+        await _render(
+          tester,
+          frame,
+          'history-entry-live-collapsed-${brightness.name}-$scale',
+        );
+        final section = find.ancestor(
+          of: find.text('Activity · 99 tools'),
+          matching: find.byType(ProfileActivitySection),
+        );
+        await tester.tap(find.text('Activity · 99 tools'));
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(
+          find.descendant(of: section, matching: find.text('Timeline')),
+          findsWidgets,
+        );
+        expect(find.byType(ProfileExecutionActivity), findsWidgets);
+        await tester.ensureVisible(find.text('Activity · 99 tools'));
+        await tester.pump();
+        await tester.tap(find.text('Activity · 99 tools'));
+        await tester.pump(const Duration(milliseconds: 300));
+        event('tool.complete', {
+          'tool_id': 'later',
+          'name': 'read_file',
+          'result': 'Later receipt',
+        });
+        await session.refreshLive();
+        await tester.pump(const Duration(milliseconds: 30));
+        expect(find.text('Activity · 100 tools'), findsOneWidget);
+        expect(find.text('Timeline'), findsNothing);
+        expect(fixture.commands, isEmpty);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox());
+      });
+
       testWidgets('fresh tool-only tail still shows recent messages '
           '${brightness.name} $scale', (tester) async {
         tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
@@ -340,12 +550,24 @@ void main() {
                 .label,
             'Thinking… · 1 subagent active',
           );
+          expect(find.text('Activity'), findsOneWidget);
+          expect(find.text('Thinking'), findsNothing);
+          await tester.openLiveActivity();
           expect(
             find.textContaining('Inspecting the work', findRichText: true),
             findsWidgets,
           );
           expect(find.byType(StudioWorkingIndicator), findsWidgets);
           await liveFrames();
+          final reasoning = find
+              .textContaining('Inspecting the work', findRichText: true)
+              .first;
+          final viewport = tester.getRect(find.byType(ProfileTranscript));
+          expect(
+            tester.getRect(reasoning).overlaps(viewport),
+            isTrue,
+            reason: 'Opening live Activity must reveal its contents on screen.',
+          );
           await _render(
             tester,
             frame,
@@ -431,11 +653,6 @@ void main() {
             'name': 'read_file',
             'result': 'Read complete',
           });
-          event('subagent.complete', {
-            'subagent_id': 'child-1',
-            'status': 'completed',
-            'summary': 'Events verified',
-          });
           event('message.complete', {'text': 'The shared result is ready.'});
           working = false;
           fixture.workerMessages['atlas'] = [
@@ -448,8 +665,62 @@ void main() {
             },
           ];
           await session.refreshLive();
+          await liveFrames();
+          expect(
+            tester
+                .widget<ProfileActivityStatus>(
+                  find.byType(ProfileActivityStatus),
+                )
+                .label,
+            'Waiting for 1 subagent…',
+          );
+          expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey(('activity-tab', 'tasks'))),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey(('activity-tab', 'agents'))),
+            findsNothing,
+          );
+          await tester.tap(
+            find.byKey(const ValueKey(('live-work-tab', 1, false))),
+          );
+          await liveFrames();
+          expect(
+            find.textContaining('Inspect the transcript', findRichText: true),
+            findsWidgets,
+          );
+          await _render(
+            tester,
+            frame,
+            'history-waiting-dock-${brightness.name}-$scale',
+          );
+          tester
+              .state<ProfileLiveWorkDockState>(find.byType(ProfileLiveWorkDock))
+              .dismiss();
+          await liveFrames();
+          event('subagent.complete', {
+            'subagent_id': 'child-1',
+            'status': 'completed',
+            'summary': 'Events verified',
+          });
+          await session.refreshLive();
           await _settle(tester);
-          expect(find.byType(ProfileLiveWorkDock), findsNothing);
+          final latest = find.byKey(const ValueKey('jump-to-latest'));
+          if (latest.evaluate().isNotEmpty) {
+            await tester.tap(latest);
+            await _settle(tester);
+          }
+          expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey(('activity-tab', 'tasks'))),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey(('activity-tab', 'agents'))),
+            findsNothing,
+          );
           expect(
             find.textContaining(
               'The shared result is ready.',

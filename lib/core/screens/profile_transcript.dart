@@ -526,10 +526,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         onShareResource: widget.onShareResource,
       ) ??
       const [];
-  List<ProfileActivityTab> get _activityTabs => [
-    ...?widget.activity?.tabs,
-    ...widget.additionalActivityTabs,
-  ];
+  List<ProfileActivityTab> get _activityTabs => widget.additionalActivityTabs;
 
   @override
   Widget build(BuildContext context) {
@@ -702,10 +699,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         ++_layoutGeneration;
         _cancelMarkdownRestoration();
         _jumping = false;
-        _scroll.anchorExpansion(
-          event.anchor,
-          allowBottomGap: event.allowBottomGap,
-        );
+        if (event.preserveHeader) {
+          _scroll.anchorExpansion(
+            event.anchor,
+            allowBottomGap: event.allowBottomGap,
+          );
+        } else {
+          _scroll.releaseExpansionAnchor();
+        }
         return true;
       },
       child: NotificationListener<ScrollMetricsNotification>(

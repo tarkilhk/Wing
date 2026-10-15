@@ -1481,14 +1481,16 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
-    // A first answer chunk does not retire the parent turn or hide earlier
-    // reasoning/tool cycles. No disclosure needs to be opened to read them.
-    expect(find.text('Activity · 1 tool'), findsNothing);
-    expect(find.byType(ProfileReasoningDisclosure), findsNothing);
+    // Opening the initially closed Activity reveals received reasoning/tool
+    // order without hiding the independently streaming answer.
+    expect(find.text('Activity · 2 tools'), findsOneWidget);
+    expect(find.byType(ProfileToolCall), findsNothing);
     expect(
       find.text('The native response.', findRichText: true),
       findsOneWidget,
     );
+    await tester.openLiveActivity();
+    expect(find.byType(ProfileReasoningDisclosure), findsNothing);
     final first = find.byWidgetPredicate(
       (widget) => widget is ProfileToolCall && widget.call.callId == 'first',
     );

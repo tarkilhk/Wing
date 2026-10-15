@@ -41,6 +41,156 @@ void main() {
   });
   tearDown(() => session.dispose());
 
+  test(
+    'saved selection does not await or start initial live hydration',
+    () async {
+      var activeReads = 0;
+      fixture.readHook = (_, method, _) async {
+        if (method == 'session.active_list') activeReads++;
+        return null;
+      };
+      fixture.workerMessages['atlas'] = [_message(1, 'Saved message first')];
+      await session.select(group.members.first);
+      expect(session.reader.messages.single['content'], 'Saved message first');
+      expect(session.reader.historyLoading, isFalse);
+      expect(activeReads, 0);
+      await session.refreshLive();
+      expect(activeReads, 1);
+    },
+  );
+
+  test(
+    'first history page is readable while older message backfill is held',
+    () async {
+      final older = Completer<ProfileHistoryPage>();
+      addTearDown(() {
+        if (!older.isCompleted) older.completeError(StateError('Retired read'));
+      });
+      fixture.historyHook = (_, id, offset) async {
+        if (offset > 0) return older.future;
+        return ProfileHistoryPage(
+          id,
+          [
+            _message(101, 'Read this saved answer immediately'),
+            for (var id = 102; id <= 120; id++)
+              {'id': id, 'role': 'tool', 'content': 'Saved tool receipt'},
+          ],
+          0,
+          20,
+        );
+      };
+      final selected = session.select(group.members.first);
+      await Future<void>.delayed(Duration.zero);
+      expect(fixture.historyReads.map((r) => r.$3), [0, 20]);
+      expect(session.historyAvailable, isTrue);
+      expect(
+        session.reader.messages.first['content'],
+        'Read this saved answer immediately',
+      );
+      expect(session.reader.historyLoading, isTrue);
+      older.complete(
+        ProfileHistoryPage(
+          'atlas-tip',
+          [for (var id = 1; id <= 19; id++) _message(id, 'Earlier answer')],
+          20,
+          20,
+        ),
+      );
+      await selected;
+      expect(session.reader.messages, hasLength(39));
+      expect(session.reader.historyLoading, isFalse);
+    },
+  );
+
+  test(
+    'live tasks outrank older saved receipts arriving during backfill',
+    () async {
+      final older = Completer<ProfileHistoryPage>();
+      addTearDown(() {
+        if (!older.isCompleted) older.completeError(StateError('Retired read'));
+      });
+      fixture.historyHook = (_, id, offset) async => offset == 0
+          ? ProfileHistoryPage(
+              id,
+              [
+                _message(101, 'Readable conversation'),
+                for (var id = 102; id <= 120; id++)
+                  {'id': id, 'role': 'tool', 'content': 'Tool receipt'},
+              ],
+              0,
+              20,
+            )
+          : older.future;
+      fixture.readHook = (_, method, params) async => switch (method) {
+        'session.active_list' => {
+          'sessions': [
+            {
+              'id': 'atlas-live',
+              'session_key': 'atlas-tip',
+              'title': 'Group: room-1',
+              'status': 'working',
+            },
+          ],
+        },
+        'session.events.since' => {
+          'epoch': 'concurrent-read',
+          'latest_seq': 2,
+          'truncated': false,
+          'open_requests': [],
+          'events': [
+            {'seq': 1, 'session_id': 'atlas-live', 'type': 'message.start'},
+            {
+              'seq': 2,
+              'session_id': 'atlas-live',
+              'type': 'todo.updated',
+              'payload': {
+                'revision': 5,
+                'todos': [
+                  {
+                    'id': 'new',
+                    'content': 'Current live task',
+                    'status': 'in_progress',
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        _ => null,
+      };
+      final selecting = session.select(group.members.first);
+      await Future<void>.delayed(Duration.zero);
+      expect(session.historyAvailable, isTrue);
+      await session.refreshLive();
+      expect(session.todos.single.content, 'Current live task');
+      older.complete(
+        ProfileHistoryPage(
+          'atlas-tip',
+          [
+            {
+              'id': 1,
+              'role': 'tool',
+              'tool_name': 'todo_list',
+              'content': {
+                'todos': [
+                  {
+                    'id': 'old',
+                    'content': 'Old saved task',
+                    'status': 'pending',
+                  },
+                ],
+              },
+            },
+          ],
+          20,
+          20,
+        ),
+      );
+      await selecting;
+      expect(session.todos.single.content, 'Current live task');
+    },
+  );
+
   test('fresh working history includes the latest 20 conversation messages '
       'behind a tool-only tail', () async {
     fixture.workerMessages['atlas'] = [
@@ -56,6 +206,7 @@ void main() {
               },
     ];
     await session.select(group.members.first);
+    await session.refreshLive();
     final answers = session.reader.messages.where(
       (row) => row['role'] == 'assistant' && row['content'] != '',
     );
@@ -77,6 +228,7 @@ void main() {
           {..._message(id, 'Hidden carrier'), 'display_kind': 'hidden'},
       ];
       await session.select(group.members.first);
+      await session.refreshLive();
       expect(session.reader.historyError, isNull);
       expect(session.reader.messages.first['content'], 'Only saved answer');
       expect(session.reader.nextHistoryOffset, isNull);
@@ -89,6 +241,7 @@ void main() {
     () async {
       fixture.workerMessages['atlas'] = [_message(1, 'Retained answer')];
       await session.select(group.members.first);
+      await session.refreshLive();
       final held = Completer<ProfileHistoryPage>();
       addTearDown(() {
         if (!held.isCompleted) held.completeError(StateError('Retired read'));
@@ -145,6 +298,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(fixture.historyReads.last.$3, 20);
     await session.select(group.members.last);
+    await session.refreshLive();
     held.complete(
       ProfileHistoryPage(
         'atlas-tip',
@@ -209,6 +363,7 @@ void main() {
       final viewer = BotGroupHistorySession(repository, ownedGroup);
       addTearDown(viewer.dispose);
       await viewer.select(ownedGroup.members.first);
+      await viewer.refreshLive();
       expect(viewer.reader.historyError, isNull);
       expect(
         requestedLimit,
@@ -275,6 +430,7 @@ void main() {
         _ => null,
       };
       await session.select(group.members.first);
+      await session.refreshLive();
       final reasoning = session.runtime.activityEntries
           .whereType<ChatReasoningEntry>()
           .toList();
@@ -352,6 +508,7 @@ void main() {
         _ => null,
       };
       await session.select(group.members.first);
+      await session.refreshLive();
       event('message.complete', {'text': 'First answer'});
       event('message.start', {});
       event('message.delta', {'text': 'Second answer'});
@@ -387,6 +544,7 @@ void main() {
         _ => null,
       };
       await session.select(group.members.first);
+      await session.refreshLive();
       hold = true;
       final refreshing = session.refresh();
       await Future<void>.delayed(Duration.zero);
@@ -422,6 +580,7 @@ void main() {
       final first = session.select(group.members.first);
       await Future<void>.delayed(Duration.zero);
       await session.select(group.members.last);
+      await session.refreshLive();
       held.complete({
         'events': [
           {
@@ -472,6 +631,7 @@ void main() {
       _ => null,
     };
     await session.select(group.members.first);
+    await session.refreshLive();
     expect(session.reader.streaming, 'Live answer');
     expect(fixture.commands, isEmpty);
   });
@@ -491,6 +651,7 @@ void main() {
               },
     ];
     await session.select(group.members.first);
+    await session.refreshLive();
     final answers = session.reader.messages.where(
       (row) => row['role'] == 'assistant' && row['content'] != '',
     );
@@ -512,6 +673,7 @@ void main() {
           {..._message(id, 'Hidden carrier'), 'display_kind': 'hidden'},
       ];
       await session.select(group.members.first);
+      await session.refreshLive();
       expect(session.reader.historyError, isNull);
       expect(session.reader.messages.first['content'], 'Only saved answer');
       expect(session.reader.nextHistoryOffset, isNull);
@@ -524,6 +686,7 @@ void main() {
     () async {
       fixture.workerMessages['atlas'] = [_message(1, 'Retained answer')];
       await session.select(group.members.first);
+      await session.refreshLive();
       final held = Completer<ProfileHistoryPage>();
       addTearDown(() {
         if (!held.isCompleted) held.completeError(StateError('Retired read'));
@@ -580,6 +743,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(fixture.historyReads.last.$3, 20);
     await session.select(group.members.last);
+    await session.refreshLive();
     held.complete(
       ProfileHistoryPage(
         'atlas-tip',
@@ -644,6 +808,7 @@ void main() {
       final viewer = BotGroupHistorySession(repository, ownedGroup);
       addTearDown(viewer.dispose);
       await viewer.select(ownedGroup.members.first);
+      await viewer.refreshLive();
       expect(viewer.reader.historyError, isNull);
       expect(
         requestedLimit,
@@ -722,6 +887,7 @@ void main() {
       final reader = BotGroupHistorySession(repository, ownedGroup);
       addTearDown(reader.dispose);
       await reader.select(ownedGroup.members.first);
+      await reader.refreshLive();
       expect(reader.reader.historyError, isNull);
       expect(reader.reader.messages.single['content'], 'Production snapshot');
       offline = true;
@@ -757,6 +923,7 @@ void main() {
         for (var id = 1; id <= 102; id++) _message(id, 'Saved $id'),
       ];
       await session.select(group.members.first);
+      await session.refreshLive();
       expect(registry.single.$1, 'atlas');
       expect(registry.single.$2, {
         'title': 'Group: room-1',
@@ -791,11 +958,14 @@ void main() {
       fixture.workerMessages['atlas'] = [_message(1, 'Atlas saved')];
       fixture.workerMessages['mira'] = [_message(2, 'Mira saved')];
       await session.select(group.members.first);
+      await session.refreshLive();
       final atlasReader = session.reader;
       atlasReader.recordScrollOffset(240);
       await session.select(group.members.last);
+      await session.refreshLive();
       final reads = fixture.historyReads.length;
       await session.select(group.members.first);
+      await session.refreshLive();
       expect(fixture.historyReads.length, reads);
       expect(session.reader, same(atlasReader));
       expect(session.reader.historyScrollOffset, 240);
@@ -809,6 +979,7 @@ void main() {
   test('a warm member retires another member’s held read', () async {
     fixture.workerMessages['atlas'] = [_message(1, 'Atlas saved')];
     await session.select(group.members.first);
+    await session.refreshLive();
     final atlasReader = session.reader;
     final held = Completer<ProfileHistoryPage>();
     fixture.historyHook = (_, _, _) => held.future;
@@ -816,6 +987,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(session.reader.historyLoading, isTrue);
     await session.select(group.members.first);
+    await session.refreshLive();
     expect(session.reader, same(atlasReader));
     expect(session.reader.historyLoading, isFalse);
     held.complete(
@@ -827,6 +999,7 @@ void main() {
     fixture.historyHook = null;
     fixture.workerMessages['mira'] = [_message(3, 'Fresh Mira')];
     await session.select(group.members.last);
+    await session.refreshLive();
     expect(session.reader.messages.single['content'], 'Fresh Mira');
   });
 
@@ -835,17 +1008,21 @@ void main() {
     () async {
       fixture.workerRows['atlas'] = [];
       await session.select(group.members.first);
+      await session.refreshLive();
       expect(session.historyAvailable, isTrue);
       final empty = session.reader;
       fixture.historyHook = (_, _, _) async => throw StateError('Offline');
       await session.select(group.members.last);
+      await session.refreshLive();
       expect(session.reader.historyError, isNotNull);
       await session.select(group.members.first);
+      await session.refreshLive();
       expect(session.reader, same(empty));
       expect(session.reader.historyError, isNull);
       fixture.historyHook = null;
       fixture.workerMessages['mira'] = [_message(1, 'Recovered Mira')];
       await session.select(group.members.last);
+      await session.refreshLive();
       expect(session.reader.messages.single['content'], 'Recovered Mira');
       expect(fixture.historyReads, hasLength(2));
     },
@@ -857,6 +1034,7 @@ void main() {
       expect(session.historyAvailable, isFalse);
       fixture.workerRows['atlas'] = [];
       await session.select(group.members.first);
+      await session.refreshLive();
       expect(session.historyAvailable, isTrue);
       expect(session.reader.historyError, isNull);
       expect(fixture.historyReads, isEmpty);
@@ -902,6 +1080,7 @@ void main() {
       final retiredReader = session.reader;
       retiredReader.recordScrollOffset(180);
       await session.select(group.members.last);
+      await session.refreshLive();
       expect(session.historyAvailable, isTrue);
       retiredReader.recordScrollOffset(420);
       expect(session.reader.historyScrollOffset, 0);

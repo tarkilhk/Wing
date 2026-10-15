@@ -1,11 +1,44 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
 
 extension PumpMarkdownWidget on WidgetTester {
   Future<void> pumpMarkdownWidget(Widget widget) async {
     await pumpWidget(widget);
     await settleMarkdown();
+  }
+
+  Future<void> openLiveActivity() async {
+    final section = find.byKey(const ValueKey('live-activity'));
+    if (section.evaluate().isEmpty) {
+      final retained = find.byKey(
+        const ValueKey('live-activity'),
+        skipOffstage: false,
+      );
+      if (retained.evaluate().isEmpty) return;
+      final latest = find.byKey(const ValueKey('jump-to-latest'));
+      expect(latest, findsOneWidget);
+      await tap(latest);
+      await pump();
+      await pump(const Duration(milliseconds: 300));
+    }
+    final icon = widget<Icon>(
+      find.descendant(of: section, matching: find.byType(Icon)).first,
+    );
+    if (icon.icon != Icons.keyboard_arrow_right_rounded) return;
+    final label = widget<ProfileActivitySection>(section).label;
+    final title = find
+        .descendant(of: section, matching: find.text(label))
+        .first;
+    await ensureVisible(title);
+    await pump(const Duration(milliseconds: 300));
+    final rect = getRect(title);
+    await tapAt(Offset(rect.left + 4, rect.center.dy));
+    await pump();
+    await pump(const Duration(milliseconds: 300));
+    await settleMarkdown();
+    await pump();
   }
 
   Future<void> settleMarkdown() async {
