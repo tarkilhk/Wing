@@ -6,13 +6,14 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 
 import '../models/composer_action.dart';
+import '../theme/wing_icons.dart';
 import 'composer_icon_button.dart';
 
 IconData composerActionIcon(ComposerAction action) => switch (action) {
   ComposerAction.send => Icons.arrow_upward,
-  ComposerAction.steer => Icons.explore_outlined,
+  ComposerAction.steer => WingIcons.steer,
   ComposerAction.stop => Icons.stop,
-  ComposerAction.queue => Icons.queue,
+  ComposerAction.queue => WingIcons.queue,
 };
 
 /// A held pointer chooses an action; lifting commits it, leaving cancels it.

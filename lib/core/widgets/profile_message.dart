@@ -6,6 +6,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
+import '../theme/wing_icons.dart';
 import '../theme/bot_bubble_colors.dart';
 import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
@@ -635,7 +636,7 @@ class ProfileMessage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    Icons.explore_outlined,
+                    WingIcons.steer,
                     size: 14,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

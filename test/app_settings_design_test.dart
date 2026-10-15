@@ -15,6 +15,7 @@ import 'package:wing/core/config/support_wing.dart';
 import 'package:wing/core/screens/app_settings_content.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/widgets/support_wing_section.dart';
 
 const _capture = bool.fromEnvironment('CAPTURE_SETTINGS');
@@ -100,6 +101,18 @@ void main() {
       }
       await loader.load();
     }
+    await (FontLoader('WingProjectIcons')..addFont(
+          File(
+            'assets/fonts/codicons.ttf',
+          ).readAsBytes().then(ByteData.sublistView),
+        ))
+        .load();
+    await (FontLoader('WingIcons')..addFont(
+          File(
+            'assets/fonts/wing-icons.ttf',
+          ).readAsBytes().then(ByteData.sublistView),
+        ))
+        .load();
   });
 
   setUp(() {
@@ -241,6 +254,14 @@ void main() {
         final queue = find.widgetWithText(ChoiceChip, 'Queue');
         await tester.ensureVisible(queue);
         await tester.pumpAndSettle();
+        expect(
+          find.descendant(of: queue, matching: find.byIcon(WingIcons.queue)),
+          findsOneWidget,
+        );
+        await _captureFrame(
+          tester,
+          '${brightness.name}-$scale-composer-actions',
+        );
         await tester.tap(queue);
         await tester.pumpAndSettle();
         expect(preferences.getString('composer_running_action'), 'queue');

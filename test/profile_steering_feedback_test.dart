@@ -1,5 +1,6 @@
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:flutter/material.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/answer_versions.dart';
 import 'package:wing/core/widgets/profile_message.dart';
@@ -149,7 +150,7 @@ void main() {
       expect(find.text('steered'), findsOneWidget);
       expect(find.text('Keep searching'), findsOneWidget);
       expect(find.textContaining('OUT-OF-BAND'), findsNothing);
-      expect(find.byIcon(Icons.explore_outlined), findsOneWidget);
+      expect(find.byIcon(WingIcons.steer), findsOneWidget);
       expect(find.byTooltip('Copy message'), findsNothing);
     },
   );

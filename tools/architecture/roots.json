@@ -272,6 +272,14 @@
       "status": "supported"
     },
     {
+      "id": "asset-assets/fonts/TABLER-LICENSE",
+      "kind": "asset-or-source",
+      "path": "assets/fonts/TABLER-LICENSE",
+      "purpose": "Steering-wheel glyph copyright/license obligation",
+      "source": "assets/fonts/README.md",
+      "status": "supported"
+    },
+    {
       "id": "asset-assets/fonts/README.md",
       "kind": "asset-or-source",
       "path": "assets/fonts/README.md",
@@ -2069,7 +2077,7 @@
       "id": "font",
       "kind": "flutter-font",
       "path": "assets/fonts/wing-icons.ttf",
-      "purpose": "WingIcons square-pen New chat and desktop git-fork answer action subset font",
+      "purpose": "WingIcons New chat, Fork and desktop steering-wheel action subset font",
       "source": "pubspec.yaml:58; lib/core/theme/wing_icons.dart:6",
       "status": "supported",
       "selector": "WingIcons"
@@ -7029,6 +7037,11 @@
     },
     {
       "path": "assets/fonts/LUCIDE-LICENSE",
+      "area": "assets",
+      "provenance": "tracked"
+    },
+    {
+      "path": "assets/fonts/TABLER-LICENSE",
       "area": "assets",
       "provenance": "tracked"
     },

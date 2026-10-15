@@ -1,4 +1,5 @@
 import '../widgets/selection_viewport.dart';
+import '../theme/wing_icons.dart';
 import '../widgets/profile_subagent_panel.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import '../widgets/conversation_activity.dart';
@@ -3403,7 +3404,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       child: IconButton(
         tooltip: hasAttachments ? null : 'Steer queued message',
         onPressed: onPressed,
-        icon: const Icon(Icons.explore_outlined),
+        icon: const Icon(WingIcons.steer),
       ),
     );
     if (!hasAttachments) return button;
