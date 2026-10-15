@@ -18,7 +18,9 @@ Use the pencil in a sent user message's footer to edit it. Editing needs a conne
 
 Fork remains available on older saved answers while the chat is working or
 waiting for your input. The original work continues; later replies are not
-included in the branch. Regenerate requires an idle chat.
+included in the branch. Tapping Fork opens **New chat** immediately, with a Wing
+loading indicator until it is ready or an error with Retry. Regenerate requires
+an idle chat.
 
 Find's historical context view is read-only. Edit and Restore apply to saved human prompts, not internal notices.
 

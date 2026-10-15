@@ -1,6 +1,10 @@
 # Wing workspace
 
 Before planning or editing Wing, read [the internal working instructions](internal/AGENTS.md).
+For every feature or fix that changes a visible control, navigation, action
+admission or asynchronous UI behavior, follow the [UI workflow](internal/AGENTS.md#ui-design)
+before planning or editing, even when the implementation is mostly controller code.
+
 The private `wing-internal` repository must be cloned into `internal/` for
 engineering work. If it is missing, obtain its clone URL and access from the
 project owner before proceeding. Public CI runs from the app source alone.

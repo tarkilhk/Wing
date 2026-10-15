@@ -5608,6 +5608,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat source,
     int messageIndex, {
     bool regenerate = false,
+    bool Function()? isCurrentRequest,
   }) async {
     final resource = _commandOwner(source);
     if ((regenerate
@@ -5724,6 +5725,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       if (_current == resource &&
           resource.chat == source &&
+          (isCurrentRequest?.call() ?? true) &&
           navigation == _navigationGeneration &&
           profileGeneration == _generation &&
           !switching) {

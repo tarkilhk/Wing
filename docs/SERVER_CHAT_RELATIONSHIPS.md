@@ -7,7 +7,9 @@ latest saved assistant reply; an optional argument names the new chat.
 
 You can fork a saved answer while the original chat is working or waiting for
 your input. Its current work continues in the original chat. The branch includes
-only history through the selected saved answer.
+only history through the selected saved answer. Tapping the answer's branch
+action opens **New chat** immediately, with the Wing loading indicator while
+the fork is prepared. If it fails, use Retry or Back.
 
 **Restore checkpoint** on a saved user prompt changes the existing chat instead.
 After confirmation, it replaces that prompt and everything after it, then reruns

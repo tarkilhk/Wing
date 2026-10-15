@@ -21,7 +21,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/widgets/answer_actions.dart';
-import 'package:wing/core/widgets/transcript_latest_button.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -320,6 +320,10 @@ void main() {
     appPreferences.dispose();
   });
 
+  Finder forkLoading() => find.byWidgetPredicate(
+    (widget) => widget is StudioLoading && widget.label == 'Forking chat',
+  );
+
   void event(String type, [Map<String, dynamic> data = const {}]) {
     host.gateways['a']!.onEvent!(
       StreamEvent(
@@ -447,26 +451,34 @@ void main() {
           expect(tester.widget<AnswerActions>(actions).onBranch, isNotNull);
           expect(tester.widget<AnswerActions>(actions).onRegenerate, isNull);
           await picture('available');
-          final actionBounds = tester.getRect(actions);
           host.branchDelay = Completer<void>();
           host.branchError = StateError('Fork failed; try again');
           host.branchReadDelay = Completer<void>();
           host.branchReadSession = 'original';
           await tester.tap(fork);
           await tester.pump();
+          expect(find.text('New chat'), findsOneWidget);
+          expect(actions, findsNothing);
           await tester.pump(const Duration(milliseconds: 100));
           expect(original.branchingAnswer, isTrue);
-          expect(tester.widget<AnswerActions>(actions).onBranch, isNull);
+          expect(find.text('New chat'), findsOneWidget);
+          expect(actions, findsNothing);
+          expect(
+            find.byKey(const Key('profile-message-composer')),
+            findsNothing,
+          );
           expect(original.runtime.execution, ChatExecution.running);
-          expect(tester.getRect(actions), actionBounds);
           final header = find.byKey(const ValueKey('studio-loading-slot'));
           expect(
-            find.descendant(
-              of: header,
-              matching: find.byTooltip('Preparing answer'),
-            ),
+            find.descendant(of: header, matching: forkLoading()),
             findsOneWidget,
           );
+          final glyph = find.descendant(
+            of: forkLoading(),
+            matching: find.byType(CustomPaint),
+          );
+          expect(glyph, findsOneWidget);
+          expect(tester.getSize(glyph), const Size(18, 18));
           await picture('pending');
           expect(
             host.calls.where((call) => call.$1 == 'session.branch'),
@@ -482,6 +494,8 @@ void main() {
             hasLength(1),
           );
           expect(original.branchingAnswer, isTrue);
+          expect(find.text('New chat'), findsOneWidget);
+          expect(forkLoading(), findsOneWidget);
           await tester.runAsync(() async {
             host.branchDelay!.complete();
             await Future<void>.delayed(Duration.zero);
@@ -490,24 +504,24 @@ void main() {
           await tester.pump(const Duration(milliseconds: 300));
           expect(find.textContaining('Fork failed; try again'), findsOneWidget);
           expect(original.branchingAnswer, isFalse);
-          expect(tester.widget<AnswerActions>(actions).onBranch, isNotNull);
+          expect(find.byTooltip('Retry').hitTestable(), findsOneWidget);
+          expect(forkLoading(), findsNothing);
           expect(original.runtime.execution, ChatExecution.running);
           await picture('failed');
-          await tester.pump(const Duration(seconds: 4));
-          await tester.pump(const Duration(milliseconds: 300));
-          // Keep the real retry control clear of the floating Latest button.
-          await Scrollable.ensureVisible(tester.element(fork), alignment: 0.5);
-          await tester.pump();
           host.branchError = null;
           host.branchReadDelay = Completer<void>();
           host.branchReadSession = 'child-1';
-          await tester.tap(fork);
+          await tester.tap(find.byTooltip('Retry'));
           await tester.runAsync(() async {
             await Future<void>.delayed(const Duration(milliseconds: 50));
           });
           await tester.pump();
           expect(controller.current!.chat, same(original));
           expect(original.branchingAnswer, isTrue);
+          expect(find.text('New chat'), findsOneWidget);
+          await tester.pump();
+          expect(forkLoading(), findsOneWidget);
+          expect(actions, findsNothing);
           await tester.runAsync(() async {
             host.branchReadDelay!.complete();
             await Future<void>.delayed(Duration.zero);
@@ -516,6 +530,11 @@ void main() {
           expect(controller.current!.chat, isNot(same(original)));
           expect(original.runtime.execution, ChatExecution.running);
           await tester.pump(const Duration(milliseconds: 300));
+          expect(forkLoading(), findsNothing);
+          expect(
+            find.byKey(const Key('profile-message-composer')),
+            findsOneWidget,
+          );
           await picture('branched');
           await tester.pumpWidget(const SizedBox());
         },
@@ -523,9 +542,10 @@ void main() {
     }
   }
 
-  testWidgets('fork progress survives scrolling away from saved answers', (
+  testWidgets('leaving the fork destination retires late navigation', (
     tester,
   ) async {
+    await controller.updateDraft(original, 'Keep this draft');
     await tester.pumpWidget(
       MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
     );
@@ -542,39 +562,26 @@ void main() {
       ),
     );
     await tester.pump();
-    event('message.delta', {
-      'text': List.filled(200, 'The original work continues.\n\n').join(),
-    });
-    await tester.pump(const Duration(milliseconds: 80));
-    await tester.settleMarkdown();
-    await tester.tap(find.byType(TranscriptLatestButton));
+    expect(find.text('New chat'), findsOneWidget);
+    expect(actions, findsNothing);
+    await tester.tap(find.byTooltip('Back'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.settleMarkdown();
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(find.byTooltip('Branch in new session').hitTestable(), findsNothing);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('studio-loading-slot')),
-        matching: find.byTooltip('Preparing answer'),
-      ),
-      findsOneWidget,
-    );
-    await tester.enterText(
-      find.byKey(const Key('profile-message-composer')),
-      'Another draft',
-    );
-    await tester.pump();
-    expect(original.composer.observation.text, 'Another draft');
-    host.branchError = StateError('Fork failed; try again');
+    expect(controller.current!.chat, isNull);
+    event('message.delta', {'text': 'The original work continues.'});
     await tester.runAsync(() async {
       host.branchDelay!.complete();
-      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
     });
     await tester.pump();
+    expect(controller.current!.chat, isNull);
+    expect(forkLoading(), findsNothing);
     expect(original.branchingAnswer, isFalse);
     expect(original.runtime.execution, ChatExecution.running);
-    expect(find.textContaining('Fork failed; try again'), findsOneWidget);
+    expect(original.composer.observation.text, 'Keep this draft');
+    expect(
+      controller.current!.sessions.any((row) => row['id'] == 'child-1'),
+      isTrue,
+    );
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -1225,6 +1232,25 @@ fixture-value-amber-729
     await pending;
     expect(controller.current!.chat, isNull);
   });
+
+  test(
+    'retired fork visit cannot select its child on the same source',
+    () async {
+      host.branchDelay = Completer<void>();
+      var current = true;
+      final pending = controller.branchAnswer(
+        original,
+        2,
+        isCurrentRequest: () => current,
+      );
+      await Future<void>.delayed(Duration.zero);
+      current = false;
+      host.branchDelay!.complete();
+      final child = await pending;
+      expect(child, isNotNull);
+      expect(controller.current!.chat, same(original));
+    },
+  );
 
   test('stale history refuses the branch before mutation', () async {
     original.reading.installSavedHistory([

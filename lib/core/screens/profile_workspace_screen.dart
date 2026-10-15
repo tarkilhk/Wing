@@ -1928,12 +1928,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       readingAloud:
           _voiceOutput.owner == controller.voiceReplyKey(chat, message),
       onBranch: controller.canBranchAnswer(chat) && !chat.runtime.commandRunning
-          ? () => _run(() async {
-              await controller.branchAnswer(
+          ? () => _openConversationDestination(
+              (current) async => (await controller.branchAnswer(
                 chat,
-                chat.reading.messages.indexOf(message),
-              );
-            })
+                chat.reading.messages.indexWhere(
+                  (row) => answerMessageId(row) == messageId,
+                ),
+                isCurrentRequest: current,
+              ))?.key,
+              title: 'New chat',
+              label: 'Forking chat',
+              owner: chat.key.workspace,
+              resumeStoredChat: false,
+              origin: AppDestination.chats,
+            )
           : null,
       onRegenerate: enabled
           ? () => _run(() async {
