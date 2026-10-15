@@ -1,9 +1,36 @@
+import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wing/core/models/gateway_activity.dart';
 import 'package:wing/core/models/hermes_question.dart';
+import 'package:wing/core/presentation/tool_call_presentation.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/hermes_question_card.dart';
-import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/widgets/source_code_text.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
+import 'package:wing/core/widgets/tool_activity_details.dart';
+
+const _capture = bool.fromEnvironment('CAPTURE_QUESTION_FAMILY');
+final _frame = GlobalKey();
+
+Future<void> capture(WidgetTester tester, String name) async {
+  if (!_capture) return;
+  await tester.runAsync(() async {
+    final boundary =
+        _frame.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage();
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    final directory = Directory('build/design-previews/default-questions')
+      ..createSync(recursive: true);
+    await File(
+      '${directory.path}/$name.png',
+    ).writeAsBytes(bytes!.buffer.asUint8List());
+    image.dispose();
+  });
+}
 
 HermesQuestion question(HermesQuestionStatus status) => HermesQuestion(
   id: 'approval/request',
@@ -21,6 +48,18 @@ Future<void> showQuestion(
   HermesQuestion value, {
   Brightness brightness = Brightness.light,
   double scale = 1,
+}) => showActivity(
+  tester,
+  HermesQuestionCard(question: value),
+  brightness: brightness,
+  scale: scale,
+);
+
+Future<void> showActivity(
+  WidgetTester tester,
+  Widget child, {
+  Brightness brightness = Brightness.light,
+  double scale = 1,
 }) => tester.pumpWidget(
   MaterialApp(
     theme: wingTheme(brightness),
@@ -30,13 +69,39 @@ Future<void> showQuestion(
       ).copyWith(textScaler: TextScaler.linear(scale)),
       child: child!,
     ),
-    home: Scaffold(
-      body: SingleChildScrollView(child: HermesQuestionCard(question: value)),
+    home: RepaintBoundary(
+      key: _frame,
+      child: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   ),
 );
 
 void main() {
+  setUpAll(() async {
+    if (!_capture) return;
+    for (final (family, path) in [
+      (WingTypography.sans, 'build/studio-roboto.ttf'),
+      ('MaterialIcons', 'build/studio-icons.otf'),
+      ('monospace', 'build/studio-mono.ttf'),
+    ]) {
+      await (FontLoader(
+        family,
+      )..addFont(File(path).readAsBytes().then(ByteData.sublistView))).load();
+    }
+  });
+  testWidgets('request history uses the default Wing Activity presentation', (
+    tester,
+  ) async {
+    await showQuestion(tester, question(HermesQuestionStatus.expired));
+    expect(find.byType(ProfileToolCall), findsOneWidget);
+    expect(find.text('Asked a question'), findsOneWidget);
+    expect(find.byType(ActivityDetailsCard), findsNothing);
+    await tester.tap(find.text('Asked a question'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ActivityDetailsCard), findsOneWidget);
+    expect(find.text('Expired'), findsWidgets);
+    expect(find.text('Raw details'), findsOneWidget);
+  });
   for (final (status, label) in [
     (HermesQuestionStatus.pending, 'Pending'),
     (HermesQuestionStatus.approved, 'Approved'),
@@ -50,8 +115,15 @@ void main() {
       tester,
     ) async {
       await showQuestion(tester, question(status));
-      expect(find.text('Hermes question - $label'), findsOneWidget);
-      expect(find.textContaining('Research bot'), findsOneWidget);
+      expect(
+        find.text(
+          status == HermesQuestionStatus.pending
+              ? 'Asking a question'
+              : 'Asked a question',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining(label), findsWidgets);
       // A recorded pending request is historical information; response
       // authority belongs to the live request owner and its separate controls.
       expect(find.byType(TextField), findsNothing);
@@ -75,26 +147,76 @@ void main() {
             brightness: brightness,
             scale: scale,
           );
-          expect(find.byType(SourceCodeBlock), findsNothing);
+          expect(find.byType(SourceCodeText), findsNothing);
           expect(find.text(value.description), findsNothing);
+          await capture(tester, 'approval-collapsed-${brightness.name}-$scale');
 
-          await tester.tap(find.text('Hermes question - Expired'));
+          await tester.tap(find.text('Asked a question'));
           await tester.pumpAndSettle();
           expect(find.text(value.description), findsOneWidget);
-          expect(find.byType(SourceCodeBlock), findsOneWidget);
+          expect(find.byType(SourceCodeText), findsOneWidget);
           expect(
-            tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
+            tester.widget<SourceCodeText>(find.byType(SourceCodeText)).text,
             'cat selected.txt',
           );
-          await tester.ensureVisible(find.byTooltip('Copy code'));
+          await capture(tester, 'approval-expanded-${brightness.name}-$scale');
+          await tester.ensureVisible(find.byTooltip('Copy Command'));
           await tester.pumpAndSettle();
-          expect(find.byTooltip('Copy code').hitTestable(), findsOneWidget);
+          expect(find.byTooltip('Copy Command').hitTestable(), findsOneWidget);
 
-          await tester.ensureVisible(find.text('Hermes question - Expired'));
-          await tester.tap(find.text('Hermes question - Expired'));
+          await tester.ensureVisible(find.text('Asked a question'));
+          await tester.tap(find.text('Asked a question'));
           await tester.pumpAndSettle();
-          expect(find.byType(SourceCodeBlock), findsNothing);
+          expect(find.byType(SourceCodeText), findsNothing);
           expect(find.text(value.description), findsNothing);
+          expect(tester.takeException(), isNull);
+        },
+      );
+      testWidgets(
+        'native questions keep choices and answers at ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          const prompt = 'How should I handle live validation?';
+          const answer = 'Resume the group and verify processing.';
+          const choices = ['Keep the group stopped.', answer];
+          final call = ToolCallPresentation.live(
+            GatewayToolActivity.fromGatewayEvent('tool.complete', {
+              'tool_id': 'native-clarify',
+              'name': 'clarify',
+              'args': {
+                'questions': [
+                  {'question': prompt, 'choices': choices},
+                ],
+              },
+              'result': {
+                'responses': [
+                  {
+                    'question': prompt,
+                    'choices_offered': choices,
+                    'status': 'answered',
+                    'user_response': answer,
+                  },
+                ],
+              },
+            })!,
+          );
+          await showActivity(
+            tester,
+            ProfileToolCall(call: call),
+            brightness: brightness,
+            scale: scale,
+          );
+          await tester.tap(find.text('Asked a question'));
+          await tester.pumpAndSettle();
+          expect(find.text('Question'), findsOneWidget);
+          expect(find.text('Choices'), findsOneWidget);
+          expect(find.text('Answer'), findsOneWidget);
+          expect(find.text('Answered'), findsOneWidget);
+          expect(find.text('Completed'), findsOneWidget);
+          expect(find.byType(HermesQuestionCard), findsNothing);
+          await capture(tester, 'native-expanded-${brightness.name}-$scale');
           expect(tester.takeException(), isNull);
         },
       );
@@ -106,7 +228,7 @@ void main() {
   ) async {
     final pending = question(HermesQuestionStatus.pending);
     await showQuestion(tester, pending);
-    await tester.tap(find.text('Hermes question - Pending'));
+    await tester.tap(find.text('Asking a question'));
     await tester.pumpAndSettle();
 
     await showQuestion(
@@ -114,10 +236,10 @@ void main() {
       pending.withStatus(HermesQuestionStatus.approved),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Hermes question - Pending'), findsNothing);
-    expect(find.text('Hermes question - Approved'), findsOneWidget);
+    expect(find.text('Asked a question'), findsOneWidget);
+    expect(find.text('Approved'), findsOneWidget);
     expect(find.text(pending.description), findsOneWidget);
-    expect(find.byType(SourceCodeBlock), findsOneWidget);
+    expect(find.byType(SourceCodeText), findsOneWidget);
   });
 
   testWidgets(
@@ -132,11 +254,11 @@ void main() {
         description: 'Which source should I inspect?',
       );
       await showQuestion(tester, value);
-      await tester.tap(find.text('Hermes question - Answered'));
+      await tester.tap(find.text('Asked a question'));
       await tester.pumpAndSettle();
       expect(find.text(value.description), findsOneWidget);
-      expect(find.byType(SourceCodeBlock), findsNothing);
-      expect(find.byTooltip('Copy code'), findsNothing);
+      expect(find.byType(SourceCodeText), findsNothing);
+      expect(find.byTooltip('Copy Command'), findsNothing);
       expect(find.byType(TextField), findsNothing);
     },
   );

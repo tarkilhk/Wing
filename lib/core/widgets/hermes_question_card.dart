@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../models/hermes_question.dart';
-import 'anchored_expansion_tile.dart';
-import 'source_code_block.dart';
+import '../presentation/tool_call_presentation.dart';
+import 'profile_tool_call.dart';
 
-/// A passive history entry. Code rendering is admitted only while expanded;
-/// the live request owner supplies any actionable controls separately.
+/// Gateway request history uses Wing's standard Activity row, disclosure,
+/// question/command sections, exact source viewer and outcome footer.
 class HermesQuestionCard extends StatefulWidget {
   const HermesQuestionCard({super.key, required this.question});
   final HermesQuestion question;
@@ -15,42 +15,19 @@ class HermesQuestionCard extends StatefulWidget {
 }
 
 class _HermesQuestionCardState extends State<HermesQuestionCard> {
-  bool _expanded = false;
+  late ToolCallPresentation _call = ToolCallPresentation.question(
+    widget.question,
+  );
 
   @override
-  Widget build(BuildContext context) {
-    final question = widget.question;
-    final time = MaterialLocalizations.of(context).formatTimeOfDay(
-      TimeOfDay.fromDateTime(question.timestamp.toLocal()),
-      alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
-    );
-    return AnchoredExpansionTile(
-      key: ValueKey(('hermes-question', question.id)),
-      title: Text(question.title),
-      subtitle: Text(
-        [
-          if (question.sender.isNotEmpty) question.sender,
-          MaterialLocalizations.of(
-            context,
-          ).formatShortDate(question.timestamp.toLocal()),
-          time,
-        ].join(' · '),
-      ),
-      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-      childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
-      onExpansionChanged: (value) => setState(() => _expanded = value),
-      children: _expanded
-          ? [
-              if (question.description.isNotEmpty) Text(question.description),
-              if (question.command.isNotEmpty)
-                SourceCodeBlock(
-                  code: question.command,
-                  language: 'bash',
-                  headerAction: null,
-                ),
-            ]
-          : const [],
-    );
+  void didUpdateWidget(HermesQuestionCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.question, widget.question)) {
+      _call = ToolCallPresentation.question(widget.question);
+    }
   }
+
+  @override
+  Widget build(BuildContext context) =>
+      ProfileToolCall(key: ValueKey(widget.question.id), call: _call);
 }

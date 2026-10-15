@@ -146,6 +146,9 @@ final class HermesQuestionHistory {
     };
     for (final entry in _entries.values) {
       if (entry.question.status == HermesQuestionStatus.pending) continue;
+      // clarify already supplies the canonical question/choices/answer receipt
+      // in Activity. Lifecycle metadata must not synthesize a second row.
+      if (entry.question.kind == HermesQuestionKind.clarification) continue;
       var index = indices[entry.afterMessage];
       if (entry.groupSequence case final sequence?) {
         index = -1;

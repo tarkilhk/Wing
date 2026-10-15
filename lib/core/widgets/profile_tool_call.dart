@@ -71,6 +71,9 @@ class ProfileToolCall extends StatelessWidget {
     'cronjob': Icons.calendar_month_outlined,
     'cronjob_manage': Icons.calendar_month_outlined,
     'clarify': Icons.help_outline,
+    'approval': Icons.help_outline,
+    'clarification': Icons.help_outline,
+    'secureInput': Icons.help_outline,
     'session_search': Icons.manage_search_outlined,
   };
 
@@ -78,8 +81,9 @@ class ProfileToolCall extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WingTokens.of(context);
     final storage = PageStorage.maybeOf(context);
-    final storageId = ('tool-call', call.callId);
-    final remembered = call.callId == null
+    final identity = call.disclosureId ?? call.callId;
+    final storageId = ('tool-call', identity);
+    final remembered = identity == null
         ? null
         : storage?.readState(context, identifier: storageId) as bool?;
     final statusColor = switch (call.outcome) {
@@ -122,13 +126,13 @@ class ProfileToolCall extends StatelessWidget {
       time: ActivityTime(
         durationSeconds: call.durationSeconds,
         startedAt: call.startedAt,
-        showUnavailable: true,
+        showUnavailable: call.requestId == null,
       ),
       // Backend identity survives the live-to-history handoff. Explicit
       // notification focus still opens independently of stored disclosure.
       initiallyExpanded: initiallyExpanded || remembered == true,
       onExpansionChanged: (expanded) {
-        if (call.callId != null) {
+        if (identity != null) {
           storage?.writeState(context, expanded, identifier: storageId);
         }
       },
@@ -146,11 +150,16 @@ class ProfileToolCall extends StatelessWidget {
           children: [
             ActivityDetailsCard(
               children: [
-                _RawToolValue(label: 'Tool', value: call.name),
+                _RawToolValue(
+                  label: call.requestId == null ? 'Tool' : 'Request type',
+                  value: call.name,
+                ),
                 for (final label in call.labels.skip(1))
                   _RawToolValue(label: label.text, value: label.preview),
                 if (call.callId case final id?)
                   _RawToolValue(label: 'Call ID', value: id),
+                if (call.requestId case final id?)
+                  _RawToolValue(label: 'Request ID', value: id),
                 if (call.context case final context?)
                   _RawToolValue(label: 'Context', value: context),
                 if (call.summary case final summary?)
@@ -161,7 +170,12 @@ class ProfileToolCall extends StatelessWidget {
                     value: seconds.toString(),
                   ),
                 if (call.arguments case final args?)
-                  _RawToolValue(label: 'Inputs', value: args),
+                  _RawToolValue(
+                    label: call.requestId == null
+                        ? 'Inputs'
+                        : 'Request metadata',
+                    value: args,
+                  ),
                 if (call.result case final result?)
                   _RawToolValue(label: 'Output', value: result),
                 for (final receipt in call.exchangeReceipts)

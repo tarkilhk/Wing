@@ -1,4 +1,5 @@
 import 'package:wing/core/models/tool_payload.dart';
+import 'package:wing/core/models/hermes_question.dart';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +23,41 @@ ToolCallPresentation completed(
 );
 
 void main() {
+  test('approval history reports consent without inventing tool execution', () {
+    const command = "python -c 'print(\"hello\")'";
+    for (final status in [
+      HermesQuestionStatus.approved,
+      HermesQuestionStatus.rejected,
+    ]) {
+      final call = ToolCallPresentation.question(
+        HermesQuestion(
+          id: 'approval/observed',
+          requestId: 'server-request',
+          kind: HermesQuestionKind.approval,
+          status: status,
+          timestamp: DateTime(2026, 10, 16),
+          description: 'Run the selected command?',
+          command: command,
+        ),
+      );
+      expect(
+        call.title,
+        ToolCallPresentation.titleFor('clarify', completed: true),
+      );
+      expect(call.requestId, 'server-request');
+      expect(call.callId, isNull);
+      expect(call.durationSeconds, isNull);
+      expect(call.startedAt, isNull);
+      expect(call.status, status.label);
+      expect(call.outcome, ToolCallOutcome.completed);
+      final source = call.activityDetails.request.last;
+      expect(source.label, 'Command');
+      expect(source.text, command);
+      expect(source.copyText, command);
+      expect(source.language, 'bash');
+      expect(call.result, isNull);
+    }
+  });
   const loopWarning =
       '[Tool loop warning: idempotent_no_progress_warning; count=2; '
       'skill_view returned the same result 2 times. Use the result already '

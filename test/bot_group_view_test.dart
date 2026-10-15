@@ -1,5 +1,5 @@
 import 'package:wing/core/widgets/bot_group_conversation.dart';
-import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/bots_preferences.dart';
@@ -193,17 +193,17 @@ void main() {
           );
           await tester.pumpWidget(route());
           await _settleGroupMarkdown(tester);
-          expect(find.text('Hermes question - Pending'), findsOneWidget);
-          expect(find.byType(SourceCodeBlock), findsNothing);
+          expect(find.text('Asking a question'), findsOneWidget);
+          expect(find.byType(SourceCodeText), findsNothing);
           await _render(
             tester,
             frame,
             'question-pending-${brightness.name}-$scale',
           );
-          await tester.tap(find.text('Hermes question - Pending'));
+          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           expect(
-            tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
+            tester.widget<SourceCodeText>(find.byType(SourceCodeText)).text,
             command,
           );
           await _render(
@@ -211,11 +211,11 @@ void main() {
             frame,
             'question-expanded-${brightness.name}-$scale',
           );
-          await tester.tap(find.text('Hermes question - Pending'));
+          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           tester.view.viewInsets = const FakeViewPadding(bottom: 260);
           await tester.pump();
-          await tester.tap(find.text('Hermes question - Pending'));
+          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           final approve = _decisionButton('Approve once');
           final keyboardTop =
@@ -237,7 +237,7 @@ void main() {
             'question-keyboard-${brightness.name}-$scale',
           );
           expect(tester.takeException(), isNull);
-          await tester.tap(find.text('Hermes question - Pending'));
+          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           tester.view.viewInsets = FakeViewPadding.zero;
           final held = Completer<void>();
@@ -288,7 +288,7 @@ void main() {
           expect(rows[position + 1]['id'], 3);
           expect(_decisionButton('Approve once'), findsNothing);
           expect(_decisionButton('Reject'), findsNothing);
-          final closed = find.text('Hermes question - Closed');
+          final closed = find.text('Asked a question');
           await tester.scrollUntilVisible(
             closed,
             160,
@@ -301,7 +301,17 @@ void main() {
             maxScrolls: 20,
           );
           await _settleGroupMarkdown(tester);
-          expect(find.byType(SourceCodeBlock), findsNothing);
+          await tester.ensureVisible(closed);
+          await _settleGroupMarkdown(tester);
+          if (closed.hitTestable().evaluate().isEmpty) {
+            await tester.drag(
+              find.byKey(const ValueKey('profile-transcript')),
+              const Offset(0, -320),
+            );
+            await _settleGroupMarkdown(tester);
+          }
+          expect(closed.hitTestable(), findsOneWidget);
+          expect(find.byType(SourceCodeText), findsNothing);
           await _render(
             tester,
             frame,
@@ -310,7 +320,7 @@ void main() {
           await tester.tap(closed);
           await _settleGroupMarkdown(tester);
           expect(
-            tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
+            tester.widget<SourceCodeText>(find.byType(SourceCodeText)).text,
             command,
           );
           expect(tester.takeException(), isNull);
@@ -319,7 +329,7 @@ void main() {
           await tester.pumpWidget(route());
           await _settleGroupMarkdown(tester);
           await tester.scrollUntilVisible(
-            find.text('Hermes question - Closed'),
+            find.text('Asked a question'),
             160,
             scrollable: find
                 .descendant(
@@ -330,7 +340,7 @@ void main() {
             maxScrolls: 20,
           );
           await _settleGroupMarkdown(tester);
-          expect(find.byType(SourceCodeBlock), findsNothing);
+          expect(find.byType(SourceCodeText), findsNothing);
           final reopened = session.reading.messages;
           final restored = reopened.indexWhere(
             (row) => row['_hermes_question'] is HermesQuestion,
@@ -2937,7 +2947,7 @@ void main() {
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
         expect(tester.getRect(readingAnchor).top, closeTo(readingTop, 1));
-        expect(find.text('Hermes question - Pending'), findsOneWidget);
+        expect(find.text('Asking a question'), findsOneWidget);
         expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
         await _render(tester, frame, 'approval-${brightness.name}-$scale');

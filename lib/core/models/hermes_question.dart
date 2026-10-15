@@ -48,7 +48,7 @@ final class HermesQuestion {
   final HermesQuestionStatus status;
   final DateTime timestamp;
 
-  String get title => 'Hermes question - ${status.label}';
+  String get title => 'Asked a question';
 
   HermesQuestion withStatus(HermesQuestionStatus next) => HermesQuestion(
     id: id,

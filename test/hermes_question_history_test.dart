@@ -178,6 +178,34 @@ void main() {
     expect(history.questions.single.status, HermesQuestionStatus.answered);
   });
 
+  test(
+    'native clarification history does not receive a second question row',
+    () {
+      answerQuestion();
+      final native = <Map<String, dynamic>>[
+        ...messages,
+        {
+          'id': 13,
+          'role': 'tool',
+          'name': 'clarify',
+          'tool_call_id': 'native-clarify',
+          'content': jsonEncode({
+            'responses': [
+              {
+                'question': 'Which source?',
+                'choices_offered': ['the chosen source'],
+                'status': 'answered',
+                'user_response': 'the chosen source',
+              },
+            ],
+          }),
+        },
+      ];
+      expect(history.project(native), native);
+      expect(history.project(native).last['content'], native.last['content']);
+    },
+  );
+
   test('interrupted secure input records cancellation', () {
     runtime.receiveSecure(
       const GatewaySensitivePromptRequest(
