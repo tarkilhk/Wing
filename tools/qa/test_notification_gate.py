@@ -126,6 +126,37 @@ class DirectActionConfigurationTest(unittest.TestCase):
                         calls.index(('approval',)))
 
 
+class ColdActionReceiptTest(unittest.TestCase):
+    def test_atomic_preference_write_is_retried_before_accepting_exact_receipt(self):
+        reads = 0
+
+        def adb(*args):
+            nonlocal reads
+            if args[-1] == 'shared_prefs/FlutterSharedPreferences.xml':
+                reads += 1
+                if reads == 1:
+                    raise subprocess.CalledProcessError(1, 'cat')
+                return ('<map><string name="flutter.notification_qa_decisions">'
+                        '[{"params":{"request_id":"cold-request"}}]'
+                        '</string></map>')
+            return ''
+
+        def until(check, message, **kwargs):
+            for _ in range(3):
+                if check():
+                    return
+            raise AssertionError(message)
+
+        with patch.object(driver, 'adb', side_effect=adb), \
+             patch.object(driver, 'state', return_value={
+                 'decisions': [], 'pending': [{'request_id': 'cold-request'}],
+             }), patch.object(driver, 'until', side_effect=until), \
+             patch.object(driver, 'shade'), patch.object(driver, 'tap'), \
+             patch.object(driver, 'screenshot'), patch.object(driver, 'nodes', return_value=[]):
+            driver.check_cold_action(Path('unused'))
+        self.assertEqual(reads, 3)
+
+
 class GroupBodyDestinationTest(unittest.TestCase):
     def exercise(self, visible_answer):
         def until(check, message, **kwargs):

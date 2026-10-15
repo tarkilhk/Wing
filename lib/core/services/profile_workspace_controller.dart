@@ -7508,7 +7508,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
         final owner = _resource(key.workspace.profileName);
         if (owner.blocksSession(key.sessionId)) return null;
         final existing = owner._chats[key.sessionId];
-        if (existing != null && !existing.runtime.offline) return existing;
+        if (existing != null && !existing.runtime.offline) {
+          if (existing.runtime.approval == null) {
+            await _refreshApprovals(existing, notifyNew: false);
+          }
+          return existing;
+        }
         final read = existing == null ? null : _captureResume(owner, existing);
         await owner.gateway.connect();
         final resumed = await owner.gateway.resume(key.sessionId);

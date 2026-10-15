@@ -862,6 +862,30 @@ void main() {
   );
 
   test(
+    'notification loads pending approval for an already online empty chat',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      host.pendingApprovals = [
+        {
+          'request_id': 'not-yet-observed',
+          'command': 'echo ready',
+          'choices': ['once', 'deny'],
+        },
+      ];
+      controller.showList();
+      expect(chat.runtime.approval, isNull);
+      final loaded = await controller.loadNotificationApproval(chat.key);
+      expect(loaded, same(chat));
+      expect(loaded?.runtime.approval?.requestId, 'not-yet-observed');
+      expect(controller.notificationChat, isNull);
+      expect(
+        host.calls.where((call) => call.$2 == 'approval.respond'),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
     'cold approval review loads requests without selecting the chat',
     () async {
       host.running = false;

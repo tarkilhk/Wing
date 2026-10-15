@@ -480,8 +480,14 @@ def check_cold_action(output):
     def saved_decisions():
         # A settled action releases the fake HTTP server with its engine.
         # Read the fake server's acknowledgement persisted before its RPC reply.
-        root = ET.fromstring(adb('shell', 'run-as', PACKAGE, 'cat',
-                                 'shared_prefs/FlutterSharedPreferences.xml'))
+        try:
+            raw = adb('shell', 'run-as', PACKAGE, 'cat',
+                      'shared_prefs/FlutterSharedPreferences.xml')
+        except subprocess.CalledProcessError:
+            # SharedPreferences atomically replaces this file while persisting.
+            # The bounded poll must still observe the exact acknowledgement.
+            return []
+        root = ET.fromstring(raw)
         value = next(n.text for n in root if n.get('name') == 'flutter.notification_qa_decisions')
         return json.loads(value)
 
