@@ -49,7 +49,6 @@ final class ConversationActivity {
 
   Widget? liveExecution({
     TranscriptTimelineSection? savedActivity,
-    Widget Function(TranscriptTimelineEntry)? noticeBuilder,
     Future<Uint8List> Function(String)? loadImage,
     Future<void> Function(ChatOutput)? onOpenResource,
     Future<void> Function(ChatOutput)? onShareResource,
@@ -58,7 +57,6 @@ final class ConversationActivity {
       : ProfileLiveExecution(
           entries: entries,
           savedActivity: savedActivity,
-          noticeBuilder: noticeBuilder,
           loadImage: loadImage,
           onOpenResource: onOpenResource,
           onShareResource: onShareResource,

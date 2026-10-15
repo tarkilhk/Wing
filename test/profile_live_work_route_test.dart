@@ -16,6 +16,7 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/profile_live_work_dock.dart';
 import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
@@ -547,6 +548,36 @@ void main() {
           },
           {'id': 6, 'role': 'assistant', 'content': 'The saved final answer.'},
         ];
+        // A completion receipt can save while its parent is still streaming.
+        // That must not move or duplicate the canonical agent into Activity.
+        final finalAnswer = host.historyMessages!.removeLast();
+        await controller.refreshHistory(chat);
+        await settle();
+        expect(chat.runtime.executionActive, isTrue);
+        expect(chat.reading.messages.any((row) => row['id'] == 4), isTrue);
+        await tester.openLiveActivity();
+        await settle();
+        final liveTabs = find.descendant(
+          of: find.byType(ProfileLiveExecution),
+          matching: find.byType(ProfileActivityTabs),
+        );
+        expect(liveTabs, findsWidgets);
+        for (final tabs in tester.widgetList<ProfileActivityTabs>(liveTabs)) {
+          expect(tabs.tabs.map((tab) => tab.id), ['timeline']);
+        }
+        expect(
+          find.text('Subagent Task Completed: Inspect source mappings'),
+          findsNothing,
+        );
+        await picture('current-receipt-timeline');
+        await tester.tap(tab(0, overlay: false));
+        await settle();
+        expect(find.text('Inspect source mappings'), findsOneWidget);
+        expect(chat.subagents.every((agent) => agent.isTerminal), isTrue);
+        await picture('current-receipt-drawer');
+        await tester.binding.handlePopRoute();
+        await settle();
+        host.historyMessages!.add(finalAnswer);
         host.event('a', 'message.complete', {
           'text': 'The saved final answer.',
         });

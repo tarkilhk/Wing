@@ -12,7 +12,9 @@ Use the compact **Subagents / Tasks** bar above your draft, or at the bottom of
 Working history. It remains available while Hermes waits for subagents and after
 the parent response finishes. Tap a side to open its drawer, swipe left/right to
 switch, and tap the selected side or outside to close. Tasks shows completed/total;
-cancelled tasks do not count as completed. Empty categories stay hidden.
+cancelled tasks do not count as completed. Empty categories stay hidden. During
+streaming, current Tasks and Subagents appear only in this drawer, including
+completed subagents whose parent is still answering.
 
 Past answers retain their received Activity and Work details. Tools and agent
 results share the Timeline and Agents tabs within the same Activity. Activity shows the

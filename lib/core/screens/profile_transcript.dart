@@ -638,7 +638,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   Widget? get _liveExecution => widget.activity?.liveExecution(
     savedActivity: _joinedLiveActivity,
-    noticeBuilder: widget.messageBuilder,
     loadImage: widget.loadImage,
     onOpenResource: widget.onOpenResource,
     onShareResource: widget.onShareResource,

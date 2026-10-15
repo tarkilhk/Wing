@@ -6,6 +6,7 @@ import '../models/chat_output.dart';
 import '../models/chat_runtime.dart';
 import '../models/transcript_timeline.dart';
 import 'profile_execution_activity.dart';
+import 'profile_activity_tabs.dart';
 import 'profile_tool_activity.dart';
 
 /// Readable live reasoning separates independently collapsed tool runs.
@@ -14,7 +15,6 @@ class ProfileLiveExecution extends StatefulWidget {
     super.key,
     required this.entries,
     this.savedActivity,
-    this.noticeBuilder,
     this.loadImage,
     this.onOpenResource,
     this.onShareResource,
@@ -22,7 +22,6 @@ class ProfileLiveExecution extends StatefulWidget {
 
   final List<ChatActivityEntry> entries;
   final TranscriptTimelineSection? savedActivity;
-  final Widget Function(TranscriptTimelineEntry)? noticeBuilder;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
@@ -73,13 +72,20 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
           label: count == 0
               ? 'Activity'
               : 'Activity · $count ${count == 1 ? 'tool' : 'tools'}',
-          detailsBuilder: (_) => ProfileActivityContents(
-            groups: saved,
-            currentActivity: [if (live.isNotEmpty) _run(live)],
-            noticeBuilder: widget.noticeBuilder,
-            loadImage: widget.loadImage,
-            onOpenResource: widget.onOpenResource,
-            onShareResource: widget.onShareResource,
+          detailsBuilder: (_) => ProfileActivityTabs(
+            tabs: [
+              ProfileActivityTab(
+                id: 'timeline',
+                label: 'Timeline',
+                child: ProfileActivityTimeline(
+                  groups: saved,
+                  currentActivity: [if (live.isNotEmpty) _run(live)],
+                  loadImage: widget.loadImage,
+                  onOpenResource: widget.onOpenResource,
+                  onShareResource: widget.onShareResource,
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -102,7 +108,9 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
             text: entry.reasoning,
           ),
         );
-      } else {
+      } else if (!group.isAgentNotice) {
+        // Current subagents stay in the canonical dock. A saved completion
+        // notice is historical evidence, not another current agent surface.
         savedGroups.add(group);
       }
     }
