@@ -131,7 +131,7 @@ class ProfileToolActivitySection extends StatelessWidget {
               ),
             ),
       detailsBuilder: (_) => ProfileActivityContents(
-        section: section,
+        groups: section.groups,
         expandedMessageId: expandedMessageId,
         focusedMessageKey: focusedMessageKey,
         currentActivity: currentActivity,
@@ -149,7 +149,7 @@ class ProfileToolActivitySection extends StatelessWidget {
 class ProfileActivityContents extends StatelessWidget {
   const ProfileActivityContents({
     super.key,
-    this.section,
+    required this.groups,
     this.expandedMessageId,
     this.focusedMessageKey,
     this.currentActivity = const [],
@@ -160,7 +160,7 @@ class ProfileActivityContents extends StatelessWidget {
     this.noticeBuilder,
   });
 
-  final TranscriptTimelineSection? section;
+  final List<TranscriptTimelineGroup> groups;
   final int? expandedMessageId;
   final GlobalKey? focusedMessageKey;
   final List<Widget> currentActivity;
@@ -172,7 +172,6 @@ class ProfileActivityContents extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groups = section?.groups ?? const <TranscriptTimelineGroup>[];
     final saved = SavedActivity(groups.expand((group) => group.toolResults));
     final supplied = tabs.map((tab) => tab.id).toSet();
     final noticeEntries = [

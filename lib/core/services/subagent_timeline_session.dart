@@ -60,7 +60,9 @@ final class SubagentTimelineSession extends ChangeNotifier
   @override
   List<GatewayTodo> get todos => _todos;
   @override
-  bool get liveAnswering => runtime.executionActive || runtime.needsInput;
+  // Completion is reported by runtime; presentation waits for saved history.
+  bool get liveAnswering =>
+      runtime.executionActive || runtime.needsInput || _reconcile;
   @override
   String? get qualification => _partial
       ? 'Earlier live activity is unavailable. Showing saved history and received updates.'

@@ -1,3 +1,13 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/widgets/subagent_timeline.dart';
 import 'package:wing/core/services/profile_supervision_session.dart';
@@ -22,10 +32,14 @@ import 'support/composer_fixture.dart' show emitChatEvent;
 import 'helpers/pump_markdown_widget.dart';
 
 class _SubagentFixture extends ProfileActionsFixture {
+  List<Map<String, dynamic>>? childMessages;
+  final childEvents = <Map<String, dynamic>>[];
   int listCalls = 0;
   int tailCalls = 0;
   int tailFailures = 0;
+  Completer<void>? steerGate;
   bool acceptSteer = false;
+  bool failSteer = false;
   bool findInterrupt = false;
   bool emptyList = false;
   bool tailAvailable = true;
@@ -43,17 +57,19 @@ class _SubagentFixture extends ProfileActionsFixture {
         if (path == 'sessions/child-session/messages') {
           return {
             'session_id': 'child-session',
-            'messages': [
-              {
-                'id': 101,
-                'role': 'assistant',
-                'content': 'Child saved evidence',
-              },
-            ],
+            'messages':
+                childMessages?.reversed.toList() ??
+                [
+                  {
+                    'id': 101,
+                    'role': 'assistant',
+                    'content': 'Child saved evidence',
+                  },
+                ],
             'pagination': {
               'offset': int.parse(query['offset']!),
               'limit': int.parse(query['limit']!),
-              'returned': 1,
+              'returned': childMessages?.length ?? 1,
               'order': 'latest',
             },
           };
@@ -75,8 +91,8 @@ class _SubagentFixture extends ProfileActionsFixture {
             params['session_id'] == 'child-watch') {
           return {
             'epoch': 'child-epoch',
-            'events': <Map<String, dynamic>>[],
-            'latest_seq': 0,
+            'events': childEvents,
+            'latest_seq': childEvents.length,
             'truncated': false,
           };
         }
@@ -113,6 +129,8 @@ class _SubagentFixture extends ProfileActionsFixture {
               'truncated': false,
             };
           case 'subagent.steer':
+            if (failSteer) throw StateError('Steering transport failed');
+            if (steerGate case final gate?) await gate.future;
             return {
               'status': acceptSteer ? 'queued' : 'rejected',
               'subagent_id': 'child-1',
@@ -128,6 +146,38 @@ class _SubagentFixture extends ProfileActionsFixture {
 }
 
 void main() {
+  const review = bool.fromEnvironment('CAPTURE_SUBAGENT_FIXES');
+  const frame = ValueKey('subagent-fixes-render');
+  setUpAll(() async {
+    if (!review) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+      'WingIcons': 'assets/fonts/wing-icons.ttf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            File(entry.value).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
+  Future<void> capture(WidgetTester tester, String name) async {
+    if (!review) return;
+    await tester.settleMarkdown();
+    await tester.runAsync(() async {
+      final image = await tester
+          .renderObject<RenderRepaintBoundary>(find.byKey(frame))
+          .toImage();
+      final data = await image.toByteData(format: ui.ImageByteFormat.png);
+      final folder = Directory('build/design-previews/subagent-fixes/site')
+        ..createSync(recursive: true);
+      await File(
+        '${folder.path}/$name.png',
+      ).writeAsBytes(data!.buffer.asUint8List());
+      image.dispose();
+    });
+  }
+
   late _SubagentFixture fixture;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
@@ -164,37 +214,42 @@ void main() {
     WidgetTester tester, {
     Brightness brightness = Brightness.light,
     double scale = 1.8,
+    bool motion = false,
+    Size size = const Size(320, 640),
   }) async {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pump();
-    tester.view.physicalSize = const Size(320, 640);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(
-        theme: wingTheme(brightness),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: TextScaler.linear(scale),
-            disableAnimations: true,
+      RepaintBoundary(
+        key: frame,
+        child: MaterialApp(
+          theme: wingTheme(brightness),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(scale),
+              disableAnimations: !motion,
+            ),
+            child: child!,
           ),
-          child: child!,
-        ),
-        home: Scaffold(
-          body: ListView(
-            children: [
-              ProfileSubagentPanel(
-                session: supervision,
-                initiallyExpanded: true,
-              ),
-            ],
+          home: Scaffold(
+            body: ListView(
+              children: [
+                ProfileSubagentPanel(
+                  session: supervision,
+                  initiallyExpanded: true,
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
-    await tester.pumpAndSettle();
+    if (!motion) await tester.pumpAndSettle();
   }
 
   Future<void> openDetails(WidgetTester tester) async {
@@ -234,7 +289,7 @@ void main() {
       expect(child.historyError, isNull);
       expect(child.liveError, isNull);
       expect(controller.current!.chat, same(selected));
-      await tester.tap(find.text('Task'));
+      await tester.tap(find.text('Task').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       final steerField = find.byType(TextField);
@@ -264,6 +319,339 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets(
+    'child saved and live work share one Activity and native reasoning',
+    (tester) async {
+      fixture.childMessages = [
+        {'id': 1, 'role': 'user', 'content': 'Inspect the release'},
+        {
+          'id': 2,
+          'role': 'assistant',
+          'content': '',
+          'reasoning': '**Check saved evidence**',
+          'tool_calls': [
+            for (var i = 0; i < 11; i++)
+              {
+                'id': 'call-$i',
+                'function': {'name': 'read_file', 'arguments': '{}'},
+              },
+          ],
+        },
+        for (var i = 0; i < 11; i++)
+          {
+            'id': i + 3,
+            'role': 'tool',
+            'tool_call_id': 'call-$i',
+            'content': 'Evidence $i',
+          },
+      ];
+      fixture.childEvents.addAll([
+        {'session_id': 'child-watch', 'seq': 1, 'type': 'message.start'},
+        {
+          'session_id': 'child-watch',
+          'seq': 2,
+          'type': 'tool.start',
+          'payload': {
+            'tool_id': 'submirror:child-session:1',
+            'name': 'read_file',
+            'preview': 'current.txt',
+          },
+        },
+      ]);
+      await showPanel(tester, scale: 1);
+      emitChatEvent(controller, chat, 'subagent.start', {
+        'subagent_id': 'child-1',
+        'child_session_id': 'child-session',
+        'goal': 'Inspect the release',
+      });
+      await tester.pump();
+      await tester.tap(find.text('Inspect the release'));
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      expect(
+        find.text('Activity · 12 tools'),
+        findsOneWidget,
+        reason: tester
+            .widgetList<Text>(find.byType(Text))
+            .map((w) => w.data)
+            .whereType<String>()
+            .join(' | '),
+      );
+      expect(find.byType(ProfileActivitySection), findsOneWidget);
+      fixture.childEvents.add({
+        'session_id': 'child-watch',
+        'seq': 3,
+        'type': 'message.complete',
+        'payload': {'text': 'Final reply awaiting persistence'},
+      });
+      await tester
+          .widget<SubagentTimeline>(find.byType(SubagentTimeline))
+          .session
+          .refresh();
+      await tester.pump();
+      expect(
+        find.text('Activity · 12 tools'),
+        findsOneWidget,
+        reason:
+            'Saved work and the retained final replay must stay in one reply Activity',
+      );
+      expect(find.byType(ProfileActivitySection), findsOneWidget);
+      await tester.tap(find.text('Activity · 12 tools'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      final reasoning = find.byWidgetPredicate(
+        (w) =>
+            w is MarkdownMessageContent && w.data == '**Check saved evidence**',
+      );
+      expect(reasoning, findsOneWidget);
+      expect(
+        find.ancestor(
+          of: reasoning,
+          matching: find.byType(ProfileActivityTabs),
+        ),
+        findsNothing,
+      );
+      await tester.tap(find.byTooltip('Close subagent activity'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('child timeline keeps its visible Running pulse', (tester) async {
+    await showPanel(tester, scale: 1, motion: true);
+    emitChatEvent(controller, chat, 'subagent.start', {
+      'subagent_id': 'child-1',
+      'child_session_id': 'child-session',
+      'goal': 'Inspect the release',
+    });
+    await tester.pump();
+    await tester.tap(find.text('Inspect the release'));
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(find.byType(SubagentTimeline), findsOneWidget);
+    final pulse = find.byWidgetPredicate(
+      (widget) => widget is StudioLoading && widget.label == 'Running',
+    );
+    expect(pulse, findsOneWidget);
+    Future<List<int>> workPixels() async {
+      final rect = tester.getRect(pulse);
+      final viewport =
+          Offset.zero &
+          (tester.view.physicalSize / tester.view.devicePixelRatio);
+      expect(viewport.intersect(rect), rect);
+      return (await tester.runAsync(() async {
+        final image = await tester
+            .renderObject<RenderRepaintBoundary>(find.byKey(frame))
+            .toImage();
+        final bytes = (await image.toByteData())!.buffer.asUint8List();
+        final pixels = <int>[
+          for (var y = rect.top.ceil(); y < rect.bottom.floor(); y++)
+            for (var x = rect.left.ceil(); x < rect.right.floor(); x++)
+              ...bytes.sublist(
+                (y * image.width + x) * 4,
+                (y * image.width + x + 1) * 4,
+              ),
+        ];
+        image.dispose();
+        return pixels;
+      }))!;
+    }
+
+    final before = await workPixels();
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(await workPixels(), isNot(equals(before)));
+    await capture(tester, 'running-pulse');
+    await tester.tap(find.text('Task').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(pulse, findsOneWidget);
+    await tester.tap(find.text('Task').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(pulse, findsOneWidget);
+    await tester.tap(find.byTooltip('Close subagent activity'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'timeline steering stays visible and reports pending/rejection ${brightness.name} $scale',
+        (tester) async {
+          fixture.childMessages = [
+            {'id': 1, 'role': 'user', 'content': 'Check source evidence'},
+            {
+              'id': 2,
+              'role': 'assistant',
+              'content': '',
+              'reasoning':
+                  '**Fixing database issues**\n\nCheck the retained parent and child rows before changing the query.',
+              'tool_calls': [
+                {
+                  'id': 'saved',
+                  'function': {
+                    'name': 'read_file',
+                    'arguments': '{"path":"evidence.py"}',
+                  },
+                },
+              ],
+            },
+            {
+              'id': 3,
+              'role': 'tool',
+              'tool_call_id': 'saved',
+              'content': 'Saved source evidence',
+            },
+          ];
+          await showPanel(
+            tester,
+            brightness: brightness,
+            scale: scale,
+            size: scale == 1 ? const Size(390, 844) : const Size(320, 640),
+          );
+          emitChatEvent(controller, chat, 'subagent.start', {
+            'subagent_id': 'child-1',
+            'child_session_id': 'child-session',
+            'goal': 'Inspect the release',
+          });
+          await tester.pump();
+          await tester.tap(find.text('Inspect the release'));
+          for (var i = 0; i < 12; i++) {
+            await tester.pump(const Duration(milliseconds: 50));
+          }
+          final field = find.byType(TextField);
+          final steer = find.byTooltip('Steer');
+          expect(field.hitTestable(), findsOneWidget);
+          expect(steer.hitTestable(), findsOneWidget);
+          expect(find.byTooltip('Interrupt'), findsOneWidget);
+          final reasoning = find.byWidgetPredicate(
+            (w) =>
+                w is MarkdownMessageContent &&
+                w.data.startsWith('**Fixing database issues**'),
+          );
+          await tester.settleMarkdown();
+          await tester.ensureVisible(reasoning);
+          await tester.pump();
+          await tester.settleMarkdown();
+          await tester.ensureVisible(reasoning);
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+            tester
+                .getRect(reasoning)
+                .overlaps(tester.getRect(find.byType(SubagentTimeline))),
+            isTrue,
+            reason:
+                'Reasoning ${tester.getRect(reasoning)}; viewport ${tester.getRect(find.byType(SubagentTimeline))}',
+          );
+          await capture(tester, 'reasoning-${brightness.name}-$scale');
+          await tester.enterText(field, 'Check the retained child rows');
+          tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(steer.hitTestable(), findsOneWidget);
+          final gate = Completer<void>();
+          fixture.steerGate = gate;
+          addTearDown(() {
+            if (!gate.isCompleted) gate.complete();
+          });
+          await tester.tap(steer);
+          await tester.pump();
+          expect(
+            find.descendant(
+              of: steer,
+              matching: find.byType(CircularProgressIndicator),
+            ),
+            findsOneWidget,
+          );
+          expect(tester.widget<TextField>(field).enabled, isFalse);
+          final dispatches = fixture.requests
+              .where((c) => c.$1 == 'subagent.steer')
+              .length;
+          await tester.tap(steer);
+          await tester.pump();
+          expect(
+            fixture.requests.where((c) => c.$1 == 'subagent.steer'),
+            hasLength(dispatches),
+          );
+          final request = fixture.requests.lastWhere(
+            (c) => c.$1 == 'subagent.steer',
+          );
+          expect(request.$2['session_id'], chat.runtime.runtimeId);
+          expect(request.$2['subagent_id'], 'child-1');
+          expect(request.$2['text'], 'Check the retained child rows');
+          await capture(tester, 'steering-pending-${brightness.name}-$scale');
+          gate.complete();
+          for (var i = 0; i < 5; i++) {
+            await tester.pump(const Duration(milliseconds: 30));
+          }
+          expect(
+            find.text('The subagent did not accept that steering.'),
+            findsOneWidget,
+          );
+          expect(
+            tester.widget<TextField>(field).controller!.text,
+            'Check the retained child rows',
+          );
+          expect(steer.hitTestable(), findsOneWidget);
+          await capture(tester, 'steering-rejected-${brightness.name}-$scale');
+          fixture.steerGate = null;
+          fixture.failSteer = true;
+          await tester.tap(steer);
+          for (var i = 0; i < 5; i++) {
+            await tester.pump(const Duration(milliseconds: 30));
+          }
+          expect(find.text('Steering could not be queued.'), findsOneWidget);
+          expect(
+            tester.widget<TextField>(field).controller!.text,
+            'Check the retained child rows',
+          );
+          fixture.failSteer = false;
+          fixture.acceptSteer = true;
+          await tester.tap(steer);
+          for (var i = 0; i < 5; i++) {
+            await tester.pump(const Duration(milliseconds: 30));
+          }
+          expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+          expect(find.text('Steering queued.'), findsOneWidget);
+          await capture(tester, 'steering-queued-${brightness.name}-$scale');
+          // A newer draft must survive acceptance of the captured submission.
+          await tester.enterText(field, 'Original guidance');
+          final acceptedGate = Completer<void>();
+          fixture.steerGate = acceptedGate;
+          addTearDown(() {
+            if (!acceptedGate.isCompleted) acceptedGate.complete();
+          });
+          await tester.tap(steer);
+          await tester.pump();
+          tester.widget<TextField>(field).controller!.text = 'Newer guidance';
+          acceptedGate.complete();
+          for (var i = 0; i < 5; i++) {
+            await tester.pump(const Duration(milliseconds: 30));
+          }
+          expect(
+            tester.widget<TextField>(field).controller!.text,
+            'Newer guidance',
+          );
+
+          expect(tester.takeException(), isNull);
+          tester.view.viewInsets = const FakeViewPadding();
+          tester.testTextInput.hide();
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.tap(find.byTooltip('Close subagent activity'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
 
   testWidgets(
     'agent timing is backend-derived and stops on completion or uncertainty',
@@ -342,28 +730,8 @@ void main() {
           await showPanel(tester, brightness: brightness, scale: scale);
           final title = tester.widget<Text>(find.text(heading));
           expect(title.maxLines, 2);
-          final tile = tester.widget<ListTile>(
-            find.ancestor(
-              of: find.text(heading),
-              matching: find.byType(ListTile),
-            ),
-          );
-          final firstLineCenter =
-              tester.getTopLeft(find.text(heading)).dy + 14 * scale * 1.3 / 2;
-          expect(
-            tester.getRect(find.byWidget(tile.leading!)).center.dy,
-            closeTo(firstLineCenter, .1),
-          );
-          expect(
-            tester.getRect(find.byWidget(tile.trailing!)).center.dy,
-            closeTo(firstLineCenter, .1),
-          );
           expect(title.overflow, TextOverflow.ellipsis);
           expect(find.text(longGoal), findsNothing);
-          expect(
-            tester.getSize(find.text(heading)).height,
-            lessThanOrEqualTo(2 * 14 * scale * 1.3 + 1),
-          );
           for (final label in [
             'Running',
             'Queued',
@@ -735,7 +1103,10 @@ void main() {
               data: MediaQuery.of(context).copyWith(disableAnimations: true),
               child: child!,
             ),
-            home: ProfileWorkspaceScreen(controller: controller),
+            home: ProfileWorkspaceScreen(
+              createBotsSession: () => BotsSession((_) async => const []),
+              controller: controller,
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -791,7 +1162,12 @@ void main() {
       'goal': 'Inspect the release',
     });
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 100));

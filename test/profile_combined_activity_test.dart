@@ -389,9 +389,7 @@ void main() {
     });
   }
 
-  testWidgets('saved tool calls retain their Activity beside the live run', (
-    tester,
-  ) async {
+  testWidgets('saved and live tool calls share their Activity', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final host = ProfileActionsFixture();
     final preferences = await SharedPreferences.getInstance();
@@ -451,7 +449,7 @@ void main() {
     await tester.tap(find.text('Activity · 68 tools'));
     await tester.pumpAndSettle();
     expect(find.text('Search'), findsNWidgets(67));
-    expect(find.text('Timeline'), findsNWidgets(2));
+    expect(find.text('Timeline'), findsOneWidget);
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
       'Keep Activity open while typing',

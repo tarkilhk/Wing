@@ -48,14 +48,6 @@ class SubagentTimeline extends StatelessWidget {
           builder: (context, constraints) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Align(
-                alignment: Alignment.centerRight,
-                child: ActivityDetailAction(
-                  label: 'Refresh subagent activity',
-                  icon: Icons.refresh,
-                  onPressed: session.historyLoading ? null : session.refresh,
-                ),
-              ),
               Expanded(
                 child: ProfileTranscript(
                   presentation: TranscriptPresentation.capture(

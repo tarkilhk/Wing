@@ -237,6 +237,185 @@ void main() {
       expect(reasoning, findsOneWidget);
     },
   );
+  testWidgets('current saved reasoning stays outside collapsed tool runs', (
+    tester,
+  ) async {
+    final saved = TranscriptTimeline.project([
+      {
+        'id': 1,
+        'role': 'tool',
+        'tool_call_id': 'saved-one',
+        'tool_name': 'read_file',
+        'content': 'First result',
+      },
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': '',
+        'reasoning': 'Saved current reasoning',
+      },
+      {
+        'id': 3,
+        'role': 'tool',
+        'tool_call_id': 'saved-two',
+        'tool_name': 'read_file',
+        'content': 'Second result',
+      },
+    ], presentationId: (row) => row['id']!).sections.single;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ProfileLiveExecution(
+              savedActivity: saved,
+              entries: [tool('live-three')],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.settleMarkdown();
+    expect(
+      find.text('Saved current reasoning', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.byType(ProfileReasoningDisclosure), findsNothing);
+    expect(find.byType(ProfileActivitySection), findsNWidgets(2));
+  });
+
+  testWidgets('saved and live contiguous tools share one Activity disclosure', (
+    tester,
+  ) async {
+    final saved = TranscriptTimeline.project([
+      {
+        'id': 1,
+        'role': 'tool',
+        'tool_call_id': 'saved-one',
+        'tool_name': 'read_file',
+        'content': 'First result',
+      },
+      {
+        'id': 2,
+        'role': 'tool',
+        'tool_call_id': 'saved-two',
+        'tool_name': 'read_file',
+        'content': 'Second result',
+      },
+    ], presentationId: (row) => row['id']!).sections.single;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ProfileLiveExecution(
+              savedActivity: saved,
+              entries: [tool('live-three')],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(ProfileActivitySection), findsOneWidget);
+    expect(find.text('Activity · 3 tools'), findsOneWidget);
+    await tester.openLiveActivity();
+    expect(find.byType(ProfileToolCall), findsNWidgets(3));
+  });
+
+  testWidgets('older saved receipts retain the opened live run', (
+    tester,
+  ) async {
+    Widget view(List<int> ids) => MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: ProfileLiveExecution(
+            savedActivity: TranscriptTimeline.project([
+              for (final id in ids)
+                {
+                  'id': id,
+                  'role': 'tool',
+                  'tool_call_id': 'saved-$id',
+                  'tool_name': 'read_file',
+                  'content': 'Result $id',
+                },
+            ], presentationId: (row) => row['id']!).sections.single,
+            entries: [tool('native')],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpWidget(view([2]));
+    await tester.pumpAndSettle();
+    await tester.openLiveActivity();
+    final native = find.byWidgetPredicate(
+      (w) => w is ProfileToolCall && w.call.callId == 'native',
+    );
+    final retained = tester.element(native);
+    await tester.pumpWidget(view([1, 2]));
+    await tester.pumpAndSettle();
+    expect(find.text('Activity · 3 tools'), findsOneWidget);
+    expect(find.byType(ProfileToolCall), findsNWidgets(3));
+    expect(tester.element(native), same(retained));
+  });
+
+  for (final live in [true, false]) {
+    testWidgets(
+      'Agents and Timeline share one Activity across handoff live=$live',
+      (tester) async {
+        final section = TranscriptTimeline.project([
+          {
+            'id': 1,
+            'role': 'user',
+            'display_kind': 'async_delegation_complete',
+            'content': 'Agent result',
+            'display_content': 'Subagent Task Completed',
+          },
+          if (!live)
+            {
+              'id': 2,
+              'role': 'tool',
+              'tool_call_id': 'call',
+              'tool_name': 'read_file',
+              'content': 'File result',
+            },
+        ], presentationId: (row) => row['id']!).sections.single;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: live
+                    ? ProfileLiveExecution(
+                        savedActivity: section,
+                        entries: [tool('call')],
+                        noticeBuilder: (_) => const Text('Agent result'),
+                      )
+                    : ProfileToolActivitySection(
+                        section: section,
+                        noticeBuilder: (_) => const Text('Agent result'),
+                      ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileActivitySection), findsOneWidget);
+        await tester.tap(find.text('Activity · 1 tool'));
+        await tester.pumpAndSettle();
+        final tabs = tester.widget<ProfileActivityTabs>(
+          find.byType(ProfileActivityTabs),
+        );
+        expect(tabs.tabs.map((tab) => tab.id), ['timeline', 'agents']);
+        expect(find.byType(ProfileToolCall), findsOneWidget);
+        await tester.tap(find.text('Agents'));
+        await tester.pumpAndSettle();
+        expect(find.text('Agent result'), findsOneWidget);
+        expect(find.byType(ProfileToolCall), findsNothing);
+        await tester.tap(find.text('Timeline'));
+        await tester.pumpAndSettle();
+        expect(find.byType(ProfileToolCall), findsOneWidget);
+      },
+    );
+  }
+
   testWidgets('all 12 earlier tools remain visible beside 3 later calls', (
     tester,
   ) async {

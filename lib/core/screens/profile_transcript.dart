@@ -664,8 +664,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     final timeline = _readingThrough == null
         ? widget.presentation.timeline
         : widget.presentation.timeline.through(_readingThrough!);
-    _joinedLiveActivity =
-        widget.activity?.live == true && widget.activity!.entries.isNotEmpty
+    _joinedLiveActivity = widget.activity?.live == true
         ? timeline.adjacentLiveActivity
         : null;
     final rows = timeline.sections.reversed
@@ -715,12 +714,13 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         : liveAnswerIndex < 0
         ? 0
         : liveAnswerIndex + 1;
-    final joinCurrentActivity =
-        _liveExecution == null && timeline.joinsCurrentActivity;
+    final joinCurrentActivity = _liveExecution == null
+        ? timeline.adjacentCurrentActivity
+        : null;
     final hasCurrentActivity =
         _currentActivity.isNotEmpty || _activityTabs.isNotEmpty;
     final tailContent = [
-      if (hasCurrentActivity && !joinCurrentActivity)
+      if (hasCurrentActivity && joinCurrentActivity == null)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: WingSpacing.lg),
           child: ProfileActivitySection(
@@ -998,15 +998,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                               loadImage: widget.loadImage,
                               onOpenResource: widget.onOpenResource,
                               onShareResource: widget.onShareResource,
-                              tabs: rowIndex == 0 && joinCurrentActivity
+                              tabs: identical(section, joinCurrentActivity)
                                   ? _activityTabs
                                   : const [],
                               liveToolCount:
-                                  rowIndex == 0 && joinCurrentActivity
+                                  identical(section, joinCurrentActivity)
                                   ? (widget.activity?.toolCount ?? 0)
                                   : 0,
                               currentActivity:
-                                  rowIndex == 0 && joinCurrentActivity
+                                  identical(section, joinCurrentActivity)
                                   ? _currentActivity
                                   : const [],
                             )

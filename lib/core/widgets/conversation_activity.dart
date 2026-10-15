@@ -53,7 +53,7 @@ final class ConversationActivity {
     Future<Uint8List> Function(String)? loadImage,
     Future<void> Function(ChatOutput)? onOpenResource,
     Future<void> Function(ChatOutput)? onShareResource,
-  }) => !live || entries.isEmpty
+  }) => !live || (entries.isEmpty && savedActivity == null)
       ? null
       : ProfileLiveExecution(
           entries: entries,

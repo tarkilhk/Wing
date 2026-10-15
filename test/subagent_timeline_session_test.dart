@@ -190,11 +190,13 @@ void main() {
       events.add(event('message.complete', {'text': 'New final answer'}));
       await session.refresh();
       expect(session.streaming, 'New final answer');
+      expect(session.liveAnswering, isTrue);
       expect(session.runtime.executionActive, isFalse);
       rows.add({'id': 5, 'role': 'assistant', 'content': 'New final answer'});
       await session.refresh();
       expect(session.streaming, isEmpty);
       expect(session.messages.single['content'], 'New final answer');
+      expect(session.liveAnswering, isFalse);
     },
   );
 

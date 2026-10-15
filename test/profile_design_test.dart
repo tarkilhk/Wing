@@ -305,7 +305,7 @@ void main() {
       expect(section.toolCount, 3);
       expect(section.reviewCount, 1);
       expect(section.groups.last.reviewText, 'Details');
-      expect(timeline.joinsCurrentActivity, isFalse);
+      expect(timeline.adjacentCurrentActivity, isNull);
       expect(section.messages.first.presentationId, same(tokens.first));
       source.first['content'] = 'Caller rewrite';
       expect(section.groups.first.toolResults.first.text, 'First');
@@ -337,7 +337,11 @@ void main() {
         final timeline = TranscriptTimeline.project([
           entry.$1,
         ], presentationId: (_) => Object());
-        expect(timeline.joinsCurrentActivity, entry.$2, reason: '${entry.$1}');
+        expect(
+          timeline.adjacentCurrentActivity != null,
+          entry.$2,
+          reason: '${entry.$1}',
+        );
       }
     },
   );

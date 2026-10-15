@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import '../presentation/tool_call_presentation.dart';
 import 'profile_tool_call.dart';
 import 'tool_activity_details.dart';
+import 'markdown_message_content.dart';
 import '../presentation/tool_activity_details.dart';
 
 import 'package:flutter/material.dart';
@@ -318,6 +319,54 @@ class _PendingTaskPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PendingTaskPainter oldDelegate) =>
       oldDelegate.color != color;
+}
+
+/// The same readable reasoning block for saved receipts and live events.
+class ProfileReasoningContent extends StatelessWidget {
+  const ProfileReasoningContent({
+    super.key,
+    required this.text,
+    this.running = false,
+  });
+  final String text;
+  final bool running;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 16),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            SizedBox.square(
+              dimension: 16,
+              child: FittedBox(
+                child: CircuitBrainIcon(color: WingTokens.of(context).muted),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                running ? 'Thinking' : 'Reasoning',
+                style: WingTokens.of(context).typography.label.copyWith(
+                  fontSize: 11,
+                  color: WingTokens.of(context).muted,
+                ),
+              ),
+            ),
+            ToolDetailCopyButton(label: 'Copy reasoning', text: text),
+          ],
+        ),
+        const SizedBox(height: 8),
+        MarkdownMessageContent(
+          data: text,
+          streaming: running,
+          loadImages: false,
+        ),
+      ],
+    ),
+  );
 }
 
 class ProfileReasoningDisclosure extends StatelessWidget {

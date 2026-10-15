@@ -32,7 +32,12 @@ class ActivityDetailAction extends StatelessWidget {
       style: activityActionStyle,
       tooltip: label,
       onPressed: busy ? null : onPressed,
-      icon: Icon(icon, size: 16),
+      icon: busy
+          ? const SizedBox.square(
+              dimension: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Icon(icon, size: 16),
     ),
   );
 }

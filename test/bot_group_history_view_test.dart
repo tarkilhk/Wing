@@ -33,12 +33,18 @@ const _capture = bool.fromEnvironment('CAPTURE_BOT_GROUPS');
 
 Future<void> _settle(WidgetTester tester) async {
   for (var attempt = 0; attempt < 100; attempt++) {
-    await tester.pumpAndSettle();
+    // Resume placement waits for background Markdown. Give that real worker
+    // time before expecting frame animations to settle.
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 10)),
+    );
     if (!tester
-        .stateList<BackgroundMarkdownContentState>(
-          find.byType(BackgroundMarkdownContent, skipOffstage: false),
-        )
-        .any((state) => state.pending)) {
+            .stateList<BackgroundMarkdownContentState>(
+              find.byType(BackgroundMarkdownContent, skipOffstage: false),
+            )
+            .any((state) => state.pending) &&
+        !tester.binding.hasScheduledFrame) {
       return;
     }
     await tester.runAsync(
@@ -783,8 +789,9 @@ void main() {
           childMount.complete();
           await liveFrames();
           expect(find.text('Task'), findsOneWidget);
-          expect(find.byTooltip('Interrupt subagent'), findsNothing);
-          expect(find.byTooltip('Steer subagent'), findsNothing);
+          expect(find.byTooltip('Interrupt'), findsNothing);
+          expect(find.byTooltip('Steer'), findsNothing);
+          expect(find.byType(TextField), findsNothing);
           expect(childReads, greaterThan(0));
           final childView = find.byType(SubagentTimeline);
           final childSession = tester
@@ -1112,7 +1119,7 @@ void main() {
             .controller!;
         scroll.jumpTo(120);
         await _settle(tester);
-        final savedOffset = scroll.offset;
+        final savedPosition = session.reader.readingPosition.resume!;
         await tester.tap(find.widgetWithText(ChoiceChip, 'Mira'));
         await _settle(tester);
         final reads = fixture.historyReads.length;
@@ -1121,13 +1128,15 @@ void main() {
         expect(fixture.historyReads.length, reads);
         expect(session.reader.messages.last['id'], 200);
         expect(
-          tester
-              .widget<ListView>(
-                find.byKey(const ValueKey('profile-transcript')),
-              )
-              .controller!
-              .offset,
-          closeTo(savedOffset, 0.01),
+          session.reader.readingPosition.resume?.messageId,
+          savedPosition.messageId,
+        );
+        expect(
+          find.textContaining(
+            'Atlas saved ${savedPosition.messageId}',
+            findRichText: true,
+          ),
+          findsWidgets,
         );
         expect(fixture.commands, isEmpty);
         expect(tester.takeException(), isNull);
