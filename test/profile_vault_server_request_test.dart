@@ -133,7 +133,8 @@ void main() {
           expect(expired.timestamp, pending.timestamp);
           expect(expired.description, pending.description);
           expect(expired.status, HermesQuestionStatus.expired);
-          expect(find.text('Hermes question - Expired'), findsOneWidget);
+          expect(find.text('Asked a question'), findsOneWidget);
+          expect(find.text('Expired'), findsOneWidget);
           expect(chat.runtime.error, isNull);
         } else {
           final button = find.byKey(
