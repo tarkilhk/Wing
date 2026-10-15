@@ -138,7 +138,9 @@ void main() {
   testWidgets(
     'switching category preserves its position in reversed transcript',
     (tester) async {
-      final scroll = ExpansionScrollController();
+      final scroll = ExpansionScrollController(
+        preserveViewportPosition: () => true,
+      );
       addTearDown(scroll.dispose);
       await tester.pumpWidget(
         MaterialApp(

@@ -96,6 +96,7 @@ class ProfileTranscript extends StatefulWidget {
 
 class _ProfileTranscriptState extends State<ProfileTranscript> {
   late final _scroll = ExpansionScrollController(
+    preserveViewportPosition: () => !widget.needsInput,
     initialScrollOffset: widget.focusedMessageId == null
         ? widget.reader.historyScrollOffset
         : 0,

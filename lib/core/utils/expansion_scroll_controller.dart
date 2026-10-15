@@ -6,10 +6,14 @@ import '../widgets/anchored_expansion_tile.dart';
 /// Corrects disclosure movement during layout, before a frame is painted.
 class ExpansionScrollController extends ScrollController {
   ExpansionScrollController({
+    required this.preserveViewportPosition,
     super.initialScrollOffset,
     bool restoreInitialOffset = false,
   }) : _restoringInitialOffset = restoreInitialOffset;
 
+  // Input navigation must align controls with the new viewport bounds; ordinary
+  // reading instead retains the visible row while lower chrome changes height.
+  final bool Function() preserveViewportPosition;
   bool _restoringInitialOffset;
 
   void finishInitialOffsetRestoration() => _restoringInitialOffset = false;
@@ -160,6 +164,7 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
     final previous = hasViewportDimension ? viewportDimension : null;
     final accepted = super.applyViewportDimension(nextViewport);
     if (previous != null &&
+        controller.preserveViewportPosition() &&
         hasPixels &&
         axisDirection == AxisDirection.up &&
         pixels > .5 &&

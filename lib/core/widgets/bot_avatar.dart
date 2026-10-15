@@ -76,7 +76,13 @@ class _BorrowedBotAvatarState extends State<BorrowedBotAvatar>
       _scroll = scroll;
       _scroll?.addListener(_queueAdmission);
     }
-    _queueAdmission();
+    // Fixed headers need no viewport geometry and can borrow cached identity
+    // before their first paint. Sliver rows wait until layout has positioned them.
+    if (_scroll == null) {
+      _syncDemand();
+    } else {
+      _queueAdmission();
+    }
   }
 
   @override

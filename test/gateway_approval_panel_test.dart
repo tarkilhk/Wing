@@ -43,7 +43,7 @@ void main() {
       testWidgets('approval command scrolls independently: $brightness/$scale', (
         tester,
       ) async {
-        tester.view.physicalSize = const Size(390, 844);
+        tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         SharedPreferences.setMockInitialValues({});
@@ -111,6 +111,10 @@ void main() {
         expect(find.text('Approval needed (1/2)'), findsOneWidget);
         await tester.ensureVisible(command);
         await tester.pumpAndSettle();
+        final viewport = tester.getRect(
+          find.byKey(const ValueKey('profile-transcript')),
+        );
+        expect(viewport.contains(tester.getRect(command).center), isTrue);
         final controlsBefore = tester.getRect(find.text('Allow once'));
         await tester.drag(command, const Offset(0, -100));
         await tester.pumpAndSettle();

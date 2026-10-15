@@ -322,10 +322,7 @@ Future<void> _chatGesture(
   bool pinch = true,
   bool returnToStart = false,
 }) async {
-  final group = find.byKey(const ValueKey('group-transcript'));
-  final rect = tester.getRect(
-    group.evaluate().isEmpty ? find.byType(ProfileTranscript) : group,
-  );
+  final rect = tester.getRect(find.byType(ProfileTranscript));
   final fractions = pinch ? [.24, .76] : [.16, .38];
   for (var y = rect.top + 24; y < rect.bottom - 24; y += 12) {
     if (!fractions.every(
@@ -3768,10 +3765,10 @@ void main() {
           );
           expect(find.byIcon(Icons.cloud_outlined), findsOneWidget);
           final landingViewport = find.byKey(
-            const ValueKey('group-transcript'),
+            const ValueKey('profile-transcript'),
           );
           final landingBounds = tester.getRect(landingViewport);
-          expect(find.bySemanticsLabel('Loading conversation'), findsOneWidget);
+          expect(find.bySemanticsLabel('Loading history'), findsOneWidget);
           landingRead.complete();
           for (var frame = 0; frame < 24; frame++) {
             await tester.pump(const Duration(milliseconds: 16));
@@ -3817,7 +3814,7 @@ void main() {
           FocusManager.instance.primaryFocus?.unfocus();
           await tester.pump();
           final list = tester.widget<ListView>(
-            find.byKey(const ValueKey('group-transcript')),
+            find.byKey(const ValueKey('profile-transcript')),
           );
           list.controller!.jumpTo(0);
           await tester.pump();
@@ -3907,10 +3904,10 @@ void main() {
           await _finishFrames(tester);
           expect(find.byType(BotGroupScreen), findsOneWidget);
           final switchedViewport = find.byKey(
-            const ValueKey('group-transcript'),
+            const ValueKey('profile-transcript'),
           );
           final switchedBounds = tester.getRect(switchedViewport);
-          expect(find.bySemanticsLabel('Loading conversation'), findsNothing);
+          expect(find.bySemanticsLabel('Loading history'), findsNothing);
           await _capture(
             tester,
             frame,
