@@ -230,6 +230,7 @@ class Host {
   Completer<void>? defaultDiscoveryStarted;
   Object? defaultDiscoveryFailure;
   Map<String, dynamic> clarifyResult = {'status': 'ok'};
+  Future<void> Function()? onClarifyResponse;
   Map<String, dynamic> steerResult = {'status': 'queued'};
   Future<ProfileDiscovery> discover() async {
     if (discoveryStarted case final started? when !started.isCompleted) {
@@ -442,6 +443,7 @@ class Host {
               code: 4000,
             );
           }
+          await onClarifyResponse?.call();
           return clarifyResult;
         }
         if (method == 'projects.tree') {
@@ -4056,6 +4058,57 @@ void main() {
     },
   );
 
+  test('ended response cannot close a newer clarification', () async {
+    final chat = await controller.createChat(canDispatch: () => true);
+    host.event('a', 'clarify', {'request_id': 'old', 'question': 'Old?'});
+    host.onClarifyResponse = () async {
+      host.event('a', 'clarify', {'request_id': 'new', 'question': 'New?'});
+    };
+    host.clarifyResult = {'status': 'expired'};
+    final resumesBefore = host.calls
+        .where((c) => c.$2 == 'session.resume')
+        .length;
+    await controller.clarify(chat, 'late answer');
+    expect(chat.runtime.pendingQuestion?.requestId, 'new');
+    expect(
+      host.calls.where((c) => c.$2 == 'session.resume'),
+      hasLength(resumesBefore),
+    );
+  });
+
+  test(
+    'ended batch closes even when desktop advances its pending question',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      final questions = [
+        {'qid': 'q0', 'question': 'First?'},
+        {'qid': 'q1', 'question': 'Second?'},
+      ];
+      host.event('a', 'clarify', {
+        'request_id': 'batch',
+        'questions': questions,
+      });
+      host.onClarifyResponse = () async {
+        host.event('a', 'session.info', {
+          'open_requests': [
+            {
+              'id': 'batch',
+              'method': 'clarify',
+              'params': {
+                'session_id': chat.runtime.runtimeId,
+                'questions': questions,
+                'answers': {'q0': 'desktop'},
+              },
+            },
+          ],
+        });
+      };
+      host.clarifyResult = {'status': 'expired'};
+      await controller.clarify(chat, 'late answer');
+      expect(chat.runtime.pendingQuestion, isNull);
+    },
+  );
+
   test(
     'expired input refreshes its owner without retrying the answer',
     () async {
@@ -4081,7 +4134,9 @@ void main() {
       expect(expired.requestId, pending.requestId);
       expect(expired.timestamp, pending.timestamp);
       expect(expired.description, pending.description);
-      expect(expired.status, HermesQuestionStatus.expired);
+      // Stock "expired" also means answered on another surface, so only a
+      // request.cancel timeout receipt can establish actual expiry.
+      expect(expired.status, HermesQuestionStatus.closed);
       expect(chat.runtime.error, isNull);
       final resumes = host.calls
           .where((c) => c.$2 == 'session.resume')

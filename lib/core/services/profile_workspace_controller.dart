@@ -7815,12 +7815,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
               'result': {'answer': answer},
             },
     );
-    if (!capture.current) return;
     if (result['status'] == 'expired') {
+      // This receipt closes the whole request, even if another surface has
+      // advanced its batch. It cannot close a different request or runtime.
+      if (capture.runtimeId != chat.runtime.runtimeId ||
+          chat.runtime.pendingQuestion?.requestId != question.requestId) {
+        return;
+      }
       chat._runtime.closeQuestion(question.requestId);
+      _changed();
       await reconnect(resource.scope);
       chat._runtime.reportQuestionExpiry(capture);
     } else {
+      if (!capture.current) return;
       chat._runtime.finishQuestionAnswer(
         capture,
         answer: answer,

@@ -72,9 +72,10 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _submitting = false;
         _error = 'Hermes could not accept the answer. Please try again.';
       });
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 

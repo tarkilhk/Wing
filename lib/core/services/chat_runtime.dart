@@ -110,8 +110,10 @@ class ChatRuntime {
     }
   }
 
-  void closeQuestion(String requestId) =>
-      _settleQuestionRequest(requestId, HermesQuestionStatus.closed);
+  void closeQuestion(String requestId) {
+    _settleQuestionRequest(requestId, HermesQuestionStatus.closed);
+    if (_questions?.pending?.requestId == requestId) _questions = null;
+  }
 
   bool _closed = false;
   bool _liveSessionConfirmed = true;
@@ -916,15 +918,41 @@ class ChatRuntime {
     if (_closed) return;
     final parsed = GatewayClarifyRequest.fromEventDataList(data);
     _rememberQuestions(parsed);
+    bool settled(GatewayClarifyRequest question) =>
+        _questionHistory['clarify/${question.requestId}/${question.questionId ?? ''}']
+            ?.status !=
+        HermesQuestionStatus.pending;
+    // Request IDs cannot reopen after settlement. A late replay must not
+    // restore its controls or displace a newer request.
+    if (parsed.isNotEmpty && parsed.every(settled)) return;
     if (parsed.isNotEmpty) _revokeCommandPrompt();
-    _questions = parsed.isEmpty
+    final answeredIds = data['answers'] is Map
+        ? (data['answers'] as Map).keys.whereType<String>().toSet()
+        : <String>{};
+    answeredIds.addAll(
+      parsed.where(settled).map((q) => q.questionId).whereType<String>(),
+    );
+    final pending = parsed
+        .where(
+          (q) => q.questionId == null || !answeredIds.contains(q.questionId),
+        )
+        .firstOrNull;
+    final previous = _questions?.pending;
+    // A repeated server snapshot does not replace the pending question's
+    // response authority. Advancing to another question does.
+    final correlation =
+        pending != null &&
+            previous != null &&
+            pending.requestId == previous.requestId &&
+            pending.questionId == previous.questionId
+        ? _questions!.correlation
+        : Object();
+    _questions = pending == null
         ? null
         : ChatQuestions(
-            correlation: Object(),
+            correlation: correlation,
             questions: parsed,
-            answeredIds: data['answers'] is Map
-                ? (data['answers'] as Map).keys.whereType<String>()
-                : const [],
+            answeredIds: answeredIds,
             lockedAnswers: data['answers'] is Map
                 ? {
                     for (final e in (data['answers'] as Map).entries)
@@ -934,7 +962,8 @@ class ChatRuntime {
                 : const {},
           );
     for (final question in parsed) {
-      if (_questions?.answeredIds.contains(question.questionId) == true) {
+      if (data['answers'] is Map &&
+          (data['answers'] as Map).containsKey(question.questionId)) {
         _settleQuestion(
           'clarify/${question.requestId}/${question.questionId ?? ''}',
           HermesQuestionStatus.answered,

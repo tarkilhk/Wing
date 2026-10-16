@@ -68,6 +68,81 @@ void main() {
     );
   }
 
+  test('a settled clarification cannot return through a delayed snapshot', () {
+    answerQuestion();
+    runtime.reconcileOpenRequests([
+      {
+        'id': 'question',
+        'method': 'clarify',
+        'params': {'session_id': 'runtime', 'question': 'Which source?'},
+      },
+    ]);
+    expect(runtime.observation.pendingQuestion, isNull);
+    expect(history.questions.single.status, HermesQuestionStatus.answered);
+  });
+
+  test(
+    'replayed batch cannot restore an answered question or replace a newer request',
+    () {
+      final batch = {
+        'request_id': 'batch',
+        'questions': [
+          {'qid': 'q0', 'question': 'First?'},
+          {'qid': 'q1', 'question': 'Second?'},
+        ],
+      };
+      runtime.receiveQuestions(batch);
+      final first = runtime.beginQuestionAnswer(runtime.observation.questions)!;
+      runtime.finishQuestionAnswer(first, answer: 'one', remaining: ['q1']);
+      runtime.receiveQuestions(batch);
+      expect(runtime.observation.pendingQuestion?.questionId, 'q1');
+      expect(runtime.observation.questions?.pendingNumber, 2);
+      final second = runtime.beginQuestionAnswer(
+        runtime.observation.questions,
+      )!;
+      runtime.finishQuestionAnswer(second, answer: 'two', remaining: []);
+      runtime.receiveQuestions({
+        'request_id': 'new',
+        'question': 'New question?',
+      });
+      runtime.receiveQuestions(batch);
+      expect(runtime.observation.pendingQuestion?.requestId, 'new');
+    },
+  );
+
+  test(
+    'same-question snapshot retains response but advancing the batch retires it',
+    () {
+      final batch = {
+        'request_id': 'batch',
+        'questions': [
+          {'qid': 'q0', 'question': 'First?'},
+          {'qid': 'q1', 'question': 'Second?'},
+        ],
+      };
+      runtime.receiveQuestions(batch);
+      final first = runtime.beginQuestionAnswer(runtime.observation.questions)!;
+      runtime.receiveQuestions(batch);
+      expect(first.current, isTrue);
+      runtime.receiveQuestions({
+        ...batch,
+        'answers': {'q0': 'desktop answer'},
+      });
+      expect(first.current, isFalse);
+      runtime.finishQuestionAnswer(first, answer: 'late answer', remaining: []);
+      expect(runtime.observation.pendingQuestion?.questionId, 'q1');
+    },
+  );
+
+  test('closed clarification cannot displace a newer request on replay', () {
+    runtime.receiveQuestions({'request_id': 'old', 'question': 'Old?'});
+    runtime.closeQuestion('old');
+    expect(runtime.observation.pendingQuestion, isNull);
+    runtime.receiveQuestions({'request_id': 'new', 'question': 'New?'});
+    runtime.receiveQuestions({'request_id': 'old', 'question': 'Old?'});
+    expect(runtime.observation.pendingQuestion?.requestId, 'new');
+  });
+
   test('completed approvals join the canonical Activity timeline', () {
     runtime.receiveApproval(request);
     expireApproval();
