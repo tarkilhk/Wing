@@ -418,9 +418,9 @@ class GroupNotificationSession extends ChangeNotifier {
         preferences,
       ).observeQuestions(decoded.room!, runtime, decoded.latestSequence);
       group.title = decoded.room!.name;
-      group.approvals = runtime.actions
-          .where((a) => a.kind == 'approval')
-          .toList();
+      group.approvals = BotsPreferences(
+        preferences,
+      ).pendingApprovals(decoded.room!, runtime);
       final action = group.approvals
           .where((a) => groupApprovalFocusId(a) == focus)
           .firstOrNull;
@@ -490,9 +490,9 @@ class GroupNotificationSession extends ChangeNotifier {
     BotsPreferences(
       preferences,
     ).observeQuestions(room, runtime, decoded.latestSequence);
-    group.approvals = runtime.actions
-        .where((a) => a.kind == 'approval')
-        .toList();
+    group.approvals = BotsPreferences(
+      preferences,
+    ).pendingApprovals(room, runtime);
     final identities = group.approvals.map(groupApprovalFocusId).toSet();
     group.accepted.removeWhere((key, _) => !identities.contains(key));
     group.errors.removeWhere((key, _) => !identities.contains(key));

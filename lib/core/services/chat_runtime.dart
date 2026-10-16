@@ -920,8 +920,9 @@ class ChatRuntime {
     _rememberQuestions(parsed);
     bool settled(GatewayClarifyRequest question) =>
         _questionHistory['clarify/${question.requestId}/${question.questionId ?? ''}']
-            ?.status !=
-        HermesQuestionStatus.pending;
+            ?.status
+            .isPending ==
+        false;
     // Request IDs cannot reopen after settlement. A late replay must not
     // restore its controls or displace a newer request.
     if (parsed.isNotEmpty && parsed.every(settled)) return;

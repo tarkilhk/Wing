@@ -275,11 +275,26 @@ void main() {
             frame,
             'question-failed-${brightness.name}-$scale',
           );
+          final originalRequest = fixture.pending.single;
           fixture.pending.clear();
           fixture.events.addAll([
             _event(3, 'message.user', 'you', 'Continue with other work.'),
             _event(4, 'message.member', 'atlas', 'A later reply.'),
           ]);
+          await session.refresh();
+          await _settleGroupMarkdown(tester);
+          fixture.pending.add(originalRequest);
+          await session.refresh();
+          await _settleGroupMarkdown(tester);
+          expect(_decisionButton('Approve once'), findsNothing);
+          expect(_decisionButton('Reject'), findsNothing);
+          expect(session.pendingApprovals, isEmpty);
+          await _render(
+            tester,
+            frame,
+            'question-replayed-closed-${brightness.name}-$scale',
+          );
+          fixture.pending.clear();
           await session.refresh();
           await _settleGroupMarkdown(tester);
           final timeline = TranscriptTimeline.project(

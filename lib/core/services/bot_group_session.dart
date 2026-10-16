@@ -325,18 +325,10 @@ class BotGroupSession extends ChangeNotifier {
   final _approvalErrors = <String, String>{};
 
   List<BotGroupAction> get pendingApprovals {
-    final current = {
-      for (final action in runtime?.actions ?? const <BotGroupAction>[])
-        if (action.kind == 'approval' &&
-            !{
-              HermesQuestionStatus.approved,
-              HermesQuestionStatus.rejected,
-            }.contains(questionHistory.question(action.key)?.status))
-          action.key: action,
-    };
-    return List.unmodifiable([
-      for (final question in questionHistory.questions) ?current[question.id],
-    ]);
+    final current = runtime;
+    return current == null
+        ? const []
+        : preferences.pendingApprovals(group, current);
   }
 
   _GroupContinuation? _continuation;
@@ -633,11 +625,7 @@ class BotGroupSession extends ChangeNotifier {
     if (_closed ||
         _acting ||
         _sending ||
-        {
-          HermesQuestionStatus.approved,
-          HermesQuestionStatus.rejected,
-        }.contains(questionHistory.question(action.key)?.status) ||
-        runtime?.actions.any((a) => a.key == action.key) != true) {
+        !pendingApprovals.any((a) => a.key == action.key)) {
       return;
     }
     _recoveryRevision++;

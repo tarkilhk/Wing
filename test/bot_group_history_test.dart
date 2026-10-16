@@ -47,7 +47,7 @@ class _WorkerReplay {
         'latest_seq': events.length,
         'truncated': false,
         'epoch': 'recovery-test',
-        'open_requests': [],
+        'open_requests': openRequests,
       },
       _ => null,
     };
@@ -55,6 +55,7 @@ class _WorkerReplay {
   bool present = true;
   String status = 'working';
   final events = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> openRequests = [];
   void add(String type, [Map<String, dynamic> payload = const {}]) =>
       events.add({
         'seq': events.length + 1,
@@ -79,6 +80,27 @@ void main() {
     fixture.workerRows['mira'] = [_worker('mira')];
   });
   tearDown(() => session.dispose());
+
+  test('group worker uses shared clarification retirement on replay', () async {
+    final replay = _WorkerReplay(fixture);
+    replay.add('message.start');
+    final question = {
+      'id': 'worker-question',
+      'method': 'clarify',
+      'params': {'session_id': 'atlas-live', 'question': 'Continue?'},
+    };
+    replay.openRequests = [question];
+    await session.select(group.members.first);
+    await session.refreshLive(discover: true);
+    expect(session.runtime.pendingQuestion?.requestId, 'worker-question');
+    replay.openRequests = [];
+    await session.refreshLive(discover: true);
+    expect(session.runtime.pendingQuestion, isNull);
+    replay.openRequests = [question];
+    await session.refreshLive(discover: true);
+    expect(session.runtime.pendingQuestion, isNull);
+    expect(fixture.commands, isEmpty);
+  });
 
   test(
     'quiet history refresh bridges a new tool tail to retained messages',

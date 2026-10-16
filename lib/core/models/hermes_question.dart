@@ -10,6 +10,8 @@ enum HermesQuestionStatus {
   const HermesQuestionStatus(this.label);
   final String label;
 
+  bool get isPending => this == pending;
+
   int get certainty => switch (this) {
     pending => 0,
     closed => 1,

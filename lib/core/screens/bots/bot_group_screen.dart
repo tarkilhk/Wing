@@ -329,8 +329,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 
   Widget _activityStatus(BuildContext context) {
     final runtime = _session.runtime;
-    final needsApproval =
-        runtime?.actions.any((a) => a.kind == 'approval') == true;
+    final needsApproval = _session.pendingApprovals.isNotEmpty;
     final interrupted =
         runtime?.blocked == true || runtime?.actions.isNotEmpty == true;
     final String? label;

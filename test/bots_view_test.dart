@@ -1,4 +1,5 @@
 import 'support/form_family_capture.dart';
+import 'package:wing/core/widgets/gateway_clarify_dialog.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -58,6 +59,7 @@ class _BotConversationBrowser extends ProfileBrowserFixture {
   Completer<void>? resumeDelay;
   Completer<void>? markReadDelay;
   List<Map<String, dynamic>>? openingHistory;
+  Map<String, dynamic>? clarificationResult;
 
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
@@ -78,6 +80,9 @@ class _BotConversationBrowser extends ProfileBrowserFixture {
             },
       rpc: (method, params) async {
         if (method == 'session.resume') await resumeDelay?.future;
+        if (method == 'clarify.lock' && clarificationResult != null) {
+          return clarificationResult!;
+        }
         return base.call(method, params);
       },
     );
@@ -3792,6 +3797,29 @@ void main() {
           expect(find.text('Hermes'), findsNothing);
           expect(tester.takeException(), isNull);
           semantics.dispose();
+          await controller.openSession(
+            ProfileSessionKey(scope, 'canonical-root'),
+          );
+          await tester.pumpAndSettle();
+          final questionChat = controller.current!.chat!;
+          final question = {
+            'request_id': 'bot-cleared-question',
+            'questions': [
+              {'qid': 'q0', 'question': 'Already answered on desktop?'},
+            ],
+          };
+          emitChatEvent(controller, questionChat, 'clarify', question);
+          await tester.pump();
+          expect(find.byType(GatewayClarifyDialog), findsOneWidget);
+          browser.clarificationResult = {'status': 'expired'};
+          await tester.ensureVisible(find.byKey(const Key('clarify-skip')));
+          await tester.tap(find.byKey(const Key('clarify-skip')));
+          await tester.pumpAndSettle();
+          expect(questionChat.runtime.pendingQuestion, isNull);
+          emitChatEvent(controller, questionChat, 'clarify', question);
+          await tester.pump();
+          expect(find.byType(GatewayClarifyDialog), findsNothing);
+          expect(find.byType(CircularProgressIndicator), findsNothing);
           await tester.pumpWidget(const SizedBox());
           controller.dispose();
           appPreferences.dispose();
