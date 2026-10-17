@@ -2511,7 +2511,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         ProfileSubagentPanel(session: _supervisionFor(chat), embedded: true),
     live: _liveAnswering(chat),
     taskCount: chat.todoRevision == null ? null : chat.todos.length,
-    agentCount: chat.subagentsAvailable ? chat.subagents.length : null,
+    agentCount: chat.subagentsAvailable ? chat.currentSubagents.length : null,
   );
 
   bool _showLiveWorkDock(ProfileChat chat) =>

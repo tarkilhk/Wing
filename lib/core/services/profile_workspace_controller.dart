@@ -132,6 +132,7 @@ class ProfileChat {
   List<GatewayTodo> _todos = [];
   int? _todoRevision;
   List<GatewaySubagentActivity> _subagents = [];
+  final Map<String, int> _subagentCompletionTurns = {};
   final Set<String> _unconfirmedSubagentIds = {};
   int _subagentsRevision = 0;
   bool _subagentsLoading = false;
@@ -199,6 +200,8 @@ class ProfileChat {
   Object get workRevision {
     final inputs = (
       runtime.runtimeId,
+      _runtime.turnRevision,
+      runtime.executionActive,
       _todos,
       _todoRevision,
       _subagentsRevision,
@@ -223,6 +226,20 @@ class ProfileChat {
 
   List<GatewaySubagentActivity> get subagents =>
       List.unmodifiable(_subagents.map(copySupervisedSubagent));
+
+  /// Unfinished work and terminal observations from the still-active round.
+  /// Keep older canonical records for open details and duplicate-event merging;
+  /// their saved results belong to historical Activity, outside the live dock.
+  List<GatewaySubagentActivity> get currentSubagents => List.unmodifiable(
+    _subagents
+        .where(
+          (item) =>
+              !item.isTerminal ||
+              runtime.executionActive &&
+                  _subagentCompletionTurns[item.id] == _runtime.turnRevision,
+        )
+        .map(copySupervisedSubagent),
+  );
   Set<String> get unconfirmedSubagentIds =>
       Set.unmodifiable(_unconfirmedSubagentIds);
   bool get subagentsLoading => _subagentsLoading;
@@ -3177,6 +3194,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> refreshSubagents(ProfileChat chat) async {
     final resource = _owned(chat);
     final runtime = chat.runtime.runtimeId;
+    final turn = chat._runtime.turnRevision;
     final revision = chat._subagentsRevision;
     final before = chat._subagents;
     final loadGeneration = ++chat._subagentsLoadGeneration;
@@ -3222,6 +3240,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
           next.add(item);
         } else if (!next[index].isTerminal) {
           next[index] = next[index].merge(item, snapshot: true);
+        }
+        if (item.isTerminal) {
+          chat._subagentCompletionTurns.putIfAbsent(item.id, () => turn);
         }
       }
       chat._subagents = next;
@@ -7895,6 +7916,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
       next[index] = next[index].merge(update);
     }
     chat._subagents = next;
+    if (update.isTerminal) {
+      chat._subagentCompletionTurns.putIfAbsent(
+        update.id,
+        () => chat._runtime.turnRevision,
+      );
+    }
     chat._unconfirmedSubagentIds.remove(update.id);
     chat._subagentsRevision++;
     chat._subagentsError = null;
@@ -9086,6 +9113,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._todos = [];
       chat._todoRevision = null;
       chat._subagents = [];
+      chat._subagentCompletionTurns.clear();
       chat._unconfirmedSubagentIds.clear();
       chat._subagentsRevision++;
       chat._subagentsLoading = false;

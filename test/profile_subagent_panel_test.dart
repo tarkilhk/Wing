@@ -201,6 +201,7 @@ void main() {
     );
     await controller.initialize();
     chat = await controller.createChat(canDispatch: () => true);
+    emitChatEvent(controller, chat, 'message.start', {});
     supervision = ProfileSupervisionSession(controller: controller, chat: chat);
   });
 
@@ -1079,7 +1080,7 @@ void main() {
 
   for (final status in ['running', 'completed']) {
     testWidgets(
-      'idle conversation keeps $status subagents in the bottom dock',
+      'settled conversation ${status == 'completed' ? 'retires completed' : 'keeps running'} subagents in the bottom dock',
       (tester) async {
         fixture.rows = [
           {
@@ -1097,6 +1098,7 @@ void main() {
             'content': 'The inspection is finished.',
           },
         ]);
+        emitChatEvent(controller, chat, 'message.complete', {});
         await tester.pumpWidget(
           MaterialApp(
             builder: (context, child) => MediaQuery(
@@ -1112,6 +1114,12 @@ void main() {
         await tester.pumpAndSettle();
         expect(chat.runtime.executionActive, isFalse);
         expect(chat.reading.streamingMessage, isNull);
+        if (status == 'completed') {
+          expect(find.byType(ProfileLiveWorkDock), findsNothing);
+          expect(find.byType(ProfileSubagentPanel), findsNothing);
+          expect(tester.takeException(), isNull);
+          return;
+        }
         expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
         expect(find.byType(ProfileLiveExecution), findsNothing);
         expect(find.text('Activity'), findsNothing);
@@ -1126,10 +1134,7 @@ void main() {
           findsNothing,
         );
         expect(find.byType(ProfileSubagentPanel), findsOneWidget);
-        expect(
-          find.text(status == 'completed' ? 'Completed' : 'Running'),
-          findsOneWidget,
-        );
+        expect(find.text('Running'), findsOneWidget);
         final agent = find.byKey(ValueKey(('subagent', chat.key, 'child-1')));
         await tester.ensureVisible(agent);
         await tester.pumpAndSettle();
@@ -1143,6 +1148,18 @@ void main() {
         await tester.settleMarkdown();
         expect(find.text('Task'), findsOneWidget);
         expect(find.byTooltip('Copy Task'), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        emitChatEvent(controller, chat, 'message.start', {});
+        emitChatEvent(controller, chat, 'message.delta', {
+          'text': 'The next answer is streaming.',
+        });
+        await tester.pump();
+        await tester.settleMarkdown();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(chat.runtime.executionActive, isTrue);
+        expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
+        expect(find.byType(ProfileSubagentPanel), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );

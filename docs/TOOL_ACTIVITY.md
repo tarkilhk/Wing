@@ -15,6 +15,9 @@ switch, and tap the selected side or outside to close. Tasks shows completed/tot
 cancelled tasks do not count as completed. Empty categories stay hidden. During
 streaming, current Tasks and Subagents appear only in this drawer, including
 completed subagents whose parent is still answering.
+When their parent turn ends, completed subagents leave this drawer immediately.
+Their saved results remain in that turn's Activity → Agents tab. Running and
+queued background agents remain available until they finish.
 
 The summary stays fixed while the rows scroll. Swipe the top handle up to expand
 near full screen, or down to return to compact height; tapping it also toggles
