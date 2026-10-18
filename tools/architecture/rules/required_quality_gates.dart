@@ -298,6 +298,10 @@ List<String> _checkNightly(Directory root) {
               _runsFinalCommand(step['run'], matrixCommand),
         ) ||
         !hardCommand('native', nativeCommand) ||
+        !hardCommand(
+          'native',
+          r'echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"',
+        ) ||
         native is! Map ||
         native['needs'] != 'catalog' ||
         strategy is! Map ||

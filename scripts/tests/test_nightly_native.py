@@ -145,7 +145,7 @@ class Catalog(unittest.TestCase):
             'journeys', 'health-normal', 'health-large', 'backup', 'background',
             'recents', 'recents-code', 'recents-events', 'recents-momentum',
             'notification-actions', 'notification-restore', 'notification-counts',
-            'notification-cold', 'voice', 'file-transfer', 'stock-hermes',
+            'notification-cold', 'voice', 'file-transfer', 'stock-hermes', 'external-share',
         }.issubset(nightly.FAMILIES))
 
     def test_empty_and_duplicate_catalogs_fail_before_publishing_outputs(self):

@@ -32,7 +32,7 @@ FAMILIES = (
     'voice', 'recents', 'recents-code', 'recents-events', 'recents-momentum',
     'platform-plugins', 'scheduled-tasks', 'administration', 'queue-editing',
     'health-entry', 'transcript-expansion', 'health-retention',
-    'slash', 'html', 'stock-hermes',
+    'slash', 'html', 'stock-hermes', 'external-share',
 )
 DEV = 'com.tarkilhk.wing.dev'
 QA = 'com.tarkilhk.wing.notificationqa'
@@ -218,6 +218,13 @@ class Runner:
             self.install('integration_test/background_monitoring_device.dart')
             self.driver('tools/qa/check_background_monitoring.py', '--serial', self.device,
                         '--output', self.output / 'background')
+        elif family == 'external-share':
+            self.environment['ORG_GRADLE_PROJECT_nativeShareQa'] = 'true'
+            self.install('integration_test/share_intake_device.dart', qa=True,
+                         defines=['--dart-define=WING_NATIVE_SHARE_QA=true'])
+            self.launch(QA)
+            self.driver('tools/qa/check_external_share.py', '--serial', self.device,
+                        '--provider-faults', '--output', self.output / 'external-share')
         elif family in ('health-normal', 'health-large', 'health-retention'):
             large = family == 'health-large'
             retention = family == 'health-retention'

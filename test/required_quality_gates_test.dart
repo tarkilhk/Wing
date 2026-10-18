@@ -544,6 +544,7 @@ void main() {
         ('fail-fast: false', 'fail-fast: true'),
         (r'${{ fromJSON(needs.catalog.outputs.families) }}', '[backup]'),
         ('--matrix', '--matrix || true'),
+        (r'echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"', 'echo omitted Android tools'),
         (r'NIGHTLY_FAMILY: ${{ matrix.family }}', 'NIGHTLY_FAMILY: backup'),
         ('  platform:', '  platform:\n    if: false'),
         ('  renderer:', '  renderer:\n    continue-on-error: true'),
@@ -821,6 +822,7 @@ ${fixtureCommands.map((command) => '      - name: Proof fixtures\n        run: $
       matrix:
         family: \${{ fromJSON(needs.catalog.outputs.families) }}
     steps:
+      - run: echo "\$ANDROID_HOME/platform-tools" >> "\$GITHUB_PATH"
       - env:
           NIGHTLY_FAMILY: \${{ matrix.family }}
         run: python3 scripts/test_nightly_native.py "\$NIGHTLY_FAMILY" --hermes-source "\$RUNNER_TEMP/hermes"
