@@ -4473,9 +4473,12 @@ void main() {
                 get: base.read,
                 ownedPatch: (path, body, canDispatch, onDispatched) async {
                   if (path != 'sessions/chat-0' ||
-                      body.length != 2 ||
+                      body.length != 5 ||
                       body['profile'] != scope.profileName ||
                       body['unread'] != false ||
+                      body['request_id'] is! String ||
+                      body['expected_revision'] != 0 ||
+                      body['expected_generation'] != 0 ||
                       !canDispatch()) {
                     throw StateError('Unexpected read acknowledgement');
                   }

@@ -273,6 +273,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         chat: chat,
       );
       addTearDown(supervision.dispose);
+      emitChatEvent(controller, chat, 'message.start', {});
       emitChatEvent(controller, chat, 'subagent.start', {
         'subagent_id': 'one',
         'goal': 'Compare the available stays',

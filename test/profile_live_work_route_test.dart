@@ -757,6 +757,11 @@ void main() {
         await settle();
         await picture('turn-ended-saved-agents');
         await picture('saved-agents');
+        // Keep reading the previous Activity instead of following the newest
+        // edge when the next turn adds rows to the lazy transcript.
+        await tester.drag(find.byType(ProfileTranscript), const Offset(0, 240));
+        await settle();
+        expect(output, findsOneWidget);
         // Start another answer while the previous Activity remains open on
         // Agents. Its completed children must no longer occupy the live dock.
         host.historyMessages!.add({
