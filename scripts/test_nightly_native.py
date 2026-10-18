@@ -132,6 +132,33 @@ class Runner:
     def shell(self, *parts):
         return self.adb('shell', *parts)
 
+    def capture_failure(self):
+        """Keep native evidence before retiring the emulator; preserve the original failure."""
+        errors = []
+        for name, command in {
+            'failure-logcat.txt': ('logcat', '-d', '-t', '3000'),
+            'failure-window.txt': ('shell', 'dumpsys', 'window'),
+            'failure-notifications.txt': ('shell', 'dumpsys', 'notification', '--noredact'),
+            'failure-services.txt': ('shell', 'dumpsys', 'activity', 'services'),
+        }.items():
+            try:
+                (self.output / name).write_text(self.adb(*command))
+            except Exception as error:
+                errors.append(name + ': ' + str(error))
+        try:
+            self.shell('uiautomator', 'dump', '/sdcard/wing-nightly-failure.xml')
+            (self.output / 'failure-ui.xml').write_text(self.shell('cat', '/sdcard/wing-nightly-failure.xml'))
+        except Exception as error:
+            errors.append('failure-ui.xml: ' + str(error))
+        try:
+            with (self.output / 'failure.png').open('wb') as capture:
+                subprocess.run([android.adb_path(), '-s', self.device, 'exec-out', 'screencap', '-p'],
+                               stdout=capture, check=True, timeout=25)
+        except Exception as error:
+            errors.append('failure.png: ' + str(error))
+        if errors:
+            (self.output / 'capture-errors.json').write_text(json.dumps(errors, indent=2) + '\n')
+
     def build(self, target, *, qa=False, defines=()):
         self.environment['ORG_GRADLE_PROJECT_notificationQa'] = str(qa).lower()
         key = (target, qa, tuple(defines), self.environment['ORG_GRADLE_PROJECT_nativeShareQa'])
@@ -219,6 +246,9 @@ class Runner:
                                 '--serial', self.device, '--port', port)
             else:
                 if family == 'notification-cold':
+                    # Onboarding reads this permission at startup. Granting it
+                    # after launch cannot establish the monitoring prerequisite.
+                    self.shell('dumpsys', 'deviceidle', 'whitelist', '+' + QA)
                     self.launch(QA)
                 script = ('test_native_cold_notification.py' if family == 'notification-cold'
                           else 'test_native_notification_restore.py')
@@ -433,7 +463,11 @@ def main():
             runner.device = device
             android.require_emulator(device)
             receipt['device'] = device
-            runner.family(args.family, args.hermes_source)
+            try:
+                runner.family(args.family, args.hermes_source)
+            except (Exception, KeyboardInterrupt):
+                runner.capture_failure()
+                raise
         receipt['passed'] = bool(runner.steps) and all(step['passed'] for step in runner.steps)
     except (Exception, KeyboardInterrupt) as error:
         receipt['error'] = str(error) or type(error).__name__

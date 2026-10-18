@@ -97,6 +97,16 @@ class NativeExecution(unittest.TestCase):
                     raise RuntimeError('test failure')
         self.assertEqual(adb.call_args_list[-1].args, ('forward', '--remove', 'tcp:43123'))
 
+    def test_diagnostic_failures_are_recorded_without_replacing_the_test_error(self):
+        with patch.object(self.runner, 'adb', side_effect=OSError('device unavailable')), \
+             patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+             patch.object(nightly.subprocess, 'run', side_effect=OSError('capture unavailable')):
+            self.runner.capture_failure()
+        errors = json.loads((self.output / 'capture-errors.json').read_text())
+        self.assertEqual(len(errors), 6)
+        self.assertTrue(any('failure-window.txt' in error for error in errors))
+        self.assertTrue(any('failure.png' in error for error in errors))
+
     def test_clipboard_foreign_fixture_is_retired_after_test_failure(self):
         with patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
              patch.object(self.runner, 'run'), patch.object(self.runner, 'shell'), \
@@ -149,6 +159,18 @@ class NativeExecution(unittest.TestCase):
 
 
 class Catalog(unittest.TestCase):
+    def test_cold_notification_provisions_monitoring_before_launch(self):
+        order = []
+        with tempfile.TemporaryDirectory() as directory:
+            runner = nightly.Runner(Path(directory))
+            with patch.object(runner, 'install'), \
+                 patch.object(runner, 'shell', side_effect=lambda *a: order.append(a)), \
+                 patch.object(runner, 'launch', side_effect=lambda p: order.append(('launch', p))), \
+                 patch.object(runner, 'driver'):
+                runner.family('notification-cold')
+            self.assertEqual(order, [('dumpsys', 'deviceidle', 'whitelist', '+' + nightly.QA),
+                                     ('launch', nightly.QA)])
+
     def test_clipboard_apk_is_prepared_before_emulator_boot(self):
         order = []
         @contextlib.contextmanager
@@ -251,6 +273,7 @@ class Catalog(unittest.TestCase):
                  patch.object(nightly.android, 'require_emulator'), \
                  patch.object(nightly, 'fingerprint', side_effect=['before', 'after' if changing_source else 'before']), \
                  patch.object(nightly.Runner, 'family', side_effect=RuntimeError('driver failed')), \
+                 patch.object(nightly.Runner, 'capture_failure') as capture, \
                  contextlib.redirect_stdout(io.StringIO()):
                 original_output = nightly.android.OUTPUT
                 self.assertEqual(nightly.main(), 1)
@@ -259,6 +282,7 @@ class Catalog(unittest.TestCase):
                 self.assertEqual(result['error'], 'driver failed')
                 self.assertEqual(retired, [True])
                 self.assertEqual(nightly.android.OUTPUT, original_output)
+                capture.assert_called_once()
 
     def test_source_change_invalidates_successful_steps(self):
         def successful(runner, *args):
