@@ -159,6 +159,16 @@ class NativeExecution(unittest.TestCase):
 
 
 class Catalog(unittest.TestCase):
+    def test_large_health_runs_at_320_dp_with_enlarged_system_text(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = nightly.Runner(Path(directory))
+            with patch.object(runner, 'install'), patch.object(runner, 'flutter'), \
+                 patch.object(runner, 'shell') as shell:
+                runner.family('health-large')
+            shell.assert_any_call('wm', 'density', '420')
+            shell.assert_any_call('wm', 'size', '840x2215')
+            shell.assert_any_call('settings', 'put', 'system', 'font_scale', '2.0')
+
     def test_cold_notification_provisions_monitoring_before_launch(self):
         order = []
         with tempfile.TemporaryDirectory() as directory:

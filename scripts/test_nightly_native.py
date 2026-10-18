@@ -270,6 +270,9 @@ class Runner:
             defines = ['--dart-define=ALERT_RETENTION_NATIVE=true'] if retention else [
                 '--dart-define=ALERT_EXPECT_LARGE=' + str(large).lower()]
             self.install('integration_test/health_alerts_native_test.dart', qa=True, defines=defines)
+            if large:
+                self.shell('wm', 'density', '420')
+                self.shell('wm', 'size', '840x2215')
             self.shell('settings', 'put', 'system', 'font_scale', '2.0' if large else '1.0')
             self.shell('dumpsys', 'deviceidle', 'whitelist', '+' + QA)
             expected = frozenset({'Android health threshold retention through real Home and reopen'}) if retention else frozenset(
@@ -456,18 +459,19 @@ def main():
     receipt = {'family': args.family, 'passed': False, 'source_before': fingerprint(),
                'steps': runner.steps}
     try:
-        if args.family == 'clipboard':
-            # Build before boot: System UI must own focus for the real clipboard grant.
-            runner.build('integration_test/clipboard_device_test.dart', defines=CLIPBOARD_DEFINES)
-        with cleanup_signals(), android.owned_emulator() as device:
-            runner.device = device
-            android.require_emulator(device)
-            receipt['device'] = device
-            try:
-                runner.family(args.family, args.hermes_source)
-            except (Exception, KeyboardInterrupt):
-                runner.capture_failure()
-                raise
+        with cleanup_signals():
+            if args.family == 'clipboard':
+                # Build before boot: System UI must own focus for the real clipboard grant.
+                runner.build('integration_test/clipboard_device_test.dart', defines=CLIPBOARD_DEFINES)
+            with android.owned_emulator() as device:
+                runner.device = device
+                android.require_emulator(device)
+                receipt['device'] = device
+                try:
+                    runner.family(args.family, args.hermes_source)
+                except (Exception, KeyboardInterrupt):
+                    runner.capture_failure()
+                    raise
         receipt['passed'] = bool(runner.steps) and all(step['passed'] for step in runner.steps)
     except (Exception, KeyboardInterrupt) as error:
         receipt['error'] = str(error) or type(error).__name__
