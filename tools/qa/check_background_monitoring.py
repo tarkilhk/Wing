@@ -28,7 +28,7 @@ def require_single_monitoring_card(dump, package):
         if (re.match(r'NotificationRecord\([^\n]*pkg=' + re.escape(package) + r'(?:\s|$)', header)
                 and re.search(r'\bchannel=hermes_monitoring\b', header)):
             records.append(header)
-    assert len(records) == 1, f'Expected one monitoring card, got {len(records)}'
+    assert len(records) == 1, f'Expected one monitoring card, got {len(records)}: {records}'
     assert re.search(r'\bid=214601\b', records[0]), records
     assert 'FOREGROUND_SERVICE' in records[0], records
     return records[0]
@@ -102,9 +102,10 @@ def main():
         until(foreground, 'Working chat did not start monitoring')
         icon = until(lambda: notification_icon(214601), 'Monitoring card missing')
         assert not notification_present(214602), 'Obsolete monitoring summary was posted'
-        require_single_monitoring_card(
-            shell('dumpsys', 'notification', '--noredact'), package,
-        )
+        dump = shell('dumpsys', 'notification', '--noredact')
+        capture = args.output / f'monitoring-cards-{time.monotonic_ns()}.txt'
+        capture.write_text(dump)
+        require_single_monitoring_card(dump, package)
         locks = shell('dumpsys', 'power').split('Wake Locks:', 1)[1].split('Suspend Blockers:', 1)[0]
         assert 'hermes-monitoring' in locks, 'Working chat has no monitoring wake lock'
         return icon
@@ -112,6 +113,11 @@ def main():
     def launch():
         shell('am', 'start', '-n', f'{package}/com.tarkilhk.wing.MainActivity')
         until(lambda: request()['lifecycle'] == 'resumed', 'Wing did not resume')
+
+    def background():
+        shell('input', 'keyevent', 'KEYCODE_HOME')
+        until(lambda: request()['lifecycle'] == 'paused',
+              'Wing did not finish entering the background')
 
     def event(profile, state):
         status = request('/event', json.dumps({'profile': profile, 'state': state}))
@@ -243,8 +249,7 @@ def main():
         monitoring_icon = monitoring_started()
         event('b', 'working')
         assert monitoring_started() == monitoring_icon, 'Second chat changed the monitoring icon'
-        shell('input', 'keyevent', 'KEYCODE_HOME')
-        until(lambda: request()['lifecycle'] != 'resumed', 'App stayed in foreground')
+        background()
         until(lambda: polling_status()['notificationPoll']['active'] == 1, 'Working chats did not schedule polling')
         observe_polling(active=True)
         event('a', 'waiting')
@@ -265,7 +270,7 @@ def main():
         assert not foreground(), 'Opening a waiting chat restarted monitoring'
         event('a', 'working')
         monitoring_started()
-        shell('input', 'keyevent', 'KEYCODE_HOME')
+        background()
         event('a', 'idle')
         alert(3)
         stopped()
@@ -298,7 +303,7 @@ def main():
         event('a', 'working')
         event('b', 'working')
         monitoring_started()
-        shell('input', 'keyevent', 'KEYCODE_HOME')
+        background()
         shell('input', 'keyevent', 'KEYCODE_SLEEP')
         shell('dumpsys', 'battery', 'unplug')
         shell('dumpsys', 'deviceidle', 'force-idle')
@@ -323,7 +328,7 @@ def main():
         stopped()
         request('/alerts', 'true')
         monitoring_started()
-        shell('input', 'keyevent', 'KEYCODE_HOME')
+        background()
         event('a', 'idle')
         until(lambda: request()['alerts'] == 3, 'Final reply did not post')
         stopped()

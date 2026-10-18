@@ -110,6 +110,15 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
   var alerts = 0;
   var nextReplyId = 1;
   final generation = DateTime.now().microsecondsSinceEpoch.toString();
+  // Stock session.create returns a new identity. A recreated fixture engine
+  // must not accidentally reopen an earlier generation's persisted outbox.
+  for (final profile in ['a', 'b']) {
+    final id = 'monitoring-$generation-$profile';
+    host.createdSessionIds[profile] = id;
+    host.saved[profile] = [
+      {'id': id, 'profile': profile},
+    ];
+  }
   final appPreferences = AppPreferences(preferences);
   final registry = ProfileWorkspaceRegistry(
     identities: ProfileConnectionIdentity(credentialStore: secrets),
@@ -179,6 +188,20 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
         host.waitingProfiles.remove(profile);
         if (state == 'working') host.workingProfiles.add(profile);
         if (state == 'waiting') host.waitingProfiles.add(profile);
+        // Polling and stream observations describe the same backend state.
+        host.active = [
+          for (final entry in chats.entries)
+            {
+              'id': entry.value.runtime.runtimeId,
+              'session_key': entry.value.key.sessionId,
+              'status': host.workingProfiles.contains(entry.key)
+                  ? 'working'
+                  : host.waitingProfiles.contains(entry.key)
+                  ? 'waiting'
+                  : 'idle',
+              'last_active': 1,
+            },
+        ];
         if (state == 'working') {
           if (chat.runtime.pendingQuestion != null) {
             await controller.clarify(chat, 'Continue');
@@ -186,6 +209,13 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
             chat.composer.editText('Native fixture work');
             await controller.send(chat);
           }
+          host.gateways[profile]!.onEvent!(
+            StreamEvent(
+              type: 'message.start',
+              sessionId: chat.runtime.runtimeId,
+              data: const {},
+            ),
+          );
         } else {
           host.gateways[profile]!.onEvent!(
             StreamEvent(
