@@ -775,6 +775,11 @@ void main() {
         await settle();
         await picture('turn-ended-saved-agents');
         await picture('saved-agents');
+        // Keep reading the previous Activity instead of following the newest
+        // edge when the next turn adds rows to the lazy transcript.
+        await tester.drag(find.byType(ProfileTranscript), const Offset(0, 240));
+        await settle();
+        expect(output, findsOneWidget);
         // Start another answer while the previous Activity remains open on
         // Agents. Its completed children must no longer occupy the live dock.
         host.historyMessages!.add({
@@ -790,48 +795,6 @@ void main() {
         expect(tab(0, overlay: false), findsNothing);
         expect(tab(1, overlay: false), findsOneWidget);
         expect(find.text('2 subagents'), findsNothing);
-        // An offscreen lazy row can be recreated collapsed at enlarged text.
-        // Revisit its actual disclosure and read the same saved result.
-        if (output.evaluate().isEmpty) {
-          final newest = find.byKey(const ValueKey('jump-to-latest'));
-          if (newest.evaluate().isNotEmpty) {
-            await tester.tap(newest);
-            await settle();
-          }
-          await tester.scrollUntilVisible(
-            savedTitle,
-            120,
-            scrollable: find
-                .descendant(
-                  of: find.byType(ProfileTranscript),
-                  matching: find.byType(Scrollable),
-                )
-                .first,
-          );
-          await settle();
-          if (agents.evaluate().isEmpty) {
-            final rect = tester.getRect(savedTitle);
-            await tester.tapAt(Offset(rect.left + 4, rect.center.dy));
-            await settle();
-          }
-          await tester.ensureVisible(agents);
-          await settle();
-          await tester.tap(agents);
-          await settle();
-          if (output.evaluate().isEmpty) {
-            await tester.ensureVisible(result);
-            await settle();
-            await tester.tap(
-              find.descendant(
-                of: find.byKey(
-                  const ValueKey<(String, Object?)>(('transcript-notice', 4)),
-                ),
-                matching: find.byIcon(Icons.expand_more),
-              ),
-            );
-            await settle();
-          }
-        }
         expect(output, findsOneWidget);
         await tester.ensureVisible(output);
         await settle();

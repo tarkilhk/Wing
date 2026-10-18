@@ -24,7 +24,19 @@ class BackendVersionCard extends StatefulWidget {
   State<BackendVersionCard> createState() => _BackendVersionCardState();
 }
 
-class _BackendVersionCardState extends State<BackendVersionCard> {
+class _BackendVersionCardState extends State<BackendVersionCard>
+    with SingleTickerProviderStateMixin {
+  late final _refreshRotation = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+
+  @override
+  void dispose() {
+    _refreshRotation.dispose();
+    super.dispose();
+  }
+
   late BackendUpdateController _controller;
 
   @override
@@ -148,6 +160,22 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
           controller.channelSaving ||
           controller.starting ||
           controller.statusLoading;
+      final animateRefresh =
+          busy &&
+          !MediaQuery.disableAnimationsOf(context) &&
+          (ModalRoute.isCurrentOf(context) ?? true) &&
+          TickerMode.valuesOf(context).enabled;
+      if (animateRefresh) {
+        if (!_refreshRotation.isAnimating) _refreshRotation.repeat();
+      } else {
+        _refreshRotation.stop();
+        _refreshRotation.value = 0;
+      }
+      final showUpdate =
+          controller.updateAttempt > 0 ||
+          status != null ||
+          controller.statusLoading;
+      final lines = status?.lines ?? const <String>[];
       return StudioPageLoading(
         active: busy,
         label: controller.channelSaving
@@ -286,10 +314,23 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                       ],
                     ),
                   ),
+                if (!hideAvailability &&
+                    checkMessage == null &&
+                    channel?.name == 'main' &&
+                    check?.updateAvailable == true &&
+                    check?.behind == null &&
+                    check?.commits.isEmpty == true) ...[
+                  const SizedBox(height: WingSpacing.sm),
+                  Text(
+                    BackendUpdateChangesScreen.comparisonUnavailableMessage,
+                    style: tokens.typography.label.copyWith(
+                      color: tokens.muted,
+                    ),
+                  ),
+                ],
                 if (check?.canApply == false)
                   const Text('Updates must be applied from the server host.'),
-                if (!controller.starting &&
-                    controller.phase != BackendUpdatePhase.idle &&
+                if (controller.phase != BackendUpdatePhase.idle &&
                     controller.phase != BackendUpdatePhase.ready &&
                     controller.message == null)
                   Text(_phaseLabel(controller.phase)),
@@ -302,14 +343,23 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                       }.contains(controller.phase)
                       ? StudioError(message)
                       : Text(message),
-                if (status?.lines case final lines? when lines.isNotEmpty)
+                if (showUpdate)
                   ExpansionTile(
+                    key: ValueKey((controller, controller.updateAttempt)),
                     tilePadding: EdgeInsets.zero,
                     childrenPadding: const EdgeInsets.only(bottom: 8),
                     shape: const Border(),
                     collapsedShape: const Border(),
                     title: const Text('Update logs'),
-                    subtitle: Text('${lines.length} lines'),
+                    subtitle: Text(
+                      lines.isEmpty
+                          ? controller.starting ||
+                                    controller.phase ==
+                                        BackendUpdatePhase.running
+                                ? 'Waiting for update output'
+                                : 'No update output received'
+                          : '${lines.length} lines',
+                    ),
                     children: [
                       Container(
                         width: double.infinity,
@@ -319,7 +369,9 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                         ).colorScheme.surfaceContainerHighest,
                         child: viewportSelection(
                           SelectableText(
-                            lines.join('\n'),
+                            lines.isEmpty
+                                ? 'No update output received.'
+                                : lines.reversed.join('\n'),
                             style: WingTokens.of(context).typography.mono,
                           ),
                         ),
@@ -339,7 +391,10 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                           onPressed: busy || controller.requestOutstanding
                               ? null
                               : controller.checkForUpdate,
-                          icon: const Icon(Icons.sync, size: 18),
+                          icon: RotationTransition(
+                            turns: _refreshRotation,
+                            child: const Icon(Icons.sync, size: 18),
+                          ),
                         ),
                       ),
                       if (check?.updateAvailable == true)
@@ -418,7 +473,9 @@ String _checkStatus(
         ? 'Update available · $behind commits behind${channel?.branch == null ? '' : ' ${channel!.branch}'}'
         : channel != null && channel.name != 'main'
         ? 'Release update available'
-        : 'Update available · commit count unknown';
+        : check.commits.isEmpty
+        ? 'Update available · comparison unavailable'
+        : 'Update available · commit count unavailable';
   }
   return check.updateAvailable == false && check.behind == 0
       ? channel == null

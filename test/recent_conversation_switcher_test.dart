@@ -4504,12 +4504,12 @@ void main() {
                 ownedPatch: (path, body, canDispatch, onDispatched) async {
                   if (path != 'sessions/chat-0' ||
                       body.length != 5 ||
+                      body['profile'] != scope.profileName ||
+                      body['unread'] != false ||
                       body['request_id'] is! String ||
                       (body['request_id'] as String).isEmpty ||
                       body['expected_revision'] != 0 ||
                       body['expected_generation'] != 0 ||
-                      body['profile'] != scope.profileName ||
-                      body['unread'] != false ||
                       !canDispatch()) {
                     throw StateError('Unexpected read acknowledgement');
                   }
