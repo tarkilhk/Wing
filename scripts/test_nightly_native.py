@@ -37,6 +37,7 @@ FAMILIES = (
 DEV = 'com.tarkilhk.wing.dev'
 QA = 'com.tarkilhk.wing.notificationqa'
 CLIPBOARD_DEFINES = ('--dart-define=HERMES_CLIPBOARD_DEVICE_TEST=true',)
+SLASH_DEFINES = ('--dart-define=SLASH_NATIVE_INPUT=true',)
 DIRECT_SUITES = {
     'dependency_plugins_native_test.dart': frozenset({
         'native package metadata and app storage remain available',
@@ -290,6 +291,9 @@ class Runner:
             target = 'queued_message_edit_test.dart'
             self.install('integration_test/' + target)
             self.flutter(target, DIRECT_SUITES[target])
+        elif family == 'slash':
+            self.install('integration_test/slash_completion_native_test.dart', defines=SLASH_DEFINES)
+            self.slash()
         else:
             # Drivers using --no-uninstall require a dev package on the fresh AVD.
             self.install('integration_test/file_transfer_native_test.dart')
@@ -305,8 +309,6 @@ class Runner:
                 target = ('administration_health_entry_test.dart' if family == 'health-entry'
                           else 'profile_expansion_scroll_test.dart')
                 self.flutter(target, expected='registered')
-            elif family == 'slash':
-                self.slash()
             else:
                 script = {'backup': 'config_backup', 'bots': 'bots',
                           'file-transfer': 'file_transfer', 'voice': 'voice'}.get(family, 'recents')
@@ -399,7 +401,7 @@ class Runner:
 
         self.flutter('slash_completion_native_test.dart', frozenset(
             f'/app selection {theme} {scale}' for theme in ('dark', 'light')
-            for scale in ('1.0', '2.0')), defines=['--dart-define=SLASH_NATIVE_INPUT=true'],
+            for scale in ('1.0', '2.0')), defines=SLASH_DEFINES,
             checkpoint=checkpoint)
 
     def retention_checkpoint(self):
@@ -477,6 +479,8 @@ def main():
                 runner.build('integration_test/clipboard_device_test.dart', defines=CLIPBOARD_DEFINES)
             elif args.family == 'queue-editing':
                 runner.build('integration_test/queued_message_edit_test.dart')
+            elif args.family == 'slash':
+                runner.build('integration_test/slash_completion_native_test.dart', defines=SLASH_DEFINES)
             with android.owned_emulator() as device:
                 runner.device = device
                 android.require_emulator(device)

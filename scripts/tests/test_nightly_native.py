@@ -241,7 +241,7 @@ class Catalog(unittest.TestCase):
         def family(runner, *args):
             order.append('test')
             runner.steps.append({'name': 'clipboard', 'passed': True})
-        for family_name in ('clipboard', 'queue-editing'):
+        for family_name in ('clipboard', 'queue-editing', 'slash'):
             order.clear()
             with tempfile.TemporaryDirectory() as directory, \
                  patch.object(sys, 'argv', ['nightly', family_name, '--output', directory]), \
