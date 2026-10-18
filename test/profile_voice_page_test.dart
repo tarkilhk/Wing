@@ -7,6 +7,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_speech_synthesis_page.dart';
+import 'package:wing/core/screens/administration/admin_provider_credentials.dart';
 import 'package:wing/core/services/voice_sample.dart';
 import 'package:wing/core/widgets/studio_select.dart';
 import 'package:wing/core/screens/administration/admin_voice_routes.dart';
@@ -444,6 +445,37 @@ void main() {
     await tester.tap(find.byTooltip('Refresh speech settings'));
     await tester.pumpAndSettle();
     expect(find.text('Play'), findsOneWidget);
+  });
+
+  testWidgets('speech credential entry prepares current profile metadata', (
+    tester,
+  ) async {
+    final f = ProfileVoiceFixture()..elevenLabsReady = false;
+    setSetting(f.configs['personal']!, 'tts.provider', 'elevenlabs');
+    final device = VoiceDeviceFixture();
+    addTearDown(device.stream.close);
+    await show(tester, f, device);
+    f.override = (method, path, query, body) async {
+      expect((method, path), ('GET', 'env'));
+      expect(query, {'profile': 'personal'});
+      return {
+        'ELEVENLABS_API_KEY': {
+          'is_set': true,
+          'channel_managed': false,
+          'category': 'api_keys',
+          'provider_label': 'ElevenLabs',
+        },
+      };
+    };
+    await tester.tap(find.text('API key'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AdminSecretPage), findsOneWidget);
+    expect(find.text('Remove stored credential'), findsOneWidget);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).obscureText,
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('unconfirmed provider save disables playback until refresh', (

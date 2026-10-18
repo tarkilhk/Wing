@@ -605,48 +605,20 @@ double? _savedTimestamp(Object? value) =>
     ? value.toDouble()
     : null;
 
-bool _hasReasoning(Map<String, dynamic> row) {
-  for (final key in const [
-    '_gateway_reasoning',
-    'reasoning',
-    'reasoning_content',
-    'reasoning_details',
-  ]) {
-    final value = row[key];
-    if (value is String && value.trim().isNotEmpty) return true;
-  }
-  final details = row['reasoning_details'];
-  if (details is List &&
-      details.any(
-        (detail) =>
-            detail is Map &&
-            ((detail['type'] == 'reasoning.text' &&
-                    detail['text'] is String &&
-                    (detail['text'] as String).trim().isNotEmpty) ||
-                (detail['type'] == 'reasoning.summary' &&
-                    detail['summary'] is String &&
-                    (detail['summary'] as String).trim().isNotEmpty)),
-      )) {
-    return true;
-  }
-  final items = row['codex_reasoning_items'];
-  return items is List &&
-      items.any(
-        (item) =>
-            item is Map &&
-            item['type'] == 'reasoning' &&
-            item['summary'] is List &&
-            (item['summary'] as List).any(
-              (part) =>
-                  part is Map &&
-                  part['type'] == 'summary_text' &&
-                  part['text'] is String &&
-                  (part['text'] as String).trim().isNotEmpty,
-            ),
-      );
-}
+bool _hasReasoning(Map<String, dynamic> row) =>
+    _reasoningParts(row).any((text) => text.trim().isNotEmpty);
 
-String _reasoning(Map<String, dynamic> row) {
+String _reasoning(Map<String, dynamic> row) =>
+    _reasoningParts(row).join('\n\n');
+
+/// One authority/selection policy for grouping, rendering and receipt matching.
+/// Iteration lets metadata indexing stop at the first readable part without
+/// preparing the whole reasoning body. Empty display text remains authoritative.
+Iterable<String> _reasoningParts(Map<String, dynamic> row) sync* {
+  if (row['display_reasoning'] case final String text) {
+    yield text;
+    return;
+  }
   for (final key in const [
     '_gateway_reasoning',
     'reasoning',
@@ -654,35 +626,40 @@ String _reasoning(Map<String, dynamic> row) {
     'reasoning_details',
   ]) {
     final value = row[key];
-    if (value is String && value.trim().isNotEmpty) return value;
+    if (value is String && value.trim().isNotEmpty) {
+      yield value;
+      return;
+    }
   }
   final details = row['reasoning_details'];
+  var hasDetails = false;
   if (details is List) {
-    final text = [
-      for (final detail in details)
-        if (detail is Map)
-          if (detail['type'] == 'reasoning.text' && detail['text'] is String)
-            detail['text'] as String
-          else if (detail['type'] == 'reasoning.summary' &&
-              detail['summary'] is String)
-            detail['summary'] as String,
-    ].where((text) => text.trim().isNotEmpty).join('\n\n');
-    if (text.isNotEmpty) return text;
+    for (final detail in details) {
+      if (detail is! Map) continue;
+      final text = switch (detail['type']) {
+        'reasoning.text' => detail['text'],
+        'reasoning.summary' => detail['summary'],
+        _ => null,
+      };
+      if (text is String && text.trim().isNotEmpty) {
+        hasDetails = true;
+        yield text;
+      }
+    }
   }
+  if (hasDetails) return;
   final items = row['codex_reasoning_items'];
-  if (items is List) {
-    return [
-      for (final item in items)
-        if (item is Map && item['type'] == 'reasoning')
-          if (item['summary'] is List)
-            for (final part in item['summary'] as List)
-              if (part is Map &&
-                  part['type'] == 'summary_text' &&
-                  part['text'] is String)
-                part['text'] as String,
-    ].where((text) => text.trim().isNotEmpty).join('\n\n');
+  if (items is! List) return;
+  for (final item in items) {
+    if (item is! Map || item['type'] != 'reasoning') continue;
+    final summary = item['summary'];
+    if (summary is! List) continue;
+    for (final part in summary) {
+      if (part is! Map || part['type'] != 'summary_text') continue;
+      final text = part['text'];
+      if (text is String && text.trim().isNotEmpty) yield text;
+    }
   }
-  return '';
 }
 
 /// One saved/live projection for normal chats and passive worker inspection.

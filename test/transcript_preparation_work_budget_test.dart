@@ -57,6 +57,23 @@ class _Arguments extends MapBase<String, dynamic> {
   dynamic remove(Object? key) => throw UnsupportedError('read only');
 }
 
+class _ReasoningDetails extends ListBase<Object?> {
+  int tailReads = 0;
+  @override
+  int get length => 2;
+  @override
+  Object? operator [](int index) {
+    if (index == 1) tailReads++;
+    return {'type': 'reasoning.text', 'text': 'Part $index'};
+  }
+
+  @override
+  set length(int value) => throw UnsupportedError('read only');
+  @override
+  void operator []=(int index, Object? value) =>
+      throw UnsupportedError('read only');
+}
+
 void main() {
   List<Map<String, dynamic>> imageRows(List<_ImageLocation> images) => [
     for (var i = 0; i < images.length; i++)
@@ -71,6 +88,22 @@ void main() {
   ];
   TranscriptTimeline project(List<Map<String, dynamic>> rows) =>
       TranscriptTimeline.project(rows, presentationId: (row) => row['id']!);
+
+  test('reasoning presence does not prepare the remaining body', () {
+    final details = _ReasoningDetails();
+    final timeline = project([
+      {
+        'id': 1,
+        'role': 'assistant',
+        'content': '',
+        'reasoning_details': details,
+      },
+    ]);
+    expect(timeline.entries.single.hasReasoning, isTrue);
+    expect(details.tailReads, 0);
+    expect(timeline.entries.single.reasoning, 'Part 0\n\nPart 1');
+    expect(details.tailReads, 1);
+  });
 
   test('timeline identity and grouping do not read attachment bodies', () {
     final images = List.generate(100, (_) => _ImageLocation());

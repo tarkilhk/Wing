@@ -1512,6 +1512,27 @@ void main() {
     );
   });
 
+  test('saved display reasoning is authoritative, including empty text', () {
+    for (final display in ['Received reasoning', '', ' \n ']) {
+      final row = <String, dynamic>{
+        'id': 1,
+        'role': 'assistant',
+        'content': '',
+        'reasoning': 'Received reasoning\n\nPublic commentary',
+        'reasoning_content': 'Received reasoning\n\nPublic commentary',
+        'display_reasoning': display,
+        'display_commentary': ['Public commentary'],
+      };
+      final timeline = TranscriptTimeline.project([
+        row,
+      ], presentationId: (row) => row['id']!);
+      expect(timeline.entries.single.reasoning, display);
+      expect(timeline.entries.single.hasReasoning, display.trim().isNotEmpty);
+      expect(timeline.sections.isEmpty, display.trim().isEmpty);
+      expect(row['reasoning'], 'Received reasoning\n\nPublic commentary');
+    }
+  });
+
   testWidgets('saved reasoning-only Find result opens its native payload', (
     tester,
   ) async {

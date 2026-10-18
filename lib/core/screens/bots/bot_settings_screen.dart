@@ -116,11 +116,7 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
               createSession: () => ProfileToolSetupSession(profile, tool: name),
               onCredential: (context, field) => _push(
                 context,
-                AdminSecretPage(
-                  profile: profile,
-                  name: field.key,
-                  isSet: field.isSet,
-                ),
+                AdminSecretPage(profile: profile, name: field.key),
               ),
             ),
     ),

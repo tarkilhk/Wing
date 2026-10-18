@@ -404,6 +404,32 @@ void main() {
             'canonical-streaming-collapsed-$variant',
           );
           await _inspectLiveImage(tester, frame, 'canonical-$variant');
+          final liveRun = tester.element(find.byType(ProfileActivitySection));
+          browser.messages.add({
+            'id': 2,
+            'role': 'assistant',
+            'content': '',
+            'reasoning':
+                'Inspect the received image.\n\nI will review the evidence.',
+            'display_reasoning': 'Inspect the received image.',
+            'display_commentary': ['I will review the evidence.'],
+            'tool_calls': [
+              {
+                'id': 'received-image',
+                'function': {'name': 'vision_analyze', 'arguments': '{}'},
+              },
+            ],
+          });
+          await controller.refreshHistory(chat);
+          await _frames(tester);
+          expect(find.byType(ProfileReasoningContent), findsOneWidget);
+          expect(
+            tester.element(find.byType(ProfileActivitySection)),
+            same(liveRun),
+          );
+          // A visited, collapsed run retains its offstage tool/viewer state.
+          expect(find.byType(ProfileToolCall), findsNothing);
+          await _render(tester, frame, 'canonical-history-reasoning-$variant');
           emitChatEvent(controller, chat, 'reasoning.delta', {
             'text': 'Continue the review.',
           });
@@ -411,7 +437,7 @@ void main() {
           expect(find.byType(ProfileToolCall), findsNothing);
 
           browser.messages.add({
-            'id': 2,
+            'id': 3,
             'role': 'assistant',
             'content': 'The shared renderer keeps the conversation readable.',
           });
