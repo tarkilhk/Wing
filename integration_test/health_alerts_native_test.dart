@@ -80,6 +80,7 @@ class _Observations extends ProfileBrowserFixture {
   bool analyticsUnavailable = false;
   int hostReads = 0;
   final analyticsReads = <String>[];
+  final analyticsModelProfiles = <String>[];
   late ProfileWorkspaceController owner;
 
   @override
@@ -113,6 +114,7 @@ class _Observations extends ProfileBrowserFixture {
     SavedConnection connection,
     String identity,
   ) => AdministrationRepository(
+    apiPricing: ({refresh = false}) async => administration.apiPrices,
     connectionId: connection.id,
     connectionIdentity: identity,
     connectionLabel: connection.label,
@@ -129,6 +131,9 @@ class _Observations extends ProfileBrowserFixture {
     request: (method, path, query, body) async {
       if (method == 'GET' && path.startsWith('analytics/')) {
         analyticsReads.add(path);
+        if (path == 'analytics/models') {
+          analyticsModelProfiles.add(query['profile']!);
+        }
         if (analyticsUnavailable) {
           throw DashboardHttpException(503, path);
         }
@@ -744,16 +749,20 @@ void main() {
         250,
         scrollable: analyticsScroll,
       );
+      await _settleScreen(tester);
       expect(unavailable.hitTestable(), findsOneWidget);
       await _capture('$label-analytics-unavailable');
 
       observations.analyticsUnavailable = false;
-      final refresh = find.byTooltip('Refresh usage');
+      final refresh = find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == 'Refresh usage',
+      );
       await tester.scrollUntilVisible(
         refresh,
         250,
         scrollable: analyticsScroll,
       );
+      await _settleScreen(tester);
       final readsBeforeRefresh = observations.analyticsReads.length;
       await tester.tap(refresh);
       await _waitUntil(
@@ -765,14 +774,23 @@ void main() {
         'New analytics reads complete and clear the visible error',
       );
       expect(unavailable, findsNothing);
-      await tester.scrollUntilVisible(
-        find.text('639K'),
-        -250,
-        scrollable: analyticsScroll,
-      );
+      // The large-text breakdown has its own scroll surface. Drag in the
+      // dashboard gutter so returning to totals scrolls the outer page.
+      final total = find.byKey(const ValueKey('usage-token-total'));
+      final viewport = tester.getRect(analyticsScroll);
+      for (var i = 0; i < 40 && total.evaluate().isEmpty; i++) {
+        await tester.dragFrom(
+          Offset(viewport.left + 4, viewport.center.dy),
+          const Offset(0, 300),
+        );
+        await _settleScreen(tester);
+      }
+      await tester.ensureVisible(total);
+      await _settleScreen(tester);
       expect(find.textContaining('Could not load model totals.'), findsNothing);
       expect(find.text('Unavailable'), findsNothing);
-      expect(find.text('639K'), findsOneWidget);
+      expect(find.text('1.3M'), findsOneWidget);
+      expect(observations.analyticsModelProfiles.toSet(), {'personal', 'work'});
       expect(
         observations.analyticsReads
             .where((p) => p == 'analytics/models')
