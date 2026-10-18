@@ -341,18 +341,30 @@ class Runner:
             finally:
                 self.adb('uninstall', helper)
 
+    def read_checkpoint(self, package, path):
+        result = subprocess.run([
+            android.adb_path(), '-s', self.device, 'shell', 'run-as', package,
+            'cat', path,
+        ], capture_output=True, text=True, timeout=25)
+        if result.returncode:
+            return None
+        try:
+            stage = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            # Dart can be between truncation and completion of writeAsString.
+            # The existing fixture/child deadlines still bound missing records.
+            return None
+        if not isinstance(stage, dict):
+            raise ValueError('Native checkpoint must be a JSON object')
+        return stage
+
     def slash(self):
         seen = set()
 
         def checkpoint():
-            # Absence means the Flutter journey has not reached a checkpoint yet.
-            result = subprocess.run([
-                android.adb_path(), '-s', self.device, 'shell', 'run-as', DEV,
-                'cat', 'code_cache/wing-slash-stage.json',
-            ], capture_output=True, text=True, timeout=25)
-            if result.returncode:
+            stage = self.read_checkpoint(DEV, 'code_cache/wing-slash-stage.json')
+            if stage is None:
                 return
-            stage = json.loads(result.stdout)
             token, name = stage['token'], stage['name']
             if token in seen:
                 return
@@ -394,13 +406,9 @@ class Runner:
         seen = set()
 
         def checkpoint():
-            result = subprocess.run([
-                android.adb_path(), '-s', self.device, 'shell', 'run-as', QA,
-                'cat', 'code_cache/wing-health-retention-stage.json',
-            ], capture_output=True, text=True, timeout=25)
-            if result.returncode:
+            stage = self.read_checkpoint(QA, 'code_cache/wing-health-retention-stage.json')
+            if stage is None:
                 return
-            stage = json.loads(result.stdout)
             token = stage['token']
             if token in seen:
                 return

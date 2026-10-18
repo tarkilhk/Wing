@@ -132,6 +132,40 @@ class NativeExecution(unittest.TestCase):
                 self.runner.clipboard()
             self.assertEqual(adb.call_args.args, ('uninstall', 'com.tarkilhk.wing.shareqa.fixture'))
 
+    def test_checkpoint_reader_waits_for_a_complete_record(self):
+        stages = [subprocess.CompletedProcess([], code, text) for code, text in (
+            (1, ''), (0, ''), (0, '{"token":'), (0, '{"token":"ready"}'))]
+        with patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+             patch.object(nightly.subprocess, 'run', side_effect=stages):
+            for _ in range(3):
+                self.assertIsNone(self.runner.read_checkpoint(nightly.QA, 'stage.json'))
+            self.assertEqual(self.runner.read_checkpoint(nightly.QA, 'stage.json'), {'token': 'ready'})
+
+    def test_complete_invalid_checkpoint_fails_instead_of_waiting(self):
+        for text in ('null', '[]', '1'):
+            with self.subTest(text=text), \
+                 patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+                 patch.object(nightly.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, text)):
+                with self.assertRaisesRegex(ValueError, 'JSON object'):
+                    self.runner.read_checkpoint(nightly.QA, 'stage.json')
+
+    def test_retention_ack_follows_real_home_interval_and_reopen_once(self):
+        checkpoint = self.runner.retention_checkpoint()
+        stage = {'token': 'background-30', 'action': 'background', 'seconds': 30}
+        order = []
+        with patch.object(self.runner, 'read_checkpoint', return_value=stage), \
+             patch.object(self.runner, 'shell', side_effect=lambda *a: order.append(a)), \
+             patch.object(nightly.time, 'sleep', side_effect=lambda s: order.append(('wait', s))), \
+             patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+             patch.object(nightly.subprocess, 'run', side_effect=lambda *a, **kw: order.append(('ack', kw['input']))):
+            checkpoint()
+            checkpoint()
+        self.assertEqual(order, [
+            ('input', 'keyevent', 'KEYCODE_HOME'), ('wait', 30),
+            ('am', 'start', '-W', '-n', nightly.QA + '/com.tarkilhk.wing.MainActivity'),
+            ('ack', 'background-30'),
+        ])
+
     def test_slash_native_checkpoints_configure_type_capture_and_ack_once(self):
         with patch.object(self.runner, 'flutter') as flutter:
             self.runner.slash()
