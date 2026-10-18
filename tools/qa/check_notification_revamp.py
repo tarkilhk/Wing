@@ -175,13 +175,20 @@ def scroll_through_answer(answer):
 def shade(*, expand=True):
     width, height = map(int, re.findall(r'(\d+)x(\d+)', adb('shell', 'wm', 'size'))[-1])
 
-    def opened():
-        # Use the real user gesture: some emulator System UI builds ignore the
-        # shell expansion command. Wait for notification UI before tapping.
-        # A second pull can open Quick Settings instead of notifications.
-        # Return to Home first so retries always start with a closed panel.
+    launcher = adb('shell', 'cmd', 'package', 'resolve-activity', '--brief',
+                   '-a', 'android.intent.action.MAIN',
+                   '-c', 'android.intent.category.HOME').strip().splitlines()[-1].split('/')[0]
+    if '.' not in launcher:
+        raise ValueError('Android did not resolve its home launcher')
+
+    def home_visible():
         adb('shell', 'input', 'keyevent', 'KEYCODE_BACK', 'KEYCODE_BACK', 'KEYCODE_HOME')
-        time.sleep(.5)
+        return any(node.get('package') == launcher for node in nodes())
+
+    def opened():
+        # A second pull can open Quick Settings. Observe the actual launcher
+        # before every attempt; sending Home does not mean System UI settled.
+        until(home_visible, 'Notification panel did not close to the launcher', timeout=15)
         adb('shell', 'input', 'swipe', str(width // 2), '1', str(width // 2), str(height * 2 // 3), '400')
         time.sleep(.7)
         shown = nodes()
