@@ -72,6 +72,39 @@ class NativeMonitoringForwardOwnership(unittest.TestCase):
         ])
 
 
+class ColdNotificationPrerequisites(unittest.TestCase):
+    def test_failure_restores_only_the_exemption_and_forward_it_owned(self):
+        from scripts import test_native_cold_notification as cold
+        for already_exempt in (False, True):
+            calls = []
+
+            def adb(command, **kwargs):
+                parts = command[3:]
+                calls.append(parts)
+                if parts == ['shell', 'dumpsys', 'deviceidle', 'whitelist']:
+                    return cold.PACKAGE if already_exempt else ''
+                if parts == ['forward', '--no-rebind', 'tcp:0', 'tcp:18766']:
+                    return '43123\n'
+                return ''
+
+            with self.subTest(already_exempt=already_exempt), \
+                 patch.object(sys, 'argv', ['cold', '--serial', 'emulator-5562']), \
+                 patch.object(cold.subprocess, 'check_output', side_effect=adb), \
+                 patch.object(cold.urllib.request, 'urlopen', side_effect=RuntimeError('fixture failed')):
+                with self.assertRaisesRegex(RuntimeError, 'fixture failed'):
+                    cold.main()
+            mutations = [call for call in calls if len(call) == 5 and call[:4] ==
+                         ['shell', 'dumpsys', 'deviceidle', 'whitelist']]
+            self.assertEqual(mutations, [] if already_exempt else [
+                ['shell', 'dumpsys', 'deviceidle', 'whitelist', '+' + cold.PACKAGE],
+                ['shell', 'dumpsys', 'deviceidle', 'whitelist', '-' + cold.PACKAGE],
+            ])
+            self.assertEqual([call for call in calls if call[0] == 'forward'], [
+                ['forward', '--no-rebind', 'tcp:0', 'tcp:18766'],
+                ['forward', '--remove', 'tcp:43123'],
+            ])
+
+
 class MonitoringCardCardinality(unittest.TestCase):
     package = 'com.tarkilhk.wing.dev'
 
@@ -107,7 +140,8 @@ class MonitoringCardCardinality(unittest.TestCase):
 class NativeNotificationPresentation(unittest.TestCase):
     def card(self, text='3 questions', *, title='Outside task', app='Wing Dev', expanded=True):
         row = ET.Element('node', {'resource-id': 'com.android.systemui:id/expandableNotificationRow'})
-        ET.SubElement(row, 'node', {'resource-id': 'android:id/app_name_text', 'text': app})
+        if app is not None:
+            ET.SubElement(row, 'node', {'resource-id': 'android:id/app_name_text', 'text': app})
         ET.SubElement(row, 'node', {'resource-id': 'android:id/conversation_text', 'text': title})
         ET.SubElement(row, 'node', {'resource-id': 'android:id/message_text', 'text': text})
         ET.SubElement(row, 'node', {
@@ -128,6 +162,43 @@ class NativeNotificationPresentation(unittest.TestCase):
         rows = [self.card(), self.card()]
         with self.assertRaisesRegex(AssertionError, 'More than one native notification'):
             notification_ui.notification_card(rows, 'Outside task')
+
+    def test_headerless_card_requires_independent_package_ownership(self):
+        card = self.card(app=None, expanded=False)
+        self.assertIsNone(notification_ui.notification_card([card], 'Outside task'))
+        self.assertIs(notification_ui.notification_card(
+            [card], 'Outside task', headerless_owner=True), card)
+        self.assertIsNone(notification_ui.notification_card(
+            [self.card(app='Another app')], 'Outside task', headerless_owner=True))
+
+    def notification_record(self, package=notification_ui.PACKAGE):
+        return (f'    NotificationRecord(0x1: pkg={package} user=UserHandle{{0}} id=42)\n'
+                '      extras={\n        android.title=String (Outside task: Outside task)\n'
+                '        android.conversationTitle=String (Outside task)\n      }\n')
+
+    def test_only_one_active_owned_title_can_identify_a_headerless_card(self):
+        owned = self.notification_record()
+        other = self.notification_record('another.app')
+        for records, expected in ((owned, True), (other, False),
+                                  (owned + other, False), (owned + owned, False)):
+            with self.subTest(records=records):
+                self.assertEqual(notification_ui.notification_title_owned(
+                    '  Notification List:\n' + records + '  Historical notifications:\n',
+                    'Outside task'), expected)
+        self.assertFalse(notification_ui.notification_title_owned(
+            '  Notification List:\n  Historical notifications:\n' + owned, 'Outside task'))
+
+    def test_real_collapse_can_remove_the_header_without_losing_owned_content(self):
+        expanded = self.card()
+        collapsed = self.card(app=None, expanded=False)
+        dump = '  Notification List:\n' + self.notification_record()
+        with patch.object(notification_ui, 'shade'), \
+             patch.object(notification_ui, 'nodes', side_effect=[[expanded], [collapsed]]), \
+             patch.object(notification_ui, 'adb', return_value=dump) as adb:
+            result = notification_ui.shown_notification('Outside task', expanded=False, required=['3 questions'])
+        self.assertIs(result, collapsed)
+        self.assertEqual(adb.call_args_list[0].args, ('shell', 'input', 'tap', '30', '40'))
+        self.assertEqual(adb.call_args_list[1].args, ('shell', 'dumpsys', 'notification', '--noredact'))
 
     def test_question_count_cannot_match_the_suffix_of_a_different_number(self):
         self.assertFalse(notification_ui.notification_text_matches(self.card('13 questions'), ['3 questions']))

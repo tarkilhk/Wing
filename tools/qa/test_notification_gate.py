@@ -432,6 +432,8 @@ class NotificationForwardOwnershipTest(unittest.TestCase):
                 def command(argv, **kwargs):
                     arguments = argv[3:]
                     calls.append(arguments)
+                    if arguments == ['shell', 'dumpsys', 'deviceidle', 'whitelist']:
+                        return module.PACKAGE
                     if arguments == ['forward', '--no-rebind', 'tcp:0', 'tcp:18766']:
                         return '34819\n'
                     if arguments == ['forward', '--remove', 'tcp:34819']:
@@ -453,13 +455,16 @@ class NotificationForwardOwnershipTest(unittest.TestCase):
 
                 def collision(argv, **kwargs):
                     calls.append(argv[3:])
+                    if argv[3:] == ['shell', 'dumpsys', 'deviceidle', 'whitelist']:
+                        return module.PACKAGE
                     raise subprocess.CalledProcessError(1, argv)
 
                 with patch.object(sys, 'argv', [name, '--serial', 'emulator-5562', '--port', '34819']), \
                      patch.object(subprocess, 'check_output', side_effect=collision):
                     with self.assertRaises(subprocess.CalledProcessError):
                         module.main()
-                self.assertEqual(calls, [['forward', '--no-rebind', 'tcp:34819', 'tcp:18766']])
+                self.assertEqual([call for call in calls if call[0] == 'forward'],
+                                 [['forward', '--no-rebind', 'tcp:34819', 'tcp:18766']])
 
     def test_shade_failure_removes_owned_forward_even_when_settings_cleanup_fails(self):
         calls = []

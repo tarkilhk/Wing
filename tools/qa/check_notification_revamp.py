@@ -54,20 +54,40 @@ def nodes():
     return list(ET.fromstring(adb('shell', 'cat', '/sdcard/wing-notification-ui.xml')).iter('node'))
 
 
-def notification_card(shown, title):
+def notification_card(shown, title, *, headerless_owner=False):
     """Identify one current System UI conversation card, never adjacent text."""
     cards = []
     for node in shown:
         if node.get('resource-id') != 'com.android.systemui:id/expandableNotificationRow':
             continue
         children = list(node.iter('node'))
-        if (any(child.get('resource-id') == 'android:id/app_name_text'
-                and child.get('text') == 'Wing Dev' for child in children)
-                and any(child.get('resource-id') in {'android:id/title', 'android:id/conversation_text'}
-                        and child.get('text') == title for child in children)):
+        labels = [child.get('text') for child in children
+                  if child.get('resource-id') == 'android:id/app_name_text']
+        owned = labels == ['Wing Dev'] or (not labels and headerless_owner)
+        if (owned and any(child.get('resource-id') in {'android:id/title', 'android:id/conversation_text'}
+                          and child.get('text') == title for child in children)):
             cards.append(node)
     assert len(cards) <= 1, f'More than one native notification for {title!r}'
     return cards[0] if cards else None
+
+
+
+def notification_title_owned(dump, title):
+    """Bind a headerless Android conversation card to one active owned slot."""
+    active = re.search(r'^  Notification List:\n(.*?)(?=^  \S|\Z)',
+                       dump, re.MULTILINE | re.DOTALL)
+    if active is None:
+        return False
+    owners = []
+    for block in re.split(r'(?=NotificationRecord\()', active.group(1)):
+        if not block.startswith('NotificationRecord('):
+            continue
+        titles = re.findall(r'android\.conversationTitle=String \((.*?)\)\n', block)
+        if title not in titles:
+            continue
+        owner = re.search(r'\bpkg=(\S+)', block.splitlines()[0])
+        owners.append(owner.group(1) if owner else None)
+    return owners == [PACKAGE]
 
 
 def notification_text_matches(card, required=(), forbidden=()):
@@ -90,8 +110,20 @@ def tap_notification_node(node):
 def shown_notification(title, *, expanded, required=(), forbidden=()):
     """Observe the requested collapsed/expanded card through real Android controls."""
     shade(expand=False)
+    def current_card():
+        shown = nodes()
+        current = notification_card(shown, title)
+        if current is not None:
+            return current
+        # API36 collapses conversation headers without an app-name label.
+        # Require a unique active Android slot owned by the QA package before
+        # using that presentation; matching text elsewhere is insufficient.
+        owned = notification_title_owned(
+            adb('shell', 'dumpsys', 'notification', '--noredact'), title)
+        return notification_card(shown, title, headerless_owner=owned)
+
     def located():
-        current = notification_card(nodes(), title)
+        current = current_card()
         return [current] if current is not None else None
 
     card = until(located, f'Native notification for {title!r} is not visible')[0]
@@ -111,7 +143,7 @@ def shown_notification(title, *, expanded, required=(), forbidden=()):
         tap_notification_node(control)
 
     def rendered():
-        current = notification_card(nodes(), title)
+        current = current_card()
         if current is None:
             return None
         if expansion_control(current).get('content-desc') != expected:
@@ -129,6 +161,15 @@ def tap(resource=None, text=None):
     assert found is not None, f'Missing control: {resource or text}'
     x1, y1, x2, y2 = map(int, re.findall(r'\d+', found.get('bounds')))
     adb('shell', 'input', 'tap', str((x1 + x2)//2), str((y1 + y2)//2))
+
+
+def scroll_through_answer(answer):
+    """Use the actual reading gesture; opening a reply is deliberately not read."""
+    until(lambda: any(answer in (node.get('text'), node.get('content-desc'))
+                      for node in nodes()), 'The exact answer is not visible')
+    width, height = map(int, re.findall(r'(\d+)x(\d+)', adb('shell', 'wm', 'size'))[-1])
+    adb('shell', 'input', 'swipe', str(width // 2), str(height * 2 // 3),
+        str(width // 2), str(height // 3), '400')
 
 
 def shade(*, expand=True):
@@ -514,18 +555,7 @@ def run(output, tap_only=False):
     until(lambda: all(not v['inputs'] for v in json.loads(state()['notices']).values()), 'Watcher did not clear remote decision')
     print('PASS: watcher reconciles a desktop decision without another notification tap', flush=True)
     check_direct_actions(output)
-    # A settled cold action may release its engine; restart this fake app for
-    # the unrelated reply/open checks that follow.
-    adb('shell', 'am', 'start', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity')
-    until(lambda: state()['ready'], 'Fixture did not restart after the cold action')
-    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
-    answer = 'The mobile layout is ready. Read the result before publishing.'
-    state('/reply', {'text': answer})
-    shade()
-    screenshot(output / 'reply.png')
-    tap(text=answer)
-    until(lambda: all(v['result'] is None for k, v in json.loads(state()['notices']).items() if json.loads(k)['profile'] == 'a'), 'Reading the latest answer did not clear its notification')
-    print('PASS: body tap opens latest reply and visibility clears its notification', flush=True)
+    check_reply_read(output)
     check_content_tap_clear()
     check_group_approval_rendering(output)
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
@@ -534,6 +564,31 @@ def run(output, tap_only=False):
     screenshot(output / 'stopped.png')
     state('/stop', {})
 
+
+
+def check_reply_read(output):
+    # A settled cold action may release its engine; restart this fake app for
+    # the unrelated reply/open checks that follow.
+    adb('shell', 'am', 'start', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity')
+    until(lambda: state()['ready'], 'Fixture did not restart after the cold action')
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    until(lambda: state()['lifecycle'] == 'paused', 'Reply fixture did not enter the background')
+    reads_before = len(state()['read_acks'])
+    answer = 'The mobile layout is ready. Read the result before publishing.'
+    state('/reply', {'text': answer})
+    shade()
+    screenshot(output / 'reply.png')
+    tap(text=answer)
+    until(lambda: state()['chat_visible'] and state()['read_guards']['selected_is_target'],
+          'Reply tap did not open its exact owner')
+    assert len(state()['read_acks']) == reads_before, 'Opening alone acknowledged the answer'
+    assert any(v['result'] is not None for k, v in json.loads(state()['notices']).items()
+               if json.loads(k)['profile'] == 'a'), 'Opening alone marked the answer read'
+    scroll_through_answer(answer)
+    until(lambda: all(v['result'] is None for k, v in json.loads(state()['notices']).items() if json.loads(k)['profile'] == 'a'), 'Reading the latest answer did not clear its notification')
+    assert state()['read_acks'][reads_before:] == [{'profile': 'a', 'session': 'same'}]
+    assert not state()['mark_read_failed']
+    print('PASS: opening preserves unread reply; user scrolling acknowledges its exact owner and clears the result', flush=True)
 
 
 def check_direct_actions(output):
@@ -671,13 +726,12 @@ def check_recents_visibility(output):
                 # Remove only this disposable fixture's task, as a Recents swipe does.
                 adb('shell', 'am', 'stack', 'remove', task_id)
             assert not main_tasks(), 'Original fixture task was not removed'
-        shade()
-        shown = nodes()
-        target = next((n for n in shown if n.get('resource-id') == 'android:id/title'
-                       and n.get('text') in ('Website refresh', 'Weekly report', 'a chat', 'b chat')), None)
+        card = shown_notification('Website refresh', expanded=True,
+                                  required=['WING-RECENTS-REGRESSION'])
+        target = next((n for n in card.iter('node')
+                       if n.get('text') == 'WING-RECENTS-REGRESSION'), None)
         assert target is not None, 'Missing native fixture reply notification'
-        x1, y1, x2, y2 = map(int, re.findall(r'\d+', target.get('bounds')))
-        adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+        tap_notification_node(target)
         until(lambda: any(component in line for line in
                          adb('shell', 'dumpsys', 'activity', 'activities').splitlines()
                          if 'topResumedActivity=' in line), 'Notification did not open Wing')

@@ -137,18 +137,21 @@ def main():
         assert identifier in notices(), 'Opening only the list marked the answer read'
         x1, y1, x2, y2 = shade_target()
         command('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
-        for _ in range(40):
-            state = ready()
-            if identifier not in notices(only_answer=False):
-                assert state['chat_visible'] and state['read_guards']['selected_is_target'], state
-                break
-            time.sleep(.25)
-        else:
-            raise AssertionError(f'Restored reply not cleared by reading via native tap: {state}')
-        native.until(lambda: any(answer in (node.get('text'), node.get('content-desc'))
-                                 for node in native.nodes()),
-                     'Tapped chat did not display the restored answer')
-        print('PASS: native notification tap opens the exact answer and clears its notice', flush=True)
+        native.until(lambda: ready()['chat_visible'] and ready()['read_guards']['selected_is_target'],
+                     'Restored notification did not open its exact owner')
+        opened = ready()
+        assert opened['read_acks'] == [], 'Opening alone acknowledged the restored answer'
+        assert any(value['result'] is not None for value in json.loads(opened['notices']).values()), \
+            'Opening alone marked the restored answer read'
+        native.scroll_through_answer(answer)
+        def read_completed():
+            current = ready()
+            return (all(value['result'] is None for value in json.loads(current['notices']).values())
+                    and current['read_acks'] == [{'profile': 'a', 'session': 'same'}]
+                    and not current['mark_read_failed'])
+        native.until(read_completed, 'Scrolling did not acknowledge the restored answer')
+        assert identifier not in notices(only_answer=False), 'Read notification is still posted'
+        print('PASS: tap preserves unread answer; scrolling acknowledges its exact owner and clears the result', flush=True)
         command('shell', 'am', 'force-stop', PACKAGE)
         command('shell', 'am', 'start', '-n', ACTIVITY)
         ready()

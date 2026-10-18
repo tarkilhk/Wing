@@ -36,10 +36,13 @@ def main():
 
     if not 0 <= args.port <= 65535:
         parser.error('--port must be between 0 and 65535')
+    exempt_before = PACKAGE in command('shell', 'dumpsys', 'deviceidle', 'whitelist')
     # Never replace another run's mapping. An allocated port belongs to this run.
     allocated = command('forward', '--no-rebind', f'tcp:{args.port}', 'tcp:18766').strip()
     args.port = int(allocated or args.port)
     try:
+        if not exempt_before:
+            command('shell', 'dumpsys', 'deviceidle', 'whitelist', '+' + PACKAGE)
 
         def post(path):
             req = urllib.request.Request(f'http://127.0.0.1:{args.port}/{path}', data=b'{}')
@@ -106,7 +109,11 @@ def main():
             raise AssertionError('Monitoring stayed alive after input became pending')
         print('PASS: monitoring stopped after posting the pending request')
     finally:
-        command('forward', '--remove', f'tcp:{args.port}')
+        try:
+            if not exempt_before:
+                command('shell', 'dumpsys', 'deviceidle', 'whitelist', '-' + PACKAGE)
+        finally:
+            command('forward', '--remove', f'tcp:{args.port}')
 
 
 if __name__ == '__main__':
