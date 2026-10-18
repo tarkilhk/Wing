@@ -1,5 +1,6 @@
 import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
+import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/widgets/recent_identity_card.dart';
@@ -134,8 +135,9 @@ void main() {
     double scale = 1,
     Brightness brightness = Brightness.light,
     Widget? home,
+    Size viewport = const Size(360, 800),
   }) async {
-    tester.view.physicalSize = const Size(360, 800);
+    tester.view.physicalSize = viewport;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -1004,6 +1006,84 @@ void main() {
         expect(chat?.composer.observation.text, openChat ? 'Still here' : null);
       },
     );
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 1.3, 2.0]) {
+      testWidgets('Settings title is readable in $brightness at ${scale}x', (
+        tester,
+      ) async {
+        final homeFixture = await createHomeFixture();
+        final manager = homeFixture.manager;
+        final settings = homeFixture.appPreferences;
+        await show(
+          tester,
+          scale: scale,
+          brightness: brightness,
+          viewport: const Size(320, 640),
+          home: HomeScreen(
+            createSharedDraftSession: (entry) => SharedDraftSession(
+              connectionManager: manager,
+              entrySession: entry,
+              shareIntents: null,
+            ),
+            createEntrySession: homeEntryFactory(
+              tester,
+              manager,
+              settings,
+              create: (connection) =>
+                  profileController(connection, manager.prefs, settings),
+              launchIntents: null,
+            ),
+            connManager: manager,
+            appPreferences: settings,
+            createBackupSession: () => BackupSession(
+              configuration: ConfigBackupService(
+                connectionManager: manager,
+                appPreferences: settings,
+              ),
+              io: ConfigBackupIo(),
+            ),
+          ),
+        );
+        await navigate(tester, AppDestination.settings);
+        await snapshot(tester, 'settings-title-${brightness.name}-$scale');
+        for (final action in [
+          'Backup configuration',
+          'Restore configuration',
+        ]) {
+          expect(find.byTooltip(action).hitTestable(), findsOneWidget);
+        }
+        final title = find.text('App settings');
+        final header = tester.getRect(
+          find.descendant(
+            of: find.byType(WingAppBar),
+            matching: find.byType(NavigationToolbar),
+          ),
+        );
+        final paragraph = tester.renderObject<RenderParagraph>(title);
+        final lines = paragraph.getBoxesForSelection(
+          TextSelection(baseOffset: 0, extentOffset: 'App settings'.length),
+        );
+        expect(lines, isNotEmpty);
+        for (final line in lines) {
+          final bounds = line.toRect().shift(
+            paragraph.localToGlobal(Offset.zero),
+          );
+          expect(
+            header.contains(bounds.topLeft),
+            isTrue,
+            reason: 'The title must not paint above its header.',
+          );
+          expect(
+            header.contains(bounds.bottomRight),
+            isTrue,
+            reason: 'The full Settings title must fit within its header.',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
   }
 
   testWidgets('drawer and settings fit a narrow device at large text size', (

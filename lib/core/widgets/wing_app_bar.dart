@@ -26,7 +26,8 @@ class WingConversationTitle extends StatelessWidget {
 
 /// All routes share the Chats density: a 48dp title/action row, followed by
 /// optional scope context. At enlarged text, secondary actions get their own
-/// row; the bell always remains beside the title. No business policy or I/O.
+/// row. They also move below when they would squeeze a title onto extra
+/// lines; the bell always remains beside the title. No business policy or I/O.
 class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
   WingAppBar({
     super.key,
@@ -45,25 +46,44 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.titleSpacing = 8,
     this.automaticallyImplyLeading = true,
     bool inlineActions = false,
-  }) : assert(contextRow != null || contextActions.isEmpty),
-       _large =
-           !inlineActions && MediaQuery.textScalerOf(context).scale(16) >= 24 {
+  }) : assert(contextRow != null || contextActions.isEmpty) {
+    var separateActions =
+        !inlineActions && MediaQuery.textScalerOf(context).scale(16) >= 24;
     final style = titleStyle(context);
     final label = title is Text ? (title as Text).data : null;
+    final actionsWidth = actions.fold<double>(
+      0,
+      (width, action) =>
+          width +
+          (action is PreferredSizeWidget ? action.preferredSize.width : 48),
+    );
     final available =
         (MediaQuery.sizeOf(context).width -
                 56 -
-                16 -
+                2 * titleSpacing -
                 48 -
-                (contextRow == null ? 32 : 0) -
-                (_large ? 0 : actions.length * 48))
-            .clamp(80.0, double.infinity);
-    final painter = TextPainter(
-      text: TextSpan(text: label ?? 'Title', style: style),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: title is Text ? (title as Text).maxLines ?? 6 : 1,
-    )..layout(maxWidth: available);
+                (contextRow == null ? 32 : 0))
+            .clamp(0.0, double.infinity);
+    final painter =
+        TextPainter(
+          text: TextSpan(text: label ?? 'Title', style: style),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          maxLines: title is Text ? (title as Text).maxLines ?? 6 : 1,
+        )..layout(
+          maxWidth: (available - (separateActions ? 0 : actionsWidth)).clamp(
+            0.0,
+            double.infinity,
+          ),
+        );
+    if (!inlineActions &&
+        !separateActions &&
+        actions.isNotEmpty &&
+        painter.computeLineMetrics().length > 1) {
+      separateActions = true;
+      painter.layout(maxWidth: available);
+    }
+    _large = separateActions;
     _rowHeight = (painter.height + 8).clamp(48.0, double.infinity);
     painter.dispose();
   }
@@ -74,7 +94,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Color? backgroundColor, surfaceTintColor;
   final ShapeBorder? shape;
   final bool centerTitle, automaticallyImplyLeading;
-  final bool _large;
+  late final bool _large;
   late final double _rowHeight;
   static TextStyle titleStyle(BuildContext context) => Theme.of(
     context,
