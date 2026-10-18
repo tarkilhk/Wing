@@ -34,6 +34,10 @@ STEPS = {'share-plain', 'pick-plain', 'share-encrypted',
          'pick-encrypted-wrong', 'pick-encrypted'}
 
 
+class HierarchyUnavailable(RuntimeError):
+    """The current Android transition has not yielded a fresh UI hierarchy."""
+
+
 class Driver:
     def __init__(self, device, output, prefix):
         self.device = device
@@ -48,7 +52,8 @@ class Driver:
     def nodes(self, label):
         captured = self.device.shell('uiautomator', 'dump', self.dump_path)
         if 'dumped to:' not in captured:
-            raise RuntimeError('Android UI capture failed; discard the previous hierarchy')
+            raise HierarchyUnavailable(
+                'Android UI capture failed; discard the previous hierarchy: ' + repr(captured))
         raw = self.device.shell('cat', self.dump_path)
         (self.output / (label + '.xml')).write_text(raw)
         nodes = list(ET.fromstring(raw).iter('node'))
@@ -148,7 +153,15 @@ class Driver:
                 }
                 self.capture(label + '_saved')
                 return
-            nodes = self.nodes(label)
+            try:
+                nodes = self.nodes(label)
+            except HierarchyUnavailable as error:
+                # A stage marker precedes the Android chooser transition. Never
+                # read its previous dump; retry a fresh capture within this stage's
+                # existing deadline, as the notification driver does.
+                print(str(error), flush=True)
+                time.sleep(.3)
+                continue
             if stage.startswith('share-'):
                 target = next((n for n in nodes if n.get('text') == 'Save Wing QA backup'
                                and n.get('package') == 'com.android.intentresolver'

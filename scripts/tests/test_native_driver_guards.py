@@ -313,6 +313,31 @@ class NativeBackupChooser(unittest.TestCase):
         self.assertEqual(command[:2], ('input', 'swipe'))
         self.assertGreater(int(command[3]), int(command[5]))
 
+    def test_unavailable_transition_retries_a_fresh_capture_before_tapping(self):
+        from unittest.mock import patch
+        from scripts import test_native_config_backup as backup
+        driver = self.driver('unused')
+        target = self.node('android:id/text1', '[20,1200][500,1250]',
+                           text='Save Wing QA backup')
+        driver.status = lambda: {}
+        driver.capture = lambda _: None
+        driver.process = type('Process', (), {'poll': lambda _: None})()
+
+        class TargetTapped(Exception):
+            pass
+
+        def tap(node):
+            self.assertIs(node, target)
+            raise TargetTapped()
+
+        driver.tap = tap
+        with patch.object(driver, 'nodes', side_effect=[
+                backup.HierarchyUnavailable('transition not ready'), [target]]) as capture, \
+                patch.object(backup.time, 'sleep'), self.assertRaises(TargetTapped):
+            driver.drive('share-plain')
+        self.assertEqual(capture.call_count, 2)
+        self.assertEqual(driver.device.calls, [])
+
     def test_expanded_chooser_scrolls_its_target_list_upward(self):
         driver = self.driver('unused')
         shown = [self.node('android:id/contentPanel', '[0,0][1080,1920]'),
