@@ -35,6 +35,7 @@ ROADMAP = frozenset({
     'activity approvals and queued work keep their chat owner',
     'project discovery review delivery and input jump stay native',
     'subagents goals and background work keep their chat owner',
+    'completed child stays in current work while the parent streams',
     'administration checks edits and update refusal stay scoped',
     'saved answers edit regenerate branch and fork through Hermes',
 })

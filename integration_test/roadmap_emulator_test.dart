@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/widgets/profile_goal_panel.dart';
+import 'package:wing/core/widgets/profile_activity_tabs.dart';
+import 'package:wing/core/widgets/profile_live_execution.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/gateway_approval_panel.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
@@ -659,6 +661,205 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'completed child stays in current work while the parent streams',
+    (tester) async {
+      final rows = <Map<String, dynamic>>[
+        {'id': 1, 'role': 'user', 'content': 'Inspect the emulator release.'},
+      ];
+      harness.fixture.scopedHistories[('personal', 'chat-0')] = rows;
+      await harness.launch(tester);
+      await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
+      await _settle(tester);
+      final chat = harness.controller.current!.chat!;
+      final runtime = chat.runtime.runtimeId;
+      final composer = find.byKey(const Key('profile-message-composer'));
+      const draft = 'Keep this draft while the child completes';
+      await tester.enterText(composer, draft);
+      tester.binding.focusManager.primaryFocus?.unfocus();
+
+      emitChatEvent(harness.controller, chat, 'message.start');
+      emitChatEvent(harness.controller, chat, 'tool.complete', {
+        'tool_id': 'native-release-source',
+        'name': 'read_file',
+        'args': {'path': '/tmp/release-notes.md'},
+        'result': 'The release source is available.',
+      });
+      emitChatEvent(harness.controller, chat, 'message.delta', {
+        'text': 'Parent stream before child completion.',
+      });
+      await harness.controller.refreshSubagents(chat);
+      await _settle(tester);
+
+      final dockAgents = find.byKey(
+        const ValueKey(('live-work-tab', 0, false)),
+      );
+      await tester.ensureVisible(dockAgents);
+      await _settle(tester);
+      await tester.tap(dockAgents);
+      await _settle(tester);
+      final child = find.byKey(
+        ValueKey(('subagent', chat.key, 'roadmap-child')),
+      );
+      expect(child, findsOneWidget);
+      await tester.ensureVisible(child);
+      await _settle(tester);
+      await tester.tap(
+        find.descendant(of: child, matching: find.byIcon(Icons.chevron_right)),
+      );
+      await _settle(tester);
+      expect(find.byTooltip('Steer'), findsOneWidget);
+      expect(find.byTooltip('Interrupt'), findsOneWidget);
+
+      // The terminal event must update controls in an already-open inspection.
+      // Saving its receipt is independent of the still-streaming parent answer.
+      harness.fixture.subagentStatus = 'completed';
+      harness.fixture.subagentOutput = 'Verified the emulator release source.';
+      emitChatEvent(harness.controller, chat, 'subagent.complete', {
+        'subagent_id': 'roadmap-child',
+        'status': 'completed',
+        'summary': 'Release source verified.',
+      });
+      rows.addAll([
+        {
+          'id': 2,
+          'role': 'tool',
+          'tool_call_id': 'native-release-source',
+          'tool_name': 'read_file',
+          'args': {'path': '/tmp/release-notes.md'},
+          'content': 'The release source is available.',
+        },
+        {
+          'id': 3,
+          'role': 'assistant',
+          'content': 'The inspection is underway.',
+        },
+        {
+          'id': 4,
+          'role': 'user',
+          'display_kind': 'async_delegation_complete',
+          'display_metadata': {
+            'task_count': 1,
+            'display_text':
+                'Subagent Task Completed: Inspect the emulator release',
+          },
+          'content': 'Verified the emulator release source.',
+        },
+      ]);
+      await harness.controller.refreshHistory(chat);
+      await _settle(tester);
+      expect(find.byTooltip('Steer'), findsNothing);
+      expect(find.byTooltip('Interrupt'), findsNothing);
+      expect(
+        find.text('Release source verified.', findRichText: true),
+        findsOneWidget,
+      );
+      final refreshOutput = find.byTooltip('Refresh live output');
+      await tester.ensureVisible(refreshOutput);
+      await _settle(tester);
+      await tester.tap(refreshOutput);
+      await _settle(tester);
+      final output = find.byWidgetPredicate(
+        (widget) =>
+            widget is SourceCodeText &&
+            widget.text == 'Verified the emulator release source.',
+      );
+      await tester.ensureVisible(output);
+      await _settle(tester);
+      expect(output, findsOneWidget);
+      expect(find.byTooltip('Copy Live output'), findsOneWidget);
+      final tailReads = harness.fixture.supervisionRequests.where(
+        (request) => request.$1 == 'subagent.tail',
+      );
+      expect(tailReads, isNotEmpty);
+      for (final request in tailReads) {
+        expect(request.$2, {
+          'session_id': runtime,
+          'subagent_id': 'roadmap-child',
+          'profile': 'personal',
+        });
+      }
+      await captureJourney(tester, 'child-completed-parent-streaming');
+      await tester.binding.handlePopRoute();
+      await _settle(tester);
+      expect(child, findsOneWidget);
+      expect(find.text('Inspect the emulator release'), findsOneWidget);
+      expect(find.text('Completed'), findsOneWidget);
+      expect(chat.currentSubagents.single.isTerminal, isTrue);
+      expect(
+        harness.fixture.supervisionRequests.where(
+          (request) => const {
+            'subagent.steer',
+            'subagent.interrupt',
+          }.contains(request.$1),
+        ),
+        isEmpty,
+      );
+      await tester.tap(find.byKey(const ValueKey(('live-work-tab', 0, true))));
+      await _settle(tester);
+
+      emitChatEvent(harness.controller, chat, 'message.delta', {
+        'text': ' Parent stream continues after child completion.',
+      });
+      await _settle(tester);
+      expect(chat.runtime.executionActive, isTrue);
+      expect(
+        chat.reading.messages.where((row) => row['id'] == 4),
+        hasLength(1),
+      );
+      final activity = find
+          .textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$'))
+          .first;
+      await tester.ensureVisible(activity);
+      await _settle(tester);
+      await tester.tap(activity);
+      await _settle(tester);
+      final liveTabs = find.descendant(
+        of: find.byType(ProfileLiveExecution),
+        matching: find.byType(ProfileActivityTabs),
+      );
+      expect(liveTabs, findsWidgets);
+      for (final tabs in tester.widgetList<ProfileActivityTabs>(liveTabs)) {
+        expect(tabs.tabs.map((tab) => tab.id), ['timeline']);
+      }
+      expect(
+        find.text('Subagent Task Completed: Inspect the emulator release'),
+        findsNothing,
+      );
+      final latest = find.byKey(const ValueKey('jump-to-latest'));
+      if (latest.evaluate().isNotEmpty) {
+        await tester.tap(latest);
+        await _settle(tester);
+      }
+      expect(
+        find.textContaining(
+          'Parent stream continues after child completion.',
+          findRichText: true,
+        ),
+        findsOneWidget,
+      );
+      expect(chat.runtime.runtimeId, runtime);
+      expect(chat.composer.observation.text, draft);
+      expect(tester.widget<TextField>(composer).controller!.text, draft);
+
+      rows.add({
+        'id': 5,
+        'role': 'assistant',
+        'content': 'The parent has finished.',
+      });
+      emitChatEvent(harness.controller, chat, 'message.complete', {
+        'text': 'The parent has finished.',
+      });
+      await _settle(tester);
+      expect(chat.runtime.executionActive, isFalse);
+      expect(chat.currentSubagents, isEmpty);
+      expect(dockAgents, findsNothing);
+      expect(chat.subagents.single.isTerminal, isTrue);
+      expect(chat.composer.observation.text, draft);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('subagents goals and background work keep their chat owner', (
     tester,

@@ -44,6 +44,9 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   final answerParents = <String, String>{};
   final answerRuntimes = <String, String>{};
   final resumedRuntimes = <(String, String), String>{};
+  final scopedHistories = <(String, String), List<Map<String, dynamic>>>{};
+  String subagentStatus = 'running';
+  String subagentOutput = 'Emulator child is checking the release.';
   String goalStatus = 'active';
   String loopStatus = 'active';
   bool runningProcess = true;
@@ -65,25 +68,26 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
 
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) =>
-      answerActionsEnabled
-      ? _answerHistory(profile, id)
-      : [
-          for (var i = 1; i <= messageCount; i++)
-            {
-              'id': i,
-              'role': i.isEven ? 'assistant' : 'user',
-              'content': i == 618
-                  ? 'Roadmap needle: the emulator found this saved answer.'
-                  : i == 616
-                  ? 'Saved /tmp/roadmap-notes.md for the emulator review.'
-                  : '$profile message $i',
-              'display_content': i == 618
-                  ? 'Roadmap needle: the emulator found this saved answer.'
-                  : i == 616
-                  ? 'Saved /tmp/roadmap-notes.md for the emulator review.'
-                  : '$profile message $i',
-            },
-        ];
+      scopedHistories[(profile, id)] ??
+      (answerActionsEnabled
+          ? _answerHistory(profile, id)
+          : [
+              for (var i = 1; i <= messageCount; i++)
+                {
+                  'id': i,
+                  'role': i.isEven ? 'assistant' : 'user',
+                  'content': i == 618
+                      ? 'Roadmap needle: the emulator found this saved answer.'
+                      : i == 616
+                      ? 'Saved /tmp/roadmap-notes.md for the emulator review.'
+                      : '$profile message $i',
+                  'display_content': i == 618
+                      ? 'Roadmap needle: the emulator found this saved answer.'
+                      : i == 616
+                      ? 'Saved /tmp/roadmap-notes.md for the emulator review.'
+                      : '$profile message $i',
+                },
+            ]);
 
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
@@ -358,14 +362,14 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               Map<String, dynamic>.from(params),
             ));
             return {
-              'subagents': const [
+              'subagents': [
                 {
                   'subagent_id': 'roadmap-child',
                   'goal': 'Inspect the emulator release',
-                  'status': 'running',
+                  'status': subagentStatus,
                   'model': 'gpt-5.6-sol',
                   'last_tool': 'read_file',
-                  'accepting_steer': true,
+                  'accepting_steer': subagentStatus == 'running',
                 },
               ],
               'delegations': const [],
@@ -378,7 +382,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             return {
               'subagent_id': 'roadmap-child',
               'available': true,
-              'text': 'Emulator child is checking the release.',
+              'text': subagentOutput,
               'truncated': false,
             };
           case 'subagent.steer':

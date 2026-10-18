@@ -63,6 +63,14 @@ class CompletedOnboardingOwnership(unittest.TestCase):
 
 
 class AndroidJourneyVerdict(unittest.TestCase):
+    def test_parent_stream_completion_is_a_required_native_journey(self):
+        name = 'completed child stays in current work while the parent streams'
+        self.assertIn(name, ROADMAP)
+        result = verdict(events(ROADMAP, omitted=name), 0, ROADMAP)
+        self.assertFalse(result['passed'])
+        self.assertEqual(result['missing'], [name])
+        self.assertTrue(verdict(events(ROADMAP), 0, ROADMAP)['passed'])
+
     def test_all_required_journeys_must_complete(self):
         self.assertTrue(verdict(events(), 0, CRITICAL)['passed'])
 
