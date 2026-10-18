@@ -27,6 +27,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/widgets/recent_conversations/conversation_gestures.dart';
+import 'package:wing/core/widgets/recent_conversations/conversation_preview.dart';
 import 'package:wing/core/widgets/recent_conversations/recent_conversation_switcher.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
 
@@ -151,7 +152,11 @@ class _NativeEventChats extends ProfileBrowserFixture {
             : null;
         if (id == null ||
             !sessions(scope.profileName).any((row) => row['id'] == id) ||
-            body.length != 2 ||
+            body.length != 5 ||
+            body['request_id'] is! String ||
+            (body['request_id'] as String).isEmpty ||
+            body['expected_revision'] != 0 ||
+            body['expected_generation'] != 0 ||
             body['profile'] != scope.profileName ||
             body['unread'] != false ||
             !canDispatch()) {
@@ -719,7 +724,7 @@ Future<void> _incomingJourney(
   final groupY = _gestureRow(tester, [
     .24,
     .76,
-  ], transcript: find.byKey(const ValueKey('group-transcript')));
+  ], transcript: find.byKey(ValueKey(('discussion', group.id))));
   await _native(
     tester,
     '$prefix-group-stack',
@@ -849,6 +854,7 @@ Future<void> _revealRecent(
 /// Only gateway responses and incoming journal projections are synthetic.
 /// Android dispatches every tested touch through the installed production chat.
 class _NativeChats extends ProfileBrowserFixture {
+  final newReplies = <(String, String), List<Map<String, dynamic>>>{};
   final patched = <ProfileSessionKey>[];
   ProfileSessionKey? failedResume;
   int rejectedResumes = 0;
@@ -895,6 +901,7 @@ class _NativeChats extends ProfileBrowserFixture {
           '## Your conversation\n\nMove between tasks when you need to. '
           'Your draft and reading position stay with this chat.',
     },
+    ...?newReplies[(profile, id)],
   ];
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
@@ -909,7 +916,11 @@ class _NativeChats extends ProfileBrowserFixture {
             : null;
         if (id == null ||
             !sessions(scope.profileName).any((row) => row['id'] == id) ||
-            body.length != 2 ||
+            body.length != 5 ||
+            body['request_id'] is! String ||
+            (body['request_id'] as String).isEmpty ||
+            body['expected_revision'] != 0 ||
+            body['expected_generation'] != 0 ||
             body['profile'] != scope.profileName ||
             body['unread'] != false ||
             !canDispatch()) {
@@ -1285,7 +1296,14 @@ void main() {
                 ]),
               ],
             );
-            expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+            expect(
+              find.text(
+                accessible
+                    ? 'Choose a conversation'
+                    : 'Swipe to browse · tap to open',
+              ),
+              findsOneWidget,
+            );
             expect(controller.visible, isFalse);
           }
 
@@ -1298,14 +1316,52 @@ void main() {
                 '${ring[i].title}, conversation ${i + 1} of ${ring.length}':
                     ring[i].key.chat!,
             };
-            String? focusedChoice() => tester
-                .widgetList<Semantics>(find.byType(Semantics))
-                .map((widget) => widget.properties.label)
-                .where(visibleChoices.containsKey)
-                .firstOrNull;
+            // The footer announces a settled choice. Observe actual transformed
+            // card contents during motion, independently of the motion/index state.
+            String? focusedChoice() {
+              String? nearest;
+              var distance = double.infinity;
+              for (final element
+                  in find
+                      .byWidgetPredicate(
+                        (widget) =>
+                            widget is ConversationCardPlaceholder ||
+                            widget is RawImage,
+                      )
+                      .evaluate()) {
+                final ProfileSessionKey? key = switch (element.widget) {
+                  ConversationCardPlaceholder(:final card) =>
+                    card.entry.key.chat,
+                  RawImage(
+                    key: ValueKey(
+                      value: (RecentConversationKey key, 'snapshot'),
+                    ),
+                  ) =>
+                    key.chat,
+                  _ => null,
+                };
+                if (key == null) continue;
+                final box = element.findRenderObject();
+                if (box is! RenderBox || !box.hasSize || !box.attached) {
+                  continue;
+                }
+                final center = box.localToGlobal(box.size.center(Offset.zero));
+                final offset = (center.dx - mid.dx).abs();
+                if (!rect.contains(center) || offset >= distance) continue;
+                final label = visibleChoices.entries
+                    .where((entry) => entry.value == key)
+                    .firstOrNull
+                    ?.key;
+                if (label == null) continue;
+                distance = offset;
+                nearest = label;
+              }
+              return nearest;
+            }
+
             final afterRelease = <String>[];
             var released = false, recording = true;
-            void observeFocus(Duration _) {
+            void observeFocus(Duration frame) {
               if (!recording) return;
               final label = focusedChoice();
               if (released &&
@@ -1340,8 +1396,8 @@ void main() {
                 '$prefix-momentum-fling',
                 actions: [
                   _touch(tester, 'one', [
-                    (Offset(w * .8, mid.dy), Offset(w * .2, mid.dy)),
-                  ], milliseconds: 140),
+                    (Offset(w * .92, mid.dy), Offset(w * .08, mid.dy)),
+                  ], milliseconds: 100),
                 ],
               );
             } finally {
@@ -1504,8 +1560,19 @@ void main() {
           );
           expect(host.resumes, beforeLaps);
           final readsBeforeStackReturn = host.patched.length;
+          host.newReplies[(
+            first.key.workspace.profileName,
+            first.key.sessionId,
+          )] = [
+            {
+              'id': 1000,
+              'role': 'assistant',
+              'timestamp': host.now + 1,
+              'content': 'New answer received while Recents is open.',
+            },
+          ];
           first.reading.recordNotificationResult(
-            const NotificationFocus('answer', '3'),
+            const NotificationFocus('answer', '1000'),
           );
           await controller.refreshHistory(first);
           await tester.pumpAndSettle();
@@ -1537,7 +1604,7 @@ void main() {
           );
           expect(host.patched, hasLength(readsBeforeStackReturn));
           await _readNewest(tester, '$prefix-read-restored-answer');
-          expect(readReceipts, ['answer:3']);
+          expect(readReceipts, ['answer:1000']);
           expect(host.patched.skip(readsBeforeStackReturn), [first.key]);
           expect(first.markReadFailed, isFalse);
           // The neighbor was already opened above and needs no resume RPC.
@@ -1588,12 +1655,26 @@ void main() {
           }
           await _native(
             tester,
-            '$prefix-edit-suppression',
+            '$prefix-editing-arrival',
             actions: [
               _tap(tester, find.byKey(const Key('profile-message-composer'))),
             ],
             capture: false,
           );
+          for (
+            var tick = 0;
+            tick < 150 && tester.view.viewInsets.bottom == 0;
+            tick++
+          ) {
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+          final editingField = tester.widget<TextField>(
+            find.byKey(const Key('profile-message-composer')),
+          );
+          expect(editingField.focusNode!.hasFocus, isTrue);
+          expect(tester.view.viewInsets.bottom, greaterThan(0));
+          final editingValue = editingField.controller!.value;
+          final editingOwner = controller.current!.chat!.key;
           activity.value = ChatNoticeActivity(
             key: ring[(origin + 1) % ring.length].key,
             kind: ConversationActivityKind.reply,
@@ -1603,8 +1684,13 @@ void main() {
           await tester.pump(const Duration(milliseconds: 350));
           expect(
             find.byKey(const Key('recent-conversation-nudge')),
-            findsNothing,
+            findsOneWidget,
+            reason:
+                'Fresh activity remains visible without interrupting editing',
           );
+          expect(editingField.focusNode!.hasFocus, isTrue);
+          expect(editingField.controller!.value, editingValue);
+          expect(controller.current!.chat!.key, editingOwner);
           await _native(
             tester,
             '$prefix-end-editing',
