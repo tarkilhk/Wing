@@ -129,13 +129,12 @@ void main() {
 
     final chat = controller.current!.chat!;
     expect(find.text('Search result'), findsOneWidget);
-    expect(find.text('Nearby messages'), findsOneWidget);
-    expect(find.text('Back to latest'), findsOneWidget);
+    expect(find.byTooltip('Back to latest'), findsOneWidget);
     expect(find.text('Saved /srv/earlier.pdf'), findsOneWidget);
     expect(chat.reading.messages, hasLength(50));
     expect(chat.reading.messages.any((row) => row['id'] == 9500), isFalse);
 
-    await tester.tap(find.text('Back to latest'));
+    await tester.tap(find.byTooltip('Back to latest'));
     await tester.pumpAndSettle();
     await tester.settleMarkdown();
     expect(find.text('Search result'), findsNothing);

@@ -273,6 +273,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         chat: chat,
       );
       addTearDown(supervision.dispose);
+      // Completed children belong to the live panel only during this answer.
+      emitChatEvent(controller, chat, 'message.start');
       emitChatEvent(controller, chat, 'subagent.start', {
         'subagent_id': 'one',
         'goal': 'Compare the available stays',
