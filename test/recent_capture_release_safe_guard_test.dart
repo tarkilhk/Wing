@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../tools/architecture/dart_sdk.dart';
+import '../tools/architecture/proof_process.dart';
 import '../tools/architecture/rules/recent_capture_release_safe.dart' as rule;
 
 const _invalid = '''
@@ -116,11 +118,12 @@ void main() {
   }
 }
 
-Future<ProcessResult> _cli(Directory root) => Process.run('dart', [
-  'run',
-  'tools/architecture/rules/recent_capture_release_safe.dart',
-  '--root',
-  root.path,
-]);
+Future<ProcessResult> _cli(Directory root) =>
+    runProofProcess('${dartSdkPath(Directory.current.path)}/bin/dart', [
+      'run',
+      'tools/architecture/rules/recent_capture_release_safe.dart',
+      '--root',
+      root.path,
+    ]);
 
 String _output(ProcessResult result) => '${result.stdout}\n${result.stderr}';
