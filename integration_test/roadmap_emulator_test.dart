@@ -170,6 +170,14 @@ void main() {
 
       await tester.tap(find.byKey(const Key('chat-intelligence-button')));
       await _settle(tester);
+      await _pumpUntil(
+        tester,
+        () => find
+            .byKey(const Key('model-search'))
+            .hitTestable()
+            .evaluate()
+            .isNotEmpty,
+      );
       await tester.enterText(find.byKey(const Key('model-search')), 'sol');
       await _settle(tester);
       await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
@@ -178,10 +186,17 @@ void main() {
       await _settle(tester);
       await tester.ensureVisible(find.byKey(const Key('reasoning-xhigh')));
       await tester.tap(find.byKey(const Key('reasoning-xhigh')));
+      await _settle(tester);
       await tester.tap(find.byTooltip('Apply model settings'));
       await _settle(tester);
       expect(find.text('5.6 Sol'), findsOneWidget);
-      expect(find.text('Extra High'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('composer-reasoning-control')),
+          matching: find.text('X'),
+        ),
+        findsOneWidget,
+      );
       expect(harness.fixture.configWrites, hasLength(2));
       await captureJourney(tester, 'chat-model-and-draft');
 
@@ -222,6 +237,7 @@ void main() {
         find.text('Roadmap needle: the emulator found this saved answer.'),
         findsOneWidget,
       );
+      await captureJourney(tester, 'search-result');
 
       await tester.tap(find.byTooltip('Chat actions'));
       await _settle(tester);
@@ -351,11 +367,10 @@ void main() {
           .text,
       draftText,
     );
-    final removeAttachment = find.descendant(
-      of: find.widgetWithText(InputChip, fileName),
-      matching: find.byTooltip('Delete'),
-    );
+    final removeAttachment = find.byTooltip('Remove $fileName');
+    await _pumpUntil(tester, () => removeAttachment.evaluate().isNotEmpty);
     await tester.ensureVisible(removeAttachment);
+    await _settle(tester);
     await tester.tap(removeAttachment);
     await _settle(tester);
     await tester.tap(find.byTooltip('Save queued message'));
@@ -415,7 +430,7 @@ void main() {
       'echo isolated-roadmap-check',
     );
     await tester.tap(
-      find.descendant(of: question, matching: find.text('Asked a question')),
+      find.descendant(of: question, matching: find.text('Asking a question')),
     );
     await _settle(tester);
     expect(
@@ -427,7 +442,15 @@ void main() {
       findsOneWidget,
     );
     await captureJourney(tester, 'approval');
-    await tester.tap(find.byTooltip('Approve once'));
+    final approveOnce = find.byWidgetPredicate(
+      (widget) => widget is IconButton && widget.tooltip == 'Approve once',
+    );
+    await tester.ensureVisible(approveOnce);
+    await _pumpUntil(
+      tester,
+      () => approveOnce.hitTestable().evaluate().isNotEmpty,
+    );
+    await tester.tap(approveOnce);
     await _settle(tester);
     expect(
       harness.fixture.approvalResponses.single,
@@ -437,10 +460,12 @@ void main() {
 
     // The approved synthetic turn has ended; the server snapshot now owns
     // the next waiting state rather than the earlier local running flag.
-    emitChatEvent(harness.controller, chat, 'session.info', {
-      'open_requests': [],
-      'running': false,
+    emitChatEvent(harness.controller, chat, 'message.complete', {
+      'text': 'The approved fixture turn completed.',
     });
+    await _pumpUntil(tester, () => chat.composer.observation.queue.isEmpty);
+    harness.fixture.requestApproval('personal', chat.runtime.runtimeId);
+    await tester.pump();
     harness.fixture.liveSessions['personal'] = [
       {
         'id': runningChat.runtime.runtimeId,
@@ -461,9 +486,15 @@ void main() {
       () => find.text('personal chat 0').evaluate().isNotEmpty,
     );
     expect(find.text('personal chat 1'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilterChip, 'Needs input'));
-    await tester.pump();
-    expect(find.text('personal chat 0'), findsNothing);
+    expect(find.byType(FilterChip), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('activity-personal-chat-1')),
+        matching: find.text('Needs your input'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('personal chat 0'), findsOneWidget);
     expect(find.text('personal chat 1'), findsOneWidget);
     await captureJourney(tester, 'activity-needs-input');
     await tester.tap(find.text('personal chat 1'));
@@ -497,11 +528,13 @@ void main() {
       const ValueKey('project-folder-/srv/wing'),
     );
     await tester.ensureVisible(discoveredFolder);
+    await _settle(tester);
     await tester.tap(discoveredFolder);
     await tester.pump();
     await tester.ensureVisible(
       find.byKey(const ValueKey('project-folder-continue')),
     );
+    await _settle(tester);
     await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
     await _settle(tester);
 
@@ -661,10 +694,12 @@ void main() {
     await tester.ensureVisible(
       find.byKey(const ValueKey(('live-work-tab', 0, false))),
     );
+    await _settle(tester);
     await tester.tap(find.byKey(const ValueKey(('live-work-tab', 0, false))));
     await _settle(tester);
     final child = find.byKey(ValueKey(('subagent', chat.key, 'roadmap-child')));
     await tester.ensureVisible(child);
+    await _settle(tester);
     await tester.tap(
       find.descendant(of: child, matching: find.byIcon(Icons.chevron_right)),
     );
@@ -691,6 +726,7 @@ void main() {
     );
     final steer = find.byTooltip('Steer');
     await tester.ensureVisible(steer);
+    await _settle(tester);
     await tester.tap(steer);
     await _settle(tester);
     expect(find.text('Steering queued.'), findsOneWidget);
@@ -703,16 +739,18 @@ void main() {
       'text': 'Check the Android route',
       'profile': 'personal',
     });
-    Navigator.of(tester.element(steer)).pop();
+    await tester.binding.handlePopRoute();
     await _settle(tester);
-    await tester.tap(find.byKey(const ValueKey(('live-work-tab', 0, false))));
+    await tester.tap(find.byKey(const ValueKey(('live-work-tab', 0, true))));
     await _settle(tester);
     final activity = find.text('Activity');
     await tester.ensureVisible(activity);
+    await _settle(tester);
     await tester.tap(activity);
     await _settle(tester);
     await tester.ensureVisible(find.text('Goal'));
-    await tester.tap(find.text('Goal'));
+    await _settle(tester);
+    await tester.tap(find.text('Goal').hitTestable());
     await _settle(tester);
     final goalSheet = find.byType(ProfileGoalPanel);
     expect(
@@ -743,6 +781,7 @@ void main() {
     expect(goalRequest.$2['session_id'], chat.runtime.runtimeId);
     expect(goalRequest.$2['profile'], 'personal');
     await tester.ensureVisible(find.text('Background work'));
+    await _settle(tester);
     await tester.tap(find.text('Background work'));
     await _settle(tester);
     expect(find.text('Report emulator health'), findsOneWidget);
@@ -753,6 +792,7 @@ void main() {
     await _settle(tester);
     expect(find.text('Loop · Paused'), findsOneWidget);
     await tester.ensureVisible(find.text('dart run roadmap_worker.dart'));
+    await _settle(tester);
     await tester.tap(find.text('dart run roadmap_worker.dart'));
     await _settle(tester);
     await tester.ensureVisible(find.byTooltip('Stop process'));
@@ -761,6 +801,7 @@ void main() {
     await _settle(tester);
     expect(find.text('dart run roadmap_worker.dart'), findsNothing);
     await tester.ensureVisible(find.text('dart test roadmap_check.dart'));
+    await _settle(tester);
     await tester.tap(find.text('dart test roadmap_check.dart'));
     await _settle(tester);
     await tester.ensureVisible(find.byTooltip('Dismiss'));
@@ -844,13 +885,13 @@ void main() {
     await tester.tap(find.byTooltip('Save changes'));
     await _settle(tester);
 
-    expect(harness.fixture.profileIdentityWrites, [
-      (
-        'profiles/personal/description',
-        {'description': 'Updated from emulator'},
-      ),
-      ('profiles/personal/soul', {'content': 'Keep this exact.\n'}),
+    final identityWrites = harness.fixture.profileIdentityWrites;
+    expect(identityWrites.map((write) => write.$1), [
+      'profiles/personal/description',
+      'profiles/personal/soul',
     ]);
+    expect(identityWrites[0].$2, {'description': 'Updated from emulator'});
+    expect(identityWrites[1].$2, {'content': 'Keep this exact.\n'});
     expect(find.text('Saved: description.'), findsOneWidget);
     expect(
       find.text('Some fields were not saved. Review them before trying again.'),
@@ -885,6 +926,7 @@ void main() {
     await captureJourney(tester, 'versions');
 
     await tester.ensureVisible(find.byTooltip('Update backend'));
+    await _settle(tester);
     await tester.tap(find.byTooltip('Update backend'));
     await _settle(tester);
     expect(find.text('Update backend on Roadmap fixture?'), findsOneWidget);
@@ -940,23 +982,33 @@ void main() {
     );
     await _settle(tester);
     expect(find.text('Roadmap fixture / personal'), findsOneWidget);
-    expect(_usageChartRow('openai/gpt-6-astra: 6,380 tokens'), findsOneWidget);
+    expect(_usageChartRow('openai/gpt-6-astra: 12,760 tokens'), findsOneWidget);
     expect(
       find.descendant(
-        of: _usageChartRow('openai/gpt-6-astra: 6,380 tokens'),
-        matching: find.text('6.4K'),
+        of: _usageChartRow('openai/gpt-6-astra: 12,760 tokens'),
+        matching: find.text('12.8K'),
       ),
       findsOneWidget,
     );
-    final costChoice = find.text('Cost').first;
-    await tester.ensureVisible(costChoice);
+    final costChoice = find.byKey(const ValueKey('usage-breakdown-cost'));
+    await tester.scrollUntilVisible(
+      costChoice,
+      -200,
+      scrollable: find
+          .descendant(
+            of: find.byType(HermesAnalyticsContent),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await _settle(tester);
     await tester.tap(costChoice);
     await _settle(tester);
-    expect(_usageChartRow('openai/gpt-6-astra: USD 1.25'), findsOneWidget);
+    expect(_usageChartRow('openai/gpt-6-astra: USD 2.50'), findsOneWidget);
     expect(
       find.descendant(
-        of: _usageChartRow('openai/gpt-6-astra: USD 1.25'),
-        matching: find.text('USD 1.25'),
+        of: _usageChartRow('openai/gpt-6-astra: USD 2.50'),
+        matching: find.text('USD 2.50'),
       ),
       findsOneWidget,
     );
@@ -980,12 +1032,15 @@ void main() {
     );
     expect(
       harness.fixture.administrationReads
-          .singleWhere(
+          .where(
             (request) =>
                 request.$1 == 'analytics/models' && request.$2['days'] == '30',
           )
-          .$2,
-      {'days': '30', 'profile': 'personal'},
+          .map((request) => request.$2),
+      unorderedEquals([
+        {'days': '30', 'profile': 'personal'},
+        {'days': '30', 'profile': 'work'},
+      ]),
     );
 
     await _navigate(tester, AppDestination.health);
@@ -1030,15 +1085,24 @@ void main() {
     await harness.launch(tester);
     harness.fixture.enableAnswerActions();
     await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
+    await _pumpUntil(
+      tester,
+      () =>
+          harness.controller.current?.chat?.runtime.opening == false &&
+          harness.controller.current!.chat!.reading.messages.length == 4,
+    );
     await _settle(tester);
     final source = harness.controller.current!.chat!;
     await tester.enterText(
       find.byKey(const Key('profile-message-composer')),
       'Keep this unrelated draft',
     );
+    tester.binding.focusManager.primaryFocus?.unfocus();
+    await _settle(tester);
 
     final edit = find.byKey(const ValueKey('edit-message-3'));
-    await tester.ensureVisible(edit);
+    await Scrollable.ensureVisible(tester.element(edit), alignment: .5);
+    await _settle(tester);
     await tester.tap(edit);
     await _settle(tester);
     expect(
@@ -1053,12 +1117,17 @@ void main() {
       find.byKey(const ValueKey('saved-message-edit-input')),
       'Corrected emulator prompt',
     );
-    final replaceAndResend = find.byTooltip('Replace message and resend');
+    final replaceAndResend = find.byWidgetPredicate(
+      (widget) =>
+          widget is IconButton &&
+          widget.tooltip == 'Replace message and resend',
+    );
     await _pumpUntil(
       tester,
       () => tester.widget<IconButton>(replaceAndResend).onPressed != null,
     );
     await tester.ensureVisible(replaceAndResend);
+    await _settle(tester);
     await tester.tap(replaceAndResend);
     await _pumpUntil(
       tester,
@@ -1081,8 +1150,25 @@ void main() {
     harness.fixture.completeAnswerAction('personal', source.runtime.runtimeId);
     await _settle(tester);
     expect(source.composer.observation.text, 'Keep this unrelated draft');
-    expect(find.text('Corrected emulator prompt'), findsOneWidget);
+    await _pumpUntil(
+      tester,
+      () => find
+          .text('Corrected emulator prompt', findRichText: true)
+          .evaluate()
+          .isNotEmpty,
+    );
+    expect(
+      find.text('Corrected emulator prompt', findRichText: true),
+      findsOneWidget,
+    );
 
+    await _pumpUntil(
+      tester,
+      () =>
+          source.reading.messages.last['role'] == 'assistant' &&
+          answerMessageText(source.reading.messages.last) ==
+              'Acknowledged Corrected emulator prompt',
+    );
     final sourceAnswerId = answerMessageId(source.reading.messages.last)!;
     final sourceActions = find.byKey(
       ValueKey('answer-actions-$sourceAnswerId'),
@@ -1093,7 +1179,11 @@ void main() {
     final submitsBeforeRegenerate = harness.fixture.answerActionRequests
         .where((request) => request.$1 == 'prompt.submit')
         .length;
-    await tester.ensureVisible(sourceActions);
+    await Scrollable.ensureVisible(
+      tester.element(sourceActions),
+      alignment: .5,
+    );
+    await _settle(tester);
     await tester.tap(
       find.descendant(
         of: sourceActions,
@@ -1141,7 +1231,11 @@ void main() {
     final regeneratedActions = find.byKey(
       ValueKey('answer-actions-$regeneratedAnswerId'),
     );
-    await tester.ensureVisible(regeneratedActions);
+    await Scrollable.ensureVisible(
+      tester.element(regeneratedActions),
+      alignment: .5,
+    );
+    await _settle(tester);
     await tester.tap(
       find.descendant(
         of: regeneratedActions,
@@ -1185,7 +1279,11 @@ void main() {
     emitChatEvent(harness.controller, source, 'message.start');
     harness.fixture.branchGate = Completer<void>();
     harness.fixture.branchEntered = Completer<void>();
-    await tester.ensureVisible(regeneratedActions);
+    await Scrollable.ensureVisible(
+      tester.element(regeneratedActions),
+      alignment: .5,
+    );
+    await _settle(tester);
     await tester.tap(
       find.descendant(
         of: regeneratedActions,
@@ -1222,6 +1320,7 @@ void main() {
       find.byKey(const Key('profile-message-composer')),
       'Continue in emulator fork',
     );
+    await _settle(tester);
     await tester.tap(find.byTooltip('Send'));
     await _pumpUntil(
       tester,
@@ -1238,6 +1337,7 @@ void main() {
     expect(forkSubmits, hasLength(1));
     expect(forkSubmits.single.$2, {
       'session_id': forked.runtime.runtimeId,
+      'queued': true,
       'text': 'Continue in emulator fork',
       'profile': 'personal',
     });
@@ -1523,7 +1623,13 @@ class _RoadmapHarness {
         }
         if (method == 'GET' &&
             const {'analytics/models', 'analytics/usage'}.contains(path)) {
-          final reader = fixture.gateway(controller.current!.scope);
+          final reader = fixture.gateway(
+            WorkspaceScope(
+              connectionId: controller.connection.id,
+              connectionIdentity: controller.connectionIdentity,
+              profileName: query['profile']!,
+            ),
+          );
           try {
             return await reader.read(path, query);
           } finally {
@@ -1671,10 +1777,14 @@ Future<void> _revealChat(WidgetTester tester, String profile, String id) async {
 }
 
 Future<void> _chooseComposerAction(WidgetTester tester, String action) async {
+  await _settle(tester);
   final gesture = await tester.startGesture(
     tester.getCenter(find.byType(ComposerActionButton)),
   );
-  await tester.pump(const Duration(milliseconds: 600));
+  await _pumpUntil(
+    tester,
+    () => find.byKey(ValueKey('composer-choice-$action')).evaluate().isNotEmpty,
+  );
   await gesture.moveTo(
     tester.getCenter(find.byKey(ValueKey('composer-choice-$action'))),
   );
@@ -1688,6 +1798,7 @@ Future<void> _pumpUntil(
   bool Function() condition, {
   Duration timeout = const Duration(seconds: 15),
 }) async {
+  await tester.pump();
   final deadline = tester.binding.clock.now().add(timeout);
   while (!condition() && tester.binding.clock.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 100));

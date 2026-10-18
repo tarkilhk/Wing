@@ -19,6 +19,12 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   Completer<void>? branchEntered;
   final gateways = <String, Set<ProfileGateway>>{};
   final configWrites = <Map<String, dynamic>>[];
+  final intelligenceConfig = {
+    'model': 'openai-codex:gpt-6-astra',
+    'reasoning': 'high',
+    'fast': 'normal',
+  };
+  int approvalSequence = 0;
   final approvalResponses = <Map<String, dynamic>>[];
   final commandDispatches = <Map<String, dynamic>>[];
   final projectCreates = <Map<String, dynamic>>[];
@@ -183,6 +189,10 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
                 'slug': 'openai-codex',
                 'name': 'OpenAI subscription',
                 'models': ['gpt-6-astra', 'gpt-5.6-sol'],
+                'capabilities': {
+                  for (final model in ['gpt-6-astra', 'gpt-5.6-sol'])
+                    model: {'reasoning': true, 'fast': true},
+                },
               },
             ],
           };
@@ -260,8 +270,19 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               'context_percent': 25,
             };
           case 'config.get':
-            return {'value': 'high'};
+            return switch (params['key']) {
+              'reasoning' => {'value': intelligenceConfig['reasoning']},
+              'fast' => {'value': intelligenceConfig['fast']},
+              _ => throw StateError(
+                'Unexpected intelligence key: ${params['key']}',
+              ),
+            };
           case 'config.set':
+            final key = params['key'] as String;
+            if (!intelligenceConfig.containsKey(key)) {
+              throw StateError('Unexpected intelligence key: $key');
+            }
+            intelligenceConfig[key] = params['value'] as String;
             configWrites.add(Map<String, dynamic>.from(params));
             return {'status': 'ok'};
           case 'commands.catalog':
@@ -641,8 +662,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
       StreamEvent(
         type: 'approval',
         sessionId: runtimeId,
-        data: const {
-          'request_id': 'roadmap-approval',
+        data: {
+          'request_id': 'roadmap-approval-${++approvalSequence}',
           'command': 'echo isolated-roadmap-check',
           'choices': ['once', 'session', 'deny'],
         },

@@ -1911,110 +1911,129 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(host.calls.length, before);
   });
 
-  testWidgets(
-    'search context keeps its header visible and expands the matched tool result',
-    (tester) async {
-      tester.view.physicalSize = const Size(320, 640);
-      tester.view.devicePixelRatio = 1;
-      tester.platformDispatcher.textScaleFactorTestValue = 2;
-      addTearDown(tester.view.reset);
-      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      final originalMessages = List<Map<String, dynamic>>.of(
-        chat.reading.messages,
-      );
-      chat.reading.recordReading(const TranscriptBookmark(messageId: 84));
-      var returned = false;
-      final nearby = [
-        for (var id = 1; id <= 9; id++)
-          id == 5
-              ? {
-                  'id': id,
-                  'role': 'tool',
-                  'tool_name': 'read_file',
-                  'content': 'Matched tool output',
-                }
-              : {
-                  'id': id,
-                  'role': 'assistant',
-                  'content': List.filled(30, 'Nearby message $id').join('\n'),
-                },
-      ];
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'search context keeps its header visible and expands the matched tool result ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = const Size(320, 640);
+          tester.view.devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          final originalMessages = List<Map<String, dynamic>>.of(
+            chat.reading.messages,
+          );
+          chat.reading.recordReading(const TranscriptBookmark(messageId: 84));
+          var returned = false;
+          final nearby = [
+            for (var id = 1; id <= 9; id++)
+              id == 5
+                  ? {
+                      'id': id,
+                      'role': 'tool',
+                      'tool_name': 'read_file',
+                      'content': 'Matched tool output',
+                    }
+                  : {
+                      'id': id,
+                      'role': 'assistant',
+                      'content': List.filled(
+                        30,
+                        'Nearby message $id',
+                      ).join('\n'),
+                    },
+          ];
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ListenableBuilder(
-              listenable: controller,
-              builder: (_, _) => ProfileTranscript(
-                presentation: TranscriptPresentation.capture(
-                  identity: chat.key,
-                  reader: chat.reading,
-                  timeline: TranscriptTimeline.project(
-                    nearby,
-                    presentationId: chat.reading.messagePresentationId,
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: profileWorkspaceTheme(wingTheme(brightness)),
+              home: Scaffold(
+                body: ListenableBuilder(
+                  listenable: controller,
+                  builder: (_, _) => ProfileTranscript(
+                    presentation: TranscriptPresentation.capture(
+                      identity: chat.key,
+                      reader: chat.reading,
+                      timeline: TranscriptTimeline.project(
+                        nearby,
+                        presentationId: chat.reading.messagePresentationId,
+                      ),
+                      needsInput: chat.runtime.needsInput,
+                      turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
+                    ),
+                    openingContent: chat.runtime.opening
+                        ? ProfileTranscriptOpening(
+                            status: controller.connectionStatus,
+                            error: chat.runtime.openingError,
+                            onRetry: controller.resumeConnection,
+                          )
+                        : null,
+                    notificationReading: chat.reading,
+                    onAnswerRead: (target) =>
+                        controller.notificationAnswerRead(chat, target),
+                    onRefreshHistory: () => controller.refreshHistory(chat),
+                    onLoadOlder:
+                        loadOlder ?? () => controller.loadOlderMessages(chat),
+                    messageBuilder: (message) => Text(message.message.text),
+                    tail: const [],
+
+                    focusedMessageId: 5,
+                    onBackToLatest: () => returned = true,
                   ),
-                  needsInput: chat.runtime.needsInput,
-                  turnAdmissionBlocked: chat.runtime.blocksTurnAdmission,
                 ),
-                openingContent: chat.runtime.opening
-                    ? ProfileTranscriptOpening(
-                        status: controller.connectionStatus,
-                        error: chat.runtime.openingError,
-                        onRetry: controller.resumeConnection,
-                      )
-                    : null,
-                notificationReading: chat.reading,
-                onAnswerRead: (target) =>
-                    controller.notificationAnswerRead(chat, target),
-                onRefreshHistory: () => controller.refreshHistory(chat),
-                onLoadOlder:
-                    loadOlder ?? () => controller.loadOlderMessages(chat),
-                messageBuilder: (message) => Text(message.message.text),
-                tail: const [],
-
-                focusedMessageId: 5,
-                onBackToLatest: () => returned = true,
               ),
             ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      tester
-          .element(
+          );
+          await tester.pumpAndSettle();
+          tester
+              .element(
+                find
+                    .ancestor(
+                      of: find.byType(ProfileTranscript),
+                      matching: find.byType(ListenableBuilder),
+                    )
+                    .first,
+              )
+              .markNeedsBuild();
+          await tester.pumpAndSettle();
+
+          expect(find.text('Search result'), findsOneWidget);
+          expect(
+            find.byTooltip('Back to latest').hitTestable(),
+            findsOneWidget,
+          );
+          expect(
             find
-                .ancestor(
-                  of: find.byType(ProfileTranscript),
-                  matching: find.byType(ListenableBuilder),
+                .byWidgetPredicate(
+                  (widget) =>
+                      widget is SourceCodeText &&
+                      widget.text == 'Matched tool output',
                 )
-                .first,
-          )
-          .markNeedsBuild();
-      await tester.pumpAndSettle();
+                .hitTestable(),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          expect(chat.reading.messages, originalMessages);
+          expect(chat.reading.readingPosition.resume?.messageId, 84);
 
-      expect(find.text('Search result'), findsOneWidget);
-      expect(find.text('Nearby messages'), findsOneWidget);
-      expect(find.text('Back to latest'), findsOneWidget);
-      expect(
-        find
-            .byWidgetPredicate(
-              (widget) =>
-                  widget is SourceCodeText &&
-                  widget.text == 'Matched tool output',
-            )
-            .hitTestable(),
-        findsOneWidget,
+          // A keyboard and composer can leave less than 84 logical pixels.
+          tester.view.physicalSize = const Size(320, 84);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(find.text('Search result').hitTestable(), findsOneWidget);
+          expect(
+            find.byTooltip('Back to latest').hitTestable(),
+            findsOneWidget,
+          );
+          await tester.tap(find.byTooltip('Back to latest'));
+          expect(returned, isTrue);
+          await tester.pumpWidget(const SizedBox.shrink());
+          expect(chat.reading.readingPosition.resume?.messageId, 84);
+        },
       );
-      expect(tester.takeException(), isNull);
-      expect(chat.reading.messages, originalMessages);
-      expect(chat.reading.readingPosition.resume?.messageId, 84);
-
-      await tester.tap(find.text('Back to latest'));
-      expect(returned, isTrue);
-      await tester.pumpWidget(const SizedBox.shrink());
-      expect(chat.reading.readingPosition.resume?.messageId, 84);
-    },
-  );
+    }
+  }
 
   testWidgets(
     'an older-page failure retains messages and only retries on request',
