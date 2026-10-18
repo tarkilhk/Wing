@@ -26,6 +26,204 @@ DRIVERS = (
 )
 
 
+class NativeVoiceAdbdOwnership(unittest.TestCase):
+    def driver(self, prior='2000', *, root_error=False, root_denied=False, restore_bad=False):
+        from scripts import test_native_voice as voice
+        driver = voice.Driver('emulator-5562', Path('/unused'), 30)
+        state = {'uid': prior}
+        calls = []
+
+        def shell(*command):
+            calls.append(command)
+            if command == ('getprop', 'ro.kernel.qemu'):
+                return '1'
+            if command == ('getprop', 'ro.build.version.sdk'):
+                return '36'
+            if command == ('id', '-u'):
+                return state['uid']
+            raise AssertionError(command)
+
+        def adb(*command):
+            calls.append(command)
+            if command == ('root',):
+                if not root_denied:
+                    state['uid'] = '0'
+                if root_error:
+                    raise RuntimeError('lost root receipt')
+            elif command == ('unroot',):
+                state['uid'] = '0' if restore_bad else '2000'
+            elif command == ('get-serialno',):
+                return driver.serial
+            elif command != ('wait-for-device',):
+                raise AssertionError(command)
+            return ''
+
+        driver.shell = shell
+        driver.adb = adb
+        return driver, state, calls
+
+    def test_only_owned_root_transition_is_restored_after_native_work(self):
+        for prior in ('0', '2000'):
+            with self.subTest(prior=prior):
+                driver, state, calls = self.driver(prior)
+                with driver.rooted_emulator():
+                    self.assertEqual(state['uid'], '0')
+                    calls.append(('native-capability-restored',))
+                self.assertEqual(state['uid'], prior)
+                self.assertTrue(driver.evidence['adbd']['restored'])
+                transitions = [c for c in calls if c in {('root',), ('unroot',)}]
+                self.assertEqual(transitions, [] if prior == '0' else [('root',), ('unroot',)])
+                if prior != '0':
+                    self.assertLess(calls.index(('native-capability-restored',)), calls.index(('unroot',)))
+
+    def test_failed_or_lost_root_receipt_still_restores_prior_authority(self):
+        for kwargs in ({'root_error': True}, {'root_denied': True}):
+            with self.subTest(kwargs=kwargs):
+                driver, state, calls = self.driver(**kwargs)
+                with self.assertRaises(RuntimeError):
+                    with driver.rooted_emulator():
+                        self.fail('Failed root admitted native work')
+                self.assertEqual(state['uid'], '2000')
+                self.assertIn(('unroot',), calls)
+                self.assertTrue(driver.evidence['adbd']['restored'])
+
+    def test_native_failure_still_unroots(self):
+        driver, state, _ = self.driver()
+        with self.assertRaisesRegex(RuntimeError, 'native failure'):
+            with driver.rooted_emulator():
+                raise RuntimeError('native failure')
+        self.assertEqual(state['uid'], '2000')
+        self.assertTrue(driver.evidence['adbd']['restored'])
+
+    def test_failed_adbd_restore_cannot_report_success(self):
+        driver, _, _ = self.driver(restore_bad=True)
+        with self.assertRaisesRegex(RuntimeError, 'authority was not restored'):
+            with driver.rooted_emulator():
+                pass
+        self.assertFalse(driver.evidence['adbd']['restored'])
+        self.assertIn('cleanup_error', driver.evidence['adbd'])
+
+    def test_physical_identity_is_rejected_before_adb_root(self):
+        driver, _, calls = self.driver()
+        driver.serial = 'physical-device'
+        with self.assertRaisesRegex(RuntimeError, 'disposable emulator'):
+            with driver.rooted_emulator():
+                self.fail('Physical device admitted')
+        self.assertNotIn(('root',), calls)
+
+
+class NativeVoiceRecognitionIsolation(unittest.TestCase):
+    def driver(self, *, uid='0', baseline='original/Recognizer\n',
+               failure=None, restore_mismatch=False):
+        from scripts import test_native_voice as voice
+        driver = voice.Driver('emulator-5562', Path('/unused'), 30)
+        state = {'registered': False, 'enabled': False, 'identifier': None}
+        calls = []
+
+        def shell(*command):
+            calls.append(command)
+            if command == ('getprop', 'ro.kernel.qemu'):
+                return '1\n'
+            if command == ('id', '-u'):
+                return uid + '\n'
+            if command == ('getprop', 'ro.build.version.sdk'):
+                return '36\n'
+            if command[:3] == ('cmd', 'overlay', 'lookup'):
+                if state['enabled']:
+                    return '\n' if failure != 'unapplied' else baseline
+                return 'different/Recognizer\n' if restore_mismatch and state['registered'] else baseline
+            if command[:3] == ('cmd', 'overlay', 'list'):
+                return (('[x] ' if state['enabled'] else '[ ] ') + state['identifier'] + '\n'
+                        if state['registered'] else '')
+            if command[:3] == ('cmd', 'overlay', 'fabricate'):
+                state['registered'] = True
+                state['identifier'] = 'com.android.shell:' + command[6]
+                if failure == 'fabricate-receipt':
+                    raise RuntimeError('lost fabricate receipt')
+            if command[:3] == ('cmd', 'overlay', 'enable'):
+                state['enabled'] = True
+                if failure == 'enable-receipt':
+                    raise RuntimeError('lost enable receipt')
+            if command[:3] == ('cmd', 'overlay', 'disable'):
+                self.assertEqual(command[-1], state['identifier'])
+                state['enabled'] = False
+            return ''
+
+        driver.shell = shell
+        return driver, state, calls
+
+    def test_owned_overlay_is_disabled_and_exact_baseline_restored(self):
+        for baseline in ('original/Recognizer\n', '\n'):
+            with self.subTest(baseline=baseline):
+                driver, state, calls = self.driver(baseline=baseline)
+                with driver.unavailable_recognition():
+                    self.assertTrue(state['enabled'])
+                self.assertFalse(state['enabled'])
+                self.assertTrue(driver.evidence['recognition_isolation']['restored'])
+                self.assertEqual(driver.evidence['recognition_isolation']['baseline_resource'], baseline)
+                self.assertEqual(len([c for c in calls if c[:3] == ('cmd', 'overlay', 'disable')]), 1)
+                self.assertIn('AVD storage deletion',
+                              driver.evidence['recognition_isolation']['registration_cleanup'])
+
+    def test_test_failure_still_restores_its_overlay(self):
+        driver, state, _ = self.driver()
+        with self.assertRaisesRegex(RuntimeError, 'native assertion failed'):
+            with driver.unavailable_recognition():
+                raise RuntimeError('native assertion failed')
+        self.assertFalse(state['enabled'])
+        self.assertTrue(driver.evidence['recognition_isolation']['restored'])
+
+    def test_process_cleanup_failure_still_restores_android_configuration(self):
+        driver, state, _ = self.driver()
+        with patch.object(driver, 'stop_process', side_effect=RuntimeError('process stop failed')):
+            with self.assertRaisesRegex(RuntimeError, 'process stop failed'):
+                with driver.unavailable_recognition():
+                    pass
+        self.assertFalse(state['enabled'])
+        self.assertTrue(driver.evidence['recognition_isolation']['restored'])
+
+    def test_lost_mutation_receipts_still_cleanup_exact_owned_registration(self):
+        for failure in ('fabricate-receipt', 'enable-receipt', 'unapplied'):
+            with self.subTest(failure=failure):
+                driver, state, calls = self.driver(failure=failure)
+                with self.assertRaises(RuntimeError):
+                    with driver.unavailable_recognition():
+                        self.fail('Invalid isolation admitted native execution')
+                self.assertFalse(state['enabled'])
+                self.assertTrue(driver.evidence['recognition_isolation']['restored'])
+                self.assertEqual(len([c for c in calls if c[:3] == ('cmd', 'overlay', 'disable')]), 1)
+
+    def test_restoration_mismatch_is_failure_with_cleanup_evidence(self):
+        driver, state, _ = self.driver(restore_mismatch=True)
+        with self.assertRaisesRegex(RuntimeError, 'was not restored'):
+            with driver.unavailable_recognition():
+                pass
+        self.assertFalse(state['enabled'])
+        self.assertFalse(driver.evidence['recognition_isolation']['restored'])
+        self.assertIn('cleanup_error', driver.evidence['recognition_isolation'])
+
+    def test_nonroot_and_physical_devices_cannot_mutate_overlay(self):
+        for uid, serial in (('2000', 'emulator-5562'), ('0', 'physical-device')):
+            with self.subTest(uid=uid, serial=serial):
+                driver, _, calls = self.driver(uid=uid)
+                driver.serial = serial
+                with self.assertRaisesRegex(RuntimeError, 'rooted disposable emulator'):
+                    with driver.unavailable_recognition():
+                        self.fail('Invalid device admitted native execution')
+                self.assertFalse(any(c[:2] == ('cmd', 'overlay') for c in calls))
+
+    def test_native_observation_is_required_and_must_match_once(self):
+        driver, _, _ = self.driver()
+        for transcript in ('', 'VOICE_UNAVAILABLE_LOCAL_INPUT true',
+                           'VOICE_UNAVAILABLE_LOCAL_INPUT false\nVOICE_UNAVAILABLE_LOCAL_INPUT false'):
+            with self.subTest(transcript=transcript), self.assertRaises(RuntimeError):
+                driver.verify_recognition_observation(transcript, 'VOICE_UNAVAILABLE_LOCAL_INPUT', False)
+        driver.verify_recognition_observation(
+            'VOICE_UNAVAILABLE_LOCAL_INPUT false', 'VOICE_UNAVAILABLE_LOCAL_INPUT', False)
+        driver.verify_recognition_observation(
+            'VOICE_RESTORED_LOCAL_INPUT true', 'VOICE_RESTORED_LOCAL_INPUT', True)
+
+
 class NativeMonitoringForwardOwnership(unittest.TestCase):
     def test_failed_attempt_removes_its_allocated_forward_once(self):
         from tools.qa import check_background_monitoring as monitoring
