@@ -92,6 +92,14 @@ void main() {
     }
   }
 
+  Future<void> tapReady(WidgetTester tester, Finder control) async {
+    // The keyboard reduces the queue viewport; reveal the actual row action.
+    await tester.ensureVisible(control);
+    await frames(tester);
+    expect(control.hitTestable(), findsOneWidget);
+    await tester.tap(control);
+  }
+
   Future<void> capture(WidgetTester tester, String name) async {
     if (!convertedSurface) {
       await binding.convertFlutterSurfaceToImage();
@@ -149,6 +157,8 @@ void main() {
   Future<void> edit(WidgetTester tester, String original) async {
     final row = find.text(original);
     await tester.ensureVisible(row);
+    await frames(tester);
+    expect(row.hitTestable(), findsOneWidget);
     await tester.longPress(row);
     await frames(tester);
     expect(chat.composer.observation.displayedText, original);
@@ -290,7 +300,7 @@ void main() {
   ) async {
     await launch(tester);
     await edit(tester, 'Review the layout');
-    await tester.tap(find.byTooltip('Delete queued message'));
+    await tapReady(tester, find.byTooltip('Delete queued message'));
     await frames(tester);
     await capture(tester, 'queue-03-delete-confirmation');
     await tester.tap(
@@ -302,7 +312,7 @@ void main() {
     await frames(tester);
     expect(chat.composer.observation.queue, hasLength(2));
     expect(chat.composer.observation.displayedText, 'Review the layout');
-    await tester.tap(find.byTooltip('Delete queued message'));
+    await tapReady(tester, find.byTooltip('Delete queued message'));
     await frames(tester);
     await tester.tap(
       find.descendant(
@@ -336,11 +346,13 @@ void main() {
       await tester.tap(find.byTooltip('Steer queued message'));
       await frames(tester);
       expect(chat.composer.observation.saving, isTrue);
+      await tester.tap(find.byTooltip('Steer queued message'));
+      await frames(tester);
+      expect(fixture.steers, hasLength(1));
+      expect(fixture.submissions, isEmpty);
       expect(
-        tester
-            .widget<IconButton>(find.byTooltip('Steer queued message'))
-            .onPressed,
-        isNull,
+        chat.composer.observation.displayedText,
+        'Focus on spacing now',
       );
       expect(tester.widget<TextField>(composer).enabled, isFalse);
       expect(fixture.steers, hasLength(1));
@@ -355,7 +367,8 @@ void main() {
             sessionId: chat.key.sessionId,
           );
       expect(pending!.queuePaused, isTrue);
-      expect(pending.queuedPrompts.first.text, 'Review the layout');
+      expect(pending.queuedPrompts.first.text, 'Focus on spacing now');
+      expect(pending.queuedPrompts.first.submissionUncertain, isTrue);
       fixture.steerReply!.complete({'status': 'queued'});
       await frames(tester);
       expect(
@@ -399,7 +412,11 @@ void main() {
       StateError('Device test connection lost'),
     );
     await frames(tester);
-    expect(chat.composer.observation.queue.first.text, 'Review the layout');
+    expect(
+      chat.composer.observation.queue.first.text,
+      'Keep this edited instruction',
+    );
+    expect(chat.composer.observation.queue.first.submissionUncertain, isTrue);
     expect(
       chat.composer.observation.displayedText,
       'Keep this edited instruction',
@@ -429,11 +446,13 @@ void main() {
         chat.composer.observation.displayedText,
         'Send only this edited version',
       );
+      await tester.tap(find.byTooltip('Steer queued message'));
+      await frames(tester);
+      expect(fixture.steers, isEmpty);
+      expect(fixture.submissions, isEmpty);
       expect(
-        tester
-            .widget<IconButton>(find.byTooltip('Steer queued message'))
-            .onPressed,
-        isNull,
+        chat.composer.observation.displayedText,
+        'Send only this edited version',
       );
       await tester.tap(find.byTooltip('Save queued message'));
       await frames(tester);
@@ -469,6 +488,8 @@ void main() {
       await launch(tester, scale: 2, light: true);
       final row = find.text('Review this file · queued-review.txt');
       await tester.ensureVisible(row);
+      await frames(tester);
+      expect(row.hitTestable(), findsOneWidget);
       await tester.longPress(row);
       await frames(tester);
       await tester.enterText(composer, 'Check the attached notes');

@@ -197,7 +197,7 @@ class Catalog(unittest.TestCase):
             self.assertEqual(order, [('dumpsys', 'deviceidle', 'whitelist', '+' + nightly.QA),
                                      ('launch', nightly.QA)])
 
-    def test_clipboard_apk_is_prepared_before_emulator_boot(self):
+    def test_keyboard_and_clipboard_apks_are_prepared_before_emulator_boot(self):
         order = []
         @contextlib.contextmanager
         def emulator():
@@ -207,16 +207,18 @@ class Catalog(unittest.TestCase):
         def family(runner, *args):
             order.append('test')
             runner.steps.append({'name': 'clipboard', 'passed': True})
-        with tempfile.TemporaryDirectory() as directory, \
-             patch.object(sys, 'argv', ['nightly', 'clipboard', '--output', directory]), \
-             patch.object(nightly.android, 'owned_emulator', side_effect=emulator), \
-             patch.object(nightly.android, 'require_emulator'), \
-             patch.object(nightly, 'fingerprint', return_value='stable'), \
-             patch.object(nightly.Runner, 'build', side_effect=lambda *a, **kw: order.append('build')), \
-             patch.object(nightly.Runner, 'family', family), \
-             contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(nightly.main(), 0)
-            self.assertEqual(order, ['build', 'boot', 'test', 'retire'])
+        for family_name in ('clipboard', 'queue-editing'):
+            order.clear()
+            with tempfile.TemporaryDirectory() as directory, \
+                 patch.object(sys, 'argv', ['nightly', family_name, '--output', directory]), \
+                 patch.object(nightly.android, 'owned_emulator', side_effect=emulator), \
+                 patch.object(nightly.android, 'require_emulator'), \
+                 patch.object(nightly, 'fingerprint', return_value='stable'), \
+                 patch.object(nightly.Runner, 'build', side_effect=lambda *a, **kw: order.append('build')), \
+                 patch.object(nightly.Runner, 'family', family), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(nightly.main(), 0)
+                self.assertEqual(order, ['build', 'boot', 'test', 'retire'])
 
     def test_reviewed_native_boundaries_are_all_enrolled(self):
         self.assertTrue({

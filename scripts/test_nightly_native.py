@@ -286,13 +286,16 @@ class Runner:
         elif family == 'clipboard':
             self.install('integration_test/clipboard_device_test.dart', defines=CLIPBOARD_DEFINES)
             self.clipboard()
+        elif family == 'queue-editing':
+            target = 'queued_message_edit_test.dart'
+            self.install('integration_test/' + target)
+            self.flutter(target, DIRECT_SUITES[target])
         else:
             # Drivers using --no-uninstall require a dev package on the fresh AVD.
             self.install('integration_test/file_transfer_native_test.dart')
             direct = {'platform-plugins': 'dependency_plugins_native_test.dart',
                       'scheduled-tasks': 'scheduled_tasks_native_test.dart',
-                      'administration': 'administration_native_test.dart',
-                      'queue-editing': 'queued_message_edit_test.dart'}
+                      'administration': 'administration_native_test.dart'}
             if family in direct:
                 target = direct[family]
                 self.flutter(target, DIRECT_SUITES[target])
@@ -464,6 +467,8 @@ def main():
             if args.family == 'clipboard':
                 # Build before boot: System UI must own focus for the real clipboard grant.
                 runner.build('integration_test/clipboard_device_test.dart', defines=CLIPBOARD_DEFINES)
+            elif args.family == 'queue-editing':
+                runner.build('integration_test/queued_message_edit_test.dart')
             with android.owned_emulator() as device:
                 runner.device = device
                 android.require_emulator(device)
