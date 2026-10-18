@@ -50,25 +50,36 @@ def main():
                    and 'channel=wing_attention_notifications' in block.splitlines()[0]]
         assert len(records) == 1, f'Expected one attention notification, got {len(records)}'
 
-    post('preview', {'enabled': True})
-    for count in [3, 2, 1]:
-        post('question', {'count': count})
-        expected = f'{count} question' + ('s' if count != 1 else '')
-        for expanded in (False, True):
-            content = [expected]
-            if expanded:
-                content += ['Which sample output should I prepare?', 'Summary', 'Checklist']
-            native.shown_notification('Website refresh', expanded=expanded, required=content)
-            assert_single_attention_notice()
-        print(f'PASS: actual collapsed and expanded card show {expected}', flush=True)
+    # Keep the loopback fixture available while Android owns the shade. The
+    # independent profile's real work lease prevents the QA process being cached.
+    try:
+        post('work', {})
+        native.wait_for_monitoring_notification()
+        post('preview', {'enabled': True})
+        for count in [3, 2, 1]:
+            post('question', {'count': count})
+            expected = f'{count} question' + ('s' if count != 1 else '')
+            for expanded in (False, True):
+                content = [expected]
+                if expanded:
+                    content += ['Which sample output should I prepare?', 'Summary', 'Checklist']
+                native.shown_notification('Website refresh', expanded=expanded, required=content)
+                assert_single_attention_notice()
+            print(f'PASS: actual collapsed and expanded card show {expected}', flush=True)
 
-    post('preview', {'enabled': False})
-    for expanded in (False, True):
-        native.shown_notification('Website refresh', expanded=expanded,
-                                  required=['1 question'],
-                                  forbidden=['Which sample', 'Summary', 'Checklist'])
-        assert_single_attention_notice()
-    print('PASS: actual private cards retain the count without exposing question content')
+        post('preview', {'enabled': False})
+        for expanded in (False, True):
+            native.shown_notification('Website refresh', expanded=expanded,
+                                      required=['1 question'],
+                                      forbidden=['Which sample', 'Summary', 'Checklist'])
+            assert_single_attention_notice()
+        print('PASS: actual private cards retain the count without exposing question content')
+    finally:
+        # Stop the final background lease only while the fixture is foreground;
+        # otherwise Android may freeze it before the HTTP reply is delivered.
+        native.adb('shell', 'am', 'start', '-W', '-n',
+                   native.PACKAGE + '/com.tarkilhk.wing.MainActivity')
+        post('stop', {})
 
 
 if __name__ == '__main__':

@@ -239,6 +239,7 @@ class Runner:
                 self.driver('tools/qa/check_notification_revamp.py', '--serial', self.device,
                             '--output', self.output / 'actions')
             elif family == 'notification-counts':
+                self.shell('dumpsys', 'deviceidle', 'whitelist', '+' + QA)
                 self.launch(QA)
                 with self.forward('tcp:18766') as port:
                     self.wait_fixture(port)

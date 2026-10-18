@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from scripts import test_nightly_native as nightly
+from scripts import test_native_notification_counts as counts
 
 
 def events(*, skipped=False, failed=False, omitted=False):
@@ -32,6 +33,21 @@ class NativeExecution(unittest.TestCase):
 
     def command(self, text, code=0):
         return [sys.executable, '-c', f'print({text!r}); raise SystemExit({code})']
+
+    def test_counts_retires_its_work_lease_when_a_native_assertion_fails(self):
+        requests = []
+        def post(request, **kwargs):
+            requests.append(request.full_url.rsplit('/', 1)[-1])
+            return io.BytesIO(b'{}')
+        with patch.object(sys, 'argv', ['counts', '--serial', 'emulator-5562']), \
+             patch.object(counts.native, 'SERIAL', 'emulator-5562'), \
+             patch.object(counts.urllib.request, 'urlopen', side_effect=post), \
+             patch.object(counts.native, 'adb', side_effect=lambda *a: requests.append('foreground')), \
+             patch.object(counts.native, 'wait_for_monitoring_notification'), \
+             patch.object(counts.native, 'shown_notification', side_effect=AssertionError('wrong card')):
+            with self.assertRaisesRegex(AssertionError, 'wrong card'):
+                counts.main()
+        self.assertEqual(requests, ['work', 'preview', 'question', 'foreground', 'stop'])
 
     def test_completed_exact_case_and_registered_wrapper_pass(self):
         for expected in (frozenset({'owning outcome'}), 'registered'):

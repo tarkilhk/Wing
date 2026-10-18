@@ -346,16 +346,38 @@ Future<void> main() async {
           event(chat, 'approval', approval);
         case '/question':
           final count = (data['count'] as num?)?.toInt() ?? 3;
+          final questions = [
+            for (var index = 0; index < count; index++)
+              {
+                'qid': 'q$index',
+                'question': 'Which sample output should I prepare?',
+                'choices': ['Summary', 'Checklist'],
+              },
+          ];
+          final request = {
+            'id': 'qa-question-count',
+            'method': 'clarify',
+            'params': {
+              'session_id': chat.runtime.runtimeId,
+              'questions': questions,
+            },
+          };
+          // Native shade navigation can reconnect the controller. Its stock
+          // snapshots must retain the same pending request as the live event.
+          host.approvalOpenRequests = [request];
+          host.notificationActiveSessions = [
+            {'id': chat.runtime.runtimeId, 'session_key': chat.key.sessionId},
+          ];
+          host.notificationReplay = {
+            'open_requests': [request],
+            'events': [],
+            'latest_seq': 0,
+            'truncated': false,
+          };
+          host.historyMessages = [];
           event(chat, 'clarify', {
-            'request_id': 'qa-question-count',
-            'questions': [
-              for (var index = 0; index < count; index++)
-                {
-                  'qid': 'q$index',
-                  'question': 'Which sample output should I prepare?',
-                  'choices': ['Summary', 'Checklist'],
-                },
-            ],
+            'request_id': request['id'],
+            'questions': questions,
           });
         case '/reply':
           if (!chat.runtime.blocksTurnAdmission) {
@@ -391,6 +413,7 @@ Future<void> main() async {
           host.approvalFails = data['enabled'] == true;
         case '/remote':
           host.pendingApprovals!.clear();
+          host.approvalOpenRequests.clear();
           host.notificationActiveSessions = [
             {'id': chat.runtime.runtimeId, 'session_key': chat.key.sessionId},
           ];
