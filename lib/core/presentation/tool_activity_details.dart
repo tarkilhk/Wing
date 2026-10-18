@@ -4,6 +4,7 @@ import 'skill_document.dart';
 import 'source_language.dart';
 
 import '../models/chat_output.dart';
+import '../models/hermes_question.dart';
 import '../services/web_preview.dart' show externalWebLink;
 
 part 'tool_activities/files.dart';
@@ -115,6 +116,31 @@ final class ToolActivityDetails {
   final ToolReceiptState? receiptState;
   final String? receiptStatus, intent;
   final SkillActivityDocument? skill;
+
+  /// Gateway decisions borrow the existing question/command detail family.
+  /// These observations establish permission/input outcomes, never execution.
+  factory ToolActivityDetails.question(HermesQuestion question) {
+    final p = _ToolProjection(question.kind.name, null, null);
+    if (question.description.isNotEmpty) {
+      p.addRequest(
+        'Question',
+        question.description,
+        role: ToolDetailRole.question,
+      );
+    }
+    if (question.command.isNotEmpty) {
+      p.addRequest(
+        'Command',
+        question.command,
+        format: ToolDetailFormat.source,
+        role: ToolDetailRole.command,
+        language: 'bash',
+        copyable: true,
+      );
+    }
+    if (question.sender.isNotEmpty) p.metadata.add(question.sender);
+    return ToolActivityDetails._(p);
+  }
 
   ChatOutput? resourceFor(String target) {
     final image = images.any((image) => image.target == target);

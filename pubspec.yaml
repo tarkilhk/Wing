@@ -68,5 +68,6 @@ flutter:
         - asset: assets/fonts/codicons.ttf
   assets:
     - assets/fonts/CODICONS-LICENSE
+    - assets/fonts/TABLER-LICENSE
     - PRIVACY.md
     - assets/icon/icon.png

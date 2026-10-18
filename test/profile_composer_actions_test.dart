@@ -25,6 +25,7 @@ import 'support/profile_actions_fixture.dart';
 import 'package:wing/core/models/composer_action.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 
 class _ComposerActionsFixture extends ProfileActionsFixture {
   final steerRequests = <Map<String, dynamic>>[];
@@ -151,6 +152,18 @@ void main() {
             );
           await loader.load();
         }
+        await (FontLoader('WingProjectIcons')..addFont(
+              File(
+                'assets/fonts/codicons.ttf',
+              ).readAsBytes().then(ByteData.sublistView),
+            ))
+            .load();
+        await (FontLoader('WingIcons')..addFont(
+              File(
+                'assets/fonts/wing-icons.ttf',
+              ).readAsBytes().then(ByteData.sublistView),
+            ))
+            .load();
       });
     }
     await tester.pumpWidget(
@@ -612,7 +625,10 @@ void main() {
     expect(chat.composer.observation.text, isEmpty);
     final preview = find.text('follow up after this turn');
     expect(preview.hitTestable(), findsOneWidget);
-    expect(find.byIcon(Icons.keyboard_return), findsOneWidget);
+    expect(
+      find.byIcon(composerActionIcon(ComposerAction.queue)),
+      findsOneWidget,
+    );
   });
 
   testWidgets('accepted steer immediately shows its text in the transcript', (
@@ -628,7 +644,7 @@ void main() {
     expect(chat.composer.observation.text, isEmpty);
     expect(find.text('steered'), findsOneWidget);
     expect(find.text('Focus on the failing test'), findsOneWidget);
-    expect(find.byIcon(Icons.explore_outlined), findsOneWidget);
+    expect(find.byIcon(WingIcons.steer), findsOneWidget);
   });
 
   testWidgets('slash steer shows only its centered confirmation', (
@@ -689,9 +705,7 @@ void main() {
     expect(find.text('report.pdf'), findsNWidgets(2));
     expect(
       tester
-          .widget<IconButton>(
-            find.widgetWithIcon(IconButton, Icons.explore_outlined),
-          )
+          .widget<IconButton>(find.widgetWithIcon(IconButton, WingIcons.steer))
           .onPressed,
       isNull,
     );
@@ -745,9 +759,7 @@ void main() {
         await pumpFrames(tester, count: 2);
         await tester.tap(row);
         await pumpFrames(tester);
-        final steer = find
-            .widgetWithIcon(IconButton, Icons.explore_outlined)
-            .last;
+        final steer = find.widgetWithIcon(IconButton, WingIcons.steer).last;
         expect(tester.widget<IconButton>(steer).onPressed, isNull);
         expect(find.text(reason), findsNothing);
         await tester.tap(steer);

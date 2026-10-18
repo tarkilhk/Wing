@@ -1,4 +1,5 @@
 import '../widgets/selection_viewport.dart';
+import '../theme/wing_icons.dart';
 import '../widgets/profile_subagent_panel.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import '../widgets/conversation_activity.dart';
@@ -2199,6 +2200,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final liveAnswering = nearby == null && _liveAnswering(chat);
     final projection = ChatTranscriptProjection(
       savedRows: nearby ?? chat.reading.messages,
+      requestActivities: chat.reading.requestActivities,
+      readingWindow: nearby != null,
       streamingMessage: live,
       runtime: chat.runtime,
       presentationId: chat.reading.messagePresentationId,
@@ -2231,7 +2234,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         },
       );
     }
-    final activity = _conversationActivity(chat, entries: projection.activity);
+    final activity = _conversationActivity(
+      chat,
+      entries: projection.activity,
+      beforeMessagePresentationId:
+          projection.retainedActivityBeforePresentationId,
+    );
     final focus = _readingFocus(chat);
     return SkillReaderScope(
       createReader: (document) => controller.skillReader(
@@ -2492,16 +2500,18 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   ConversationActivity _conversationActivity(
     ProfileChat chat, {
     List<ChatActivityEntry>? entries,
+    Object? beforeMessagePresentationId,
   }) => ConversationActivity(
     runtime: chat.runtime,
     entries: entries ?? chat.runtime.activityEntries,
+    beforeMessagePresentationId: beforeMessagePresentationId,
     todos: chat.todos,
     inspection: _supervisionFor(chat),
     agentsBuilder: () =>
         ProfileSubagentPanel(session: _supervisionFor(chat), embedded: true),
     live: _liveAnswering(chat),
     taskCount: chat.todoRevision == null ? null : chat.todos.length,
-    agentCount: chat.subagentsAvailable ? chat.subagents.length : null,
+    agentCount: chat.subagentsAvailable ? chat.currentSubagents.length : null,
   );
 
   bool _showLiveWorkDock(ProfileChat chat) =>
@@ -3403,7 +3413,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       child: IconButton(
         tooltip: hasAttachments ? null : 'Steer queued message',
         onPressed: onPressed,
-        icon: const Icon(Icons.explore_outlined),
+        icon: const Icon(WingIcons.steer),
       ),
     );
     if (!hasAttachments) return button;

@@ -2136,11 +2136,6 @@
       "feature": "administration-health",
       "library": "lib/core/widgets/health_alerts/health_alerts_scope.dart"
     },
-    "lib/core/widgets/hermes_question_card.dart": {
-      "role": "view",
-      "feature": "conversation",
-      "library": "lib/core/widgets/hermes_question_card.dart"
-    },
     "lib/core/widgets/image_paste_menu.dart": {
       "role": "view",
       "feature": "attachments-and-sharing",

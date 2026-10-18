@@ -1,6 +1,7 @@
 import 'core/services/health_alert_incident_store.dart';
 import 'core/models/scheduled_task.dart';
 import 'core/theme/project_icon_glyphs.dart';
+import 'core/theme/wing_icons.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'core/services/connection_diagnostics.dart';
 import 'core/services/bots_connection_source.dart';
@@ -66,6 +67,7 @@ import 'core/widgets/config_backup_actions.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   ProjectIconGlyphs.registerLicense();
+  WingIcons.registerLicense();
   final dependencies = await createApplicationDependencies();
   final shareIntents = AndroidShareIntentService();
   final launchIntents = AndroidLaunchIntentService();

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
+import '../theme/wing_icons.dart';
 
 import '../models/composer_work.dart';
 
@@ -70,7 +71,7 @@ class ProfileQueuedMessages extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Icon(
-                                  Icons.keyboard_return,
+                                  WingIcons.queue,
                                   size: 16,
                                   color: theme.colorScheme.onSurfaceVariant,
                                 ),

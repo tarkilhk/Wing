@@ -1,4 +1,3 @@
-import 'hermes_question.dart';
 import 'dart:convert';
 import 'bot_exchange.dart';
 import 'bots.dart';
@@ -10,7 +9,6 @@ import 'transcript_notice.dart';
 import 'user_message_content.dart';
 
 enum TranscriptMessageKind {
-  hermesQuestion,
   hidden,
   notice,
   review,
@@ -41,7 +39,6 @@ final class TranscriptMessage {
     this.timestamp,
     this.sender,
     this.senderHandle,
-    this.question,
     this.tool,
     Iterable<UserMessageAttachment> attachments = const [],
   }) : attachments = List.unmodifiable([
@@ -53,7 +50,6 @@ final class TranscriptMessage {
            ),
        ]);
 
-  final HermesQuestion? question;
   final TranscriptMessageKind kind;
   final String role;
   final bool streaming;
@@ -111,15 +107,6 @@ final class TranscriptMessage {
     bool streaming = false,
   }) {
     final role = row['role']?.toString() ?? '';
-    if (row['_hermes_question'] case final HermesQuestion question) {
-      return TranscriptMessage._(
-        kind: TranscriptMessageKind.hermesQuestion,
-        role: 'system',
-        id: row['id'],
-        streaming: false,
-        question: question,
-      );
-    }
     final rawId = row['id'];
     final id = rawId is int || rawId is String ? rawId : null;
     if (isHiddenAnswerMessage(row)) {

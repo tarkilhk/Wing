@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/widgets/profile_goal_panel.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/gateway_approval_panel.dart';
-import 'package:wing/core/widgets/hermes_question_card.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import '../test/support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -408,14 +408,14 @@ void main() {
     expect(approval, findsOneWidget);
     final question = find.descendant(
       of: approval,
-      matching: find.byType(HermesQuestionCard),
+      matching: find.byType(ProfileToolCall),
     );
     expect(
-      tester.widget<HermesQuestionCard>(question).question.command,
+      tester.widget<GatewayApprovalPanel>(approval).question.command,
       'echo isolated-roadmap-check',
     );
     await tester.tap(
-      find.descendant(of: question, matching: find.byType(ListTile)),
+      find.descendant(of: question, matching: find.text('Asked a question')),
     );
     await _settle(tester);
     expect(

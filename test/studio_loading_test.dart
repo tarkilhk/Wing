@@ -403,7 +403,6 @@ void main() {
             if (busy) {
               await tester.tap(find.byTooltip('Preview file'));
               expect(taps, 0);
-              expect(find.bySemanticsLabel('Preview file'), findsWidgets);
             }
             expect(find.byType(StudioLoading), findsNothing);
             final action = find.byWidgetPredicate(

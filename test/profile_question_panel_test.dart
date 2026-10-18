@@ -128,6 +128,13 @@ void main() {
     await tester.pump();
     expect(answer, '');
     expect(find.text('Your input'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(
+      tester
+          .widget<IconButton>(find.byKey(const Key('clarify-skip')))
+          .onPressed,
+      isNotNull,
+    );
     expect(tester.takeException(), isNull);
   });
 

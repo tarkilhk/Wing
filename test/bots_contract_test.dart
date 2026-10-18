@@ -949,6 +949,56 @@ void main() {
   );
 
   test(
+    'desktop-cleared group approval cannot regain controls from replay',
+    () async {
+      final fixture = BotsFixture();
+      final pending = {
+        'kind': 'approval',
+        'task_id': 'task',
+        'member_id': 'atlas',
+        'request_id': 'request',
+        'execution_generation': 1,
+        'approval': {
+          'command': 'Inspect changes',
+          'choices': ['once', 'deny'],
+        },
+      };
+      fixture.pending.add(pending);
+      final group = (await readFixtureGroups(
+        fixture.repository,
+        groupMessages: null,
+      )).first;
+      final session = BotGroupSession(
+        fixture.repository,
+        group,
+        reads: BotGroupReadState(),
+        preferences: groupPreferences,
+        groupMessages: null,
+        appearances: FixedGroupAppearances(const []),
+      );
+      addTearDown(session.dispose);
+      await session.refresh();
+      final original = session.pendingApprovals.single;
+      fixture.pending.clear();
+      await session.refresh();
+      expect(session.pendingApprovals, isEmpty);
+      fixture.pending.add(pending);
+      await session.refresh();
+      expect(session.pendingApprovals, isEmpty);
+      await session.resolve(original, choice: 'once');
+      expect(
+        fixture.commands.where((call) => call.$2 == 'groups.approve'),
+        isEmpty,
+      );
+      fixture.pending
+        ..clear()
+        ..add({...pending, 'execution_generation': 2});
+      await session.refresh();
+      expect(session.pendingApprovals.single.generation, 2);
+    },
+  );
+
+  test(
     'continue group work waits for Stop and excludes duplicate taps',
     () async {
       final preparations = <String>[];

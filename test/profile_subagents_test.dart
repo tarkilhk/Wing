@@ -94,12 +94,195 @@ void main() {
     );
     await controller.initialize();
     chat = await controller.createChat(canDispatch: () => true);
+    host.event('a', 'message.start');
   });
 
   tearDown(() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test('completed agent leaves the drawer when its parent turn ends', () async {
+    final session = ProfileSupervisionSession(
+      controller: controller,
+      chat: chat,
+    );
+    addTearDown(session.dispose);
+    host.event('a', 'message.start');
+    host.event('a', 'subagent.complete', {
+      'subagent_id': 'previous-child',
+      'goal': 'Find massage venues',
+      'status': 'completed',
+    });
+    expect(session.state.subagents.single.id, 'previous-child');
+    host.event('a', 'message.complete', {'text': 'Previous answer'});
+    expect(chat.subagents.single.id, 'previous-child');
+    expect(chat.runtime.executionActive, isFalse);
+    expect(session.state.subagents, isEmpty);
+
+    host.event('a', 'message.start');
+    host.event('a', 'message.delta', {'text': 'Current answer is streaming'});
+    expect(chat.runtime.executionActive, isTrue);
+    expect(session.state.subagents, isEmpty);
+  });
+
+  for (final (event, status) in [
+    ('message.complete', 'completed'),
+    ('turn.end', 'completed'),
+    ('message.complete', 'interrupted'),
+    ('turn.error', 'error'),
+  ]) {
+    test(
+      'parent $event $status retires terminal agents before history loads',
+      () async {
+        final session = ProfileSupervisionSession(
+          controller: controller,
+          chat: chat,
+        );
+        addTearDown(session.dispose);
+        for (final terminal in ['completed', 'failed', 'interrupted']) {
+          host.event('a', 'subagent.complete', {
+            'subagent_id': terminal,
+            'status': terminal,
+          });
+        }
+        host.event('a', 'subagent.start', {
+          'subagent_id': 'background',
+          'goal': 'Still working',
+        });
+        expect(session.state.subagents, hasLength(4));
+        final history = Completer<void>();
+        host.heldHistoryDelay = history;
+        addTearDown(() {
+          if (!history.isCompleted) history.complete();
+        });
+        final before = chat.workRevision;
+        var notifications = 0;
+        session.addListener(() => notifications++);
+        host.event('a', event, {'text': 'Parent settled', 'status': status});
+        expect(chat.runtime.executionActive, isFalse);
+        expect(history.isCompleted, isFalse);
+        expect(chat.workRevision, isNot(same(before)));
+        expect(notifications, greaterThan(0));
+        expect(session.state.subagents.map((agent) => agent.id), [
+          'background',
+        ]);
+        // A background child finishing after its parent also retires immediately.
+        host.event('a', 'subagent.complete', {
+          'subagent_id': 'background',
+          'status': 'completed',
+        });
+        expect(session.state.subagents, isEmpty);
+        host.event('a', 'message.start');
+        expect(session.state.subagents, isEmpty);
+      },
+    );
+  }
+
+  test(
+    'round scope survives stale roster reads and repeated completions',
+    () async {
+      final session = ProfileSupervisionSession(
+        controller: controller,
+        chat: chat,
+      );
+      addTearDown(session.dispose);
+      host.event('a', 'message.start');
+      for (final status in ['completed', 'failed', 'interrupted']) {
+        host.event('a', 'subagent.complete', {
+          'subagent_id': status,
+          'goal': 'Previous $status task',
+          'status': status,
+        });
+      }
+      host.event('a', 'subagent.start', {
+        'subagent_id': 'background',
+        'goal': 'Still working',
+      });
+      host.event('a', 'subagent.spawn_requested', {
+        'subagent_id': 'queued',
+        'goal': 'Still queued',
+      });
+      host.event('a', 'message.complete', {'text': 'Previous answer'});
+      host.pendingList = Completer<Map<String, dynamic>>();
+      final read = controller.refreshSubagents(chat);
+      final before = chat.workRevision;
+      var notifications = 0;
+      session.addListener(() => notifications++);
+      host.event('a', 'message.start');
+      expect(chat.workRevision, isNot(same(before)));
+      expect(notifications, greaterThan(0));
+      expect(session.state.subagents.map((agent) => agent.id), [
+        'background',
+        'queued',
+      ]);
+      host.pendingList!.complete({
+        'subagents': [
+          {'subagent_id': 'completed', 'status': 'completed'},
+          {'subagent_id': 'late-completion', 'status': 'completed'},
+          {'subagent_id': 'background', 'status': 'running'},
+          {'subagent_id': 'queued', 'status': 'queued'},
+        ],
+      });
+      await read;
+      expect(
+        chat.subagents.any((agent) => agent.id == 'late-completion'),
+        isTrue,
+      );
+      host.event('a', 'subagent.complete', {
+        'subagent_id': 'completed',
+        'status': 'completed',
+      });
+      expect(session.state.subagents.map((agent) => agent.id), [
+        'background',
+        'queued',
+      ]);
+      // A genuinely new child still retains its completion during this answer,
+      // including when message.start repeats within the same running round.
+      host.event('a', 'subagent.complete', {
+        'subagent_id': 'current',
+        'status': 'completed',
+      });
+      host.event('a', 'message.start');
+      expect(session.state.subagents.map((agent) => agent.id), [
+        'background',
+        'queued',
+        'current',
+      ]);
+      expect(
+        session.state.subagentSummary,
+        '1 of 3 completed · 1 running · 1 queued',
+      );
+    },
+  );
+
+  test(
+    'sending the next prompt retires completed agents before stream start',
+    () async {
+      final session = ProfileSupervisionSession(
+        controller: controller,
+        chat: chat,
+      );
+      addTearDown(session.dispose);
+      host.event('a', 'subagent.start', {
+        'subagent_id': 'child',
+        'goal': 'Previous task',
+      });
+      final detail = session.openSubagent('child');
+      addTearDown(detail.dispose);
+      host.event('a', 'subagent.complete', {
+        'subagent_id': 'child',
+        'status': 'completed',
+      });
+      host.event('a', 'message.complete', {'text': 'Previous answer'});
+      await controller.updateDraft(chat, 'Next question');
+      await controller.send(chat);
+      expect(chat.runtime.executionActive, isTrue);
+      expect(session.state.subagents, isEmpty);
+      expect(detail.state.activity.status, GatewaySubagentStatus.completed);
+      expect(detail.state.canControl, isFalse);
+    },
+  );
 
   test(
     'subagent header separates outcomes, queue and unconfirmed work',

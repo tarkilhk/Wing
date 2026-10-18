@@ -1,5 +1,8 @@
-import 'package:wing/core/widgets/source_code_block.dart';
-import 'package:wing/core/models/hermes_question.dart';
+import 'package:wing/core/widgets/bot_group_conversation.dart';
+import 'package:wing/core/widgets/source_code_text.dart';
+import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/bots_preferences.dart';
 import 'package:wing/core/models/bots.dart';
@@ -12,7 +15,6 @@ import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/core/widgets/workspace_picker.dart';
 import 'package:wing/core/services/recent_conversation_snapshots.dart';
-import 'package:wing/core/widgets/bot_group_conversation.dart';
 import 'package:wing/core/models/voice_processing_settings.dart';
 import 'dart:async';
 import 'package:wing/core/services/bot_group_read_state.dart';
@@ -193,17 +195,17 @@ void main() {
           );
           await tester.pumpWidget(route());
           await _settleGroupMarkdown(tester);
-          expect(find.text('Hermes question - Pending'), findsOneWidget);
-          expect(find.byType(SourceCodeBlock), findsNothing);
+          expect(find.text('Asking a question'), findsOneWidget);
+          expect(find.byType(SourceCodeText), findsNothing);
           await _render(
             tester,
             frame,
             'question-pending-${brightness.name}-$scale',
           );
-          await tester.tap(find.text('Hermes question - Pending'));
+          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           expect(
-            tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
+            tester.widget<SourceCodeText>(find.byType(SourceCodeText)).text,
             command,
           );
           await _render(
@@ -211,11 +213,11 @@ void main() {
             frame,
             'question-expanded-${brightness.name}-$scale',
           );
-          await tester.tap(find.text('Hermes question - Pending'));
+          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           tester.view.viewInsets = const FakeViewPadding(bottom: 260);
           await tester.pump();
-          await tester.tap(find.text('Hermes question - Pending'));
+          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           final approve = _decisionButton('Approve once');
           final keyboardTop =
@@ -237,7 +239,7 @@ void main() {
             'question-keyboard-${brightness.name}-$scale',
           );
           expect(tester.takeException(), isNull);
-          await tester.tap(find.text('Hermes question - Pending'));
+          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           tester.view.viewInsets = FakeViewPadding.zero;
           final held = Completer<void>();
@@ -284,6 +286,7 @@ void main() {
             frame,
             'question-failed-${brightness.name}-$scale',
           );
+          final originalRequest = fixture.pending.single;
           fixture.pending.clear();
           fixture.events.addAll([
             _event(3, 'message.user', 'you', 'Continue with other work.'),
@@ -291,15 +294,61 @@ void main() {
           ]);
           await session.refresh();
           await _settleGroupMarkdown(tester);
-          final rows = session.reading.messages;
-          final position = rows.indexWhere(
-            (row) => row['_hermes_question'] is HermesQuestion,
-          );
-          expect(rows[position - 1]['id'], 2);
-          expect(rows[position + 1]['id'], 3);
+          fixture.pending.add(originalRequest);
+          await session.refresh();
+          await _settleGroupMarkdown(tester);
           expect(_decisionButton('Approve once'), findsNothing);
           expect(_decisionButton('Reject'), findsNothing);
-          final closed = find.text('Hermes question - Closed');
+          expect(session.pendingApprovals, isEmpty);
+          await _render(
+            tester,
+            frame,
+            'question-replayed-closed-${brightness.name}-$scale',
+          );
+          fixture.pending.clear();
+          await session.refresh();
+          await _settleGroupMarkdown(tester);
+          final timeline = TranscriptTimeline.project(
+            session.reading.messages,
+            presentationId: session.reading.messagePresentationId,
+            requestActivities: session.reading.requestActivities,
+          );
+          final position = timeline.sections.indexWhere((s) => s.isActivity);
+          expect(timeline.sections[position - 1].messages.last.id, 2);
+          expect(timeline.sections[position + 1].messages.first.id, 3);
+          expect(timeline.sections[position].toolCount, 0);
+          final outerActivity = find.text('Activity');
+          await tester.scrollUntilVisible(
+            outerActivity,
+            160,
+            scrollable: find
+                .descendant(
+                  of: find.byKey(const ValueKey('profile-transcript')),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+            maxScrolls: 20,
+          );
+          await tester.ensureVisible(outerActivity);
+          await _settleGroupMarkdown(tester);
+          expect(find.text('Asked a question'), findsNothing);
+          await _render(
+            tester,
+            frame,
+            'question-history-collapsed-${brightness.name}-$scale',
+          );
+          await tester.tap(outerActivity);
+          await _settleGroupMarkdown(tester);
+          expect(
+            find.descendant(
+              of: find.byType(ProfileActivityTimeline),
+              matching: find.byType(ProfileToolCall),
+            ),
+            findsOneWidget,
+          );
+          expect(_decisionButton('Approve once'), findsNothing);
+          expect(_decisionButton('Reject'), findsNothing);
+          final closed = find.text('Asked a question');
           await tester.scrollUntilVisible(
             closed,
             160,
@@ -312,7 +361,17 @@ void main() {
             maxScrolls: 20,
           );
           await _settleGroupMarkdown(tester);
-          expect(find.byType(SourceCodeBlock), findsNothing);
+          await tester.ensureVisible(closed);
+          await _settleGroupMarkdown(tester);
+          if (closed.hitTestable().evaluate().isEmpty) {
+            await tester.drag(
+              find.byKey(const ValueKey('profile-transcript')),
+              const Offset(0, -320),
+            );
+            await _settleGroupMarkdown(tester);
+          }
+          expect(closed.hitTestable(), findsOneWidget);
+          expect(find.byType(SourceCodeText), findsNothing);
           await _render(
             tester,
             frame,
@@ -321,7 +380,7 @@ void main() {
           await tester.tap(closed);
           await _settleGroupMarkdown(tester);
           expect(
-            tester.widget<SourceCodeBlock>(find.byType(SourceCodeBlock)).code,
+            tester.widget<SourceCodeText>(find.byType(SourceCodeText)).text,
             command,
           );
           expect(tester.takeException(), isNull);
@@ -330,7 +389,7 @@ void main() {
           await tester.pumpWidget(route());
           await _settleGroupMarkdown(tester);
           await tester.scrollUntilVisible(
-            find.text('Hermes question - Closed'),
+            find.text('Activity'),
             160,
             scrollable: find
                 .descendant(
@@ -341,12 +400,20 @@ void main() {
             maxScrolls: 20,
           );
           await _settleGroupMarkdown(tester);
-          expect(find.byType(SourceCodeBlock), findsNothing);
-          final reopened = session.reading.messages;
-          final restored = reopened.indexWhere(
-            (row) => row['_hermes_question'] is HermesQuestion,
+          expect(find.byType(SourceCodeText), findsNothing);
+          expect(find.text('Asked a question'), findsNothing);
+          expect(session.reading.messages.map((row) => row['id']), [
+            1,
+            2,
+            3,
+            4,
+          ]);
+          final restored = TranscriptTimeline.project(
+            session.reading.messages,
+            presentationId: session.reading.messagePresentationId,
+            requestActivities: session.reading.requestActivities,
           );
-          expect(reopened[restored + 1]['id'], 3);
+          expect(restored.sections.where((s) => s.isActivity), hasLength(1));
           expect(_decisionButton('Approve once'), findsNothing);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
@@ -2944,7 +3011,7 @@ void main() {
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
         expect(tester.getRect(readingAnchor).top, closeTo(readingTop, 1));
-        expect(find.text('Hermes question - Pending'), findsOneWidget);
+        expect(find.text('Asking a question'), findsOneWidget);
         expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
         await _render(tester, frame, 'approval-${brightness.name}-$scale');

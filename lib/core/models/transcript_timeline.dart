@@ -1,4 +1,5 @@
 import 'chat_runtime.dart';
+import 'hermes_question.dart';
 import 'answer_versions.dart';
 import 'review_notice.dart';
 import 'transcript_message.dart';
@@ -56,8 +57,47 @@ final class TranscriptTimeline {
     required Object Function(Map<String, dynamic>) presentationId,
     int? liveMessageIndex,
     TranscriptMessage Function(Map<String, dynamic>)? messageProjection,
+    Iterable<PositionedHermesQuestion> requestActivities = const [],
   }) {
     final entries = <TranscriptTimelineEntry>[];
+    final requests = <int, List<HermesQuestion>>{};
+    for (final positioned in requestActivities) {
+      final question = positioned.question;
+      // Native clarify already owns its genuine question/choices/answer receipt.
+      // Pending requests retain their existing authoritative input controls.
+      if (question.kind == HermesQuestionKind.clarification ||
+          question.status == HermesQuestionStatus.pending) {
+        continue;
+      }
+      var after = positioned.afterTool == null
+          ? -1
+          : rows.lastIndexWhere(
+              (row) =>
+                  row['role'] == 'tool' &&
+                  row['tool_call_id'] == positioned.afterTool,
+            );
+      if (after < 0 && positioned.groupSequence != null) {
+        final sequence = positioned.groupSequence!;
+        after = rows.lastIndexWhere(
+          (row) =>
+              row['sequence'] is int && (row['sequence'] as int) <= sequence,
+        );
+      } else if (positioned.afterMessage != null) {
+        final messageIndex = rows.indexWhere(
+          (row) => row['id'] == positioned.afterMessage,
+        );
+        if (messageIndex > after) after = messageIndex;
+      }
+      if (after < 0) {
+        after = rows.lastIndexWhere(
+          (row) =>
+              row['timestamp'] is num &&
+              (row['timestamp'] as num) * 1000 <=
+                  question.timestamp.millisecondsSinceEpoch,
+        );
+      }
+      (requests[after + 1] ??= []).add(question);
+    }
     // Saved outputs refer to assistant calls by their backend identity. Calls
     // with no assistant prose must still contribute their inputs.
     final calls = <String, Map>{};
@@ -92,7 +132,11 @@ final class TranscriptTimeline {
     ];
     final exchanges = _joinBotExchanges(readingRows);
     var humanReplay = false;
-    for (var index = 0; index < rows.length; index++) {
+    for (var index = 0; index <= rows.length; index++) {
+      for (final question in requests[index] ?? const <HermesQuestion>[]) {
+        entries.add(TranscriptTimelineEntry.request(question));
+      }
+      if (index == rows.length) break;
       final row = rows[index];
       final readingRow = exchanges.remaining[index] ?? readingRows[index];
       final hidden = isHiddenAnswerMessage(row);
@@ -293,6 +337,23 @@ _joinBotExchanges(List<Map<String, dynamic>> rows) {
 }
 
 final class TranscriptTimelineEntry {
+  TranscriptTimelineEntry.request(HermesQuestion request)
+    : question = request,
+      sourceIndex = -1,
+      presentationId = ('request', request.id),
+      _row = const {},
+      isReview = false,
+      role = 'request',
+      id = null,
+      suppressed = false,
+      emptyAssistant = false,
+      streaming = false,
+      hasReasoning = false,
+      savedMessageId = null,
+      branchAnswer = false,
+      exchangeReceipts = const [],
+      messageProjection = null;
+
   TranscriptTimelineEntry._({
     required this.sourceIndex,
     required this.presentationId,
@@ -306,12 +367,14 @@ final class TranscriptTimelineEntry {
     required this.branchAnswer,
     required this.exchangeReceipts,
     required this.messageProjection,
-  }) : _row = row,
+  }) : question = null,
+       _row = row,
        isReview = review,
        role = row['role']?.toString() ?? '',
        id = row['id'] is int || row['id'] is String ? row['id'] : null;
 
   final int sourceIndex;
+  final HermesQuestion? question;
   final Object presentationId;
   // Borrow the existing immutable reading row. Bodies are prepared only when a
   // viewport row or an opened disclosure asks for them; no rendered tree lives
@@ -357,9 +420,14 @@ final class TranscriptTimelineGroup {
   );
   bool get isTool => !isReasoning && messages.last.role == 'tool';
   bool get isAgentNotice => !isReasoning && messages.last.isAgentNotice;
+  HermesQuestion? get question => messages.last.question;
   String? get reviewText => messages.last.reviewText;
   bool get isActivity =>
-      isReasoning || isTool || isAgentNotice || messages.last.isReview;
+      isReasoning ||
+      isTool ||
+      isAgentNotice ||
+      messages.last.isReview ||
+      question != null;
   List<TranscriptToolResult> get toolResults =>
       List.unmodifiable([for (final message in messages) ?message.tool]);
   bool containsMessage(int id) => messages.any((entry) => entry.id == id);
@@ -412,7 +480,10 @@ List<TranscriptTimelineGroup> _groupRows(
       flushTools();
       continue;
     }
-    if (entry.role == 'tool') {
+    if (entry.question != null) {
+      flushTools();
+      groups.add(TranscriptTimelineGroup._([entry]));
+    } else if (entry.role == 'tool') {
       tools.add(entry);
     } else {
       flushTools();
@@ -622,12 +693,64 @@ final class ChatTranscriptProjection {
     required ChatRuntimeObservation runtime,
     required Object Function(Map<String, dynamic>) presentationId,
     required bool liveAnswering,
+    Iterable<PositionedHermesQuestion> requestActivities = const [],
+    bool readingWindow = false,
   }) {
     final captured = [...savedRows, ?streamingMessage];
     final active = liveAnswering
         ? runtime.activityEntries
+              .where(
+                (entry) =>
+                    entry is! ChatRequestEntry ||
+                    entry.question.status != HermesQuestionStatus.pending,
+              )
+              .toList()
         : const <ChatActivityEntry>[];
-    final activeCalls = active
+    final savedCalls = savedRows
+        .where((row) => row['role'] == 'tool')
+        .map((row) => row['tool_call_id'])
+        .toSet();
+    final firstRetained = runtime.activityEntries.indexWhere(
+      (entry) =>
+          entry is ChatReasoningEntry ||
+          entry is ChatToolEntry && !savedCalls.contains(entry.activity.toolId),
+    );
+    final firstUnsavedTool = runtime.activityEntries.indexWhere(
+      (entry) =>
+          entry is ChatToolEntry && !savedCalls.contains(entry.activity.toolId),
+    );
+    final retained = <ChatActivityEntry>[
+      for (var index = 0; index < runtime.activityEntries.length; index++)
+        if (runtime.activityEntries[index] case final entry)
+          if (switch (entry) {
+            ChatRequestEntry(:final question) =>
+              firstRetained >= 0 &&
+                  index > firstRetained &&
+                  question.status != HermesQuestionStatus.pending,
+            // A newest-first history page can already contain a later call
+            // while an earlier call still awaits backfill. Keep that suffix
+            // in received order until all preceding calls have saved receipts.
+            ChatToolEntry(:final activity) =>
+              !savedCalls.contains(activity.toolId) ||
+                  firstUnsavedTool >= 0 && index >= firstUnsavedTool,
+            ChatReasoningEntry() => true,
+          })
+            entry,
+    ];
+    final current = readingWindow
+        ? const <ChatActivityEntry>[]
+        : liveAnswering
+        ? active
+        : retained;
+    final currentRequests = current
+        .whereType<ChatRequestEntry>()
+        .map((entry) => entry.question.id)
+        .toSet();
+    final windowMessages = readingWindow
+        ? savedRows.map((row) => row['id']).toSet()
+        : null;
+    final windowTools = readingWindow ? savedCalls : null;
+    final currentCalls = current
         .whereType<ChatToolEntry>()
         .map((e) => e.activity.toolId)
         .whereType<String>()
@@ -650,7 +773,7 @@ final class ChatTranscriptProjection {
       return calls is List &&
           calls.isNotEmpty &&
           calls.every(
-            (call) => call is Map && activeCalls.contains(call['id']),
+            (call) => call is Map && currentCalls.contains(call['id']),
           );
     }
 
@@ -658,7 +781,7 @@ final class ChatTranscriptProjection {
       captured.where(
         (row) =>
             (row['role'] != 'tool' ||
-                !activeCalls.contains(row['tool_call_id'])) &&
+                !currentCalls.contains(row['tool_call_id'])) &&
             !isLiveReasoningReceipt(row),
       ),
     );
@@ -666,22 +789,40 @@ final class ChatTranscriptProjection {
       rows,
       presentationId: presentationId,
       liveMessageIndex: streamingMessage == null ? null : rows.length - 1,
+      requestActivities: requestActivities.where(
+        (entry) =>
+            !currentRequests.contains(entry.question.id) &&
+            (!readingWindow ||
+                windowMessages!.contains(entry.afterMessage) ||
+                entry.afterTool != null &&
+                    windowTools!.contains(entry.afterTool)),
+      ),
     );
-    final savedCalls = savedRows
-        .where((row) => row['role'] == 'tool')
-        .map((row) => row['tool_call_id'])
-        .toSet();
-    activity = List.unmodifiable(
-      active.isNotEmpty
-          ? active
-          : runtime.activityEntries.where(
-              (e) =>
-                  e is! ChatToolEntry ||
-                  !savedCalls.contains(e.activity.toolId),
-            ),
-    );
+    activity = List.unmodifiable(current);
+    // A genuine saved current-call receipt establishes where retained work
+    // belongs even when earlier receipts still await backfill. Hand its next
+    // rendered conversation boundary to the viewport without inventing a row.
+    final suppressedSuffix = !readingWindow && !liveAnswering
+        ? captured.lastIndexWhere(
+            (row) =>
+                row['role'] == 'tool' &&
+                currentCalls.contains(row['tool_call_id']),
+          )
+        : -1;
+    final conversationBoundaries = {
+      for (final section in timeline.sections)
+        if (!section.isActivity) ...section.presentationIds,
+    };
+    retainedActivityBeforePresentationId = suppressedSuffix < 0
+        ? null
+        : captured
+              .skip(suppressedSuffix + 1)
+              .map(presentationId)
+              .where(conversationBoundaries.contains)
+              .firstOrNull;
   }
   late final List<Map<String, dynamic>> rows;
   late final TranscriptTimeline timeline;
   late final List<ChatActivityEntry> activity;
+  late final Object? retainedActivityBeforePresentationId;
 }

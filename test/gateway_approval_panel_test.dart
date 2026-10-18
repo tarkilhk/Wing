@@ -1,4 +1,4 @@
-import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -167,14 +167,14 @@ void main() {
               ),
             );
             await tester.pumpAndSettle();
-            expect(find.text('Hermes question - Pending'), findsOneWidget);
-            expect(find.byType(SourceCodeBlock), findsNothing);
-            await tester.tap(find.text('Hermes question - Pending'));
+            expect(find.text('Asking a question'), findsOneWidget);
+            expect(find.byType(SourceCodeText), findsNothing);
+            await tester.tap(find.text('Asking a question'));
             await tester.pumpAndSettle();
-            final command = find.byType(SourceCodeBlock);
+            final command = find.byType(SourceCodeText);
             expect(command, findsOneWidget);
             expect(
-              tester.widget<SourceCodeBlock>(command).code,
+              tester.widget<SourceCodeText>(command).text,
               contains('records.append'),
             );
             for (final label in [

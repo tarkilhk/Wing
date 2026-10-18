@@ -293,6 +293,11 @@ class ProfileActivityTimeline extends StatelessWidget {
                 expandedMessageId != null &&
                 group.containsMessage(expandedMessageId!),
           )
+        else if (group.question case final question?)
+          ProfileToolCall(
+            key: ValueKey(('activity-request', question.id)),
+            call: ToolCallPresentation.question(question),
+          )
         else if (group.reviewText case final review?)
           ProfileReviewNoticeRow(
             key: group.messages.last.id == expandedMessageId

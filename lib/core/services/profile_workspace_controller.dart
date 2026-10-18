@@ -132,6 +132,7 @@ class ProfileChat {
   List<GatewayTodo> _todos = [];
   int? _todoRevision;
   List<GatewaySubagentActivity> _subagents = [];
+  final Map<String, int> _subagentCompletionTurns = {};
   final Set<String> _unconfirmedSubagentIds = {};
   int _subagentsRevision = 0;
   bool _subagentsLoading = false;
@@ -199,6 +200,8 @@ class ProfileChat {
   Object get workRevision {
     final inputs = (
       runtime.runtimeId,
+      _runtime.turnRevision,
+      runtime.executionActive,
       _todos,
       _todoRevision,
       _subagentsRevision,
@@ -223,6 +226,20 @@ class ProfileChat {
 
   List<GatewaySubagentActivity> get subagents =>
       List.unmodifiable(_subagents.map(copySupervisedSubagent));
+
+  /// Unfinished work and terminal observations from the still-active round.
+  /// Keep older canonical records for open details and duplicate-event merging;
+  /// their saved results belong to historical Activity, outside the live dock.
+  List<GatewaySubagentActivity> get currentSubagents => List.unmodifiable(
+    _subagents
+        .where(
+          (item) =>
+              !item.isTerminal ||
+              runtime.executionActive &&
+                  _subagentCompletionTurns[item.id] == _runtime.turnRevision,
+        )
+        .map(copySupervisedSubagent),
+  );
   Set<String> get unconfirmedSubagentIds =>
       Set.unmodifiable(_unconfirmedSubagentIds);
   bool get subagentsLoading => _subagentsLoading;
@@ -3177,6 +3194,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> refreshSubagents(ProfileChat chat) async {
     final resource = _owned(chat);
     final runtime = chat.runtime.runtimeId;
+    final turn = chat._runtime.turnRevision;
     final revision = chat._subagentsRevision;
     final before = chat._subagents;
     final loadGeneration = ++chat._subagentsLoadGeneration;
@@ -3222,6 +3240,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
           next.add(item);
         } else if (!next[index].isTerminal) {
           next[index] = next[index].merge(item, snapshot: true);
+        }
+        if (item.isTerminal) {
+          chat._subagentCompletionTurns.putIfAbsent(item.id, () => turn);
         }
       }
       chat._subagents = next;
@@ -5593,7 +5614,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       ]),
     );
     chat.reading.questionHistory = questions;
-    runtime.onQuestion = chat.reading.observeQuestion;
+    runtime.onQuestion = (question) => chat.reading.observeQuestion(
+      question,
+      afterTool: runtime.observation.activityEntries
+          .whereType<ChatToolEntry>()
+          .lastOrNull
+          ?.activity
+          .toolId,
+    );
     runtime.onQuestionReconciliation = (kind, active) =>
         questions.reconcile(active, kind: kind);
     runtime.publishQuestionHistory();
@@ -7808,12 +7836,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
               'result': {'answer': answer},
             },
     );
-    if (!capture.current) return;
     if (result['status'] == 'expired') {
-      chat._runtime.expireQuestion(question.requestId);
+      // This receipt closes the whole request, even if another surface has
+      // advanced its batch. It cannot close a different request or runtime.
+      if (capture.runtimeId != chat.runtime.runtimeId ||
+          chat.runtime.pendingQuestion?.requestId != question.requestId) {
+        return;
+      }
+      chat._runtime.closeQuestion(question.requestId);
+      _changed();
       await reconnect(resource.scope);
       chat._runtime.reportQuestionExpiry(capture);
     } else {
+      if (!capture.current) return;
       chat._runtime.finishQuestionAnswer(
         capture,
         answer: answer,
@@ -7843,9 +7878,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       });
       accepted = result['status'] == 'ok';
       if (result['status'] == 'expired' && capture.current) {
-        chat._runtime.expireQuestion(expectedRequest.requestId);
+        chat._runtime.closeQuestion(expectedRequest.requestId);
         accepted =
-            true; // A definite expired receipt retires this exact local card.
+            true; // A missing request retires this exact local input surface.
       }
     } finally {
       chat._runtime.finishSecureAnswer(capture, accepted: accepted);
@@ -7881,6 +7916,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
       next[index] = next[index].merge(update);
     }
     chat._subagents = next;
+    if (update.isTerminal) {
+      chat._subagentCompletionTurns.putIfAbsent(
+        update.id,
+        () => chat._runtime.turnRevision,
+      );
+    }
     chat._unconfirmedSubagentIds.remove(update.id);
     chat._subagentsRevision++;
     chat._subagentsError = null;
@@ -9072,6 +9113,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._todos = [];
       chat._todoRevision = null;
       chat._subagents = [];
+      chat._subagentCompletionTurns.clear();
       chat._unconfirmedSubagentIds.clear();
       chat._subagentsRevision++;
       chat._subagentsLoading = false;

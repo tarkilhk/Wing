@@ -325,18 +325,10 @@ class BotGroupSession extends ChangeNotifier {
   final _approvalErrors = <String, String>{};
 
   List<BotGroupAction> get pendingApprovals {
-    final current = {
-      for (final action in runtime?.actions ?? const <BotGroupAction>[])
-        if (action.kind == 'approval' &&
-            !{
-              HermesQuestionStatus.approved,
-              HermesQuestionStatus.rejected,
-            }.contains(questionHistory.question(action.key)?.status))
-          action.key: action,
-    };
-    return List.unmodifiable([
-      for (final question in questionHistory.questions) ?current[question.id],
-    ]);
+    final current = runtime;
+    return current == null
+        ? const []
+        : preferences.pendingApprovals(group, current);
   }
 
   _GroupContinuation? _continuation;
@@ -633,11 +625,7 @@ class BotGroupSession extends ChangeNotifier {
     if (_closed ||
         _acting ||
         _sending ||
-        {
-          HermesQuestionStatus.approved,
-          HermesQuestionStatus.rejected,
-        }.contains(questionHistory.question(action.key)?.status) ||
-        runtime?.actions.any((a) => a.key == action.key) != true) {
+        !pendingApprovals.any((a) => a.key == action.key)) {
       return;
     }
     _recoveryRevision++;
@@ -828,7 +816,10 @@ final class BotGroupTranscriptReading implements TranscriptReader {
     _session.group.key,
   );
   @override
-  List<Map<String, dynamic>> get messages => _session.questionHistory.project([
+  Iterable<PositionedHermesQuestion> get requestActivities =>
+      _session.questionHistory.activities;
+  @override
+  List<Map<String, dynamic>> get messages => [
     for (final event in _session.events.where(
       (event) => event.isTranscriptEntry,
     ))
@@ -840,19 +831,15 @@ final class BotGroupTranscriptReading implements TranscriptReader {
         'content': event.isPass ? 'Passed' : event.text,
         '_discussion_event': event,
       }),
-  ]);
+  ];
   TranscriptMessage messageForRow(Map<String, dynamic> row) =>
-      row['_hermes_question'] is HermesQuestion
-      ? TranscriptMessage.fromRow(row)
-      : TranscriptMessage.discussion(
-          group: _session.group,
-          event: row['_discussion_event'] as BotGroupEvent,
-        );
+      TranscriptMessage.discussion(
+        group: _session.group,
+        event: row['_discussion_event'] as BotGroupEvent,
+      );
   @override
   Object messagePresentationId(Map<String, dynamic> row) =>
-      row['_hermes_question'] is HermesQuestion
-      ? row['id'] as String
-      : ('group-message', (row['_discussion_event'] as BotGroupEvent).sequence);
+      ('group-message', (row['_discussion_event'] as BotGroupEvent).sequence);
   @override
   String? get historySessionId =>
       _session.loading && messages.isEmpty ? null : _session.group.id;

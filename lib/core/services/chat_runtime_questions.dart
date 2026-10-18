@@ -19,6 +19,17 @@ extension _RuntimeQuestions on ChatRuntime {
       );
     }
     _questionHistory[question.id] = question;
+    if (question.kind != HermesQuestionKind.clarification) {
+      final index = _activity.indexWhere(
+        (entry) =>
+            entry is ChatRequestEntry && entry.question.id == question.id,
+      );
+      if (index >= 0) {
+        _activity[index] = ChatRequestEntry(question);
+      } else if (old == null) {
+        _activity.add(ChatRequestEntry(question));
+      }
+    }
     onQuestion?.call(question);
   }
 

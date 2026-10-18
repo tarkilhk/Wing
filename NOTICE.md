@@ -12,7 +12,7 @@ The development-only renderer harness uses [Playwright Core](https://github.com/
 
 The vendored Flutter setup action retains [its MIT license](.github/actions/setup-flutter/LICENSE) and upstream copyright notice.
 
-The New chat and Fork icons use Lucide's `square-pen` and `git-fork` from `lucide-static` 0.468.0, under the [ISC license](assets/fonts/LUCIDE-LICENSE). The app includes a two-glyph font subset and the matching New chat Android shortcut vector; see [icon provenance](assets/fonts/README.md).
+The New chat and Fork icons use Lucide's `square-pen` and `git-fork` from `lucide-static` 0.468.0, under the [ISC license](assets/fonts/LUCIDE-LICENSE). Steer uses Tabler's `steering-wheel` under the [MIT license](assets/fonts/TABLER-LICENSE). The app includes these three glyphs in its action font and the matching New chat Android shortcut vector; see [icon provenance](assets/fonts/README.md).
 
 The website self-hosts Latin subsets of Manrope and Source Sans 3, distributed under the SIL Open Font License 1.1. Their copyright and license notices are retained in [Manrope's OFL notice](website/assets/fonts/MANROPE-OFL.txt) and [Source Sans 3's OFL notice](website/assets/fonts/SOURCE-SANS-3-OFL.txt). These web fonts are not bundled in the Android app.
 
@@ -42,4 +42,4 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Project icons use Microsoft’s unmodified `@vscode/codicons` 0.0.45, matching Hermes Desktop, under [CC BY 4.0](assets/fonts/CODICONS-LICENSE). Microsoft is the original author; see [font provenance](assets/fonts/README.md).
+Project icons and the Queue layers glyph use Microsoft’s unmodified `@vscode/codicons` 0.0.45, matching Hermes Desktop, under [CC BY 4.0](assets/fonts/CODICONS-LICENSE). Microsoft is the original author; see [font provenance](assets/fonts/README.md).

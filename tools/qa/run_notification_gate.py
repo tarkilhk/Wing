@@ -53,11 +53,21 @@ def check_on_emulator(serial):
             ('app.log', ('logcat', '-d', '-s',
                          'flutter:V', 'AndroidRuntime:E', 'ActivityTaskManager:I')),
             ('activity.txt', ('shell', 'dumpsys', 'activity', 'activities')),
+            ('notifications.txt', ('shell', 'dumpsys', 'notification', '--noredact')),
+            ('services.txt', ('shell', 'dumpsys', 'activity', 'services',
+                              'com.tarkilhk.wing.notificationqa')),
+            ('failure-ui.xml', ('shell', 'cat', '/sdcard/wing-notification-ui.xml')),
         ]:
             try:
                 (OUTPUT / name).write_text(device(serial, *args))
             except (OSError, subprocess.SubprocessError):
                 pass
+        try:
+            with (OUTPUT / 'failure.png').open('wb') as capture:
+                command(adb_path(), '-s', serial, 'exec-out', 'screencap', '-p',
+                        stdout=capture)
+        except (OSError, subprocess.SubprocessError):
+            pass
         raise
 
 

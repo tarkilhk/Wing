@@ -1,11 +1,11 @@
 import 'selection_viewport.dart';
-import 'hermes_question_card.dart';
 import 'dart:async';
 import 'bot_mention_scope.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
+import '../theme/wing_icons.dart';
 import '../theme/bot_bubble_colors.dart';
 import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
@@ -544,9 +544,7 @@ class ProfileMessage extends StatelessWidget {
     if (message.kind == TranscriptMessageKind.hidden) {
       return const SizedBox.shrink();
     }
-    if (message.question case final question?) {
-      return HermesQuestionCard(key: ValueKey(question.id), question: question);
-    }
+
     final theme = Theme.of(context);
     final role = message.role;
     if (usesBotFrame(context, message)) {
@@ -635,7 +633,7 @@ class ProfileMessage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    Icons.explore_outlined,
+                    WingIcons.steer,
                     size: 14,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),

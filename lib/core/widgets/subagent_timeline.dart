@@ -26,6 +26,7 @@ class SubagentTimeline extends StatelessWidget {
     builder: (context, _) {
       final projection = ChatTranscriptProjection(
         savedRows: session.messages,
+        requestActivities: session.requestActivities,
         streamingMessage: session.streamingMessage,
         runtime: session.runtime,
         presentationId: session.messagePresentationId,
@@ -34,6 +35,8 @@ class SubagentTimeline extends StatelessWidget {
       final activity = ConversationActivity(
         runtime: session.runtime,
         entries: projection.activity,
+        beforeMessagePresentationId:
+            projection.retainedActivityBeforePresentationId,
         todos: session.todos,
         inspection: session,
         agentsBuilder: () => agentsBuilder(session),

@@ -1,4 +1,6 @@
 import '../models/tool_payload.dart';
+import 'dart:convert';
+import '../models/hermes_question.dart';
 import '../models/bot_exchange.dart';
 import '../models/gateway_activity.dart';
 import '../models/transcript_message.dart';
@@ -22,6 +24,8 @@ final class ToolCallPresentation {
     required this.result,
     required this.labels,
     this.callId,
+    this.requestId,
+    this.disclosureId,
     this.context,
     this.summary,
     this.durationSeconds,
@@ -32,6 +36,10 @@ final class ToolCallPresentation {
 
   final String name;
   final String? callId;
+
+  /// Gateway request identity stays distinct from a native tool-call identity.
+  final String? requestId;
+  final Object? disclosureId;
   final String? context;
   final String? summary;
   final String title;
@@ -108,6 +116,34 @@ final class ToolCallPresentation {
     summary: result.summary,
     exchangeReceipts: result.exchangeReceipts,
   );
+
+  factory ToolCallPresentation.question(HermesQuestion question) {
+    final exceptional =
+        question.status == HermesQuestionStatus.expired ||
+        question.status == HermesQuestionStatus.cancelled ||
+        question.status == HermesQuestionStatus.closed;
+    return ToolCallPresentation._(
+      name: question.kind.name,
+      requestId: question.requestId,
+      disclosureId: ('question', question.id),
+      title: titleFor(
+        'clarify',
+        completed: question.status != HermesQuestionStatus.pending,
+      ),
+      target: null,
+      subtitle:
+          '${question.status.label} · ${_oneLine(question.description.isEmpty ? question.command : question.description)}',
+      status: question.status.label,
+      // Waiting for consent is not evidence that a tool is executing.
+      outcome: exceptional
+          ? ToolCallOutcome.warning
+          : ToolCallOutcome.completed,
+      activityDetails: ToolActivityDetails.question(question),
+      arguments: jsonEncode(question.toJson()),
+      result: null,
+      labels: const [],
+    );
+  }
 
   static ToolCallPresentation _project({
     required String name,

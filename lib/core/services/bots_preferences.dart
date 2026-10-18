@@ -86,6 +86,24 @@ class BotsPreferences {
     history.reconcile(actions.map((action) => action.key).toSet());
   }
 
+  /// Live room state is required; a settled receipt can only remove authority.
+  List<BotGroupAction> pendingApprovals(
+    BotGroup group,
+    BotGroupRuntime runtime,
+  ) {
+    final current = {
+      for (final action in runtime.actions)
+        if (action.kind == 'approval') action.key: action,
+    };
+    return List.unmodifiable([
+      for (final question in questions(
+        group.scope.connectionIdentity,
+        group.id,
+      ).questions)
+        if (question.status.isPending) ?current[question.id],
+    ]);
+  }
+
   String _messageDraftKey(String identity, String roomId) =>
       'bots_group_message_draft:${jsonEncode([identity, roomId])}';
 

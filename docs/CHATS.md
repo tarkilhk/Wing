@@ -90,14 +90,19 @@ confirmation popup. Android may show its own clipboard confirmation.
 
 [Explore Wing](FEATURES.md) · [Conversation details](CONVERSATION_ACTIONS_AND_READING.md)
 
-## Hermes questions
+## Questions and approvals
 
-After an approval, clarification or secure-input request ends, Wing retains a
-"Hermes question - <status>" entry where the request first appeared. Details are
-collapsed by default; commands use the standard code viewer with Copy and wrap
-controls. The entry moves up naturally as new messages arrive and has no dismiss
-control. Approvals report Approved or Rejected, ordinary responses report
-Answered, and confirmed timeouts report Expired. Cancelled means the request was
-withdrawn; Closed means the outcome is unknown. An approved request does not
-prove that the operation subsequently succeeded. Secret response values are
-never saved in these entries.
+Completed questions and approvals appear inside the conversation's usual
+**Activity** section as **Asked a question**. Both disclosures start collapsed.
+Details start collapsed and show the question, any command, and its outcome in
+the shared Activity card. Commands retain their exact source in the standard
+code viewer with Copy, wrap and full-view controls. Approvals report Approved
+or Rejected; these outcomes describe permission, not execution success.
+Confirmed timeouts report Expired, withdrawals report Cancelled, and Closed
+means the outcome is unknown.
+
+Completed approval and secure-input entries stay where their requests first
+appeared and move up as messages arrive. There is no dismiss control.
+Ordinary clarification questions retain their native Activity receipt, including
+choices and answers, without an additional history row. Secret response values
+are never saved in request-history entries.

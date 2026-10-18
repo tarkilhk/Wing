@@ -23,6 +23,7 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/profile_activity_status.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
@@ -35,6 +36,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       'Roboto': 'build/studio-roboto.ttf',
       'MaterialIcons': 'build/studio-icons.otf',
       'WingIcons': 'assets/fonts/wing-icons.ttf',
+      'WingProjectIcons': 'assets/fonts/codicons.ttf',
     }.entries) {
       await (FontLoader(entry.key)..addFont(
             File(entry.value).readAsBytes().then(ByteData.sublistView),
@@ -190,15 +192,15 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           for (var i = 0; i < 8; i++) {
             await tester.pump(const Duration(milliseconds: 100));
           }
-          expect(find.byIcon(Icons.keyboard_return), findsNWidgets(2));
+          expect(find.byIcon(WingIcons.queue), findsNWidgets(2));
           expect(chat.composer.observation.queue, hasLength(2));
           controller.connectionStatus.liveChanged('b', false);
           await tester.pump();
-          expect(find.byIcon(Icons.keyboard_return), findsNWidgets(2));
+          expect(find.byIcon(WingIcons.queue), findsNWidgets(2));
           controller.connectionStatus.liveChanged('a', false);
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
-          expect(find.byIcon(Icons.keyboard_return), findsNWidgets(2));
+          expect(find.byIcon(WingIcons.queue), findsNWidgets(2));
           expect(find.text('First waiting message'), findsOneWidget);
           await renderStatus(
             tester,
@@ -207,7 +209,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           controller.connectionStatus.liveChanged('a', true);
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
-          expect(find.byIcon(Icons.keyboard_return), findsNWidgets(2));
+          expect(find.byIcon(WingIcons.queue), findsNWidgets(2));
           expect(chat.composer.observation.queue, hasLength(2));
           await renderStatus(
             tester,
@@ -228,7 +230,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             chat.composer.observation.queue.single.id,
           );
           await tester.pump();
-          expect(find.byIcon(Icons.keyboard_return), findsNothing);
+          expect(find.byIcon(WingIcons.queue), findsNothing);
           expect(find.text('Second waiting message'), findsNothing);
           await renderStatus(
             tester,
@@ -308,7 +310,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             expect(chat.runtime.execution, ChatExecution.submitting);
             expect(find.text('Sending message…'), findsNothing);
             expect(find.text('Saving queue…'), findsNothing);
-            expect(find.byIcon(Icons.keyboard_return), findsOneWidget);
+            expect(find.byIcon(WingIcons.queue), findsOneWidget);
             expect(find.byType(StudioLoading), findsOneWidget);
             expect(
               tester.getSize(find.byType(ProfileActivityStatus)).height,

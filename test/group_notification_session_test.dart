@@ -372,6 +372,34 @@ void main() {
   );
 
   test(
+    'desktop-cleared group approval cannot return as a notification on replay',
+    () async {
+      approval();
+      await watch.activate();
+      final notice = sink.shown.last;
+      host.room('one');
+      await watch.refresh();
+      expect(notices.inputFor(notice.chatIdentity!), isNull);
+      approval();
+      await watch.refresh();
+      expect(notices.inputFor(notice.chatIdentity!), isNull);
+      expect(
+        await watch.resolveApproval(
+          'one',
+          notice.focus!.id,
+          'once',
+          notice.expandedBody,
+        ),
+        false,
+      );
+      expect(decisions, isEmpty);
+      approval(generation: 2);
+      await watch.refresh();
+      expect(notices.inputFor(notice.chatIdentity!), isNotNull);
+    },
+  );
+
+  test(
     'unavailable group reads retain pending approval notification',
     () async {
       approval();

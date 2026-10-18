@@ -53,6 +53,46 @@ class NotificationFixtureSetupTest(unittest.TestCase):
         self.assertLess(exempt, launch)
 
 
+class MonitoringPublicationTest(unittest.TestCase):
+    @staticmethod
+    def record(package=driver.PACKAGE, slot=214601, channel='hermes_monitoring'):
+        return (f'    NotificationRecord(0x123: pkg={package} user=UserHandle{{0}} '
+                f'id={slot} tag=null: Notification(channel={channel} shortcut=null))\n')
+
+    def test_only_the_active_owned_monitoring_slot_establishes_readiness(self):
+        for package, slot, channel in [(driver.PACKAGE, 214601, 'hermes_monitoring'),
+                                      ('other.app', 214601, 'hermes_monitoring'),
+                                      (driver.PACKAGE, 214602, 'hermes_monitoring'),
+                                      (driver.PACKAGE, 214601, 'wing_attention_notifications')]:
+            with self.subTest(package=package, slot=slot, channel=channel):
+                dump = '  Notification List:\n' + self.record(package, slot, channel)
+                with patch.object(driver, 'adb', return_value=dump):
+                    self.assertEqual(driver.monitoring_notification_posted(),
+                                     package == driver.PACKAGE and slot == 214601
+                                     and channel == 'hermes_monitoring')
+
+    def test_archived_or_snoozed_monitoring_is_not_posted(self):
+        for heading in ('mArchive=Archive (1 notifications)', 'Snoozed notifications:'):
+            with self.subTest(heading=heading), patch.object(driver, 'adb', return_value=(
+                    '  Notification List:\n  ' + heading + '\n' + self.record())):
+                self.assertFalse(driver.monitoring_notification_posted())
+
+    def test_waits_for_publication_after_the_service_has_started(self):
+        with patch.object(driver, 'adb', side_effect=[
+                '  Notification List:\n  mArchive=Archive (0 notifications)\n',
+                '  Notification List:\n' + self.record(),
+        ]) as adb, patch.object(driver.time, 'sleep'):
+            driver.wait_for_monitoring_notification()
+        self.assertEqual(adb.call_count, 2)
+
+    def test_missing_publication_fails_within_the_existing_deadline(self):
+        with patch.object(driver, 'adb', return_value='  Notification List:\n'), \
+             patch.object(driver.time, 'monotonic', side_effect=[0, 0, 46]), \
+             patch.object(driver.time, 'sleep'):
+            with self.assertRaisesRegex(AssertionError, 'not posted before leaving'):
+                driver.wait_for_monitoring_notification()
+
+
 class NotificationDismissalTest(unittest.TestCase):
     def exercise(self, notification_dump, selected_is_target=True, delayed_publication=False):
         replied = False
@@ -262,11 +302,16 @@ elif sys.argv[3] == 'forward':
                 self.assertIn('--tap-only', args)
                 raise subprocess.CalledProcessError(1, args)
 
-        with patch.object(gate, 'device', return_value='1'), \
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(gate, 'OUTPUT', Path(directory)), \
+             patch.object(gate, 'device', return_value='1'), \
              patch.object(gate, 'command', side_effect=command):
             with self.assertRaises(subprocess.CalledProcessError):
                 gate.check_on_emulator('emulator-5562')
-        self.assertEqual(len(calls), 2)
+            self.assertEqual({p.name for p in Path(directory).iterdir()},
+                             {'app.log', 'activity.txt', 'notifications.txt',
+                              'services.txt', 'failure-ui.xml', 'failure.png'})
+        self.assertEqual(calls[-1][-3:], ('exec-out', 'screencap', '-p'))
 
 
 class OwnedAndroidBootTest(unittest.TestCase):

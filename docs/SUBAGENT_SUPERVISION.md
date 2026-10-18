@@ -16,6 +16,9 @@ Received events update progress automatically. Close and reopen Subagents to
 fetch a fresh snapshot or retry a failed read. Past answers retain
 **Activity → Agents** with received goals, status, output and available timings.
 Historical results do not offer live controls.
+Completed agents leave the drawer when their parent turn ends. Their saved
+results stay under that answer's Activity, while unfinished background
+agents remain in the drawer until they finish.
 
 Open a child's details to read its own conversation when Hermes supplies its
 session identity. It uses the same message and Activity timeline as the main

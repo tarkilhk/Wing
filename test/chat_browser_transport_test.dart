@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/session_visibility.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profiles_repository.dart';
 import 'dart:io';
 
 import 'support/gateway_application_requests.dart';
@@ -17,6 +18,248 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
 void main() {
+  test('read acknowledgement supplies stock mutation identity', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final patches = <Map<String, dynamic>>[];
+    final snapshots = <Uri>[];
+    final subscription = server.listen((request) async {
+      Object result;
+      if (request.uri.path == '/auth/password-login') {
+        await request.drain<void>();
+        request.response.headers.add(
+          'set-cookie',
+          'hermes_session_at=fixture; Path=/',
+        );
+        result = <String, Object>{};
+      } else if (request.uri.path.endsWith('/mutation-snapshot')) {
+        snapshots.add(request.uri);
+        result = {
+          'session_id': 'chat',
+          'exists': true,
+          'runtime_revision': 7,
+          'runtime_generation': 3,
+        };
+      } else if (request.method == 'PATCH') {
+        final body =
+            jsonDecode(await utf8.decoder.bind(request).join())
+                as Map<String, dynamic>;
+        patches.add(body);
+        if (body['request_id'] is! String || body['expected_revision'] != 7) {
+          request.response.statusCode = 409;
+          result = {'detail': 'mutation_identity_required'};
+        } else {
+          result = {'ok': true, 'unread': false};
+        }
+      } else {
+        result = switch (request.uri.path) {
+          '/api/profiles' => {
+            'profiles': [
+              {'name': 'personal'},
+            ],
+          },
+          '/api/profiles/active' => {
+            'current': 'personal',
+            'active': 'personal',
+          },
+          _ => throw StateError(
+            'Unexpected fixture route: ${request.uri.path}',
+          ),
+        };
+      }
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode(result));
+      await request.response.close();
+    });
+    final gateway = ProfileGateway.forConnection(
+      ConnectionAccess(
+        connection: SavedConnection(
+          id: 'read-receipt',
+          label: 'Fixture',
+          host: '127.0.0.1',
+          port: server.port,
+          dashboardPortOverride: server.port,
+          apiKey: '',
+          dashboardUsername: 'fixture',
+          dashboardPassword: 'fixture',
+        ),
+        dashboardOAuth: null,
+      ),
+      WorkspaceScope(connectionId: 'read-receipt', profileName: 'personal'),
+    );
+    addTearDown(() async {
+      gateway.close();
+      await subscription.cancel();
+      await server.close(force: true);
+    });
+    final result = await gateway.updateSession('chat', {
+      'unread': false,
+    }, canDispatch: () => true);
+    expect(result['ok'], true);
+    expect(snapshots.single.queryParameters['profile'], 'personal');
+    expect(patches.single, containsPair('profile', 'personal'));
+    expect(patches.single, containsPair('expected_generation', 3));
+    expect(patches.single['request_id'], isNotEmpty);
+  });
+
+  Map<String, dynamic> mutationSnapshot() => {
+    'session_id': 'chat',
+    'exists': true,
+    'runtime_revision': 7,
+    'runtime_generation': 3,
+  };
+  ProfileGateway mutationGateway(ScopedGet read, ScopedOwnedPost patch) =>
+      ProfileGateway(
+        scope: WorkspaceScope(
+          connectionId: 'mutation',
+          profileName: 'personal',
+        ),
+        get: read,
+        rpc: (_, _) async => throw StateError('No RPC expected'),
+        discover: () async => const ProfileDiscovery(
+          profiles: [HermesProfile(name: 'personal')],
+          currentName: 'personal',
+          activeName: 'personal',
+        ),
+        ownedPatch: patch,
+      );
+
+  for (final retirement in ['departure', 'close']) {
+    test('session update $retirement during snapshot sends no PATCH', () async {
+      final entered = Completer<void>(), release = Completer<void>();
+      var active = true, writes = 0;
+      final gateway = mutationGateway(
+        (endpoint, query) async {
+          expect(endpoint, 'sessions/chat/mutation-snapshot');
+          expect(query['profile'], 'personal');
+          entered.complete();
+          await release.future;
+          return mutationSnapshot();
+        },
+        (_, _, _, _) async {
+          writes++;
+          return {'ok': true};
+        },
+      );
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+        gateway.close();
+      });
+      final pending = gateway.updateSession('chat', {
+        'unread': false,
+      }, canDispatch: () => active);
+      final checked = expectLater(
+        pending,
+        throwsA(isA<DashboardRequestNotSentException>()),
+      );
+      await entered.future.timeout(const Duration(seconds: 5));
+      if (retirement == 'departure') {
+        active = false;
+      } else {
+        gateway.close();
+      }
+      release.complete();
+      await checked;
+      expect(writes, 0);
+    });
+  }
+
+  for (final invalid in [
+    {'session_id': 'other'},
+    {'exists': false},
+    {'runtime_revision': null},
+    {'runtime_generation': -1},
+  ]) {
+    test(
+      'session update rejects invalid snapshot $invalid before PATCH',
+      () async {
+        var writes = 0;
+        final gateway = mutationGateway(
+          (_, _) async => {...mutationSnapshot(), ...invalid},
+          (_, _, _, _) async {
+            writes++;
+            return {'ok': true};
+          },
+        );
+        addTearDown(gateway.close);
+        await expectLater(
+          gateway.updateSession('chat', {
+            'unread': false,
+          }, canDispatch: () => true),
+          throwsFormatException,
+        );
+        expect(writes, 0);
+      },
+    );
+  }
+
+  test(
+    'session update captures flags before snapshot and issues distinct identities',
+    () async {
+      final entered = Completer<void>(), release = Completer<void>();
+      final patches = <Map<String, dynamic>>[];
+      final gateway = mutationGateway(
+        (_, _) async {
+          if (!entered.isCompleted) entered.complete();
+          await release.future;
+          return mutationSnapshot();
+        },
+        (_, body, canDispatch, onDispatched) async {
+          expect(canDispatch(), true);
+          onDispatched();
+          patches.add(body);
+          return {'ok': true, 'unread': body['unread']};
+        },
+      );
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+        gateway.close();
+      });
+      final flags = <String, dynamic>{'unread': false};
+      final pending = gateway.updateSession(
+        'chat',
+        flags,
+        canDispatch: () => true,
+      );
+      await entered.future.timeout(const Duration(seconds: 5));
+      flags['unread'] = true;
+      release.complete();
+      await pending;
+      await gateway.updateSession('chat', flags, canDispatch: () => true);
+      expect(patches.map((body) => body['unread']), [false, true]);
+      expect(patches.map((body) => body['request_id']).toSet(), hasLength(2));
+    },
+  );
+
+  test(
+    'session revision conflict is surfaced without replaying the update',
+    () async {
+      var writes = 0;
+      final gateway = mutationGateway((_, _) async => mutationSnapshot(), (
+        _,
+        _,
+        _,
+        _,
+      ) async {
+        writes++;
+        throw const DashboardHttpException(409, 'sessions/chat');
+      });
+      addTearDown(gateway.close);
+      await expectLater(
+        gateway.updateSession('chat', {
+          'unread': false,
+        }, canDispatch: () => true),
+        throwsA(
+          isA<DashboardHttpException>().having(
+            (e) => e.statusCode,
+            'status',
+            409,
+          ),
+        ),
+      );
+      expect(writes, 1);
+    },
+  );
+
   test(
     'retired captured browser PATCH held at authentication sends zero writes',
     () async {

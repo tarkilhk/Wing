@@ -623,12 +623,20 @@ void main() {
         expect(find.text('Inspect source mappings'), findsOneWidget);
         expect(chat.subagents.every((agent) => agent.isTerminal), isTrue);
         await picture('current-receipt-drawer');
-        await tester.binding.handlePopRoute();
-        await settle();
         host.historyMessages!.add(finalAnswer);
         host.event('a', 'message.complete', {
           'text': 'The saved final answer.',
         });
+        await tester.pump();
+        expect(chat.runtime.executionActive, isFalse);
+        expect(tab(0), findsNothing);
+        expect(tab(0, overlay: false), findsNothing);
+        await settle();
+        expect(find.byType(ProfileSubagentPanel), findsNothing);
+        expect(tab(1), findsOneWidget);
+        await picture('turn-ended-drawer');
+        await tester.binding.handlePopRoute();
+        await settle();
         for (var i = 0; i < 8; i++) {
           await settle();
           if (!chat.runtime.executionActive) break;
@@ -645,6 +653,8 @@ void main() {
         expect(chat.subagents.every((agent) => agent.isTerminal), isTrue);
         expect(chat.reading.streamingMessage, isNull);
         expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
+        expect(tab(0, overlay: false), findsNothing);
+        expect(tab(1, overlay: false), findsOneWidget);
         expect(find.byType(ProfileLiveExecution), findsNothing);
         expect(find.text('Keep my draft'), findsOneWidget);
         expect(
@@ -763,7 +773,40 @@ void main() {
         expect(output, findsOneWidget);
         await tester.ensureVisible(output);
         await settle();
+        await picture('turn-ended-saved-agents');
         await picture('saved-agents');
+        // Start another answer while the previous Activity remains open on
+        // Agents. Its completed children must no longer occupy the live dock.
+        host.historyMessages!.add({
+          'id': 7,
+          'role': 'user',
+          'content': 'Now find massage venues.',
+        });
+        await controller.refreshHistory(chat);
+        host.event('a', 'message.start');
+        host.event('a', 'message.delta', {'text': 'Checking nearby venues.'});
+        await settle();
+        expect(chat.runtime.executionActive, isTrue);
+        expect(tab(0, overlay: false), findsNothing);
+        expect(tab(1, overlay: false), findsOneWidget);
+        expect(find.text('2 subagents'), findsNothing);
+        await tester.ensureVisible(output);
+        await settle();
+        expect(output, findsOneWidget);
+        await picture('next-round-previous-agents');
+        keyboard.value = 260;
+        await settle();
+        final newest = find.byKey(const ValueKey('jump-to-latest'));
+        if (newest.evaluate().isNotEmpty) {
+          await tester.tap(newest);
+          await settle();
+        }
+        expect(tab(0, overlay: false), findsNothing);
+        expect(
+          find.text('Checking nearby venues.', findRichText: true),
+          findsOneWidget,
+        );
+        await picture('next-round-keyboard');
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox());
         await tester.pump();

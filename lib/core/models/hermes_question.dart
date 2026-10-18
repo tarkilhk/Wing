@@ -10,6 +10,8 @@ enum HermesQuestionStatus {
   const HermesQuestionStatus(this.label);
   final String label;
 
+  bool get isPending => this == pending;
+
   int get certainty => switch (this) {
     pending => 0,
     closed => 1,
@@ -48,8 +50,6 @@ final class HermesQuestion {
   final HermesQuestionStatus status;
   final DateTime timestamp;
 
-  String get title => 'Hermes question - ${status.label}';
-
   HermesQuestion withStatus(HermesQuestionStatus next) => HermesQuestion(
     id: id,
     requestId: requestId,
@@ -82,12 +82,20 @@ final class HermesQuestion {
     command: value['command'] as String,
     sender: value['sender'] as String,
   );
+}
 
-  Map<String, dynamic> get row => Map.unmodifiable({
-    'id': 'hermes-question:$id',
-    'role': 'system',
-    'content': title,
-    'timestamp': timestamp.millisecondsSinceEpoch / 1000,
-    '_hermes_question': this,
+/// A request's first observed place in Activity, separate from backend messages
+/// and tool receipts. Later status changes retain these presentation anchors.
+final class PositionedHermesQuestion {
+  const PositionedHermesQuestion(
+    this.question, {
+    this.afterMessage,
+    this.groupSequence,
+    this.afterTool,
   });
+
+  final HermesQuestion question;
+  final Object? afterMessage;
+  final int? groupSequence;
+  final String? afterTool;
 }

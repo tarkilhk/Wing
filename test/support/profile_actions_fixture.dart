@@ -25,6 +25,7 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
   bool acknowledgeClose = true;
   bool foreignActive = false;
   Completer<void>? mutationDelay;
+  Completer<void>? mutationStarted;
   Completer<void>? titleDelay;
   String? suggestedTitle = 'Conversation list improvements';
   bool failTitle = false;
@@ -145,10 +146,14 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
         }
         onDispatched();
         updates.add((scope.profileName, endpoint, body));
+        mutationStarted?.complete();
         await mutationDelay?.future;
         if (failMutation) throw StateError('Write rejected');
         final id = Uri.decodeComponent(endpoint.split('/').last);
-        final update = {...body}..remove('profile');
+        final update = {
+          for (final key in ['title', 'pinned', 'archived', 'unread'])
+            if (body.containsKey(key)) key: body[key],
+        };
         final profile = changes.putIfAbsent(scope.profileName, () => {});
         profile[id] = {...?profile[id], ...update};
         return {'ok': true, 'title': update['title'] ?? 'Chat', ...update};

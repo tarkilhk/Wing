@@ -198,9 +198,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         .where((member) => member.handle == entry.message.senderHandle)
         .firstOrNull;
     return BotGroupMessage(
-      key: entry.message.question != null
-          ? ValueKey<String>(entry.presentationId as String)
-          : ValueKey<(String, int)>(entry.presentationId as (String, int)),
+      key: ValueKey<(String, int)>(entry.presentationId as (String, int)),
       group: _session.group,
       message: entry.message,
       appearance: user || member == null
@@ -331,8 +329,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 
   Widget _activityStatus(BuildContext context) {
     final runtime = _session.runtime;
-    final needsApproval =
-        runtime?.actions.any((a) => a.kind == 'approval') == true;
+    final needsApproval = _session.pendingApprovals.isNotEmpty;
     final interrupted =
         runtime?.blocked == true || runtime?.actions.isNotEmpty == true;
     final String? label;
@@ -662,6 +659,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     final timeline = TranscriptTimeline.project(
       reading.messages,
       presentationId: reading.messagePresentationId,
+      requestActivities: reading.requestActivities,
       messageProjection: reading.messageForRow,
     );
     final canStop =

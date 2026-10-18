@@ -1,3 +1,4 @@
+import 'package:wing/core/models/hermes_question.dart';
 import 'dart:async';
 import 'package:wing/core/models/transcript_reader.dart';
 import 'package:flutter/material.dart';
@@ -20,6 +21,8 @@ final scope = WorkspaceScope(
 
 class _PagedReading extends ChangeNotifier implements TranscriptReader {
   final memory = ConversationReadingMemory();
+  @override
+  Iterable<PositionedHermesQuestion> get requestActivities => const [];
   @override
   List<Map<String, dynamic>> messages = [];
   @override

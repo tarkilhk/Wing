@@ -1,3 +1,4 @@
+import '../models/hermes_question.dart';
 import 'dart:async';
 import '../models/transcript_position.dart';
 
@@ -372,6 +373,9 @@ final class SubagentTimelineSession extends ChangeNotifier
           ),
   );
 
+  @override
+  Iterable<PositionedHermesQuestion> get requestActivities =>
+      _reading.requestActivities;
   @override
   List<Map<String, dynamic>> get messages => _reading.messages;
   @override

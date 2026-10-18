@@ -260,21 +260,23 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
               }
               return KeyEventResult.ignored;
             },
-            child: TextButton(
-              key: const ValueKey('live-work-handle'),
-              onPressed: toggle,
-              style: TextButton.styleFrom(
-                minimumSize: const Size(double.infinity, _handleHeight),
-                padding: EdgeInsets.zero,
-                shape: const RoundedRectangleBorder(),
-              ),
-              child: ExcludeSemantics(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    borderRadius: BorderRadius.circular(2),
+            child: StudioButtonPress(
+              child: TextButton(
+                key: const ValueKey('live-work-handle'),
+                onPressed: toggle,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(double.infinity, _handleHeight),
+                  padding: EdgeInsets.zero,
+                  shape: const RoundedRectangleBorder(),
+                ),
+                child: ExcludeSemantics(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
               ),

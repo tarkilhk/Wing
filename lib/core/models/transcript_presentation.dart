@@ -25,7 +25,7 @@ final class TranscriptPresentation {
        ),
        segment = reader.historySessionId,
        streaming = reader.streaming,
-       hasMessages = reader.messages.isNotEmpty,
+       hasMessages = reader.messages.isNotEmpty || timeline.entries.isNotEmpty,
        readingPosition = reader.readingPosition,
        recordReading = reader.recordReading;
 

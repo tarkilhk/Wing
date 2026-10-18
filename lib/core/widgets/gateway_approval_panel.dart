@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import '../models/gateway_approval.dart';
 import '../models/hermes_question.dart';
 import '../theme/wing_theme.dart';
-import 'hermes_question_card.dart';
+import 'profile_tool_call.dart';
+import '../presentation/tool_call_presentation.dart';
 
 /// Live decisions retain their exact server-owned scopes. Details use the same
 /// collapsed disclosure and code viewer as the eventual history entry.
@@ -51,7 +52,9 @@ class GatewayApprovalPanel extends StatelessWidget {
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: detailsHeight),
             child: SingleChildScrollView(
-              child: HermesQuestionCard(question: question),
+              child: ProfileToolCall(
+                call: ToolCallPresentation.question(question),
+              ),
             ),
           ),
           Wrap(

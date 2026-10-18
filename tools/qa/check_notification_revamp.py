@@ -376,10 +376,30 @@ def reset_fixture():
     until(lambda: (current := state())['ready'] and current['lifecycle'] == 'resumed',
           'Fixture did not start in the foreground', timeout=120)
 
+def monitoring_notification_posted():
+    # Android can start the foreground service before publishing its deferred
+    # notification. Routing requires a real posted slot, not merely a service.
+    dump = adb('shell', 'dumpsys', 'notification', '--noredact')
+    active = re.search(r'^  Notification List:\n(.*?)(?=^  \S|\Z)',
+                       dump, re.MULTILINE | re.DOTALL)
+    return active is not None and any(
+        re.search(r'\bpkg=' + re.escape(PACKAGE) + r'\s', line)
+        and re.search(r'\bid=214601\s+tag=null\b', line)
+        and 'Notification(channel=hermes_monitoring ' in line
+        for line in active.group(1).splitlines()
+        if 'NotificationRecord(' in line)
+
+
+def wait_for_monitoring_notification():
+    until(monitoring_notification_posted,
+          'QA monitoring notification was not posted before leaving Wing')
+
+
 def check_monitoring_taps(output):
     reset_fixture()
     state('/list', {})
     state('/work', {})
+    wait_for_monitoring_notification()
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     shade(expand=False)
     tap(text='Watching chats')
@@ -390,6 +410,7 @@ def check_monitoring_taps(output):
     print('PASS: monitoring tap opens the exact single profile chat', flush=True)
     state('/list', {})
     state('/work-primary', {})
+    wait_for_monitoring_notification()
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     shade(expand=False)
     tap(text='Watching chats')
@@ -400,6 +421,7 @@ def check_monitoring_taps(output):
     state('/reply', {'text': 'First monitored task finished.'})
     state('/stop', {})
     state('/monitor-group', {})
+    wait_for_monitoring_notification()
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     shade(expand=False)
     tap(text='Watching chats')
@@ -428,6 +450,7 @@ def run(output, tap_only=False):
     # Keep the production work lease alive while its loopback QA control
     # server is behind the notification shade.
     state('/work', {})
+    wait_for_monitoring_notification()
     if tap_only:
         check_content_tap_clear()
         check_group_approval_rendering(output)

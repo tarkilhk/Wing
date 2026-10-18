@@ -3,8 +3,8 @@
   "scope": {
     "root": ".",
     "revision": "a5650fa675209b6a782a5adf3f39ff12c53efb4c",
-    "tracked_count": 903,
-    "intentional_untracked_count": 618,
+    "tracked_count": 976,
+    "intentional_untracked_count": 735,
     "exclude": [
       ".git/**",
       "build/**",
@@ -271,6 +271,14 @@
       "path": "assets/fonts/LUCIDE-LICENSE",
       "purpose": "Font copyright/license obligation",
       "source": "internal/assets/fonts/README.md",
+      "status": "supported"
+    },
+    {
+      "id": "asset-assets/fonts/TABLER-LICENSE",
+      "kind": "asset-or-source",
+      "path": "assets/fonts/TABLER-LICENSE",
+      "purpose": "Steering-wheel glyph copyright/license obligation",
+      "source": "assets/fonts/README.md",
       "status": "supported"
     },
     {
@@ -2071,7 +2079,7 @@
       "id": "font",
       "kind": "flutter-font",
       "path": "assets/fonts/wing-icons.ttf",
-      "purpose": "WingIcons square-pen New chat and desktop git-fork answer action subset font",
+      "purpose": "WingIcons New chat, Fork and desktop steering-wheel action subset font",
       "source": "pubspec.yaml:58; lib/core/theme/wing_icons.dart:6",
       "status": "supported",
       "selector": "WingIcons"
@@ -6560,11 +6568,11 @@
       "selector": "main"
     },
     {
-      "id": "host-test-test/hermes_question_card_test.dart",
+      "id": "host-test-test/question_activity_test.dart",
       "kind": "host-test",
-      "path": "test/hermes_question_card_test.dart",
+      "path": "test/question_activity_test.dart",
       "purpose": "Passive question history outcomes, disclosure and command rendering",
-      "source": "test/hermes_question_card_test.dart",
+      "source": "test/question_activity_test.dart",
       "status": "supported",
       "selector": "main"
     },
@@ -6574,6 +6582,15 @@
       "path": "test/selection_viewport_test.dart",
       "purpose": "Native handle clipping and restoration preserve selection and Copy",
       "source": "test/selection_viewport_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/question_activity_projection_test.dart",
+      "kind": "host-test",
+      "path": "test/question_activity_projection_test.dart",
+      "purpose": "Request chronology, native Activity handoff and bounded reading windows",
+      "source": "test/question_activity_projection_test.dart",
       "status": "supported",
       "selector": "main"
     }
@@ -7086,6 +7103,11 @@
     },
     {
       "path": "assets/fonts/LUCIDE-LICENSE",
+      "area": "assets",
+      "provenance": "tracked"
+    },
+    {
+      "path": "assets/fonts/TABLER-LICENSE",
       "area": "assets",
       "provenance": "tracked"
     },
@@ -10000,11 +10022,6 @@
       "provenance": "intentional-untracked"
     },
     {
-      "path": "lib/core/widgets/hermes_question_card.dart",
-      "area": "lib",
-      "provenance": "intentional-untracked"
-    },
-    {
       "path": "lib/core/widgets/image_paste_menu.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -11683,11 +11700,6 @@
       "path": "test/hermes_profile_test.dart",
       "area": "test",
       "provenance": "tracked"
-    },
-    {
-      "path": "test/hermes_question_card_test.dart",
-      "area": "test",
-      "provenance": "intentional-untracked"
     },
     {
       "path": "test/hermes_question_history_test.dart",
@@ -15152,6 +15164,16 @@
     {
       "path": "website/workspaces.html",
       "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/question_activity_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/question_activity_projection_test.dart",
+      "area": "test",
       "provenance": "tracked"
     }
   ],

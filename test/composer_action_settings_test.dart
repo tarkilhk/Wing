@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/theme/wing_icons.dart';
 import 'package:wing/core/widgets/composer_action_settings.dart';
 
 void main() {
@@ -16,6 +17,20 @@ void main() {
       MaterialApp(
         home: Scaffold(body: ComposerActionSettings(preferences: owner)),
       ),
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ChoiceChip, 'Steer'),
+        matching: find.byIcon(WingIcons.steer),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ChoiceChip, 'Queue'),
+        matching: find.byIcon(WingIcons.queue),
+      ),
+      findsOneWidget,
     );
     expect(
       tester

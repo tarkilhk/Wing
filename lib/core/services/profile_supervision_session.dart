@@ -41,7 +41,7 @@ final class ProfileSupervisionSession extends ChangeNotifier
   @override
   ProfileSupervisionObservation get state => ProfileSupervisionObservation(
     key: _chat.key,
-    subagents: _chat.subagents,
+    subagents: _chat.currentSubagents,
     unconfirmedSubagentIds: _chat.unconfirmedSubagentIds,
     subagentsLoading: _chat.subagentsLoading,
     subagentsAvailable: _chat.subagentsAvailable,

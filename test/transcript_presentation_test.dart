@@ -1,3 +1,4 @@
+import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/models/transcript_position.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
@@ -5,6 +6,8 @@ import 'package:wing/core/models/transcript_reader.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 
 class _Reading implements TranscriptReader {
+  @override
+  Iterable<PositionedHermesQuestion> get requestActivities => const [];
   @override
   List<Map<String, dynamic>> messages = [];
   @override

@@ -155,6 +155,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
                   reader: chat.reading,
                   timeline: TranscriptTimeline.project(
                     [...chat.reading.messages, ?chat.reading.streamingMessage],
+                    requestActivities: chat.reading.requestActivities,
                     presentationId: chat.reading.messagePresentationId,
                     liveMessageIndex: chat.reading.streamingMessage == null
                         ? null
@@ -700,6 +701,113 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     await tester.pumpAndSettle();
     await tester.settleMarkdown();
   }
+
+  testWidgets(
+    'retained request Activity stays before the received saved answer',
+    (tester) async {
+      runtime.beginTurn(submitting: false);
+      runtime.observeTool('tool.complete', {
+        'tool_id': 'before',
+        'name': 'terminal',
+        'result': 'First result',
+      });
+      runtime.receiveApproval({
+        'request_id': 'decision',
+        'command': 'inspect source',
+        'description': 'Allow inspection?',
+      });
+      final response = runtime.beginApprovalAnswer('decision', 'once');
+      runtime.finishApprovalAnswer(response, 'decision', accepted: true);
+      runtime.observeTool('tool.complete', {
+        'tool_id': 'after',
+        'name': 'terminal',
+        'result': 'Second result',
+      });
+      runtime.completeTurn(failed: false, cancelled: false, error: null);
+      final projection = ChatTranscriptProjection(
+        savedRows: [
+          {
+            'id': 20,
+            'role': 'tool',
+            'tool_call_id': 'after',
+            'tool_name': 'terminal',
+            'content': 'Second result',
+          },
+          {
+            'id': 21,
+            'role': 'assistant',
+            'content': 'The received final answer.',
+          },
+        ],
+        streamingMessage: null,
+        runtime: runtime.observation,
+        presentationId: (row) => row['id']!,
+        liveAnswering: false,
+        requestActivities: chat.reading.requestActivities,
+      );
+      final inspection = ProfileSupervisionSession(
+        controller: controller,
+        chat: chat,
+      );
+      addTearDown(inspection.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.light),
+          home: Scaffold(
+            body: ProfileTranscript(
+              presentation: TranscriptPresentation.capture(
+                identity: chat.key,
+                reader: chat.reading,
+                timeline: projection.timeline,
+                needsInput: false,
+                turnAdmissionBlocked: false,
+              ),
+              onRefreshHistory: () async {},
+              messageBuilder: (entry) => Text(entry.message.text),
+              tail: const [],
+              activity: ConversationActivity(
+                runtime: runtime.observation,
+                entries: projection.activity,
+                beforeMessagePresentationId:
+                    projection.retainedActivityBeforePresentationId,
+                todos: const [],
+                inspection: inspection,
+                agentsBuilder: () => const SizedBox.shrink(),
+                live: false,
+                taskCount: 0,
+                agentCount: 0,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final activity = find.text('Activity · 2 tools');
+      final answer = find.text('The received final answer.');
+      expect(activity, findsOneWidget);
+      expect(
+        tester.getTopLeft(activity).dy,
+        lessThan(tester.getTopLeft(answer).dy),
+      );
+      await tester.tap(activity);
+      await tester.pumpAndSettle();
+      final calls = tester
+          .widgetList<ProfileToolCall>(find.byType(ProfileToolCall))
+          .toList();
+      expect(
+        calls.map((widget) => widget.call.callId ?? widget.call.requestId),
+        ['before', 'decision', 'after'],
+      );
+      expect(
+        find.descendant(
+          of: find.byType(ProfileActivityTimeline),
+          matching: find.byType(ProfileToolCall),
+        ),
+        findsNWidgets(3),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('retained live Activity shares through the current callback', (
     tester,
