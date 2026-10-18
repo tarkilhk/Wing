@@ -8,6 +8,9 @@ import 'administration/admin_widgets.dart';
 
 /// A captured update check: reading changes never starts an update or a request.
 class BackendUpdateChangesScreen extends StatefulWidget {
+  static const comparisonUnavailableMessage =
+      'Hermes could not compare this installation with upstream.';
+
   final BackendUpdateCheck check;
   final String connectionLabel;
 
@@ -49,8 +52,12 @@ class _BackendUpdateChangesScreenState
                 const SizedBox(height: 8),
               ],
               if (commits.isEmpty)
-                const Text(
-                  'Hermes did not provide change details for this update. Check for updates again later.',
+                Text(
+                  !check.failed &&
+                          check.updateAvailable == true &&
+                          check.behind == null
+                      ? BackendUpdateChangesScreen.comparisonUnavailableMessage
+                      : 'Hermes did not provide change details for this update.',
                 )
               else ...[
                 Text(

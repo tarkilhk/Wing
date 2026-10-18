@@ -47,7 +47,9 @@ them; Wing does not provide a preview-channel catalog or change custom branches.
 Stable follows published releases and may have no commit count or changelog.
 Main shows commits behind its branch when Hermes can count them. A build newer
 than stable is identified separately, and moving back to an older release has an
-explicit warning before updating. If the check fails, Wing shows the server's
+explicit warning before updating. When Main reports an update without a commit
+count or change details, Wing explains that Hermes could not compare the
+installation with upstream. If the check fails, Wing shows the server's
 explanation and leaves the update action unavailable. Unverified channel metadata
 also blocks updating. Check again before proceeding.
 

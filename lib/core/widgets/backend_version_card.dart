@@ -286,6 +286,20 @@ class _BackendVersionCardState extends State<BackendVersionCard> {
                       ],
                     ),
                   ),
+                if (!hideAvailability &&
+                    checkMessage == null &&
+                    channel?.name == 'main' &&
+                    check?.updateAvailable == true &&
+                    check?.behind == null &&
+                    check?.commits.isEmpty == true) ...[
+                  const SizedBox(height: WingSpacing.sm),
+                  Text(
+                    BackendUpdateChangesScreen.comparisonUnavailableMessage,
+                    style: tokens.typography.label.copyWith(
+                      color: tokens.muted,
+                    ),
+                  ),
+                ],
                 if (check?.canApply == false)
                   const Text('Updates must be applied from the server host.'),
                 if (!controller.starting &&
@@ -418,7 +432,9 @@ String _checkStatus(
         ? 'Update available · $behind commits behind${channel?.branch == null ? '' : ' ${channel!.branch}'}'
         : channel != null && channel.name != 'main'
         ? 'Release update available'
-        : 'Update available · commit count unknown';
+        : check.commits.isEmpty
+        ? 'Update available · comparison unavailable'
+        : 'Update available · commit count unavailable';
   }
   return check.updateAvailable == false && check.behind == 0
       ? channel == null

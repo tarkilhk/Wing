@@ -281,6 +281,41 @@ void main() {
             expect(tester.takeException(), isNull);
             await snapshot(tester, '${brightness.name}-$scale-current');
 
+            host.checkResponse = {..._available, 'behind': -1};
+            await tester.tap(find.byTooltip('Check for updates'));
+            await tester.pumpAndSettle();
+            expect(
+              find.text('Update available · comparison unavailable'),
+              findsOneWidget,
+            );
+            expect(
+              find.text(
+                'Hermes could not compare this installation with upstream.',
+              ),
+              findsOneWidget,
+            );
+            expect(find.textContaining('commit count unknown'), findsNothing);
+            await snapshot(tester, '${brightness.name}-$scale-comparison-card');
+            await tester.ensureVisible(
+              find.byTooltip('Changes in this update'),
+            );
+            final reads = host.reads.length;
+            await tester.tap(find.byTooltip('Changes in this update'));
+            await tester.pumpAndSettle();
+            expect(
+              find.text(
+                'Hermes could not compare this installation with upstream.',
+              ),
+              findsOneWidget,
+            );
+            expect(host.reads, hasLength(reads));
+            await snapshot(
+              tester,
+              '${brightness.name}-$scale-comparison-details',
+            );
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+
             host.checkResponse = _available;
             await tester.tap(find.byTooltip('Check for updates'));
             await tester.pumpAndSettle();
@@ -667,7 +702,11 @@ void main() {
       await showCard(tester, host);
       await tester.pumpAndSettle();
       expect(
-        find.text('Update available · commit count unknown'),
+        find.text('Update available · comparison unavailable'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Hermes could not compare this installation with upstream.'),
         findsOneWidget,
       );
       final reads = host.reads.length;
@@ -675,9 +714,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Production host'), findsOneWidget);
       expect(
-        find.text(
-          'Hermes did not provide change details for this update. Check for updates again later.',
-        ),
+        find.text('Hermes could not compare this installation with upstream.'),
         findsOneWidget,
       );
       expect(find.text('Commit details'), findsNothing);
