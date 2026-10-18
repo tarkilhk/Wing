@@ -7472,6 +7472,16 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "integration_test/fixtures/external_share/ClipboardFixtureProvider.java",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "integration_test/fixtures/external_share/ClipboardSenderActivity.java",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "integration_test/fixtures/external_share/ControlledCameraActivity.java",
       "area": "integration_test",
       "provenance": "intentional-untracked"

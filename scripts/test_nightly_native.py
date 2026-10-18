@@ -32,10 +32,11 @@ FAMILIES = (
     'voice', 'recents', 'recents-code', 'recents-events', 'recents-momentum',
     'platform-plugins', 'scheduled-tasks', 'administration', 'queue-editing',
     'health-entry', 'transcript-expansion', 'health-retention',
-    'slash', 'html', 'stock-hermes', 'external-share',
+    'slash', 'html', 'stock-hermes', 'external-share', 'clipboard',
 )
 DEV = 'com.tarkilhk.wing.dev'
 QA = 'com.tarkilhk.wing.notificationqa'
+CLIPBOARD_DEFINES = ('--dart-define=HERMES_CLIPBOARD_DEVICE_TEST=true',)
 DIRECT_SUITES = {
     'dependency_plugins_native_test.dart': frozenset({
         'native package metadata and app storage remain available',
@@ -83,6 +84,7 @@ class Runner:
     def __init__(self, output: Path):
         self.output = output
         self.device = None
+        self.prepared = None
         self.steps = []
         self.environment = dict(os.environ)
         self.environment.update({
@@ -130,12 +132,19 @@ class Runner:
     def shell(self, *parts):
         return self.adb('shell', *parts)
 
-    def install(self, target, *, qa=False, defines=()):
+    def build(self, target, *, qa=False, defines=()):
         self.environment['ORG_GRADLE_PROJECT_notificationQa'] = str(qa).lower()
+        key = (target, qa, tuple(defines), self.environment['ORG_GRADLE_PROJECT_nativeShareQa'])
+        if self.prepared == key:
+            return
         self.run('build-' + Path(target).stem, [
             'flutter', 'build', 'apk', '--debug', '--no-pub',
             '--target-platform', 'android-x64', '-t', target, *defines,
         ])
+        self.prepared = key
+
+    def install(self, target, *, qa=False, defines=()):
+        self.build(target, qa=qa, defines=defines)
         self.run('install-' + Path(target).stem, [
             android.adb_path(), '-s', self.device, 'install', '--no-incremental',
             '-r', '-g', str(ROOT / 'build/app/outputs/flutter-apk/app-debug.apk'),
@@ -240,6 +249,9 @@ class Runner:
                          checkpoint=self.retention_checkpoint() if retention else None)
         elif family == 'html':
             self.html()
+        elif family == 'clipboard':
+            self.install('integration_test/clipboard_device_test.dart', defines=CLIPBOARD_DEFINES)
+            self.clipboard()
         else:
             # Drivers using --no-uninstall require a dev package on the fresh AVD.
             self.install('integration_test/file_transfer_native_test.dart')
@@ -264,6 +276,33 @@ class Runner:
                 extra = ['--' + family.removeprefix('recents-') + '-only'] if family.startswith('recents-') else []
                 self.driver('scripts/test_native_' + script + '.py', '--device', self.device,
                             '--output', self.output / family, *extra)
+
+    def clipboard(self):
+        helper = 'com.tarkilhk.wing.shareqa.fixture'
+        output = self.output / 'clipboard-fixture'
+        self.run('build-clipboard-fixture', [sys.executable, '-c',
+            'import os,sys; from pathlib import Path; '
+            'from tools.qa.check_external_share import build_helper; '
+            'build_helper(Path(os.environ["ANDROID_HOME"]), Path(os.environ["JAVA_HOME"]), Path(sys.argv[1]))',
+            str(output)])
+        self.run('install-clipboard-fixture', [android.adb_path(), '-s', self.device,
+            'install', '--no-incremental', str(output / 'external-share-fixture.apk')])
+        try:
+            self.shell('am', 'start', '-W', '-n', helper + '/.ClipboardSenderActivity')
+            self.flutter('clipboard_device_test.dart', frozenset({
+                'synthetic image clip crosses Android clipboard with exact pixels',
+                'long-press Paste stages an image beside a picked-image thumbnail',
+            }), defines=CLIPBOARD_DEFINES)
+        finally:
+            try:
+                for name, command in {
+                    'clipboard-logcat.txt': ('logcat', '-d', '-t', '3000'),
+                    'clipboard-window.txt': ('shell', 'dumpsys', 'window'),
+                    'clipboard-service.txt': ('shell', 'dumpsys', 'clipboard'),
+                }.items():
+                    (self.output / name).write_text(self.adb(*command))
+            finally:
+                self.adb('uninstall', helper)
 
     def slash(self):
         seen = set()
@@ -387,6 +426,9 @@ def main():
     receipt = {'family': args.family, 'passed': False, 'source_before': fingerprint(),
                'steps': runner.steps}
     try:
+        if args.family == 'clipboard':
+            # Build before boot: System UI must own focus for the real clipboard grant.
+            runner.build('integration_test/clipboard_device_test.dart', defines=CLIPBOARD_DEFINES)
         with cleanup_signals(), android.owned_emulator() as device:
             runner.device = device
             android.require_emulator(device)

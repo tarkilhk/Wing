@@ -5,6 +5,11 @@
         android:debuggable="true" android:allowBackup="false">
         <activity android:name=".ShareSenderActivity" android:exported="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <activity android:name=".ClipboardSenderActivity" android:exported="true"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+        <provider android:name=".ClipboardFixtureProvider"
+            android:authorities="com.tarkilhk.wing.shareqa.fixture.clipboard"
+            android:exported="false" android:grantUriPermissions="true" />
         <activity android:name=".BackupSaveActivity" android:exported="true"
             android:label="Save Wing QA backup"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">

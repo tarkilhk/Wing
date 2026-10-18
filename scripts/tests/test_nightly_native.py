@@ -97,6 +97,15 @@ class NativeExecution(unittest.TestCase):
                     raise RuntimeError('test failure')
         self.assertEqual(adb.call_args_list[-1].args, ('forward', '--remove', 'tcp:43123'))
 
+    def test_clipboard_foreign_fixture_is_retired_after_test_failure(self):
+        with patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+             patch.object(self.runner, 'run'), patch.object(self.runner, 'shell'), \
+             patch.object(self.runner, 'adb', return_value='') as adb, \
+             patch.object(self.runner, 'flutter', side_effect=RuntimeError('Paste failed')):
+            with self.assertRaisesRegex(RuntimeError, 'Paste failed'):
+                self.runner.clipboard()
+            self.assertEqual(adb.call_args.args, ('uninstall', 'com.tarkilhk.wing.shareqa.fixture'))
+
     def test_slash_native_checkpoints_configure_type_capture_and_ack_once(self):
         with patch.object(self.runner, 'flutter') as flutter:
             self.runner.slash()
@@ -140,12 +149,33 @@ class NativeExecution(unittest.TestCase):
 
 
 class Catalog(unittest.TestCase):
+    def test_clipboard_apk_is_prepared_before_emulator_boot(self):
+        order = []
+        @contextlib.contextmanager
+        def emulator():
+            order.append('boot')
+            yield 'emulator-5562'
+            order.append('retire')
+        def family(runner, *args):
+            order.append('test')
+            runner.steps.append({'name': 'clipboard', 'passed': True})
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(sys, 'argv', ['nightly', 'clipboard', '--output', directory]), \
+             patch.object(nightly.android, 'owned_emulator', side_effect=emulator), \
+             patch.object(nightly.android, 'require_emulator'), \
+             patch.object(nightly, 'fingerprint', return_value='stable'), \
+             patch.object(nightly.Runner, 'build', side_effect=lambda *a, **kw: order.append('build')), \
+             patch.object(nightly.Runner, 'family', family), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(nightly.main(), 0)
+            self.assertEqual(order, ['build', 'boot', 'test', 'retire'])
+
     def test_reviewed_native_boundaries_are_all_enrolled(self):
         self.assertTrue({
             'journeys', 'health-normal', 'health-large', 'backup', 'background',
             'recents', 'recents-code', 'recents-events', 'recents-momentum',
             'notification-actions', 'notification-restore', 'notification-counts',
-            'notification-cold', 'voice', 'file-transfer', 'stock-hermes', 'external-share',
+            'notification-cold', 'voice', 'file-transfer', 'stock-hermes', 'external-share', 'clipboard',
         }.issubset(nightly.FAMILIES))
 
     def test_empty_and_duplicate_catalogs_fail_before_publishing_outputs(self):
@@ -186,6 +216,7 @@ class Catalog(unittest.TestCase):
                 with self.subTest(family=family), \
                      patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
                      patch.object(runner, 'run') as run, \
+                     patch.object(runner, 'adb', return_value=''), \
                      patch.object(runner, 'shell', side_effect=lambda *args:
                                   '123' if args[0] == 'pidof' else 'webview_devtools_remote_123'), \
                      patch.object(runner, 'forward', side_effect=forward), \
