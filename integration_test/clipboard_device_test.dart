@@ -2,6 +2,7 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,11 +18,12 @@ import 'package:wing/core/theme/wing_theme.dart';
 import '../test/support/profile_actions_fixture.dart';
 import '../test/support/composer_fixture.dart';
 
-/// Opt-in probe of the phone's current image clip; never contacts a gateway.
+/// The nightly driver supplies the synthetic PNG from a separate Android UID.
+/// This exercises real clipboard grants and Paste without contacting a gateway.
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
-    'current image clip can be read through the native Paste path',
+    'synthetic image clip crosses Android clipboard with exact pixels',
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(home: Scaffold(body: TextField(autofocus: true))),
@@ -30,10 +32,23 @@ void main() {
       expect(
         await ImageClipboard.hasImage(),
         isTrue,
-        reason: 'Copy an image on this device before running the probe.',
+        reason: 'Run the owned clipboard fixture before this suite.',
       );
       final bytes = await ImageClipboard.readImage();
       expect(bytes, isNotEmpty);
+      final codec = await ui.instantiateImageCodec(bytes);
+      addTearDown(codec.dispose);
+      final frame = await codec.getNextFrame();
+      addTearDown(frame.image.dispose);
+      expect((frame.image.width, frame.image.height), (32, 32));
+      final pixels = (await frame.image.toByteData())!.buffer.asUint8List();
+      expect(
+        pixels,
+        List.generate(
+          32 * 32 * 4,
+          (index) => [0x20, 0x90, 0xc0, 0xff][index % 4],
+        ),
+      );
     },
     skip: !const bool.fromEnvironment('HERMES_CLIPBOARD_DEVICE_TEST'),
   );

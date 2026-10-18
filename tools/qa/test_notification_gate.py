@@ -33,6 +33,38 @@ class NotificationCaptureTest(unittest.TestCase):
             self.assertEqual(driver.nodes()[0].get('text'), 'current reply')
 
 
+class NotificationShadeNavigationTest(unittest.TestCase):
+    def test_pull_waits_until_quick_settings_has_closed_to_the_launcher(self):
+        shown = None
+        quick = [ET.Element('node', {'package': 'com.android.systemui'})]
+        home = [ET.Element('node', {'package': 'owned.launcher'})]
+        notice = [ET.Element('node', {'resource-id': 'android:id/app_name_text'})]
+        captures = iter([quick, home, notice])
+        pulls = []
+
+        def capture():
+            nonlocal shown
+            shown = next(captures)
+            return shown
+
+        def adb(*args):
+            if args == ('shell', 'wm', 'size'):
+                return 'Physical size: 1080x1920'
+            if 'resolve-activity' in args:
+                return 'owned.launcher/.Home'
+            if 'swipe' in args:
+                self.assertIs(shown, home, 'Do not pull again while Quick Settings still owns the screen')
+                pulls.append(args)
+            return ''
+
+        with patch.object(driver, 'adb', side_effect=adb), \
+             patch.object(driver, 'nodes', side_effect=capture), \
+             patch.object(driver.time, 'sleep'):
+            driver.shade(expand=False)
+        self.assertEqual(len(pulls), 1)
+        self.assertIs(shown, notice)
+
+
 class NotificationFixtureSetupTest(unittest.TestCase):
     def test_provisions_only_qa_permissions_before_first_launch(self):
         calls = []

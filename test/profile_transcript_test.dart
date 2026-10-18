@@ -945,7 +945,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       ),
     );
     await show(tester);
-    tester.view.physicalSize = const Size(320, 140);
+    tester.view.physicalSize =
+        const Size(320, 140) * tester.view.devicePixelRatio;
     addTearDown(tester.view.reset);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
@@ -1674,8 +1675,17 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(find.text('· 1m 24s'), findsOneWidget);
     expect(find.text('Activity · 1 tool'), findsOneWidget);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-    await tester.pump(const Duration(minutes: 10));
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    try {
+      if (tester.binding is AutomatedTestWidgetsFlutterBinding) {
+        await tester.pump(const Duration(minutes: 10));
+      } else {
+        // Native frames are suspended while paused. Observe real elapsed time
+        // without waiting for a paused frame or a ten-minute fake-clock jump.
+        await Future<void>.delayed(const Duration(seconds: 2));
+      }
+    } finally {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    }
     await tester.pumpAndSettle();
     expect(find.text('· 1m 24s'), findsOneWidget);
     expect(tester.takeException(), isNull);

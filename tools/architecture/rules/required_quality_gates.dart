@@ -222,6 +222,10 @@ List<String> _checkNightly(Directory root) {
     for (final command in [
       _sourceCommand,
       _fullTestsCommand,
+      'python3 -m unittest discover -s scripts/tests -v',
+      _qaCommand,
+      _fixtureDependencyCommand,
+      _fixtureTransportCommand,
       for (final name in _fixtureNames)
         'dart run tools/architecture/tests/${name}_test.dart',
     ]) {
@@ -257,6 +261,121 @@ List<String> _checkNightly(Directory root) {
           'Run $command as a mandatory hard-failing step after dependencies.',
         );
       }
+    }
+    final jobs = document['jobs'] as Map;
+    bool hardCommand(String name, String command) {
+      final value = jobs[name];
+      return value is Map &&
+          _hardFailure(value['continue-on-error']) &&
+          _mandatory(value['if']) &&
+          value['steps'] is List &&
+          (value['steps'] as List).whereType<Map>().any(
+            (step) =>
+                _hardFailure(step['continue-on-error']) &&
+                _mandatory(step['if']) &&
+                _runsFinalCommand(step['run'], command),
+          );
+    }
+
+    final catalog = jobs['catalog'];
+    final native = jobs['native'];
+    const matrixCommand = 'python3 scripts/test_nightly_native.py --matrix';
+    const nativeCommand =
+        r'python3 scripts/test_nightly_native.py "$NIGHTLY_FAMILY" --hermes-source "$RUNNER_TEMP/hermes"';
+    final strategy = native is Map ? native['strategy'] : null;
+    final matrix = strategy is Map ? strategy['matrix'] : null;
+    final outputs = catalog is Map ? catalog['outputs'] : null;
+    final nativeSteps = native is Map && native['steps'] is List
+        ? (native['steps'] as List).whereType<Map>()
+        : <Map>[];
+    bool runsForStock(Map step) {
+      final condition = step['if']?.toString().replaceAll(RegExp(r'\s+'), '');
+      return _hardFailure(step['continue-on-error']) &&
+          (_mandatory(step['if']) ||
+              condition == "matrix.family=='stock-hermes'" ||
+              condition == "\${{matrix.family=='stock-hermes'}}");
+    }
+
+    final stockSteps = nativeSteps.toList();
+    final pythonIndex = stockSteps.indexWhere(
+      (step) =>
+          runsForStock(step) &&
+          step['uses'].toString().startsWith('actions/setup-python@') &&
+          step['with'] is Map &&
+          (step['with'] as Map)['python-version'] == '3.14',
+    );
+    final bootstrapIndex = stockSteps.indexWhere(
+      (step) =>
+          runsForStock(step) &&
+          step['run'].toString().contains(
+            r'python3 -m venv "$RUNNER_TEMP/hermes/.venv"',
+          ),
+    );
+    if (pythonIndex < 0 || bootstrapIndex <= pythonIndex) {
+      failures.add(
+        '$path:native REQUIRED_QUALITY_GATE: Provision supported Python 3.14 before creating the current stock Hermes environment.',
+      );
+    }
+    if (!hardCommand('catalog', matrixCommand) ||
+        outputs is! Map ||
+        outputs['families'] != r'${{ steps.catalog.outputs.families }}' ||
+        catalog is! Map ||
+        !(catalog['steps'] as List).whereType<Map>().any(
+          (step) =>
+              step['id'] == 'catalog' &&
+              _runsFinalCommand(step['run'], matrixCommand),
+        ) ||
+        !hardCommand('native', nativeCommand) ||
+        !hardCommand(
+          'native',
+          r'echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"',
+        ) ||
+        native is! Map ||
+        native['needs'] != 'catalog' ||
+        strategy is! Map ||
+        strategy['fail-fast'] != false ||
+        matrix is! Map ||
+        matrix.length != 1 ||
+        matrix['family'] !=
+            r'${{ fromJSON(needs.catalog.outputs.families) }}' ||
+        !nativeSteps.any(
+          (step) =>
+              _runsFinalCommand(step['run'], nativeCommand) &&
+              step['env'] is Map &&
+              (step['env'] as Map)['NIGHTLY_FAMILY'] == r'${{ matrix.family }}',
+        )) {
+      failures.add(
+        '$path:native REQUIRED_QUALITY_GATE: Run every enrolled native family independently; do not filter, replace or soft-fail the matrix.',
+      );
+    }
+    for (final command in [
+      './android/gradlew -p android :app:testDebugUnitTest --no-daemon',
+      'python3 scripts/check_commit_linters.py',
+      _nativeFixtureCommand,
+      _notificationFixtureCommand,
+      _declarationFixtureCommand,
+      _voiceFixtureCommand,
+    ]) {
+      if (!hardCommand('platform', command)) {
+        failures.add(
+          '$path:platform REQUIRED_QUALITY_GATE: Run $command as a mandatory hard-failing step.',
+        );
+      }
+    }
+    final renderer = jobs['renderer'];
+    if (renderer is! Map ||
+        !_hardFailure(renderer['continue-on-error']) ||
+        !_mandatory(renderer['if']) ||
+        renderer['steps'] is! List ||
+        !(renderer['steps'] as List).whereType<Map>().any(
+          (step) =>
+              step['uses'] == './.github/actions/test-diagram-preview' &&
+              _hardFailure(step['continue-on-error']) &&
+              _mandatory(step['if']),
+        )) {
+      failures.add(
+        '$path:renderer REQUIRED_QUALITY_GATE: Run real browser renderer isolation.',
+      );
     }
   } on FileSystemException catch (error) {
     failures.add('$path QUALITY_WORKFLOW_INPUT: ${error.message}');

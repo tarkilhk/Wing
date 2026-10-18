@@ -534,6 +534,42 @@ void main() {
     }
   });
 
+  test(
+    'nightly cannot omit, filter or soft-fail native and tooling families',
+    () {
+      final file = File('${root.path}/.github/workflows/nightly-tests.yml');
+      for (final mutation in [
+        ('  catalog:', '  catalog:\n    if: false'),
+        ('  native:', '  native:\n    continue-on-error: true'),
+        ('fail-fast: false', 'fail-fast: true'),
+        (r'${{ fromJSON(needs.catalog.outputs.families) }}', '[backup]'),
+        ('--matrix', '--matrix || true'),
+        (
+          r'echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"',
+          'echo omitted Android tools',
+        ),
+        (r'NIGHTLY_FAMILY: ${{ matrix.family }}', 'NIGHTLY_FAMILY: backup'),
+        ("python-version: '3.14'", "python-version: '3.12'"),
+        ('actions/setup-python@', 'actions/unused@'),
+        ("if: matrix.family == 'stock-hermes'", 'if: false'),
+        ('  platform:', '  platform:\n    if: false'),
+        ('  renderer:', '  renderer:\n    continue-on-error: true'),
+        ('scripts/tests -v', 'scripts/tests -v || true'),
+        ('prove_declarations.py', 'prove_declarations.py || true'),
+      ]) {
+        _writeWorkflows(root);
+        final source = file.readAsStringSync();
+        expect(source, contains(mutation.$1));
+        file.writeAsStringSync(source.replaceFirst(mutation.$1, mutation.$2));
+        expect(
+          checkRequiredQualityGates(root),
+          contains(contains('nightly-tests.yml')),
+          reason: mutation.$2,
+        );
+      }
+    },
+  );
+
   test('standalone checker fixtures remain enforced nightly', () {
     final file = File('${root.path}/.github/workflows/nightly-tests.yml');
     for (final command in fixtureCommands) {
@@ -577,10 +613,17 @@ void main() {
     final contents = file.readAsStringSync();
     expect(contents, contains(setup));
     file.writeAsStringSync(contents.replaceFirst(setup, '') + setup);
-    expect(
-      checkRequiredQualityGates(root),
-      hasLength(2 + fixtureCommands.length),
-    );
+    final failures = checkRequiredQualityGates(root);
+    for (final command in [
+      sourceCommand,
+      'python3 scripts/test.py --full --skip-linters',
+      ...fixtureCommands,
+    ]) {
+      expect(
+        failures,
+        contains(allOf(contains(command), contains('after dependencies'))),
+      );
+    }
   });
 
   test('nightly source checks must precede externally checked host tests', () {
@@ -763,10 +806,47 @@ jobs:
     steps:
       - name: Dependencies
         run: flutter pub get
+      - run: python3 -m unittest discover -s scripts/tests -v
+      - run: python3 -m unittest discover -s tools/qa -p 'test_*.py' -v
+      - run: python3 -m pip install -r tools/fake_gateway/requirements.txt
+      - run: python3 -m unittest tools.fake_gateway.test_fixture_boundaries -v
       - name: Current source
         run: python3 scripts/check_commit_linters.py --dart-only
       - name: Exhaustive tests
         run: python3 scripts/test.py --full --skip-linters
 ${fixtureCommands.map((command) => '      - name: Proof fixtures\n        run: $command').join('\n')}
+  catalog:
+    outputs:
+      families: \${{ steps.catalog.outputs.families }}
+    steps:
+      - id: catalog
+        run: python3 scripts/test_nightly_native.py --matrix
+  native:
+    needs: catalog
+    strategy:
+      fail-fast: false
+      matrix:
+        family: \${{ fromJSON(needs.catalog.outputs.families) }}
+    steps:
+      - run: echo "\$ANDROID_HOME/platform-tools" >> "\$GITHUB_PATH"
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        if: matrix.family == 'stock-hermes'
+        with:
+          python-version: '3.14'
+      - run: python3 -m venv "\$RUNNER_TEMP/hermes/.venv"
+      - env:
+          NIGHTLY_FAMILY: \${{ matrix.family }}
+        run: python3 scripts/test_nightly_native.py "\$NIGHTLY_FAMILY" --hermes-source "\$RUNNER_TEMP/hermes"
+  platform:
+    steps:
+      - run: ./android/gradlew -p android :app:testDebugUnitTest --no-daemon
+      - run: python3 scripts/check_commit_linters.py
+      - run: python3 tools/architecture/native_share/prove_boundary.py
+      - run: python3 tools/architecture/native_notification/prove_boundary.py
+      - run: python3 tools/architecture/native_notification/prove_declarations.py
+      - run: python3 tools/architecture/native_voice/prove_boundary.py
+  renderer:
+    steps:
+      - uses: ./.github/actions/test-diagram-preview
 ''');
 }
