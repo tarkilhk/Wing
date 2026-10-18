@@ -32,7 +32,7 @@ App settings shows the installed Android version/build separately from the backe
 
 Versions & updates can check for a server update and request it explicitly. **Changes in this update** shows available commit summaries, with a partial-history notice when needed; the server returns at most 20 summaries.
 
-The screen checks automatically when opened. The header Wing pulses while the
+The screen checks automatically when opened. The header Wing pulses and the circular update icon rotates while the
 check runs, without a duplicate loading caption. The installed version appears
 as soon as it is available. Unknown availability is shown only
 after a completed check provides no answer; a failed check offers another check.
@@ -52,6 +52,12 @@ count or change details, Wing explains that Hermes could not compare the
 installation with upstream. If the check fails, Wing shows the server's
 explanation and leaves the update action unavailable. Unverified channel metadata
 also blocks updating. Check again before proceeding.
+
+After confirmation, starting status and a collapsed **Update logs** viewer appear
+immediately. Wing follows progress automatically while this screen remains open.
+Expand the viewer to read output with the newest lines at the top. If progress
+cannot be read during a restart or disconnection, use **Check update progress**
+to retry; this does not repeat the update request.
 
 Leaving the screen does not cancel an accepted server update. If acknowledgement is lost, the outcome stays uncertain; check its status and version before repeating the request. Request acceptance alone does not mean the update completed.
 

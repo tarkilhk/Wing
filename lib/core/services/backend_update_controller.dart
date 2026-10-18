@@ -44,6 +44,9 @@ class BackendUpdateController extends ChangeNotifier {
   int _versionObservation = 0;
   int _checkGeneration = 0;
   int _statusGeneration = 0;
+  Timer? _statusPoll;
+  Future<void>? _statusRead;
+  int updateAttempt = 0;
   String? _actionId;
   int? _actionPid;
 
@@ -193,7 +196,10 @@ class BackendUpdateController extends ChangeNotifier {
       return false;
     }
     final generation = ++_checkGeneration;
+    updateAttempt++;
+    _statusPoll?.cancel();
     _statusGeneration++;
+    _statusRead = null;
     statusLoading = false;
     status = null;
     _actionId = null;
@@ -278,7 +284,7 @@ class BackendUpdateController extends ChangeNotifier {
       phase = BackendUpdatePhase.running;
       message = alreadyRunning
           ? 'A backend update is already running on this host. Its status is now tracked.'
-          : 'Backend update started. Check update progress to follow it.';
+          : 'Backend update started. Following update progress.';
       return true;
     } catch (_) {
       if (!_currentCheck(generation)) return false;
@@ -291,6 +297,12 @@ class BackendUpdateController extends ChangeNotifier {
       if (_currentCheck(generation)) {
         starting = false;
         _notify();
+        if (phase == BackendUpdatePhase.running) {
+          _statusPoll = Timer(
+            Duration.zero,
+            () => unawaited(refreshStatus(background: true)),
+          );
+        }
       }
     }
   }
@@ -360,10 +372,19 @@ class BackendUpdateController extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshStatus() async {
-    if (_disposed || statusLoading || starting || channelSaving) return;
+  Future<void> refreshStatus({bool background = false}) {
+    if (_disposed || starting || channelSaving) return Future.value();
+    if (!background && !statusLoading) {
+      statusLoading = true;
+      _notify();
+    }
+    return _statusRead ??= _refreshStatus(background: background);
+  }
+
+  Future<void> _refreshStatus({required bool background}) async {
+    _statusPoll?.cancel();
     final generation = ++_statusGeneration;
-    statusLoading = true;
+    statusLoading = !background;
     _notify();
     try {
       final next = BackendUpdateStatus.fromJson(
@@ -379,8 +400,15 @@ class BackendUpdateController extends ChangeNotifier {
       message = 'Backend update status is unavailable. Check again.';
     } finally {
       if (_currentStatus(generation)) {
+        _statusRead = null;
         statusLoading = false;
         _notify();
+        if (phase == BackendUpdatePhase.running) {
+          _statusPoll = Timer(
+            const Duration(seconds: 2),
+            () => unawaited(refreshStatus(background: true)),
+          );
+        }
       }
     }
   }
@@ -492,6 +520,7 @@ class BackendUpdateController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _statusPoll?.cancel();
     _checkGeneration++;
     _statusGeneration++;
     super.dispose();

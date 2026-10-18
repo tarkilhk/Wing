@@ -44,6 +44,27 @@ List<Finding> operationFindings(
 }
 
 void main() {
+  test(
+    'backend animation disposal remains live while controller ownership stays retired',
+    () {
+      const library = 'lib/core/widgets/backend_version_card.dart';
+      expect(
+        operationFindings({
+          library: 'class _BackendVersionCardState { void dispose() {} }',
+        }),
+        isEmpty,
+      );
+      final findings = operationFindings({
+        library:
+            'class _BackendVersionCardState { bool _ownsController = false; void dispose() {} }',
+      });
+      expect(findings.map((finding) => finding.subject), [
+        '_BackendVersionCardState._ownsController',
+      ]);
+      expect(findings.single.id, rule.id);
+    },
+  );
+
   test('retired enum values use their actual enum and containing library', () {
     const library = 'lib/core/models/app_preferences.dart';
     const part = 'lib/core/models/preferences_enum_part.dart';

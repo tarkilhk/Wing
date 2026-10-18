@@ -98,6 +98,26 @@ class _UpdateHost {
   );
 }
 
+// Mirrors the production Versions route's ownership when exercising a card alone.
+class _UpdateCardOwner extends StatefulWidget {
+  const _UpdateCardOwner({required this.controller, required this.child});
+  final BackendUpdateController controller;
+  final Widget child;
+  @override
+  State<_UpdateCardOwner> createState() => _UpdateCardOwnerState();
+}
+
+class _UpdateCardOwnerState extends State<_UpdateCardOwner> {
+  @override
+  void dispose() {
+    widget.controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
+
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_BACKEND_CHANNELS');
   setUpAll(() async {
@@ -105,6 +125,7 @@ void main() {
     for (final (family, path) in [
       ('Roboto', 'build/studio-roboto.ttf'),
       ('MaterialIcons', 'build/studio-icons.otf'),
+      ('monospace', 'build/studio-mono.ttf'),
     ]) {
       await (FontLoader(family)..addFont(
             File(path).readAsBytes().then((bytes) => bytes.buffer.asByteData()),
@@ -328,12 +349,63 @@ void main() {
             await tester.pump();
             await tester.pump(const Duration(milliseconds: 200));
             expect(find.byType(StudioLoading), findsOneWidget);
-            expect(find.text('Starting backend update…'), findsNothing);
+            expect(find.text('Starting backend update…'), findsOneWidget);
+            expect(find.text('Update logs'), findsOneWidget);
+            expect(find.byType(SelectableText), findsNothing);
+            final pendingRotation = tester
+                .widget<RotationTransition>(
+                  find.descendant(
+                    of: find.byTooltip('Check for updates'),
+                    matching: find.byType(RotationTransition),
+                  ),
+                )
+                .turns;
+            final turn = pendingRotation.value;
+            await tester.pump(const Duration(milliseconds: 100));
+            expect(pendingRotation.value, scale == 2 ? turn : isNot(turn));
+            await tester.ensureVisible(find.text('Update logs'));
+            await snapshot(tester, '${brightness.name}-$scale-update-starting');
             expect(find.text('Checking for updates…'), findsNothing);
             startCheck.complete(_available);
             await tester.pumpAndSettle();
             expect(find.byType(StudioLoading), findsNothing);
             expect(host.posts, hasLength(1));
+            host.pendingCheck = null;
+            host.statusResponse = {
+              ...host.statusResponse,
+              'lines': [
+                'Preparing update',
+                'Downloading source',
+                'Applying newest changes',
+              ],
+            };
+            await tester.pump(const Duration(seconds: 2));
+            await tester.pump();
+            await tester.ensureVisible(find.text('Update logs'));
+            await snapshot(
+              tester,
+              '${brightness.name}-$scale-update-running-collapsed',
+            );
+            await tester.tap(find.text('Update logs'));
+            await tester.pumpAndSettle();
+            await tester.ensureVisible(find.byType(SelectableText));
+            if (scale == 2) {
+              await tester.drag(
+                find.byType(SingleChildScrollView).first,
+                const Offset(0, -520),
+              );
+              await tester.pumpAndSettle();
+            }
+            await snapshot(
+              tester,
+              '${brightness.name}-$scale-update-running-expanded',
+            );
+            expect(
+              find.text(
+                'Applying newest changes\nDownloading source\nPreparing update',
+              ),
+              findsOneWidget,
+            );
           } finally {
             semantics.dispose();
           }
@@ -546,7 +618,6 @@ void main() {
     (tester) async {
       final host = _UpdateHost();
       final controller = BackendUpdateController(host.gateway);
-      addTearDown(controller.dispose);
       await controller.checkForUpdate();
       await controller.refreshStatus();
       final pending = Completer<Map<String, dynamic>>();
@@ -589,6 +660,8 @@ void main() {
       await tester.tap(find.byType(ExpansionTile));
       await tester.pumpAndSettle();
       expect(find.text('Fresh update output'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      controller.dispose();
     },
   );
   Future<void> showCard(
@@ -598,23 +671,25 @@ void main() {
     double textScale = 1,
   }) async {
     final controller = BackendUpdateController(host.gateway);
-    addTearDown(controller.dispose);
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: TextScaler.linear(textScale)),
-          child: child!,
-        ),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: BackendVersionCard(
-              updateController: controller,
-              connectionLabel: 'Production host',
+      _UpdateCardOwner(
+        controller: controller,
+        child: MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(textScale)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: BackendVersionCard(
+                updateController: controller,
+                connectionLabel: 'Production host',
+              ),
             ),
           ),
         ),
@@ -784,9 +859,151 @@ void main() {
     expect(host.posts, hasLength(1));
     expect(host.posts.single.$1, 'hermes/update?profile=work');
     expect(
-      find.text('Backend update started. Check update progress to follow it.'),
+      find.text('Backend update is running on this host.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets(
+    'update acknowledges preflight and follows newest output automatically',
+    (tester) async {
+      final host = _UpdateHost();
+      await showCard(tester, host);
+      await check(tester);
+      await openConfirmation(tester);
+      final preflight = Completer<Map<String, dynamic>>();
+      host.pendingCheck = preflight;
+      await tester.tap(find.byTooltip('Update backend').last);
+      await tester.pump();
+      expect(
+        find.text('Starting backend update…').hitTestable(),
+        findsOneWidget,
+      );
+      expect(find.text('Update logs').hitTestable(), findsOneWidget);
+      expect(find.byType(SelectableText), findsNothing);
+      final rotation = tester
+          .widget<RotationTransition>(
+            find.descendant(
+              of: find.byTooltip('Check for updates'),
+              matching: find.byType(RotationTransition),
+            ),
+          )
+          .turns;
+      final initialTurn = rotation.value;
+      await tester.pump(const Duration(milliseconds: 220));
+      expect(rotation.value, isNot(initialTurn));
+      expect(host.posts, isEmpty);
+
+      final status = Completer<Map<String, dynamic>>();
+      host.pendingStatus = status;
+      host.pendingCheck = null;
+      preflight.complete(_available);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Update logs'), findsOneWidget);
+      // Explicit refresh joins the held automatic snapshot and acknowledges it.
+      await tester.tap(find.byTooltip('Check update progress'));
+      await tester.pump();
+      final explicitRotation = tester
+          .widget<RotationTransition>(
+            find.descendant(
+              of: find.byTooltip('Check for updates'),
+              matching: find.byType(RotationTransition),
+            ),
+          )
+          .turns;
+      final explicitTurn = explicitRotation.value;
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(explicitRotation.value, isNot(explicitTurn));
+      expect(
+        host.reads.where((r) => r.$1 == 'actions/hermes-update/status'),
+        hasLength(1),
+      );
+      host.pendingStatus = null;
+      status.complete({
+        ...host.statusResponse,
+        'lines': ['First', 'Second'],
+      });
+      await tester.pumpAndSettle();
+      expect(find.byType(SelectableText), findsNothing);
+      await tester.tap(find.text('Update logs'));
+      await tester.pumpAndSettle();
+      expect(find.text('Second\nFirst'), findsOneWidget);
+      host.statusResponse = {
+        ...host.statusResponse,
+        'lines': ['First', 'Second', 'Third'],
+      };
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(find.text('Third\nSecond\nFirst'), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
+      host.statusFails = true;
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      expect(
+        find.text('Backend update status is unavailable. Check again.'),
+        findsOneWidget,
+      );
+      final reads = host.reads.length;
+      await tester.pump(const Duration(seconds: 6));
+      expect(host.reads, hasLength(reads));
+      expect(find.text('Third\nSecond\nFirst'), findsOneWidget);
+      host.statusFails = false;
+      host.statusResponse = {
+        ...host.statusResponse,
+        'running': false,
+        'pid': 41,
+        'action_id': 'action-1',
+        'exit_code': 0,
+      };
+      await tester.tap(find.byTooltip('Check update progress'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('The backend update completed successfully.'),
+        findsOneWidget,
+      );
+      final settledReads = host.reads.length;
+      await tester.pump(const Duration(seconds: 6));
+      expect(host.reads, hasLength(settledReads));
+      await openConfirmation(tester);
+      host.pendingCheck = Completer<Map<String, dynamic>>();
+      await tester.tap(find.byTooltip('Update backend').last);
+      await tester.pump();
+      expect(find.byType(SelectableText), findsNothing);
+      expect(find.text('Update logs'), findsOneWidget);
+      // Late work after departure cannot publish another snapshot or schedule reads.
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('route owner disposal retires held automatic status', (
+    tester,
+  ) async {
+    final host = _UpdateHost();
+    await showCard(tester, host);
+    await check(tester);
+    await openConfirmation(tester);
+    final held = Completer<Map<String, dynamic>>();
+    host.pendingStatus = held;
+    await tester.tap(find.byTooltip('Update backend').last);
+    await tester.pumpAndSettle();
+    final controller = tester
+        .widget<BackendVersionCard>(find.byType(BackendVersionCard))
+        .updateController;
+    var notifications = 0;
+    controller.addListener(() => notifications++);
+    await tester.pumpWidget(const SizedBox.shrink());
+    final before = notifications;
+    final reads = host.reads.length;
+    held.complete({
+      ...host.statusResponse,
+      'lines': ['Late output'],
+    });
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    expect(notifications, before);
+    expect(host.reads, hasLength(reads));
+    expect(find.text('Late output'), findsNothing);
   });
 
   testWidgets('fresh check can refuse a previously advertised update', (
@@ -867,13 +1084,13 @@ void main() {
     await tester.tap(find.text('Update logs'));
     await tester.pumpAndSettle();
     expect(
-      find.text('Downloading\nApplied core\nSkipped optional'),
+      find.text('Skipped optional\nApplied core\nDownloading'),
       findsOneWidget,
     );
     expect(
       find.widgetWithText(
         SelectableText,
-        'Downloading\nApplied core\nSkipped optional',
+        'Skipped optional\nApplied core\nDownloading',
       ),
       findsOneWidget,
     );
