@@ -6,10 +6,15 @@ only that package's RECORD_AUDIO grant/user flags, then drives Android's actual
 deny/grant dialogs and Home cancellation. Runs Flutter suites sequentially with
 --no-uninstall --no-pub. Does not contact Hermes or invoke a speech provider.
 Screens, native UI trees, Flutter logs and acceptance.json go under --output.
+Requires a root-capable, freshly owned disposable AVD. A uniquely named Android
+resource overlay makes local recognition unavailable for its mandatory rejection
+case. Cleanup disables that overlay and verifies the original resource and native
+capability; the enclosing AVD owner deletes its disabled registration with storage.
 The disposable AVD retains microphone permission granted after a successful run.
 """
 
 import argparse
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -24,6 +29,9 @@ import xml.etree.ElementTree as ET
 REPO = Path(__file__).resolve().parents[1]
 PACKAGE = 'com.tarkilhk.wing.dev'
 PERMISSION = 'android.permission.RECORD_AUDIO'
+RECOGNIZER_RESOURCE = 'android:string/config_defaultOnDeviceSpeechRecognitionService'
+UNAVAILABLE_TAG = 'recognition-unavailable'
+RESTORED_TAG = 'recognition-restored'
 PERMISSION_STEPS = {
     'VOICE_DENY_READY', 'VOICE_GRANT_READY', 'VOICE_BACKGROUND_READY',
     'VOICE_BACKGROUND_CANCELLED',
@@ -65,6 +73,104 @@ class Driver:
 
     def shell(self, *command):
         return self.adb('shell', shlex.join(command))
+
+    def require_emulator(self):
+        if (not re.fullmatch(r'emulator-\d+', self.serial)
+                or self.shell('getprop', 'ro.kernel.qemu').strip() != '1'):
+            raise RuntimeError('Recognition isolation requires a rooted disposable emulator')
+        if int(self.shell('getprop', 'ro.build.version.sdk').strip()) < 31:
+            raise RuntimeError('Recognition isolation requires Android API 31 or later')
+
+    def require_rooted_emulator(self):
+        self.require_emulator()
+        if self.shell('id', '-u').strip() != '0':
+            raise RuntimeError('Recognition isolation requires a rooted disposable emulator')
+
+    @contextmanager
+    def rooted_emulator(self):
+        self.require_emulator()
+        prior_uid = self.shell('id', '-u').strip()
+        if prior_uid not in {'0', '2000'}:
+            raise RuntimeError('Could not determine the emulator adbd authority')
+        record = self.evidence['adbd'] = {
+            'prior_uid': prior_uid, 'root_requested': prior_uid != '0', 'restored': False,
+        }
+        try:
+            if record['root_requested']:
+                self.adb('root')
+                self.adb('wait-for-device')
+            if self.adb('get-serialno').strip() != self.serial:
+                raise RuntimeError('The admitted emulator identity changed after adb root')
+            self.require_rooted_emulator()
+            yield
+        finally:
+            try:
+                self.stop_process()
+            finally:
+                self.deadline = None
+                try:
+                    if record['root_requested']:
+                        self.adb('unroot')
+                        self.adb('wait-for-device')
+                    if (self.adb('get-serialno').strip() != self.serial
+                            or self.shell('id', '-u').strip() != prior_uid):
+                        raise RuntimeError('Original emulator adbd authority was not restored')
+                    record['restored'] = True
+                except Exception as error:
+                    record['cleanup_error'] = str(error)
+                    raise
+
+    def recognizer_resource(self):
+        return self.shell('cmd', 'overlay', 'lookup', '--user', '0',
+                          'android', RECOGNIZER_RESOURCE)
+
+    @contextmanager
+    def unavailable_recognition(self):
+        self.require_rooted_emulator()
+        name = 'WingVoiceUnavailable' + uuid.uuid4().hex
+        identifier = 'com.android.shell:' + name
+        baseline = self.recognizer_resource()
+        overlays = self.shell('cmd', 'overlay', 'list', '--user', '0', 'android')
+        if any(line.split()[-1:] == [identifier] for line in overlays.splitlines()):
+            raise RuntimeError('Refusing to borrow an existing recognition overlay')
+        record = self.evidence['recognition_isolation'] = {
+            'overlay': identifier, 'baseline_resource': baseline,
+            'restored': False,
+            'registration_cleanup': 'Enclosing owned disposable AVD storage deletion',
+        }
+        try:
+            # Mark ownership before dispatch: an adb failure may lose a successful receipt.
+            self.shell('cmd', 'overlay', 'fabricate', '--target', 'android',
+                       '--name', name, RECOGNIZER_RESOURCE, '0x03', '')
+            self.shell('cmd', 'overlay', 'enable', '--user', '0', identifier)
+            if self.recognizer_resource().strip():
+                raise RuntimeError('Android did not apply the empty recognition configuration')
+            self.shell('am', 'force-stop', PACKAGE)
+            yield
+        finally:
+            try:
+                self.stop_process()
+            finally:
+                self.deadline = None
+                try:
+                    overlays = self.shell('cmd', 'overlay', 'list', '--user', '0', 'android')
+                    if any(line.split()[-1:] == [identifier] for line in overlays.splitlines()):
+                        self.shell('cmd', 'overlay', 'disable', '--user', '0', identifier)
+                    if self.recognizer_resource() != baseline:
+                        raise RuntimeError('Original Android recognition configuration was not restored')
+                    overlays = self.shell('cmd', 'overlay', 'list', '--user', '0', 'android')
+                    if any(line.strip() == '[x] ' + identifier for line in overlays.splitlines()):
+                        raise RuntimeError('Owned recognition overlay is still enabled')
+                    self.shell('am', 'force-stop', PACKAGE)
+                    record['restored'] = True
+                except Exception as error:
+                    record['cleanup_error'] = str(error)
+                    raise
+
+    def verify_recognition_observation(self, transcript, marker, expected):
+        observations = re.findall(re.escape(marker) + r' (true|false)', transcript)
+        if observations != [str(expected).lower()]:
+            raise RuntimeError('Missing or incorrect native recognition observation: ' + marker)
 
     def capture(self, label):
         (self.output / (label + '.png')).write_bytes(
@@ -163,9 +269,9 @@ class Driver:
             os.killpg(self.process.pid, signal.SIGKILL)
             self.process.wait(timeout=10)
 
-    def run_suite(self, name, target, required_markers=None):
+    def run_suite(self, name, target, required_markers=None, extra_arguments=()):
         command = ['flutter', 'test', target, '-d', self.serial, '--no-uninstall',
-                   '--no-pub', '--reporter', 'expanded']
+                   '--no-pub', '--reporter', 'expanded', *extra_arguments]
         log_path = self.output / (name + '-flutter.log')
         seen = set()
         transcript = ''
@@ -240,64 +346,78 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     driver = Driver(args.device, output, args.timeout)
     try:
-        if driver.shell('getprop', 'ro.kernel.qemu').strip() != '1':
-            raise RuntimeError('Target is not an emulator; refusing permission changes')
-        characteristics = driver.shell('getprop', 'ro.build.characteristics').strip()
-        features = driver.shell('pm', 'list', 'features')
-        if 'tv' in characteristics.lower() or 'android.software.leanback' in features:
-            raise RuntimeError('TV emulator is outside this phone-native voice check')
-        if not driver.shell('pm', 'path', PACKAGE).strip().startswith('package:'):
-            raise RuntimeError('Install the normal debug dev APK on the disposable AVD first')
-        driver.evidence.update({
-            'source_revision': subprocess.check_output(
-                ['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True, timeout=10).strip(),
-            'source_dirty': bool(subprocess.check_output(
-                ['git', 'status', '--porcelain'], cwd=REPO, text=True, timeout=10).strip()),
-            'android_release': driver.shell('getprop', 'ro.build.version.release').strip(),
-            'android_sdk': driver.shell('getprop', 'ro.build.version.sdk').strip(),
-            'device_model': driver.shell('getprop', 'ro.product.model').strip(),
-            'characteristics': characteristics,
-        })
-        driver.shell('am', 'force-stop', PACKAGE)
-        driver.shell('pm', 'revoke', PACKAGE, PERMISSION)
-        driver.shell('pm', 'clear-permission-flags', PACKAGE, PERMISSION, 'user-set', 'user-fixed')
-        if driver.granted():
-            raise RuntimeError('Microphone permission reset did not take effect')
-        driver.evidence['microphone_reset'] = True
-        driver.run_suite('permission', 'integration_test/voice_permission_native_test.dart', PERMISSION_STEPS)
-        driver.shell('pm', 'grant', PACKAGE, PERMISSION)
-        if not driver.granted():
-            raise RuntimeError('Microphone permission is not granted before native capture suite')
-        transcript = driver.run_suite('native', 'integration_test/voice_native_test.dart')
-        capabilities = re.search(
-            r'VOICE_CAPABILITIES localInput=(true|false) languages=(.*?) offlineVoices=(\d+)', transcript)
-        offline = re.search(r'VOICE_OFFLINE_VOICES (\d+)', transcript)
-        if capabilities is None or offline is None:
-            raise RuntimeError('Native voice capability evidence was not emitted')
-        samples = re.findall(
-            r'VOICE_LOCAL_TTS sample=(\d+) firstAudioMs=(\d+) completedMs=(\d+) voice=([^\r\n]+)', transcript)
-        driver.evidence['capabilities'] = {
-            'recognition_available': capabilities[1] == 'true',
-            'installed_languages': capabilities[2], 'offline_voice_count': int(offline[1]),
-        }
-        driver.evidence['tts_callbacks'] = [
-            {'sample': int(sample), 'start_callback_ms': int(start),
-             'completed_ms': int(completed), 'voice': voice}
-            for sample, start, completed, voice in samples
-        ]
-        if int(offline[1]) == 0:
-            raise RuntimeError('Offline speech acceptance requires an installed Android voice')
-        if sorted(int(s[0]) for s in samples) != list(range(5)):
-            raise RuntimeError('Installed offline voice did not complete all five TTS samples')
-        if capabilities[1] == 'false':
-            driver.evidence['limitations'].append('Android local speech recognition unavailable; rejection path exercised.')
-        else:
-            driver.evidence['limitations'].append(
-                'Missing-local-recognition rejection was skipped because this emulator '
-                'provides on-device recognition; that unavailable-service path was not exercised.')
-        driver.evidence['limitations'].extend(re.findall(r'VOICE_LIMITATION ([^\r\n]+)', transcript))
+        with driver.rooted_emulator():
+            characteristics = driver.shell('getprop', 'ro.build.characteristics').strip()
+            features = driver.shell('pm', 'list', 'features')
+            if 'tv' in characteristics.lower() or 'android.software.leanback' in features:
+                raise RuntimeError('TV emulator is outside this phone-native voice check')
+            if not driver.shell('pm', 'path', PACKAGE).strip().startswith('package:'):
+                raise RuntimeError('Install the normal debug dev APK on the disposable AVD first')
+            driver.evidence.update({
+                'source_revision': subprocess.check_output(
+                    ['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True, timeout=10).strip(),
+                'source_dirty': bool(subprocess.check_output(
+                    ['git', 'status', '--porcelain'], cwd=REPO, text=True, timeout=10).strip()),
+                'android_release': driver.shell('getprop', 'ro.build.version.release').strip(),
+                'android_sdk': driver.shell('getprop', 'ro.build.version.sdk').strip(),
+                'device_model': driver.shell('getprop', 'ro.product.model').strip(),
+                'characteristics': characteristics,
+            })
+            driver.shell('am', 'force-stop', PACKAGE)
+            driver.shell('pm', 'revoke', PACKAGE, PERMISSION)
+            driver.shell('pm', 'clear-permission-flags', PACKAGE, PERMISSION, 'user-set', 'user-fixed')
+            if driver.granted():
+                raise RuntimeError('Microphone permission reset did not take effect')
+            driver.evidence['microphone_reset'] = True
+            driver.run_suite('permission', 'integration_test/voice_permission_native_test.dart', PERMISSION_STEPS)
+            driver.shell('pm', 'grant', PACKAGE, PERMISSION)
+            if not driver.granted():
+                raise RuntimeError('Microphone permission is not granted before native capture suite')
+            target = 'integration_test/voice_native_test.dart'
+            transcript = driver.run_suite(
+                'native', target, extra_arguments=(
+                    '--exclude-tags', UNAVAILABLE_TAG + ' || ' + RESTORED_TAG))
+            capabilities = re.search(
+                r'VOICE_CAPABILITIES localInput=(true|false) languages=(.*?) offlineVoices=(\d+)', transcript)
+            offline = re.search(r'VOICE_OFFLINE_VOICES (\d+)', transcript)
+            if capabilities is None or offline is None:
+                raise RuntimeError('Native voice capability evidence was not emitted')
+            samples = re.findall(
+                r'VOICE_LOCAL_TTS sample=(\d+) firstAudioMs=(\d+) completedMs=(\d+) voice=([^\r\n]+)', transcript)
+            driver.evidence['capabilities'] = {
+                'recognition_available': capabilities[1] == 'true',
+                'installed_languages': capabilities[2], 'offline_voice_count': int(offline[1]),
+            }
+            driver.evidence['tts_callbacks'] = [
+                {'sample': int(sample), 'start_callback_ms': int(start),
+                 'completed_ms': int(completed), 'voice': voice}
+                for sample, start, completed, voice in samples
+            ]
+            if int(offline[1]) == 0:
+                raise RuntimeError('Offline speech acceptance requires an installed Android voice')
+            if sorted(int(s[0]) for s in samples) != list(range(5)):
+                raise RuntimeError('Installed offline voice did not complete all five TTS samples')
+            try:
+                with driver.unavailable_recognition():
+                    unavailable = driver.run_suite(
+                        'recognition-unavailable', target,
+                        extra_arguments=('--tags', UNAVAILABLE_TAG))
+                    driver.verify_recognition_observation(
+                        unavailable, 'VOICE_UNAVAILABLE_LOCAL_INPUT', False)
+                    if 'VOICE_LOCAL_UNAVAILABLE_VERIFIED' not in unavailable:
+                        raise RuntimeError('Native missing-recognizer rejection did not complete')
+            finally:
+                if driver.evidence.get('recognition_isolation', {}).get('restored'):
+                    restored = driver.run_suite(
+                        'recognition-restored', target, extra_arguments=(
+                            '--tags', RESTORED_TAG,
+                            '--dart-define=VOICE_BASELINE_LOCAL_INPUT=' + capabilities[1]))
+                    driver.verify_recognition_observation(
+                        restored, 'VOICE_RESTORED_LOCAL_INPUT', capabilities[1] == 'true')
+                    driver.evidence['recognition_isolation']['native_capability_restored'] = True
+            driver.evidence['limitations'].extend(re.findall(r'VOICE_LIMITATION ([^\r\n]+)', transcript))
         driver.evidence['status'] = 'passed'
-        print('PASS: native microphone denial/grant, background cancellation, AAC capture and playback boundaries')
+        print('PASS: native microphone, capture, playback and missing-local-recognition boundaries; Android configuration restored')
     except Exception as error:
         driver.evidence['status'] = 'failed'
         driver.evidence['error'] = str(error)

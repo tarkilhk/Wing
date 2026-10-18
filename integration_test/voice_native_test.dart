@@ -120,6 +120,9 @@ void main() {
       );
       if (index == 0) {
         debugPrint('VOICE_OFFLINE_VOICES ${capabilities.voices.length}');
+        debugPrint(
+          'VOICE_CAPABILITIES localInput=${capabilities.recognitionAvailable} languages=${capabilities.installedLanguages} offlineVoices=${capabilities.voices.length}',
+        );
       }
       expect(
         capabilities.voices,
@@ -149,33 +152,63 @@ void main() {
     });
   }
 
-  testWidgets('missing local recognition reports an actionable native error', (
-    tester,
-  ) async {
-    await launch(tester);
-    final capabilities = await device.capabilities();
-    debugPrint(
-      'VOICE_CAPABILITIES localInput=${capabilities.recognitionAvailable} languages=${capabilities.installedLanguages} offlineVoices=${capabilities.voices.length}',
-    );
-    if (capabilities.recognitionAvailable) {
-      markTestSkipped(
-        'Select an emulator image without on-device recognition for this case.',
+  testWidgets(
+    'missing local recognition reports an actionable native error',
+    (tester) async {
+      await launch(tester);
+      final capabilities = await device.capabilities();
+      debugPrint(
+        'VOICE_UNAVAILABLE_LOCAL_INPUT ${capabilities.recognitionAvailable}',
       );
-      return;
-    }
-    const owner = 'local-unavailable';
-    addTearDown(() => device.cancel(owner));
-    await expectLater(
-      device.start(owner, local: true, language: ''),
-      throwsA(
-        isA<PlatformException>().having(
-          (error) => error.code,
-          'code',
-          'voice_unavailable',
+      expect(
+        capabilities.recognitionAvailable,
+        isFalse,
+        reason:
+            'The native driver must establish an unavailable Android recognizer.',
+      );
+      const owner = 'local-unavailable';
+      addTearDown(() => device.cancel(owner));
+      await expectLater(
+        device.start(owner, local: true, language: ''),
+        throwsA(
+          isA<PlatformException>()
+              .having((error) => error.code, 'code', 'voice_unavailable')
+              .having(
+                (error) => error.message,
+                'actionable message',
+                allOf(
+                  contains('On-device recognition is unavailable'),
+                  contains('Choose Hermes in App settings'),
+                ),
+              ),
         ),
-      ),
-    );
-  });
+      );
+      expect(await device.stop(owner), isNull);
+      debugPrint('VOICE_LOCAL_UNAVAILABLE_VERIFIED');
+    },
+    tags: 'recognition-unavailable',
+  );
+
+  testWidgets(
+    'restored recognition matches the original Android capability',
+    (tester) async {
+      await launch(tester);
+      expect(
+        const bool.hasEnvironment('VOICE_BASELINE_LOCAL_INPUT'),
+        isTrue,
+        reason: 'The native driver must supply the observed baseline.',
+      );
+      final capabilities = await device.capabilities();
+      debugPrint(
+        'VOICE_RESTORED_LOCAL_INPUT ${capabilities.recognitionAvailable}',
+      );
+      expect(
+        capabilities.recognitionAvailable,
+        const bool.fromEnvironment('VOICE_BASELINE_LOCAL_INPUT'),
+      );
+    },
+    tags: 'recognition-restored',
+  );
 }
 
 Uint8List _tone({int seconds = 1}) {

@@ -1,218 +1,195 @@
-import '../test/support/composer_fixture.dart';
-import 'package:wing/core/models/chat_runtime.dart';
-import 'package:wing/core/services/app_preferences.dart';
-import 'package:wing/core/services/connection_access.dart';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/theme/wing_theme.dart';
-import 'package:wing/core/widgets/composer_action_button.dart';
-import 'package:wing/core/widgets/profile_message.dart';
 
 import '../test/support/existing_backend_login.dart';
 
-/// OPTIONAL, MUTATING acceptance: obtain explicit approval before RUN_MODEL=true.
-///
-/// Uses the production controller, transport and composer against the owner's
-/// default profile. Creates one uniquely titled chat and submits one short prompt
-/// exactly once. Reads chat/project list metadata during ordinary initialization,
-/// but opens no pre-existing chat or transcript. Login is loaded at runtime from
-/// WING_HERMES_LOGIN_FILE; never put credentials in Dart defines.
-///
-/// Stock upstream f42f579cf8bac4918ac9599bece71618afadd846 has no per-chat
-/// toolset override. tools.configure persists profile settings, so this test
-/// inherits the owner's tools, context and memory. A marker-only instruction is
-/// not a sandbox: provider retries, tools or backend hooks could incur additional
-/// calls/side effects. This test changes no shared settings and accepts no pending
-/// approvals. A stuck/uncertain chat is retained, never forcibly stopped/deleted.
-///
-/// Teardown deletes only the exact newly created chat, through production's
-/// ownership and backend-idle guards. Deletion cannot undo billing, logs, memory
-/// or any other model/backend side effects. Disabled runs make no backend calls.
+/// Mutating opt-in: an operator must supply an owned disposable QA profile and
+/// authorize one real provider turn. The outer runner owns profile cleanup.
+/// Credentials are read from a private app-cache file, never compiler defines.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   WidgetController.hitTestWarningShouldBeFatal = true;
-  const runModel = bool.fromEnvironment('RUN_MODEL');
-
   testWidgets(
-    'approved existing-server probe renders one streamed terminal reply',
+    'real provider answer and unsent draft survive reopening the chat',
     (tester) async {
+      expect(
+        const bool.fromEnvironment('RUN_MODEL'),
+        isTrue,
+        reason: 'This opt-in needs authorization for a real provider turn.',
+      );
       const url = String.fromEnvironment('WING_HERMES_URL');
       const loginFile = String.fromEnvironment('WING_HERMES_LOGIN_FILE');
+      const profile = String.fromEnvironment('WING_QA_PROFILE');
       expect(url.isNotEmpty && loginFile.isNotEmpty, isTrue);
-      final nonce =
-          '${DateTime.now().toUtc().microsecondsSinceEpoch.toRadixString(36)}'
-          '-${Random.secure().nextInt(1 << 32).toRadixString(36)}';
-      final title = 'Wing emulator QA $nonce';
-      final marker = 'WING_QA_OK_$nonce';
-      final prompt =
-          'This is a one-turn application integration check. '
-          'Do not use tools, inspect files, change settings, or save memories. '
-          'Reply with exactly this marker and nothing else: $marker';
+      expect(
+        profile.startsWith('wing-qa-'),
+        isTrue,
+        reason: 'Supply an operator-owned disposable QA profile.',
+      );
       final connection = await readExistingBackendConnection(
         url: url,
         loginFile: loginFile,
-        id: 'existing-chat-probe-$nonce',
+        id: 'provider-native-qa',
       );
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
       final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
       expect(
         (await appPreferences
-                .admitProfileSelection(connection.id, 'default')
+                .admitProfileSelection('provider-native-qa', profile)
                 .settled)
             .confirmed,
         isTrue,
       );
-      addTearDown(appPreferences.dispose);
-      final controller = ProfileWorkspaceController(
-        appPreferences: appPreferences,
-        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
-        connectionIdentity: connection.id,
-        preferences: preferences,
-      );
-      ProfileChat? ownedChat;
+
+      Future<void> until(bool Function() ready, String reason) async {
+        final deadline = DateTime.now().add(const Duration(seconds: 120));
+        while (!ready() && DateTime.now().isBefore(deadline)) {
+          await tester.pump(const Duration(milliseconds: 100));
+          expect(tester.takeException(), isNull);
+        }
+        expect(ready(), isTrue, reason: reason);
+      }
+
+      final owners = <ProfileWorkspaceController>[];
       addTearDown(() async {
-        try {
-          final chat = ownedChat;
-          if (chat != null) {
-            final owner = controller.current;
-            if (owner == null ||
-                owner.scope != chat.key.workspace ||
-                !identical(owner.chats[chat.key.sessionId], chat) ||
-                chat.runtime.blocksTurnAdmission ||
-                chat.composer.observation.sending ||
-                chat.runtime.commandRunning ||
-                chat.composer.observation.submissionUncertain) {
-              debugPrint('Owned QA chat retained: ${chat.key.sessionId}');
-            } else {
-              // deleteSession also verifies exact scoped ownership and backend
-              // idleness before closing the runtime and deleting its transcript.
-              try {
-                await controller.mutateSession(
-                  chat.key,
-                  delete: true,
-                  canDispatch: () => true,
-                );
-                debugPrint('Owned QA chat deleted: ${chat.key.sessionId}');
-              } catch (_) {
-                debugPrint('Owned QA chat retained: ${chat.key.sessionId}');
-                rethrow;
-              }
+        await tester.pumpWidget(const SizedBox.shrink());
+        for (final owner in owners.reversed) {
+          final chat = owner.current?.chat;
+          try {
+            if (chat != null && chat.runtime.executionActive) {
+              await owner.stop(chat);
             }
+          } finally {
+            owner.dispose();
           }
-        } finally {
-          controller.dispose();
         }
       });
 
-      await controller.initialize();
-      expect(controller.initialized, isTrue);
-      final owner = controller.current!;
-      expect(owner.scope.profileName, 'default');
-      expect(owner.chat, isNull);
-      final chat = ownedChat = await controller.createChat(
-        owner: owner.scope,
-        canDispatch: () => true,
-      );
-      expect(chat.key.workspace, owner.scope);
-      expect(chat.reading.messages, isEmpty);
-      expect(chat.composer.observation.attachments, isEmpty);
-      expect(chat.composer.observation.queue, isEmpty);
-      debugPrint('Owned QA chat created: ${chat.key.sessionId} ($title)');
-      // session.title is stock and supports a newly minted runtime before its
-      // first prompt; no private title lookup or pre-existing chat is touched.
-      final titled = await owner.gateway.call('session.title', {
-        'session_id': chat.runtime.runtimeId,
-        'title': title,
-      });
-      expect(titled['title'], title);
-      emitChatEvent(controller, chat, 'session.title', {
-        'session_id': chat.key.sessionId,
-        'title': title,
-      });
-
-      var sawStreamedText = false;
-      var sawToolActivity = false;
-      void observeStream() {
-        if (chat.reading.streaming.isNotEmpty) sawStreamedText = true;
-        if (chat.runtime.toolActivities.isNotEmpty ||
-            chat.runtime.tool != null) {
-          sawToolActivity = true;
-        }
+      Future<ProfileWorkspaceController> launch() async {
+        final controller = ProfileWorkspaceController(
+          appPreferences: appPreferences,
+          access: ConnectionAccess(
+            connection: connection,
+            dashboardOAuth: null,
+          ),
+          connectionIdentity: 'provider-native-qa',
+          preferences: preferences,
+        );
+        owners.add(controller);
+        await controller.initialize();
+        expect(controller.error, isNull);
+        expect(controller.current!.scope.profileName, profile);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            home: ProfileWorkspaceScreen(controller: controller),
+          ),
+        );
+        await until(
+          () => find.byTooltip('New chat').hitTestable().evaluate().isNotEmpty,
+          'The real QA browser must admit a new chat.',
+        );
+        return controller;
       }
 
-      controller.addListener(observeStream);
-      addTearDown(() => controller.removeListener(observeStream));
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: wingTheme(Brightness.dark),
-          home: ProfileWorkspaceScreen(controller: controller),
-        ),
+      final first = await launch();
+      final profileFilter = find.byKey(const ValueKey('chat-filter-profile'));
+      await tester.ensureVisible(profileFilter);
+      await tester.tap(profileFilter);
+      final search = find.byKey(const ValueKey('chat-menu-search'));
+      await until(
+        () => search.evaluate().isNotEmpty,
+        'The profile filter must open its search control.',
       );
-      await tester.pump(const Duration(milliseconds: 300));
+      await tester.enterText(search, profile);
+      final qaChoice = find.byKey(ValueKey('chat-menu-$profile'));
+      await until(
+        () => qaChoice.hitTestable().evaluate().isNotEmpty,
+        'Searching must expose the owned QA profile.',
+      );
+      await tester.tap(qaChoice);
+      tester.binding.focusManager.primaryFocus?.unfocus();
+      await tester.pump();
+      await tester.tap(find.byTooltip('Close Profile'));
+      await until(
+        () => find.byTooltip('New chat').hitTestable().evaluate().isNotEmpty,
+        'The QA-filtered browser must admit a new chat.',
+      );
+      await tester.tap(find.byTooltip('New chat'));
       final composer = find.byKey(const Key('profile-message-composer'));
-      expect(composer, findsOneWidget);
-      await tester.enterText(composer, prompt);
-      await tester.pump(const Duration(milliseconds: 300));
-      expect(chat.composer.observation.text, prompt);
-      // Exactly one user gesture: no send retry, queue, steer or regeneration.
-      await tester.tap(find.byType(ComposerActionButton));
-      final deadline = DateTime.now().add(const Duration(minutes: 3));
-      while (DateTime.now().isBefore(deadline)) {
-        await tester.pump(const Duration(milliseconds: 100));
-        if (sawStreamedText &&
-            chat.runtime.execution == ChatExecution.completed &&
-            !chat.reading.historyLoading &&
-            !controller.hasActiveChats) {
-          break;
-        }
-        if (chat.runtime.execution == ChatExecution.failed ||
-            chat.runtime.needsInput) {
-          fail('The owned QA turn failed or needs input; it was not retried.');
-        }
-      }
-      expect(chat.runtime.execution, ChatExecution.completed);
-      expect(chat.runtime.error, isNull);
-      expect(chat.reading.historyError, isNull);
-      expect(chat.reading.historyUnavailable, isFalse);
-      expect(chat.reading.historySessionId, chat.key.sessionId);
-      expect(chat.composer.observation.submissionUncertain, isFalse);
-      expect(chat.composer.observation.text, isEmpty);
-      expect(chat.reading.streaming, isEmpty);
-      expect(sawStreamedText, isTrue);
+      await until(
+        () => composer.evaluate().isNotEmpty,
+        'New chat must open its real composer.',
+      );
+      final chat = first.current!.chat!;
+      debugPrint('PROVIDER_NATIVE_QA_RUNTIME ${chat.runtime.runtimeId}');
+      final marker = 'WING_NATIVE_${DateTime.now().microsecondsSinceEpoch}';
+      await tester.enterText(
+        composer,
+        'Reply exactly $marker. Do not call tools.',
+      );
+      await tester.pump();
+      await tester.tap(find.byTooltip('Send'));
+      await until(
+        () =>
+            !chat.runtime.executionActive &&
+            chat.reading.messages.any(
+              (row) =>
+                  row['role'] == 'assistant' &&
+                  row['content'].toString().trim() == marker,
+            ),
+        'The real provider must save the exact requested answer.',
+      );
+      expect(find.text(marker, findRichText: true), findsOneWidget);
+      const draft = 'Keep this unsent native draft';
+      await tester.enterText(composer, draft);
+      await until(
+        () => chat.composer.observation.text == draft,
+        'The unsent draft must reach its owner.',
+      );
+      final key = chat.key;
+      await tester.pumpWidget(const SizedBox.shrink());
+      first.dispose();
+      owners.remove(first);
+
+      final reopened = await launch();
+      final row = find.byKey(ValueKey('chat-$profile-${key.sessionId}'));
+      await until(
+        () => row.hitTestable().evaluate().isNotEmpty,
+        'The saved chat must appear in its real QA browser.',
+      );
+      await tester.tap(row);
+      await until(
+        () =>
+            reopened.current?.chat?.runtime.opening == false &&
+            composer.evaluate().isNotEmpty,
+        'The saved chat must reopen through the browser.',
+      );
+      expect(reopened.current!.chat!.key, key);
+      await until(
+        () => find.text(marker, findRichText: true).evaluate().isNotEmpty,
+        'The saved provider answer must render after owner recreation.',
+      );
+      expect(tester.widget<TextField>(composer).controller!.text, draft);
       expect(
-        chat.reading.messages.where((row) => row['role'] == 'user'),
+        reopened.current!.chat!.reading.messages.where(
+          (row) =>
+              row['role'] == 'assistant' &&
+              row['content'].toString().trim() == marker,
+        ),
         hasLength(1),
       );
-      final answers = chat.reading.messages
-          .where((row) => row['role'] == 'assistant')
-          .toList();
-      expect(answers, hasLength(1));
-      expect((answers.single['content'] as String).trim(), marker);
-      expect(sawToolActivity, isFalse);
-      final renderedAnswer = find.byWidgetPredicate(
-        (widget) =>
-            widget is ProfileMessage &&
-            !widget.streaming &&
-            widget.message.role == 'assistant' &&
-            widget.message.text.trim() == marker,
-      );
-      expect(renderedAnswer, findsOneWidget);
-      await tester.ensureVisible(renderedAnswer);
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(tester.takeException(), isNull);
-      debugPrint('Owned QA reply streamed and rendered: ${chat.key.sessionId}');
-      // Remove screen subscriptions before teardown closes/deletes the runtime.
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 100));
+      debugPrint('PROVIDER_NATIVE_REOPEN_VERIFIED');
     },
-    skip: !runModel,
-    timeout: const Timeout(Duration(minutes: 5)),
+    timeout: const Timeout(Duration(minutes: 6)),
   );
 }
