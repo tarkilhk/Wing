@@ -44,11 +44,7 @@ class _AdminServiceKeyCatalogState extends State<AdminServiceKeyCatalog> {
     await adminPushProfile(
       context,
       session.profile,
-      (context, profile) => AdminSecretPage(
-        profile: profile,
-        name: field.key,
-        isSet: field.isSet,
-      ),
+      (context, profile) => AdminSecretPage(profile: profile, name: field.key),
     );
     await session.refresh();
   }
@@ -138,8 +134,100 @@ class ProviderInventoryBody extends StatelessWidget {
   );
 }
 
+/// Prepares the selected owner's metadata before admitting a credential draft.
+/// Callers supply identity, never a baseline captured from another inventory.
 class AdminSecretPage extends StatefulWidget {
-  const AdminSecretPage({
+  const AdminSecretPage({super.key, required this.profile, required this.name});
+  final ProfileAdministration profile;
+  final String name;
+  @override
+  State<AdminSecretPage> createState() => _AdminSecretPageState();
+}
+
+class _AdminSecretPageState extends State<AdminSecretPage> {
+  late ProviderInventorySession _inventory;
+
+  void _prepare() {
+    _inventory = ProviderInventorySession(
+      widget.profile,
+      scope: ProviderInventoryScope.catalog,
+    )..refresh();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _prepare();
+  }
+
+  @override
+  void didUpdateWidget(AdminSecretPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.profile.server, widget.profile.server) ||
+        oldWidget.profile.name != widget.profile.name ||
+        oldWidget.name != widget.name) {
+      _inventory.dispose();
+      _prepare();
+    }
+  }
+
+  @override
+  void dispose() {
+    _inventory.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _inventory,
+    builder: (context, _) {
+      final field = _inventory.observation?.keys
+          .where((field) => field.key == widget.name)
+          .firstOrNull;
+      if (!_inventory.loading &&
+          _inventory.error == null &&
+          field != null &&
+          field.editable) {
+        return _CredentialEditor(
+          key: ValueKey((
+            widget.profile.server,
+            widget.profile.name,
+            widget.name,
+          )),
+          profile: widget.profile,
+          name: field.key,
+          isSet: field.isSet,
+        );
+      }
+      return AdminPage(
+        title: widget.name,
+        scope: widget.profile.label,
+        child: ReadRecovery(
+          key: ObjectKey(_inventory),
+          shouldRetry: () => _inventory.canRecover,
+          retry: _inventory.refresh,
+          child: StudioPageLoading(
+            active: _inventory.loading,
+            label: 'Loading credential',
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                if (!_inventory.loading)
+                  AdminNotice.error(
+                    _inventory.error ?? 'This credential is unavailable.',
+                    retry: _inventory.refresh,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _CredentialEditor extends StatefulWidget {
+  const _CredentialEditor({
     super.key,
     required this.profile,
     required this.name,
@@ -149,10 +237,10 @@ class AdminSecretPage extends StatefulWidget {
   final String name;
   final bool isSet;
   @override
-  State<AdminSecretPage> createState() => _AdminSecretPageState();
+  State<_CredentialEditor> createState() => _CredentialEditorState();
 }
 
-class _AdminSecretPageState extends State<AdminSecretPage> {
+class _CredentialEditorState extends State<_CredentialEditor> {
   final _input = TextEditingController();
   late final session = ProviderCredentialEditSession(
     widget.profile,

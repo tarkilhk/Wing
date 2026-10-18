@@ -5,7 +5,6 @@ import '../../services/administration_repository.dart';
 import '../../services/android_voice.dart';
 import '../../services/profile_voice_repository.dart';
 import '../../services/profile_tool_setup_session.dart';
-import '../../services/provider_inventory_session.dart';
 import 'admin_voice_page.dart';
 import 'admin_speech_synthesis_page.dart';
 import 'admin_provider_credentials.dart';
@@ -27,7 +26,7 @@ AdminSpeechSynthesisPage profileSpeechSynthesisPage(
       context,
       profile,
       (context, selected) =>
-          _ProfileVoiceCredential(profile: selected, name: field.key),
+          AdminSecretPage(profile: selected, name: field.key),
     );
   },
   onResult: (context, operation) async {
@@ -59,7 +58,7 @@ AdminVoicePage profileVoicePage(
             context,
             selected,
             (context, target) =>
-                _ProfileVoiceCredential(profile: target, name: field.key),
+                AdminSecretPage(profile: target, name: field.key),
           );
         },
       ),
@@ -131,62 +130,6 @@ class _ProfileSpeechDefaultsState extends State<_ProfileSpeechDefaults> {
         profile: widget.profile,
         title: 'Speech defaults',
         fields: state.defaults,
-      );
-    },
-  );
-}
-
-/// Reuses the existing metadata owner so a picker replacement never borrows
-/// another profile's credential baseline. The existing editor owns the draft.
-class _ProfileVoiceCredential extends StatefulWidget {
-  const _ProfileVoiceCredential({required this.profile, required this.name});
-  final ProfileAdministration profile;
-  final String name;
-  @override
-  State<_ProfileVoiceCredential> createState() =>
-      _ProfileVoiceCredentialState();
-}
-
-class _ProfileVoiceCredentialState extends State<_ProfileVoiceCredential> {
-  late final _inventory = ProviderInventorySession(
-    widget.profile,
-    scope: ProviderInventoryScope.catalog,
-  );
-  @override
-  void initState() {
-    super.initState();
-    _inventory.refresh();
-  }
-
-  @override
-  void dispose() {
-    _inventory.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => ListenableBuilder(
-    listenable: _inventory,
-    builder: (context, _) {
-      final field = _inventory.observation?.keys
-          .where((field) => field.key == widget.name)
-          .firstOrNull;
-      if (_inventory.error != null || field == null || !field.editable) {
-        return AdminPage(
-          title: widget.name,
-          scope: widget.profile.label,
-          child: _inventory.loading
-              ? StudioPageLoading.waiting(label: 'Loading voice settings')
-              : AdminNotice.error(
-                  _inventory.error ?? 'This credential is unavailable.',
-                  retry: _inventory.refresh,
-                ),
-        );
-      }
-      return AdminSecretPage(
-        profile: widget.profile,
-        name: field.key,
-        isSet: field.isSet,
       );
     },
   );

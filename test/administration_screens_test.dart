@@ -469,18 +469,32 @@ void main() {
     tester,
   ) async {
     final f = AdministrationFixture();
+    f.override = (method, path, query, body) async => {
+      'EXAMPLE_API_KEY': {
+        'is_set': false,
+        'channel_managed': false,
+        'category': 'api_keys',
+        'provider_label': 'Example',
+        'redacted_value': 'preview-must-not-enter-form',
+      },
+    };
     await tester.pumpWidget(
       MaterialApp(
         home: AdminSecretPage(
           profile: f.server.profile('personal'),
           name: 'EXAMPLE_API_KEY',
-
-          isSet: false,
         ),
       ),
     );
     await tester.pumpAndSettle();
-    expect(f.requests, isEmpty);
+    expect(f.requests, hasLength(1));
+    expect((f.requests.single.$1, f.requests.single.$2), ('GET', 'env'));
+    expect(f.requests.single.$3, {'profile': 'personal'});
+    expect(find.textContaining('preview-must-not-enter-form'), findsNothing);
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      isEmpty,
+    );
     expect(
       tester.widget<TextField>(find.byType(TextField)).obscureText,
       isTrue,

@@ -28,6 +28,11 @@ Installed skills offers instruction reading, recorded usage and available edit, 
 
 Provider access belongs to the selected profile. Depending on the provider and credential source, Wing offers key management, sign-in, renewal, status checks and removal. Some external CLI logins must be completed on the server. Removing a saved sign-in does not revoke the provider account or necessarily clear credentials already in use.
 
+Opening a key editor checks the selected profile's stored-key state. Switching
+profiles from an untouched editor checks the newly selected profile before
+showing its credential actions. The header Wing pulses during that check; a
+failed check offers Retry.
+
 Retained memory can be searched and read. Memory entry editing and deletion are unavailable. See [MCP connectors](MCP_CONNECTORS.md) for connector setup, sign-in and reconnection.
 
 ## Scheduled tasks

@@ -914,11 +914,8 @@ Widget profileCapabilitiesPage(
             onCredential: (context, field) => adminPushProfile(
               context,
               profile,
-              (context, profile) => AdminSecretPage(
-                profile: profile,
-                name: field.key,
-                isSet: field.isSet,
-              ),
+              (context, profile) =>
+                  AdminSecretPage(profile: profile, name: field.key),
             ),
           ),
   ),

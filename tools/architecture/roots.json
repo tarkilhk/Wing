@@ -11405,6 +11405,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/fixtures/stock_reasoning_history.json",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
       "path": "test/flutter_launcher_test.ps1",
       "area": "test",
       "provenance": "tracked"

@@ -15,6 +15,115 @@ import 'package:wing/core/widgets/tool_activity_details.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 void main() {
+  testWidgets(
+    'history commentary does not replay reasoning or move open Activity',
+    (tester) async {
+      final runtime = execution.ChatRuntime(runtimeId: 'history-commentary');
+      runtime.beginTurn(submitting: false);
+      for (var i = 0; i < 5; i++) {
+        runtime.observeTool('tool.complete', {
+          'tool_id': 'earlier-$i',
+          'name': 'read_file',
+          'result': 'Earlier result $i',
+        });
+      }
+      runtime.observeReasoning('reasoning.delta', {
+        'text': 'Checking updates.',
+      });
+      runtime.observeTool('tool.start', {
+        'tool_id': 'current',
+        'name': 'terminal',
+      });
+      const commentary = 'I will compare current upstream.';
+      final saved = <Map<String, dynamic>>[
+        {'id': 1, 'role': 'user', 'content': 'Check upstream.'},
+        {
+          'id': 2,
+          'role': 'assistant',
+          'content': '',
+          'reasoning': 'Checking updates.\n\n$commentary',
+          'reasoning_content': 'Checking updates.\n\n$commentary',
+          'display_reasoning': 'Checking updates.',
+          'display_commentary': [commentary],
+          'tool_calls': [
+            {
+              'id': 'current',
+              'function': {'name': 'terminal', 'arguments': '{}'},
+            },
+          ],
+        },
+      ];
+      Future<ChatTranscriptProjection> show(
+        List<Map<String, dynamic>> rows,
+      ) async {
+        final projection = ChatTranscriptProjection(
+          savedRows: rows,
+          streamingMessage: null,
+          runtime: runtime.observation,
+          presentationId: (row) => row['id']!,
+          liveAnswering: true,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(Brightness.dark),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: ProfileLiveExecution(
+                  entries: projection.activity,
+                  savedActivity: projection.timeline.adjacentLiveActivity,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.settleMarkdown();
+        return projection;
+      }
+
+      await show([saved.first]);
+      await tester.tap(find.text('Activity · 5 tools'));
+      await tester.pumpAndSettle();
+      final originalRun = tester.element(
+        find.byType(ProfileActivitySection).first,
+      );
+      final originalTool = tester.element(find.byType(ProfileToolCall).first);
+      final projection = await show(saved);
+      expect(
+        find.byType(ProfileReasoningContent),
+        findsOneWidget,
+        reason: 'History must not replay raw reasoning beside its live copy.',
+      );
+      expect(
+        tester.element(find.byType(ProfileActivitySection).first),
+        same(originalRun),
+      );
+      expect(
+        tester.element(find.byType(ProfileToolCall).first),
+        same(originalTool),
+      );
+      expect(
+        tester.getTopLeft(find.text('Activity · 5 tools')).dy,
+        lessThan(tester.getTopLeft(find.byType(ProfileReasoningContent)).dy),
+      );
+      expect(find.text('Timeline'), findsOneWidget);
+      expect(find.text('Activity · 1 tool'), findsOneWidget);
+      expect(projection.rows.map((row) => row['id']), [1]);
+      expect(saved[1]['reasoning'], 'Checking updates.\n\n$commentary');
+      expect(
+        runtime.observation.activityEntries
+            .whereType<ChatReasoningEntry>()
+            .single
+            .text,
+        'Checking updates.',
+      );
+      await tester.tap(find.text('Activity · 5 tools'));
+      await tester.pumpAndSettle();
+      expect(find.text('Timeline'), findsNothing);
+      await tester.tap(find.text('Activity · 5 tools'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProfileToolCall), findsNWidgets(5));
+    },
+  );
   test('reasoning overlap requires exact call ownership and received text', () {
     final runtime = execution.ChatRuntime(runtimeId: 'reasoning-scope');
     runtime.beginTurn(submitting: false);

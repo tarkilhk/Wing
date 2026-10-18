@@ -177,11 +177,8 @@ class _AdminProvidersPageState extends State<AdminProvidersPage> {
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _open(
-                  (context, profile) => AdminSecretPage(
-                    profile: profile,
-                    name: field.key,
-                    isSet: field.isSet,
-                  ),
+                  (context, profile) =>
+                      AdminSecretPage(profile: profile, name: field.key),
                 ),
               ),
             ),
