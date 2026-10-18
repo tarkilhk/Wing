@@ -10542,6 +10542,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "scripts/test_nightly_native.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "scripts/test_vanilla_hermes.py",
       "area": "scripts",
       "provenance": "intentional-untracked"
@@ -10558,6 +10563,11 @@
     },
     {
       "path": "scripts/tests/test_native_driver_guards.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "scripts/tests/test_nightly_native.py",
       "area": "scripts",
       "provenance": "intentional-untracked"
     },
