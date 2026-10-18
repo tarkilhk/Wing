@@ -466,6 +466,68 @@ void main() {
   });
 
   test(
+    'missing queued file pauses before upload and preserves newer draft',
+    () async {
+      final file = await attachment('missing-local.txt');
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        text: 'Keep this queued work',
+        appendAttachments: [file],
+      );
+      await controller.queuePrompt(chat, chat.composer.observation.text);
+      final queuedId = chat.composer.observation.queue.single.id;
+      await controller.updateDraft(chat, 'Newer separate draft');
+      await File(file.cachedPath).delete();
+
+      finish();
+      await until(
+        () =>
+            !chat.composer.observation.draining &&
+            chat.composer.observation.paused,
+      );
+      expect(sends(), 0);
+      expect(host.calls.where((call) => call.$2 == 'file.attach'), isEmpty);
+      final queued = chat.composer.observation.queue.single;
+      expect(queued.id, queuedId);
+      expect(queued.text, 'Keep this queued work');
+      expect(queued.submissionUncertain, isFalse);
+      expect(queued.attachments.single.id, file.id);
+      expect(queued.attachments.single.status, AttachmentDraftStatus.failed);
+      expect(chat.composer.observation.text, 'Newer separate draft');
+      final snapshot = (await saved())!;
+      expect(snapshot.queuePaused, isTrue);
+      expect(snapshot.text, 'Newer separate draft');
+      expect(snapshot.queuedPrompts.single.text, 'Keep this queued work');
+      expect(snapshot.queuedPrompts.single.attachments.single.id, file.id);
+      expect(
+        snapshot.queuedPrompts.single.attachments.single.status,
+        AttachmentDraftStatus.failed,
+      );
+
+      final key = chat.key;
+      controller.dispose();
+      host.running = false;
+      controller = makeController();
+      await controller.initialize();
+      await controller.openSession(key);
+      chat = controller.current!.chat!;
+      expect(chat.composer.observation.paused, isTrue);
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Keep this queued work',
+      );
+      expect(
+        chat.composer.observation.queue.single.attachments.single.id,
+        file.id,
+      );
+      expect(chat.composer.observation.text, 'Newer separate draft');
+      expect(sends(), 0);
+      expect(host.calls.where((call) => call.$2 == 'file.attach'), isEmpty);
+    },
+  );
+
+  test(
     'failed queue save restores original work beside newer composer edits',
     () async {
       final originalFile = await attachment('original.txt');

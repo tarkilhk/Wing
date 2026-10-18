@@ -340,47 +340,29 @@ void main() {
     final submitsBefore = harness.fixture.calls
         .where((call) => call.$2 == 'prompt.submit')
         .length;
-    await tester.tap(find.byTooltip('Send'));
-    await _settle(tester);
-    expect(
-      harness.fixture.calls.where((call) => call.$2 == 'prompt.submit'),
-      hasLength(submitsBefore),
+    // This is still the editable draft. Send transfers it to a distinct outbox
+    // entry; per-file queued editing is not the behavior under test here.
+    final removeAttachment = find.descendant(
+      of: find.widgetWithText(InputChip, fileName),
+      matching: find.byTooltip('Delete'),
     );
-    // Send persists its snapshot in the outbox before attempting upload.
-    // The missing file must pause that retained entry without submitting it.
-    await _pumpUntil(tester, () => restored.composer.observation.paused);
-    final queued = restored.composer.observation.queue.single;
-    expect(queued.text, draftText);
-    expect(queued.attachments.single.name, fileName);
-    expect(queued.submissionUncertain, isFalse);
-    final queuedPreview = find.text('$draftText · $fileName');
-    expect(queuedPreview, findsOneWidget);
-    await tester.longPress(queuedPreview);
-    await _pumpUntil(
-      tester,
-      () => restored.composer.observation.editingEntry != null,
-    );
-    expect(
-      tester
-          .widget<TextField>(find.byKey(const Key('profile-message-composer')))
-          .controller!
-          .text,
-      draftText,
-    );
-    final removeAttachment = find.byTooltip('Remove $fileName');
-    await _pumpUntil(tester, () => removeAttachment.evaluate().isNotEmpty);
     await tester.ensureVisible(removeAttachment);
-    await _settle(tester);
     await tester.tap(removeAttachment);
-    await _settle(tester);
-    await tester.tap(find.byTooltip('Save queued message'));
     await _pumpUntil(
       tester,
-      () => restored.composer.observation.editingEntry == null,
+      () => restored.composer.observation.attachments.isEmpty,
     );
-    expect(restored.composer.observation.queue.single.text, draftText);
-    expect(restored.composer.observation.queue.single.attachments, isEmpty);
-    expect(restored.composer.observation.paused, isTrue);
+    await _settle(tester);
+    expect(restored.composer.observation.text, draftText);
+    expect(restored.composer.observation.queue, isEmpty);
+    expect(find.text(fileName), findsNothing);
+    final saved = (await readComposerFixture(
+      chat: restored,
+      preferences: restoredController.preferences,
+    ))!;
+    expect(saved.text, draftText);
+    expect(saved.attachments, isEmpty);
+    expect(saved.queuedPrompts, isEmpty);
     expect(
       harness.fixture.calls.where((call) => call.$2 == 'prompt.submit'),
       hasLength(submitsBefore),
