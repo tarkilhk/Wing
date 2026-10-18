@@ -26,6 +26,7 @@ class BackendVersionCard extends StatefulWidget {
 
 class _BackendVersionCardState extends State<BackendVersionCard>
     with SingleTickerProviderStateMixin {
+  final _logScroll = ScrollController();
   late final _refreshRotation = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1100),
@@ -33,6 +34,7 @@ class _BackendVersionCardState extends State<BackendVersionCard>
 
   @override
   void dispose() {
+    _logScroll.dispose();
     _refreshRotation.dispose();
     super.dispose();
   }
@@ -367,12 +369,24 @@ class _BackendVersionCardState extends State<BackendVersionCard>
                         color: Theme.of(
                           context,
                         ).colorScheme.surfaceContainerHighest,
-                        child: viewportSelection(
-                          SelectableText(
-                            lines.isEmpty
-                                ? 'No update output received.'
-                                : lines.reversed.join('\n'),
-                            style: WingTokens.of(context).typography.mono,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 160),
+                          child: Scrollbar(
+                            controller: _logScroll,
+                            thumbVisibility: true,
+                            child: SingleChildScrollView(
+                              key: const ValueKey('backend-update-log-scroll'),
+                              controller: _logScroll,
+                              primary: false,
+                              child: viewportSelection(
+                                SelectableText(
+                                  lines.isEmpty
+                                      ? 'No update output received.'
+                                      : lines.reversed.join('\n'),
+                                  style: WingTokens.of(context).typography.mono,
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),

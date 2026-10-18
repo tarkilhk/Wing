@@ -55,7 +55,8 @@ also blocks updating. Check again before proceeding.
 
 After confirmation, starting status and a collapsed **Update logs** viewer appear
 immediately. Wing follows progress automatically while this screen remains open.
-Expand the viewer to read output with the newest lines at the top. If progress
+Expand the viewer to read output with the newest lines at the top. Long output
+scrolls inside a capped viewer so the server actions stay nearby. If progress
 cannot be read during a restart or disconnection, use **Check update progress**
 to retry; this does not repeat the update request.
 

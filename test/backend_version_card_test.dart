@@ -410,6 +410,91 @@ void main() {
               ),
               findsOneWidget,
             );
+            final logViewport = find.byKey(
+              const ValueKey('backend-update-log-scroll'),
+            );
+            host.statusResponse = {
+              ...host.statusResponse,
+              'lines': ['One line'],
+            };
+            await tester.pump(const Duration(seconds: 2));
+            await tester.pump();
+            expect(tester.getSize(logViewport).height, lessThan(160));
+            final longLines = List.generate(
+              80,
+              (index) => 'Update line ${index.toString().padLeft(3, '0')}',
+            );
+            host.statusResponse = {...host.statusResponse, 'lines': longLines};
+            await tester.pump(const Duration(seconds: 2));
+            await tester.pump();
+            await tester.ensureVisible(find.byTooltip('Check update progress'));
+            await tester.pumpAndSettle();
+            expect(tester.getSize(logViewport).height, 160);
+            final scrollView = tester.widget<SingleChildScrollView>(
+              logViewport,
+            );
+            final logPosition = scrollView.controller!.position;
+            expect(logPosition.pixels, 0);
+            final output = tester.widget<SelectableText>(
+              find.byType(SelectableText),
+            );
+            expect(output.data, longLines.reversed.join('\n'));
+            await snapshot(
+              tester,
+              '${brightness.name}-$scale-update-bounded-newest',
+            );
+            final footer = tester.getRect(
+              find.byTooltip('Check update progress'),
+            );
+            final outerPosition = tester
+                .state<ScrollableState>(
+                  find
+                      .descendant(
+                        of: find.byType(SingleChildScrollView).first,
+                        matching: find.byType(Scrollable),
+                      )
+                      .first,
+                )
+                .position;
+            final outerOffset = outerPosition.pixels;
+            await tester.timedDrag(
+              logViewport,
+              const Offset(0, -20000),
+              const Duration(seconds: 1),
+            );
+            await tester.pumpAndSettle();
+            expect(
+              logPosition.pixels,
+              closeTo(logPosition.maxScrollExtent, 0.1),
+            );
+            expect(outerPosition.pixels, outerOffset);
+            expect(
+              tester.getRect(find.byTooltip('Check update progress')),
+              footer,
+            );
+            final editable = tester.widget<EditableText>(
+              find.descendant(
+                of: logViewport,
+                matching: find.byType(EditableText),
+              ),
+            );
+            editable.controller.selection = TextSelection(
+              baseOffset: 0,
+              extentOffset: editable.controller.text.length,
+            );
+            expect(
+              editable.controller.selection.textInside(
+                editable.controller.text,
+              ),
+              longLines.reversed.join('\n'),
+            );
+            editable.controller.selection = const TextSelection.collapsed(
+              offset: 0,
+            );
+            await snapshot(
+              tester,
+              '${brightness.name}-$scale-update-bounded-oldest',
+            );
           } finally {
             semantics.dispose();
           }
