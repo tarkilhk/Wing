@@ -288,6 +288,34 @@ List<String> _checkNightly(Directory root) {
     final nativeSteps = native is Map && native['steps'] is List
         ? (native['steps'] as List).whereType<Map>()
         : <Map>[];
+    bool runsForStock(Map step) {
+      final condition = step['if']?.toString().replaceAll(RegExp(r'\s+'), '');
+      return _hardFailure(step['continue-on-error']) &&
+          (_mandatory(step['if']) ||
+              condition == "matrix.family=='stock-hermes'" ||
+              condition == "\${{matrix.family=='stock-hermes'}}");
+    }
+
+    final stockSteps = nativeSteps.toList();
+    final pythonIndex = stockSteps.indexWhere(
+      (step) =>
+          runsForStock(step) &&
+          step['uses'].toString().startsWith('actions/setup-python@') &&
+          step['with'] is Map &&
+          (step['with'] as Map)['python-version'] == '3.14',
+    );
+    final bootstrapIndex = stockSteps.indexWhere(
+      (step) =>
+          runsForStock(step) &&
+          step['run'].toString().contains(
+            r'python3 -m venv "$RUNNER_TEMP/hermes/.venv"',
+          ),
+    );
+    if (pythonIndex < 0 || bootstrapIndex <= pythonIndex) {
+      failures.add(
+        '$path:native REQUIRED_QUALITY_GATE: Provision supported Python 3.14 before creating the current stock Hermes environment.',
+      );
+    }
     if (!hardCommand('catalog', matrixCommand) ||
         outputs is! Map ||
         outputs['families'] != r'${{ steps.catalog.outputs.families }}' ||

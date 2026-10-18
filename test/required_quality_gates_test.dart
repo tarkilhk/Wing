@@ -544,8 +544,14 @@ void main() {
         ('fail-fast: false', 'fail-fast: true'),
         (r'${{ fromJSON(needs.catalog.outputs.families) }}', '[backup]'),
         ('--matrix', '--matrix || true'),
-        (r'echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"', 'echo omitted Android tools'),
+        (
+          r'echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"',
+          'echo omitted Android tools',
+        ),
         (r'NIGHTLY_FAMILY: ${{ matrix.family }}', 'NIGHTLY_FAMILY: backup'),
+        ("python-version: '3.14'", "python-version: '3.12'"),
+        ('actions/setup-python@', 'actions/unused@'),
+        ("if: matrix.family == 'stock-hermes'", 'if: false'),
         ('  platform:', '  platform:\n    if: false'),
         ('  renderer:', '  renderer:\n    continue-on-error: true'),
         ('scripts/tests -v', 'scripts/tests -v || true'),
@@ -823,6 +829,11 @@ ${fixtureCommands.map((command) => '      - name: Proof fixtures\n        run: $
         family: \${{ fromJSON(needs.catalog.outputs.families) }}
     steps:
       - run: echo "\$ANDROID_HOME/platform-tools" >> "\$GITHUB_PATH"
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c
+        if: matrix.family == 'stock-hermes'
+        with:
+          python-version: '3.14'
+      - run: python3 -m venv "\$RUNNER_TEMP/hermes/.venv"
       - env:
           NIGHTLY_FAMILY: \${{ matrix.family }}
         run: python3 scripts/test_nightly_native.py "\$NIGHTLY_FAMILY" --hermes-source "\$RUNNER_TEMP/hermes"
