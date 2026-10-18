@@ -97,6 +97,47 @@ class NativeExecution(unittest.TestCase):
                     raise RuntimeError('test failure')
         self.assertEqual(adb.call_args_list[-1].args, ('forward', '--remove', 'tcp:43123'))
 
+    def test_slash_native_checkpoints_configure_type_capture_and_ack_once(self):
+        with patch.object(self.runner, 'flutter') as flutter:
+            self.runner.slash()
+        checkpoint = flutter.call_args.kwargs['checkpoint']
+        for theme, scale in (('dark', '1.0'), ('light', '2.0')):
+            for action in ('configure', 'type-inline', 'picker-ready', 'selected',
+                           'type-suffix', 'suffix-ready', 'backspace'):
+                name = f'{theme}-{scale}-{action}'
+                stage = subprocess.CompletedProcess([], 0, json.dumps({'name': name, 'token': name}))
+                with self.subTest(name=name), \
+                     patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+                     patch.object(nightly.subprocess, 'run', return_value=stage) as run, \
+                     patch.object(nightly.time, 'sleep'), \
+                     patch.object(self.runner, 'shell', return_value='mWindowVisible=true mIsInputViewShown=true') as shell:
+                    checkpoint()
+                    self.assertEqual(run.call_args.kwargs['input'], name)
+                    if action == 'configure':
+                        shell.assert_any_call('wm', 'size', '840x2215' if scale == '2.0' else '1024x2215')
+                    if action == 'type-inline':
+                        shell.assert_any_call('input', 'text', 'Please%suse%s/a-')
+                    if action == 'type-suffix':
+                        shell.assert_any_call('input', 'text', 'for%sthis%stask')
+                    if action == 'backspace':
+                        shell.assert_any_call('input', 'keyevent', 'KEYCODE_DEL')
+                    run.reset_mock()
+                    shell.reset_mock()
+                    checkpoint()
+                    self.assertEqual(run.call_count, 1)  # Only read; never repeat input/ack.
+                    shell.assert_not_called()
+
+    def test_slash_hidden_keyboard_cannot_be_acknowledged_as_success(self):
+        with patch.object(self.runner, 'flutter') as flutter:
+            self.runner.slash()
+        stage = subprocess.CompletedProcess([], 0, json.dumps({'name': 'dark-1.0-picker-ready', 'token': 'held'}))
+        with patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+             patch.object(nightly.subprocess, 'run', return_value=stage) as run, \
+             patch.object(self.runner, 'shell', return_value='mWindowVisible=false mIsInputViewShown=true'):
+            with self.assertRaisesRegex(RuntimeError, 'visible Android keyboard'):
+                flutter.call_args.kwargs['checkpoint']()
+            self.assertEqual(run.call_count, 1)
+
 
 class Catalog(unittest.TestCase):
     def test_reviewed_native_boundaries_are_all_enrolled(self):

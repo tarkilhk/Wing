@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.test import fingerprint, stop_process_group  # noqa: E402
 from scripts.test_journeys import verdict  # noqa: E402
 from scripts.test_vanilla_hermes import cleanup_signals  # noqa: E402
+from scripts.test_native_bots import input_view_visible  # noqa: E402
 from tools.qa import run_notification_gate as android  # noqa: E402
 
 FAMILIES = (
@@ -272,14 +273,26 @@ class Runner:
             token, name = stage['token'], stage['name']
             if token in seen:
                 return
-            if name.endswith('-type-inline'):
+            if name.endswith('-configure'):
+                self.shell('wm', 'density', '420')
+                self.shell('wm', 'size', '840x2215' if '-2.0-' in name else '1024x2215')
+                self.shell('settings', 'put', 'system', 'font_scale', '2.0' if '-2.0-' in name else '1.0')
+                self.shell('cmd', 'uimode', 'night', 'yes' if name.startswith('dark-') else 'no')
+                self.shell('wm', 'dismiss-keyguard')
+                time.sleep(.8)
+            elif name.endswith('-type-inline'):
                 self.shell('input', 'text', 'Please%suse%s/a-')
             elif name.endswith('-type-suffix'):
                 self.shell('input', 'text', 'for%sthis%stask')
             elif name.endswith('-backspace'):
                 self.shell('input', 'keyevent', 'KEYCODE_DEL')
-            elif not name.endswith(('-selected', '-suffix-ready')):
+            elif not name.endswith(('-picker-ready', '-selected', '-suffix-ready')):
                 raise ValueError('Unknown slash native checkpoint: ' + name)
+            if name.endswith(('-picker-ready', '-selected', '-suffix-ready')):
+                keyboard = self.shell('dumpsys', 'input_method')
+                (self.output / (name + '-input-method.txt')).write_text(keyboard)
+                if not input_view_visible(keyboard):
+                    raise RuntimeError('Slash checkpoint requires a visible Android keyboard: ' + name)
             with (self.output / (name + '.png')).open('wb') as capture:
                 subprocess.run([android.adb_path(), '-s', self.device, 'exec-out',
                                 'screencap', '-p'], stdout=capture, check=True, timeout=25)
