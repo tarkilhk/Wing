@@ -70,34 +70,35 @@ void main() {
       expect(picker.data, file.bytes);
     },
   );
-  test('cancel returns false and picker errors remain failures', () async {
+  test('cancelling the picker returns false', () async {
     expect(await saveRemoteFile(file), isFalse);
+  });
+  test('picker errors remain failures', () async {
     picker.error = PlatformException(code: 'write_failed');
     await expectLater(saveRemoteFile(file), throwsA(isA<PlatformException>()));
   });
-  test(
-    'oversized bytes never reach the picker, empty files can be saved',
-    () async {
-      await expectLater(
-        saveRemoteFile(
-          RemoteFileDownload(
-            filename: 'too-large.bin',
-            bytes: Uint8List(RemoteFilesClient.defaultMaxDownloadBytes + 1),
-          ),
+  test('oversized bytes never reach the picker', () async {
+    await expectLater(
+      saveRemoteFile(
+        RemoteFileDownload(
+          filename: 'too-large.bin',
+          bytes: Uint8List(RemoteFilesClient.defaultMaxDownloadBytes + 1),
         ),
-        throwsStateError,
-      );
-      expect(picker.filename, isNull);
-      picker.destination = Uri.parse('content://documents/empty.txt');
-      expect(
-        await saveRemoteFile(
-          RemoteFileDownload(filename: 'empty.txt', bytes: []),
-        ),
-        isTrue,
-      );
-      expect(picker.data, isEmpty);
-    },
-  );
+      ),
+      throwsStateError,
+    );
+    expect(picker.filename, isNull);
+  });
+  test('empty files can be saved', () async {
+    picker.destination = Uri.parse('content://documents/empty.txt');
+    expect(
+      await saveRemoteFile(
+        RemoteFileDownload(filename: 'empty.txt', bytes: []),
+      ),
+      isTrue,
+    );
+    expect(picker.data, isEmpty);
+  });
 
   test(
     'a held download rechecks route admission before opening a picker',

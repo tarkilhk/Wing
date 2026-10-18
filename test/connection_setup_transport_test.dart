@@ -20,7 +20,7 @@ void main() {
         final opened = Completer<void>();
         final closed = Completer<void>();
         final paths = <String>[];
-        final socketMessages = <Object?>[];
+        final socketRequests = <Map<String, dynamic>>[];
         WebSocket? socket;
         final subscription = server.listen((request) async {
           paths.add(request.uri.path);
@@ -29,7 +29,20 @@ void main() {
             final active = await WebSocketTransformer.upgrade(request);
             socket = active;
             gatewayApplicationRequests(active).listen(
-              socketMessages.add,
+              (raw) {
+                final frame = jsonDecode(raw as String) as Map<String, dynamic>;
+                socketRequests.add({
+                  'method': frame['method'],
+                  'params': frame['params'],
+                });
+                active.add(
+                  jsonEncode({
+                    'jsonrpc': '2.0',
+                    'id': frame['id'],
+                    'result': {'sessions': []},
+                  }),
+                );
+              },
               onDone: () {
                 if (!closed.isCompleted) closed.complete();
               },
@@ -111,7 +124,17 @@ void main() {
           await checking.timeout(const Duration(seconds: 5));
           await closed.future.timeout(const Duration(seconds: 5));
           expect(probe.verified, !cancelOpening);
-          expect(socketMessages, isEmpty);
+          expect(
+            socketRequests,
+            cancelOpening
+                ? isEmpty
+                : [
+                    {
+                      'method': 'session.list',
+                      'params': {'profile': 'work', 'limit': 1},
+                    },
+                  ],
+          );
           expect(paths.contains('/agent/api/sessions'), !cancelOpening);
         } finally {
           probe.dispose();

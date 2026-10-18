@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -18,6 +19,7 @@ import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
@@ -59,6 +61,27 @@ void main() {
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
   late ProfileChat chat;
+
+  final retry = find.descendant(
+    of: find.byType(MaterialBanner),
+    matching: find.byTooltip('Retry'),
+  );
+
+  Future<void> until(
+    WidgetTester tester,
+    bool Function() ready,
+    String outcome,
+  ) async {
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (!ready() && DateTime.now().isBefore(deadline)) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 20));
+      expect(tester.takeException(), isNull);
+    }
+    expect(ready(), isTrue, reason: outcome);
+  }
 
   const capture = bool.fromEnvironment('CAPTURE_RECOVERY');
   setUpAll(() async {
@@ -116,7 +139,12 @@ void main() {
       };
       await controller.openNotification(chat.key);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
+        ),
       );
       await tester.pump();
 
@@ -125,7 +153,7 @@ void main() {
       expect(controller.notificationChat, isNull);
       expect(controller.current!.chat, same(chat));
       expect(chat.composer.observation.text, 'My unsent follow-up');
-      expect(find.byTooltip('Retry'), findsNothing);
+      expect(retry, findsNothing);
       expect(
         host.calls
             .where((call) => call.$2 == 'session.resume')
@@ -212,11 +240,14 @@ void main() {
                 child: child!,
               ),
             ),
-            home: ProfileWorkspaceScreen(controller: controller),
+            home: ProfileWorkspaceScreen(
+              createBotsSession: () => BotsSession((_) async => const []),
+              controller: controller,
+            ),
           ),
         );
         await tester.pumpAndSettle();
-        expect(find.byTooltip('Retry').hitTestable(), findsOneWidget);
+        expect(retry.hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         if (capture) {
           final render =
@@ -250,12 +281,17 @@ void main() {
       );
       await controller.openNotification(chat.key);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
+        ),
       );
       await tester.pump();
       expect(chat.runtime.openingError, isNotNull);
       expect(chat.reading.messages.single['content'], 'a completed');
-      expect(find.byTooltip('Retry'), findsOneWidget);
+      expect(retry, findsOneWidget);
       expect(
         controller.connectionStatus.phase,
         ServerConnectionPhase.disconnected,
@@ -272,7 +308,18 @@ void main() {
             .unavailable[ComposerAction.send],
         isNull,
       );
-      await controller.send(chat);
+      final send = find.byType(ComposerActionButton);
+      expect(
+        tester.widget<ComposerActionButton>(send).primary,
+        ComposerAction.send,
+      );
+      expect(send.hitTestable(), findsOneWidget);
+      await tester.tap(send);
+      await until(
+        tester,
+        () => chat.composer.observation.queue.isNotEmpty,
+        'Send stores the original draft while connection recovery is paused.',
+      );
       expect(chat.composer.observation.text, isEmpty);
       expect(
         chat.composer.observation.queue.single.text,
@@ -281,29 +328,34 @@ void main() {
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
 
       host.resumeError = null;
-      host.resumeDelay = Completer<void>();
-      await tester.tap(find.byTooltip('Retry'));
-      await tester.pump();
-      expect(
-        controller.connectionStatus.phase,
-        ServerConnectionPhase.reconnecting,
-      );
-      expect(chat.runtime.openingError, isNull);
-      await controller.updateDraft(chat, 'Edited while reconnecting');
-      host.resumeDelay!.complete();
-      for (var i = 0; i < 5; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      for (
-        var attempt = 0;
-        attempt < 20 &&
-            (chat.runtime.opening ||
-                chat.composer.observation.sending ||
-                chat.composer.observation.queue.isNotEmpty);
-        attempt++
-      ) {
-        await tester.runAsync(() => Future<void>.delayed(Duration.zero));
-        await tester.pump(const Duration(milliseconds: 10));
+      final recovery = Completer<void>();
+      host.resumeDelay = recovery;
+      try {
+        expect(retry.hitTestable(), findsOneWidget);
+        await tester.tap(retry);
+        await until(
+          tester,
+          () =>
+              controller.connectionStatus.phase ==
+                  ServerConnectionPhase.reconnecting &&
+              find.byType(StudioLoading).evaluate().isNotEmpty,
+          'Retry starts recovery and renders visible pending feedback.',
+        );
+        expect(chat.runtime.openingError, isNull);
+        expect(find.byType(StudioLoading), findsOneWidget);
+        await controller.updateDraft(chat, 'Edited while reconnecting');
+        recovery.complete();
+        await until(
+          tester,
+          () =>
+              !chat.runtime.opening &&
+              !chat.composer.observation.sending &&
+              chat.composer.observation.queue.isEmpty,
+          'Recovery submits the queued message and preserves the newer draft.',
+        );
+      } finally {
+        if (!recovery.isCompleted) recovery.complete();
+        await tester.pump();
       }
       expect(controller.notificationChat, isNull);
       expect(controller.current!.chat, same(chat));
@@ -420,7 +472,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
@@ -450,7 +507,7 @@ void main() {
     expect(chat.runtime.opening, isFalse);
     expect(controller.notificationChat, isNull);
     expect(chat.composer.observation.text, 'My unsent follow-up');
-    expect(find.byTooltip('Retry'), findsNothing);
+    expect(retry, findsNothing);
     expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -466,7 +523,12 @@ void main() {
       expect(host.resumeCalls, 1);
 
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
+        ),
       );
       await tester.pump();
       host.resumeDelay!.complete();
@@ -480,7 +542,7 @@ void main() {
       expect(chat.runtime.opening, isFalse);
       expect(controller.notificationChat, isNull);
       expect(chat.composer.observation.text, 'My unsent follow-up');
-      expect(find.byTooltip('Retry'), findsNothing);
+      expect(retry, findsNothing);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
     },

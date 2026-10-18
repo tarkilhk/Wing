@@ -54,31 +54,29 @@ void main() {
     expect(process.detached, isTrue);
   });
 
-  test('rejects malformed identity and status, and bounds display data', () {
-    expect(
-      GatewayProcessActivity.fromJson({
-        'session_id': '',
-        'command': 'serve',
-        'status': 'running',
-      }),
-      isNull,
-    );
-    expect(
-      GatewayProcessActivity.fromJson({
-        'session_id': 'proc_unknown',
-        'command': 'serve',
-        'status': 'stopping',
-      }),
-      isNull,
-    );
+  for (final entry in <String, Map<String, dynamic>>{
+    'empty identity': {
+      'session_id': '',
+      'command': 'serve',
+      'status': 'running',
+    },
+    'unsupported status': {
+      'session_id': 'proc_unknown',
+      'command': 'serve',
+      'status': 'stopping',
+    },
+  }.entries) {
+    test('rejects ${entry.key}', () {
+      expect(GatewayProcessActivity.fromJson(entry.value), isNull);
+    });
+  }
 
+  test('bounds display data while preserving exact command and output', () {
     final process = GatewayProcessActivity.fromJson({
       'session_id': 'proc_large',
       'command': 'x' * 500,
       'cwd': 'y' * 1500,
       'status': 'running',
-      'uptime_seconds': -1,
-      'pid': 0,
       'output_tail': 'old${'z' * 5000}',
     })!;
 
@@ -87,7 +85,20 @@ void main() {
     expect(process.cwd?.length, 1000);
     expect(process.commandSource, 'x' * 500);
     expect(process.outputTail, 'old${'z' * 5000}');
-    expect(process.uptimeSeconds, isNull);
-    expect(process.pid, isNull);
   });
+  for (final entry in <String, Object>{
+    'uptime_seconds': -1,
+    'pid': 0,
+  }.entries) {
+    test('invalid ${entry.key} is omitted without discarding the process', () {
+      final process = GatewayProcessActivity.fromJson({
+        'session_id': 'proc_invalid',
+        'command': 'serve',
+        'status': 'running',
+        entry.key: entry.value,
+      })!;
+      expect(process.id, 'proc_invalid');
+      expect(entry.key == 'pid' ? process.pid : process.uptimeSeconds, isNull);
+    });
+  }
 }

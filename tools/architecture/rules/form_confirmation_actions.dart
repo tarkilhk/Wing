@@ -96,6 +96,7 @@ class _Buttons extends RecursiveAstVisitor<void> {
       if (!{'child', 'label'}.contains(argument.name.label.name)) continue;
       final text = call(argument.expression);
       if (text == null ||
+          flutterNameIsLocallyBound(argument.expression, text.$2 ?? text.$1) ||
           namespace.symbol(source.path, text.$1, prefix: text.$2) != 'Text') {
         continue;
       }

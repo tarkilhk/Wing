@@ -52,7 +52,8 @@ String answerMessageDisplayText(Map<String, dynamic> message) {
   final value =
       message['display_content'] ?? message['content'] ?? message['text'];
   final rawText = _answerText(value, displayImages: true);
-  final text = PreparedComposerMessage.parse(rawText)?.displayMessage ?? rawText;
+  final text =
+      PreparedComposerMessage.parse(rawText)?.displayMessage ?? rawText;
   final invocation = skillInvocationText(text);
   if (invocation != null) return invocation;
   final marker = RegExp(

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
 import 'package:wing/core/services/connection_access.dart';
@@ -145,7 +146,12 @@ void main() {
       await controller.initialize();
       await controller.createChat(canDispatch: () => true);
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
+        ),
       );
       host.event('a', 'clarify', {
         'request_id': 'request',

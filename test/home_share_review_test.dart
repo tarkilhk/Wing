@@ -106,6 +106,10 @@ ProfileWorkspaceController _controller(
       ),
       get: (path, query) async {
         if (path == 'logs') return {'file': 'gui', 'lines': <String>[]};
+        if (path == 'model/info') {
+          return {'provider': 'fixture', 'model': 'fixture/model'};
+        }
+        if (path == 'model/options') return {'providers': <Object>[]};
         if (path.endsWith('/messages')) {
           return {
             'session_id': Uri.decodeComponent(path.split('/')[1]),
@@ -244,7 +248,7 @@ void main() {
       final workChoice = find
           .ancestor(of: find.text('Work'), matching: find.byType(ListTile))
           .last;
-      tester.widget<ListTile>(workChoice).onTap!();
+      await tester.tap(workChoice);
       await tester.pumpAndSettle();
       await tester.pumpAndSettle();
 

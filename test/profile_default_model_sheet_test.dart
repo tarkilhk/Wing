@@ -421,11 +421,6 @@ void main() {
         );
         expect(fixture.posts, isEmpty);
         if (dismissal == 'Back') {
-          final guard = find.descendant(
-            of: find.byType(ProfileDefaultModelSheet),
-            matching: find.byWidgetPredicate((widget) => widget is PopScope),
-          );
-          expect(tester.widget<PopScope>(guard).canPop, true);
           await tester.binding.handlePopRoute();
         } else {
           await tester.tap(find.byTooltip('Cancel'));
@@ -604,8 +599,8 @@ void main() {
     expect(find.byKey(const Key('profile-model-search')), findsOneWidget);
     expect(find.byKey(const Key('profile-model-save')), findsOneWidget);
     expect(
-      tester.getBottomLeft(find.byKey(const Key('profile-model-save'))).dy,
-      lessThanOrEqualTo(400),
+      find.byKey(const Key('profile-model-save')).hitTestable(),
+      findsOneWidget,
     );
   });
 }

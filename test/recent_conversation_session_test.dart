@@ -614,19 +614,24 @@ void main() {
     },
   );
 
+  test('failed opening keeps the current chat available', () async {
+    await session.select(_entry(0).key);
+    source.failOpen = true;
+    expect(await session.select(_entry(1).key), isFalse);
+    expect(session.selected, _entry(0).key);
+    expect(session.error, isNotNull);
+    expect(session.active, isTrue);
+  });
+
   test(
-    'external selection retires ring; failed opening keeps current chat',
+    'external selection retires the ring and prevents further opening',
     () async {
       await session.select(_entry(0).key);
-      source.failOpen = true;
-      expect(await session.select(_entry(1).key), isFalse);
-      expect(session.selected, _entry(0).key);
-      expect(session.error, isNotNull);
-      expect(session.active, isTrue);
       source.selected = _entry(3).key;
       source.notifyListeners();
       expect(session.active, isFalse);
       expect(await session.select(_entry(0).key), isFalse);
+      expect(source.selected, _entry(3).key);
     },
   );
 
@@ -701,38 +706,64 @@ void main() {
     },
   );
 
-  testWidgets(
-    'suppresses quiet history/current/nonmember; coalesces amber priority',
-    (tester) async {
+  for (final (reason, index, interactive) in [
+    ('quiet history', 1, false),
+    ('current conversation', 0, true),
+    ('nonmember conversation', 20, true),
+  ]) {
+    testWidgets('$reason does not emit an arrival cue', (tester) async {
       await session.select(_entry(0).key);
-      var sequence = 0;
-      void signal(int index, ConversationActivityKind kind) =>
-          activity.value = ChatNoticeActivity(
-            key: _entry(index).key,
-            kind: kind,
-            identity: '$sequence',
-            sequence: ++sequence,
-          );
-      signal(1, ConversationActivityKind.reply);
-      session.setInteractive(true, origin: session.selected);
+      if (interactive) session.setInteractive(true, origin: session.selected);
+      activity.value = ChatNoticeActivity(
+        key: _entry(index).key,
+        kind: ConversationActivityKind.reply,
+        identity: 'ignored',
+        sequence: 1,
+      );
+      if (!interactive) session.setInteractive(true, origin: session.selected);
       await tester.pump(const Duration(milliseconds: 200));
       expect(session.nudges.value, isNull);
-      signal(0, ConversationActivityKind.reply);
-      signal(20, ConversationActivityKind.inputNeeded);
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(session.nudges.value, isNull);
-      signal(7, ConversationActivityKind.inputNeeded);
-      signal(1, ConversationActivityKind.reply);
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(session.nudges.value?.kind, ConversationActivityKind.inputNeeded);
-      expect(session.nudges.value?.direction, ConversationDirection.left);
-      final delivered = session.nudges.value;
-      signal(1, ConversationActivityKind.reply);
-      session.setInteractive(false, origin: null);
-      await tester.pump(const Duration(milliseconds: 200));
-      session.setInteractive(true, origin: session.selected);
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(session.nudges.value, same(delivered));
-    },
-  );
+    });
+  }
+
+  testWidgets('coalesced arrival cues prioritize input needed over a reply', (
+    tester,
+  ) async {
+    await session.select(_entry(0).key);
+    session.setInteractive(true, origin: session.selected);
+    activity.value = ChatNoticeActivity(
+      key: _entry(7).key,
+      kind: ConversationActivityKind.inputNeeded,
+      identity: 'needs-input',
+      sequence: 1,
+    );
+    activity.value = ChatNoticeActivity(
+      key: _entry(1).key,
+      kind: ConversationActivityKind.reply,
+      identity: 'reply',
+      sequence: 2,
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(session.nudges.value?.kind, ConversationActivityKind.inputNeeded);
+    expect(session.nudges.value?.direction, ConversationDirection.left);
+    expect(session.nudges.value?.key, _entry(7).key);
+  });
+
+  testWidgets('leaving interactive mode discards a queued arrival cue', (
+    tester,
+  ) async {
+    await session.select(_entry(0).key);
+    session.setInteractive(true, origin: session.selected);
+    activity.value = ChatNoticeActivity(
+      key: _entry(1).key,
+      kind: ConversationActivityKind.reply,
+      identity: 'queued',
+      sequence: 1,
+    );
+    session.setInteractive(false, origin: null);
+    await tester.pump(const Duration(milliseconds: 200));
+    session.setInteractive(true, origin: session.selected);
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(session.nudges.value, isNull);
+  });
 }

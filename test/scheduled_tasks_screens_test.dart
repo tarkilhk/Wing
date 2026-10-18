@@ -99,8 +99,8 @@ void main() {
       ScheduledTasksRepository(fixture.profile),
       prefs,
     );
-    await c.refresh();
     addTearDown(c.dispose);
+    await c.refresh();
     return c;
   }
 
@@ -245,6 +245,7 @@ void main() {
     );
     expect(request.$3['profile'], 'personal');
     expect(request.$4!['name'], 'Daily digest');
+    expect(request.$4!['prompt'], 'Summarize my calendar.');
     expect(request.$4!['schedule'], '0 9 * * *');
     expect(request.$4!['deliver'], 'local');
     expect(find.text('Scheduled tasks'), findsOneWidget);
@@ -774,6 +775,10 @@ void main() {
     await tester.tap(find.byTooltip('Resume and run'));
     await tester.pumpAndSettle();
     expect(fixture.mutations, 1);
+    expect(
+      fixture.admin.requests.where((request) => request.$1 == 'POST').single.$2,
+      'cron/jobs/review/trigger',
+    );
   });
   testWidgets('history failure is never displayed as no runs', (tester) async {
     fixture.failRuns = true;
@@ -917,6 +922,8 @@ void main() {
         tester,
       ) async {
         await show(tester, list(), brightness: brightness, accent: accent);
+        expect(find.text('Morning briefing').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Refresh tasks').hitTestable(), findsOneWidget);
         expect(tester.takeException(), null);
         await screenshot(tester, 'list-${brightness.name}-${accent.name}');
       });
@@ -1200,7 +1207,11 @@ void main() {
     await tester.tap(find.text('Open tasks'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), null);
-    expect(find.text('Scheduled tasks'), findsOneWidget);
-    await screenshot(tester, 'large-pushed-title');
+    expect(find.text('Scheduled tasks').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Refresh tasks').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Open tasks'), findsOneWidget);
   });
 }

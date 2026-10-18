@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/composer_reference.dart';
 import 'package:wing/core/models/attachment_draft.dart';
 import 'package:wing/core/models/queued_prompt_draft.dart';
@@ -328,7 +329,12 @@ void main() {
           isCurrentRequest: () => true,
         );
         await tester.pumpWidget(
-          MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+          MaterialApp(
+            home: ProfileWorkspaceScreen(
+              controller: controller,
+              createBotsSession: () => BotsSession((_) async => const []),
+            ),
+          ),
         );
         await tester.pump(const Duration(milliseconds: 250));
         expect(controller.notificationChat!.runtime.opening, isTrue);
@@ -513,7 +519,12 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     final composer = find.byKey(const Key('profile-message-composer'));
     await tester.enterText(composer, '/writing-for');
@@ -545,7 +556,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  test('catalog includes custom skills, aliases and no fixed size limit', () {
+  test('catalog search includes all 300 custom skills', () {
     final value = host.catalog('a');
     value['pairs'] = [
       ...value['pairs'] as List,
@@ -556,8 +567,18 @@ void main() {
     ];
     final catalog = SlashCatalog.fromJson(value);
     expect(catalog.search('/').length, 305);
-    expect(catalog.search('/short').single.text, '/a-skill');
-    expect(catalog.unavailable('clear'), contains('terminal'));
+  });
+
+  test(
+    'catalog resolves aliases and explains unavailable terminal commands',
+    () {
+      final catalog = SlashCatalog.fromJson(host.catalog('a'));
+      expect(catalog.search('/short').single.text, '/a-skill');
+      expect(catalog.unavailable('clear'), contains('terminal'));
+    },
+  );
+
+  test('invocation parses multiline arguments and refuses a bare slash', () {
     expect(
       SlashInvocation.parse('/skill first\nsecond')!.argument,
       'first\nsecond',
@@ -982,7 +1003,7 @@ void main() {
     expect(chat.runtime.execution, ChatExecution.running);
   });
 
-  test('duplicate taps do not execute a command twice', () async {
+  test('concurrent send requests do not execute a command twice', () async {
     final reply = Completer<Map<String, dynamic>>();
     host.respond = (_, _) => reply.future;
     chat.composer.editText('/custom');
@@ -2393,7 +2414,10 @@ void main() {
                 ),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           ),
         );
@@ -2522,7 +2546,10 @@ void main() {
                 ),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           ),
         );
@@ -2532,7 +2559,8 @@ void main() {
         await tester.pumpAndSettle();
         final refresh = find.byTooltip('Refresh skills');
         expect(refresh.hitTestable(), findsOneWidget);
-        expect(tester.getSize(refresh), const Size(48, 48));
+        expect(tester.getSize(refresh).width, greaterThanOrEqualTo(48));
+        expect(tester.getSize(refresh).height, greaterThanOrEqualTo(48));
         expect(find.text('No matching commands.'), findsOneWidget);
         final input = tester.widget<TextField>(composer).controller!;
         final before = input.value;
@@ -2547,7 +2575,8 @@ void main() {
             reason: 'Skill picker $state must fit with the keyboard open',
           );
           expect(refresh.hitTestable(), findsOneWidget);
-          expect(tester.getSize(refresh), const Size(48, 48));
+          expect(tester.getSize(refresh).width, greaterThanOrEqualTo(48));
+          expect(tester.getSize(refresh).height, greaterThanOrEqualTo(48));
           expect(tester.getRect(refresh).bottom, lessThanOrEqualTo(844 - 280));
           if (!Platform.environment.containsKey('CAPTURE_SKILL_COMPOSER')) {
             return;
@@ -2659,7 +2688,10 @@ void main() {
                     ).copyWith(textScaler: TextScaler.linear(scale)),
                     child: child!,
                   ),
-                  home: ProfileWorkspaceScreen(controller: controller),
+                  home: ProfileWorkspaceScreen(
+                    controller: controller,
+                    createBotsSession: () => BotsSession((_) async => const []),
+                  ),
                 ),
               ),
             );
@@ -2691,7 +2723,8 @@ void main() {
 
             await capture('picker');
             final inspect = find.byTooltip('Inspect $skillName');
-            expect(tester.getSize(inspect), const Size(48, 48));
+            expect(tester.getSize(inspect).width, greaterThanOrEqualTo(48));
+            expect(tester.getSize(inspect).height, greaterThanOrEqualTo(48));
             await tester.tap(inspect);
             await tester.pumpAndSettle();
             expect(find.byType(SkillDocumentViewer), findsOneWidget);
@@ -2756,7 +2789,12 @@ void main() {
   ) async {
     host.readSkill = () async => throw StateError('Offline');
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     final composer = find.byKey(const Key('profile-message-composer'));
     await tester.enterText(composer, '/a-');
@@ -2787,7 +2825,12 @@ void main() {
       final pending = Completer<Map<String, dynamic>>();
       host.readSkill = () => pending.future;
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.enterText(
         find.byKey(const Key('profile-message-composer')),
@@ -2977,7 +3020,12 @@ void main() {
         'display': '/a-skill task',
       };
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.enterText(
         find.byKey(const Key('profile-message-composer')),

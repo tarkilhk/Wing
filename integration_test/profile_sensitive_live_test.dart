@@ -35,18 +35,22 @@ Future<_LiveChat> _openLiveChat(WidgetTester tester, String profile) async {
   );
   final identity = await ProfileConnectionIdentity().resolve(connection);
   final appPreferences = AppPreferences(preferences);
+  addTearDown(appPreferences.dispose);
   expect(
     (await appPreferences.admitProfileSelection(identity, profile).settled)
         .confirmed,
     isTrue,
   );
-  addTearDown(appPreferences.dispose);
   final controller = ProfileWorkspaceController(
     appPreferences: appPreferences,
     access: ConnectionAccess(connection: connection, dashboardOAuth: null),
     connectionIdentity: identity,
     preferences: preferences,
   );
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    controller.dispose();
+  });
   await controller.initialize();
   expect(controller.error, isNull, reason: 'Real gateway/profile connection');
   expect(
@@ -62,10 +66,6 @@ Future<_LiveChat> _openLiveChat(WidgetTester tester, String profile) async {
     reason: '$profile must have a connected provider for this live test.',
   );
   final chat = await controller.createChat(canDispatch: () => true);
-  await tester.pumpWidget(
-    MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
-  );
-  await _until(tester, () => find.byTooltip('Send').evaluate().isNotEmpty);
   addTearDown(() async {
     Object? stopFailure;
     try {
@@ -74,14 +74,15 @@ Future<_LiveChat> _openLiveChat(WidgetTester tester, String profile) async {
       }
     } catch (error) {
       stopFailure = error;
-    } finally {
-      await tester.pumpWidget(const SizedBox.shrink());
-      controller.dispose();
     }
     if (stopFailure != null) {
       fail('Sensitive live cleanup could not stop its own turn: $stopFailure');
     }
   });
+  await tester.pumpWidget(
+    MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+  );
+  await _until(tester, () => find.byTooltip('Send').evaluate().isNotEmpty);
   return _LiveChat(controller, chat);
 }
 
@@ -94,6 +95,7 @@ Future<void> _until(
   final deadline = DateTime.now().add(Duration(seconds: seconds));
   while (!condition() && DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 200));
+    expect(tester.takeException(), isNull);
   }
   expect(condition(), isTrue, reason: reason);
 }
@@ -356,7 +358,7 @@ void main() {
   );
 
   testWidgets(
-    'safe WhatIf approval is denied when smart mode asks manually',
+    'safe WhatIf approval is denied through the manual approval card',
     (tester) async {
       final live = await _openLiveChat(tester, 'android-qa-a');
       final nonce = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
@@ -383,30 +385,13 @@ void main() {
             !live.chat.runtime.blocksTurnAdmission,
         reason: 'The bounded approval probe did not settle.',
       );
-      if (live.chat.runtime.approval == null) {
-        expect(
-          toolProbe.observed,
-          isTrue,
-          reason:
-              'UNSUPPORTED: no approval was emitted and the model did not '
-              'attempt the bounded WhatIf command.',
-        );
-        expect(
-          _hasStoredToolResult(live.chat),
-          isTrue,
-          reason:
-              'The automatically resolved approval probe did not persist '
-              'a tool result.',
-        );
-        debugPrint(
-          '[sensitive-live] APPROVAL_AUTO_RESOLVED: smart mode completed the '
-          'observed safe WhatIf tool call without a manual card.',
-        );
-        expect(live.chat.runtime.blocksTurnAdmission, isFalse);
-        expect(live.chat.runtime.execution, ChatExecution.completed);
-        expect(live.chat.runtime.error, isNull);
-        return;
-      }
+      expect(
+        live.chat.runtime.approval,
+        isNotNull,
+        reason:
+            'Manual approval is required to exercise Deny. Configure the '
+            'disposable QA profile to request approval for this probe.',
+      );
       expect(
         live.chat.runtime.approval!.request.command.toString(),
         contains('hermes-approval-$nonce'),

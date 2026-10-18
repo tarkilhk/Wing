@@ -29,15 +29,27 @@ const _cases = [
     _view: "import '../../services/administration_repository.dart';\n$_page",
     _adapter: 'class AdministrationRepository {}',
   }, 1),
-  _Case('adapter-barrel', {
+  _Case('gateway-barrel', {
     _view: "import '../../../barrel.dart'; $_page",
-    'lib/barrel.dart':
-        "export 'core/services/profile_gateway.dart'; export 'core/services/profile_voice_repository.dart'; export 'core/controllers/voice_output_controller.dart'; export 'core/services/android_voice.dart';",
-    _otherAdapter: 'class ProfileGateway {}',
+    'lib/barrel.dart': "export 'core/services/profile_gateway.dart';",
+    'lib/core/services/profile_gateway.dart': 'class ProfileGateway {}',
+  }, 1),
+  _Case('voice-repository-barrel', {
+    _view: "import '../../../barrel.dart'; $_page",
+    'lib/barrel.dart': "export 'core/services/profile_voice_repository.dart';",
     'lib/core/services/profile_voice_repository.dart':
         'class ProfileVoiceRepository {}',
+  }, 1),
+  _Case('voice-output-barrel', {
+    _view: "import '../../../barrel.dart'; $_page",
+    'lib/barrel.dart':
+        "export 'core/controllers/voice_output_controller.dart';",
     'lib/core/controllers/voice_output_controller.dart':
         'class VoiceOutputController {}',
+  }, 1),
+  _Case('native-voice-barrel', {
+    _view: "import '../../../barrel.dart'; $_page",
+    'lib/barrel.dart': "export 'core/services/android_voice.dart';",
     'lib/core/services/android_voice.dart': 'class AndroidVoice {}',
   }, 1),
   _Case(

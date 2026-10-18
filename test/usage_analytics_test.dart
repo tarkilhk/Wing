@@ -413,20 +413,26 @@ void main() {
       expect(data.days.map((d) => d.id), ['2026-09-17', '2026-09-18']);
       expect(data.days.first.tokens.total, 1280000);
       expect(data.days.last.tokens.total, isNull);
-      final empty = UsageDaily.fromJson({'daily': []}, period: 365);
-      expect(empty.days, isEmpty);
-      expect(empty.calendarDays, isEmpty);
-      expect(() => UsageDaily.fromJson({}, period: 7), throwsFormatException);
-      expect(
-        () => UsageDaily.fromJson({
-          'daily': [
-            {'day': '2026-02-30'},
-          ],
-        }, period: 7),
-        throwsFormatException,
-      );
     },
   );
+  test('empty daily analytics remains empty', () {
+    final empty = UsageDaily.fromJson({'daily': []}, period: 365);
+    expect(empty.days, isEmpty);
+    expect(empty.calendarDays, isEmpty);
+  });
+  test('missing daily analytics is rejected', () {
+    expect(() => UsageDaily.fromJson({}, period: 7), throwsFormatException);
+  });
+  test('impossible calendar dates are rejected', () {
+    expect(
+      () => UsageDaily.fromJson({
+        'daily': [
+          {'day': '2026-02-30'},
+        ],
+      }, period: 7),
+      throwsFormatException,
+    );
+  });
   for (final (name, dates) in [
     ('positive offset at UTC year end', ['2026-12-31', '2027-01-01']),
     ('negative offset partial first date', ['2025-12-30', '2025-12-31']),
@@ -521,6 +527,8 @@ void main() {
     expect(data.costs.total, 5);
     expect(data.costs.isPartial, isTrue);
     expect(data.tokenCosts, isNull);
+  });
+  test('fractional, negative and infinite token counts remain unknown', () {
     expect(
       UsageTokens.fromJson({
         'input_tokens': 1.5,

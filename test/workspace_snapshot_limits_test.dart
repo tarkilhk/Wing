@@ -115,13 +115,17 @@ void main() {
       );
 
       controller.dispose();
-      await Future<void>(() async {
-        while (true) {
-          await preferences.reload();
-          if (preferences.getString(storageKey) != seed) return;
-          await Future<void>.delayed(Duration.zero);
-        }
-      }).timeout(const Duration(seconds: 10));
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (preferences.getString(storageKey) == seed &&
+          DateTime.now().isBefore(deadline)) {
+        await preferences.reload();
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(
+        preferences.getString(storageKey),
+        isNot(seed),
+        reason: 'Disposing the workspace must persist its projected reading.',
+      );
 
       final encoded = preferences.getString(storageKey)!;
       final saved =

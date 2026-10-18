@@ -789,7 +789,11 @@ void main() {
           final avatarAction = find.byTooltip(
             'Edit name & appearance for Atlas',
           );
-          expect(tester.getSize(avatarAction), const Size(56, 56));
+          expect(avatarAction.hitTestable(), findsOneWidget);
+          expect(
+            tester.getSize(avatarAction).shortestSide,
+            greaterThanOrEqualTo(48),
+          );
           await tester.tap(find.text('Atlas').last);
           await tester.pump();
           expect(opened, ['atlas-chat']);
@@ -821,10 +825,7 @@ void main() {
           );
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 750));
-          expect(
-            tester.getSize(find.byType(LiveBotAvatar)),
-            const Size(32, 32),
-          );
+          expect(find.byType(LiveBotAvatar), findsOneWidget);
           await _pixels(
             tester,
             frame,

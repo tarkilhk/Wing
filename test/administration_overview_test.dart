@@ -186,31 +186,44 @@ void main() {
     },
   );
 
-  test(
-    'older refresh and disposed observers cannot publish late results',
-    () async {
-      final fixture = AdministrationFixture();
-      final pending = Completer<Map<String, dynamic>>();
-      var reads = 0;
-      fixture.override = (_, path, _, _) async {
-        if (path == 'config') {
-          if (++reads == 1) return pending.future;
-          return {'version': 2};
+  for (final retireBeforeCompletion in [false, true]) {
+    test(
+      retireBeforeCompletion
+          ? 'retired overview ignores an older pending refresh'
+          : 'newer overview remains authoritative when an older refresh finishes',
+      () async {
+        final fixture = AdministrationFixture();
+        addTearDown(fixture.server.close);
+        final pending = Completer<Map<String, dynamic>>();
+        var reads = 0;
+        fixture.override = (_, path, _, _) async {
+          if (path == 'config') {
+            if (++reads == 1) return pending.future;
+            return {'version': 2};
+          }
+          if (path == 'providers/oauth') return {'providers': []};
+          if (path == 'mcp/servers') return {'servers': []};
+          return {'data': []};
+        };
+        final overview = AdministrationOverview(fixture.server.profile('work'));
+        var retired = false;
+        addTearDown(() {
+          if (!retired) overview.dispose();
+          if (!pending.isCompleted) pending.complete({'version': 1});
+        });
+        final old = overview.refresh();
+        await overview.refresh();
+        expect(overview.observations['config']!.data, {'version': 2});
+        if (retireBeforeCompletion) {
+          overview.dispose();
+          retired = true;
         }
-        if (path == 'providers/oauth') return {'providers': []};
-        if (path == 'mcp/servers') return {'servers': []};
-        return {'data': []};
-      };
-      final overview = AdministrationOverview(fixture.server.profile('work'));
-      final old = overview.refresh();
-      await overview.refresh();
-      expect(overview.observations['config']!.data, {'version': 2});
-      overview.dispose();
-      pending.complete({'version': 1});
-      await old;
-      expect(overview.observations['config']!.data, {'version': 2});
-    },
-  );
+        pending.complete({'version': 1});
+        await old;
+        expect(overview.observations['config']!.data, {'version': 2});
+      },
+    );
+  }
 
   test('malformed collection does not erase last confirmed data', () async {
     final fixture = AdministrationFixture();

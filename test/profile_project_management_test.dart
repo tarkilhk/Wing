@@ -238,7 +238,7 @@ void main() {
         icon: 'folder',
         canDispatch: () => true,
       );
-      await host.folderStarted!.future.timeout(const Duration(seconds: 1));
+      await host.folderStarted!.future;
       expect(owner.creatingProject, isTrue);
       expect(host.calls.where((call) => call.$2 == 'projects.create'), isEmpty);
       expect(owner.projects, hasLength(1));
@@ -312,7 +312,7 @@ void main() {
         creating,
         throwsA(isA<DashboardRequestNotSentException>()),
       );
-      await host.folderStarted!.future.timeout(const Duration(seconds: 1));
+      await host.folderStarted!.future;
       active = false;
       host.folderGate!.complete();
       await failure;
@@ -403,7 +403,7 @@ void main() {
       icon: 'folder',
       canDispatch: () => true,
     );
-    await host.folderStarted!.future.timeout(const Duration(seconds: 1));
+    await host.folderStarted!.future;
     await expectLater(
       controller.createProject(
         'Another project',
@@ -440,7 +440,7 @@ void main() {
         creating,
         throwsA(isA<DashboardRequestNotSentException>()),
       );
-      await host.folderStarted!.future.timeout(const Duration(seconds: 1));
+      await host.folderStarted!.future;
       await controller.navigateProfile('b');
       host.folderGate!.complete();
       await failure;
@@ -554,39 +554,36 @@ void main() {
     },
   );
 
-  test(
-    'failed acknowledgements leave server-backed selection unchanged',
-    () async {
-      final resource = controller.current!;
-      await controller.selectProject(resource.projects.single);
-      final selected = resource.selectedProject;
-
-      host.rejectUpdateAck = true;
-      await expectLater(
-        controller.updateProject(
-          resource.scope,
-          'project-a',
-          name: 'Ignored',
-          canDispatch: () => true,
-        ),
-        throwsA(isA<FormatException>()),
-      );
-      expect(resource.projects.single['name'], 'A project');
-      expect(resource.selectedProject, same(selected));
-
-      host.rejectDeleteAck = true;
-      await expectLater(
-        controller.deleteProject(
-          resource.scope,
-          'project-a',
-          canDispatch: () => true,
-        ),
-        throwsA(isA<FormatException>()),
-      );
-      expect(resource.projects.single['id'], 'project-a');
-      expect(resource.selectedProject, same(selected));
-    },
-  );
+  for (final operation in ['update', 'delete']) {
+    test(
+      'failed $operation acknowledgement retains project selection',
+      () async {
+        final resource = controller.current!;
+        await controller.selectProject(resource.projects.single);
+        final selected = resource.selectedProject;
+        host.rejectUpdateAck = true;
+        host.rejectDeleteAck = true;
+        await expectLater(
+          operation == 'update'
+              ? controller.updateProject(
+                  resource.scope,
+                  'project-a',
+                  name: 'Ignored',
+                  canDispatch: () => true,
+                )
+              : controller.deleteProject(
+                  resource.scope,
+                  'project-a',
+                  canDispatch: () => true,
+                ),
+          throwsA(isA<FormatException>()),
+        );
+        expect(resource.projects.single['id'], 'project-a');
+        expect(resource.projects.single['name'], 'A project');
+        expect(resource.selectedProject, same(selected));
+      },
+    );
+  }
 
   test(
     'acknowledged delete finishes without a follow-up project read',

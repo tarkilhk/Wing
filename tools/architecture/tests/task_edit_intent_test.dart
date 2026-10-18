@@ -175,7 +175,10 @@ void main() {
     } on ArgumentError {
       rejected = true;
     }
-    check('unsupported script-only decision rejects entire rebase', rejected);
+    check(
+      '$unsupported script-only keep decision rejects entire rebase',
+      rejected,
+    );
   }
   final scriptAdopted = scriptReview.reconcile({
     TaskConflictField.name: TaskConflictDecision.keepMine,
@@ -189,7 +192,8 @@ void main() {
   check(
     'script-only name update has no hidden execution edits',
     scriptAdopted.resolve(scriptTask).conflicts.isEmpty &&
-        scriptAdopted.resolve(scriptTask).updates.length == 1,
+        scriptAdopted.resolve(scriptTask).updates.length == 1 &&
+        scriptAdopted.resolve(scriptTask).updates['name'] == 'Mine',
   );
   check(
     'execution-capability change alone blocks a retained instructions edit',
@@ -216,15 +220,24 @@ void main() {
     endpointAdopted.values.length == 1 &&
         endpointAdopted.values['name'] == 'Mine',
   );
-  for (final invalid in <void Function()>[
-    () => mixedReview.reconcile({
-      TaskConflictField.name: TaskConflictDecision.keepMine,
-    }),
-    () => endpointReview.reconcile({
-      TaskConflictField.modelRouting: TaskConflictDecision.keepMine,
-    }),
-    () => nameEdit.review(
-      row(extra: {'profile': 'work', 'profile_name': 'work'}),
+  for (final (reason, invalid) in <(String, void Function())>[
+    (
+      'incomplete review',
+      () => mixedReview.reconcile({
+        TaskConflictField.name: TaskConflictDecision.keepMine,
+      }),
+    ),
+    (
+      'unsupported routing decision',
+      () => endpointReview.reconcile({
+        TaskConflictField.modelRouting: TaskConflictDecision.keepMine,
+      }),
+    ),
+    (
+      'foreign-owner review',
+      () => nameEdit.review(
+        row(extra: {'profile': 'work', 'profile_name': 'work'}),
+      ),
     ),
   ]) {
     var rejected = false;
@@ -233,10 +246,7 @@ void main() {
     } on ArgumentError {
       rejected = true;
     }
-    check(
-      'incomplete, unsupported or foreign-owner review is rejected',
-      rejected,
-    );
+    check('$reason is rejected', rejected);
   }
   check(
     'already converged desired field has no write',

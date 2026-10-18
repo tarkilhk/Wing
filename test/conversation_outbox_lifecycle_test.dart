@@ -103,12 +103,22 @@ List<String> _submitted(Host host) => [
     if (call.$2 == 'prompt.submit') call.$3['text'] as String,
 ];
 
-Future<void> _until(bool Function() complete) async {
-  await Future<void>(() async {
-    while (!complete()) {
-      await Future<void>.delayed(Duration.zero);
-    }
-  }).timeout(const Duration(seconds: 10));
+Future<void> _until(
+  ProfileWorkspaceController controller,
+  bool Function() complete,
+) async {
+  if (complete()) return;
+  final reached = Completer<void>();
+  void observe() {
+    if (complete() && !reached.isCompleted) reached.complete();
+  }
+
+  controller.addListener(observe);
+  try {
+    await reached.future;
+  } finally {
+    controller.removeListener(observe);
+  }
 }
 
 void main() {
@@ -198,6 +208,7 @@ void main() {
           restoredQueue ? 'Separate draft' : '',
         );
         final methods = host.calls.map((call) => call.$2).toList();
+        expect(methods, containsAll(['session.resume', 'prompt.submit']));
         expect(
           methods.indexOf('session.resume'),
           lessThan(methods.indexOf('prompt.submit')),
@@ -217,6 +228,7 @@ void main() {
       host,
       appPreferences: appPreferences,
     );
+    addTearDown(() => controller.dispose());
     await controller.initialize();
     final chat = await controller.createChat(canDispatch: () => true);
     host.discoveryFailure = const SocketException('Offline');
@@ -242,7 +254,6 @@ void main() {
     controller.dispose();
 
     controller = _controller(preferences, host, appPreferences: appPreferences);
-    addTearDown(controller.dispose);
     await controller.openNotification(key);
     final restored = controller.notificationChat!;
     expect(restored.composer.observation.text, isEmpty);
@@ -270,6 +281,7 @@ void main() {
     host.running = false;
     host.event('a', 'message.complete', {'text': 'First answer'});
     await _until(
+      controller,
       () =>
           _submitted(host).length == 2 &&
           !restored.composer.observation.sending,
@@ -344,11 +356,13 @@ void main() {
       ]);
       host.event('a', 'message.complete', {'text': 'First answer'});
       await _until(
+        controller,
         () =>
             _submitted(host).length == 2 && !chat.composer.observation.sending,
       );
       host.event('a', 'message.complete', {'text': 'Second answer'});
       await _until(
+        controller,
         () =>
             _submitted(host).length == 3 && !chat.composer.observation.sending,
       );

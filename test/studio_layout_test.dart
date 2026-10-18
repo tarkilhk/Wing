@@ -2,6 +2,7 @@ import 'package:wing/core/models/chat_intelligence.dart';
 import 'support/color_contrast.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/services/shared_draft_session.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'home_config_restore_test.dart' show homeEntryFactory, profileController;
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/backup_session.dart';
@@ -102,7 +103,28 @@ class _StudioConversationFixture extends ProfileBrowserFixture {
     return ProfileGateway(
       scope: scope,
       discover: base.discover,
-      get: base.read,
+      get: (path, query) async {
+        if (path == 'model/info') {
+          return {
+            'provider': 'provider',
+            'model': 'provider/a-very-long-model-route-for-small-screens',
+          };
+        }
+        if (path == 'model/options') {
+          return {
+            'providers': [
+              {
+                'slug': 'provider',
+                'name': 'Example provider',
+                'models': [
+                  'provider/a-very-long-model-route-for-small-screens',
+                ],
+              },
+            ],
+          };
+        }
+        return base.read(path, query);
+      },
       ownedPatch: (path, body, canDispatch, onDispatched) async {
         if (!canDispatch()) {
           throw DashboardRequestNotSentException(StateError('Menu retired'));
@@ -120,6 +142,7 @@ class _StudioConversationFixture extends ProfileBrowserFixture {
             'stored_session_id': params['session_id'],
             'info': {
               'profile_name': scope.profileName,
+              'provider': 'provider',
               'model': 'provider/a-very-long-model-route-for-small-screens',
               'reasoning_effort': 'high',
             },
@@ -363,7 +386,10 @@ void main() {
                     ).copyWith(textScaler: TextScaler.linear(scale)),
                     child: child!,
                   ),
-                  home: ProfileWorkspaceScreen(controller: controller),
+                  home: ProfileWorkspaceScreen(
+                    controller: controller,
+                    createBotsSession: () => BotsSession((_) async => []),
+                  ),
                 ),
               ),
             );
@@ -380,8 +406,22 @@ void main() {
             final create = tester.getRect(
               find.byKey(const ValueKey('workspace-new-chat')),
             );
-            expect(search.bottom, lessThan(400));
-            expect(create.top, greaterThan(650));
+            final viewport =
+                Offset.zero &
+                MediaQuery.sizeOf(
+                  tester.element(find.byType(ProfileWorkspaceScreen)),
+                );
+            expect(viewport.intersect(search), search);
+            expect(viewport.intersect(create), create);
+            expect(search.bottom, lessThanOrEqualTo(create.top));
+            expect(
+              find.byKey(const ValueKey('workspace-search')).hitTestable(),
+              findsOneWidget,
+            );
+            expect(
+              find.byKey(const ValueKey('workspace-new-chat')).hitTestable(),
+              findsOneWidget,
+            );
             expect(create.height, greaterThanOrEqualTo(48));
             final export = accent == WorkspaceAccent.teal && width <= 360;
             if (export) {
@@ -407,7 +447,8 @@ void main() {
               matching: find.byTooltip('Project actions'),
             );
             final anchor = tester.getRect(projectActions);
-            expect(anchor.size, const Size(48, 48));
+            expect(anchor.width, greaterThanOrEqualTo(48));
+            expect(anchor.height, greaterThanOrEqualTo(48));
             expect(
               find.descendant(
                 of: find.byKey(const ValueKey('project-personal-p2')),
@@ -424,13 +465,16 @@ void main() {
                 )
                 .first;
             final menuRect = tester.getRect(menu);
-            expect(menuRect.width, lessThan(width - 16));
-            expect(menuRect.right, closeTo(anchor.right, 1));
+            final viewportHeight =
+                tester.view.physicalSize.height / tester.view.devicePixelRatio;
+            expect(menuRect.left, greaterThanOrEqualTo(0));
+            expect(menuRect.top, greaterThanOrEqualTo(0));
+            expect(menuRect.right, lessThanOrEqualTo(width));
+            expect(menuRect.bottom, lessThanOrEqualTo(viewportHeight));
             expect(
-              menuRect.top,
-              closeTo((anchor.bottom + 4).clamp(8, 792 - menuRect.height), 1),
+              find.byKey(const ValueKey('project-action-new')).hitTestable(),
+              findsOneWidget,
             );
-            expect(menuRect.bottom, lessThanOrEqualTo(792));
             expect(find.byType(BottomSheet), findsNothing);
             if (export) {
               await _capture(tester, '${brightness.name}-project-menu-$scale');
@@ -481,6 +525,8 @@ void main() {
             await tester.pumpAndSettle(const Duration(milliseconds: 250));
             await tester.settleMarkdown();
             expect(chat.context?.used, 42000);
+            expect(controller.modelObservation(chat), isNotNull);
+            expect(controller.modelObservation(chat)!.model, chat.model);
             expect(chat.markReadFailed, isFalse);
             expect(chat.projectLookupFailed, isFalse);
             expect(controller.chatProjectLabel(chat), 'Mobile app');

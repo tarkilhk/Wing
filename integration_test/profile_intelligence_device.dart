@@ -3,6 +3,7 @@
 library;
 
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'support/profile_fixture_root.dart';
 
 import 'package:wing/core/services/connection_access.dart';
@@ -44,7 +45,10 @@ Future<void> main() async {
         debugShowCheckedModeBanner: false,
         theme: wingTheme(Brightness.light),
         darkTheme: wingTheme(Brightness.dark),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
       ),
     ),
   );

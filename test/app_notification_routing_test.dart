@@ -55,6 +55,7 @@ typedef NotificationHarness = ({
 
 Future<NotificationHarness> _harness({
   bool restoreCachedChat = false,
+  bool customAdministration = false,
   List<Map<String, dynamic>>? indexedSessions,
   ProfileGateway Function(Host, WorkspaceScope)? makeGateway,
   Future<void> Function(GroupInputNotification)? onGroupInputs,
@@ -108,6 +109,41 @@ Future<NotificationHarness> _harness({
   );
   addTearDown(registry.dispose);
   final controller = await registry.forConnection(connection);
+  if (!customAdministration) {
+    // WingApp discovers Bots through administration independently of the chat
+    // gateway. Ordinary routing cases have an explicitly empty local roster.
+    final resources = HostResourcesFixture(identity: identity);
+    addTearDown(resources.server.close);
+    final server = AdministrationRepository(
+      connectionId: connection.id,
+      connectionIdentity: identity,
+      connectionLabel: connection.label,
+      request: resources.server.request,
+      settingsWrite: resources.server.settingsWrite,
+      ownedMutation: resources.server.ownedMutation,
+      gateway: (profile) => ProfileGateway(
+        scope: WorkspaceScope(
+          connectionId: connection.id,
+          connectionIdentity: identity,
+          profileName: profile,
+        ),
+        discover: host.discover,
+        get: (path, query) async =>
+            throw StateError('Unexpected administration read: $path'),
+        rpc: (method, params) async => switch (method) {
+          'profiles.list' => {
+            'bot_mode_protocol': true,
+            'install_id': identity,
+            'profiles': <Map<String, dynamic>>[],
+          },
+          'groups.list' => {'rooms': <Map<String, dynamic>>[]},
+          _ => throw StateError('Unexpected administration method: $method'),
+        },
+      ),
+    );
+    addTearDown(server.close);
+    controller.healthSession(repository: server);
+  }
   await controller.initialize();
   return (
     manager: manager,
@@ -162,7 +198,7 @@ Future<GlobalKey<WingAppState>> _pumpApp(
   return key;
 }
 
-Future<void> _expectSinglePopReturnsHome(WidgetTester tester) async {
+Future<void> _expectRemovingWorkspaceReturnsHome(WidgetTester tester) async {
   expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
   final context = tester.element(find.byType(ProfileWorkspaceScreen));
   final route = ModalRoute.of(context)!;
@@ -333,6 +369,7 @@ void main() {
           'payload': {'text': 'Shared group answer'},
         });
         final harness = await _harness(
+          customAdministration: true,
           makeGateway: (host, scope) {
             final base = host.gateway(scope);
             return ProfileGateway(
@@ -574,7 +611,7 @@ void main() {
     testWidgets(
       'app foreground recovers beneath global alert settings: serverRecovers=$serverRecovers, opening=${scenario.opening}, held=${scenario.held}',
       (tester) async {
-        final harness = await _harness();
+        final harness = await _harness(customAdministration: true);
         harness.host.running = false;
         final resources = HostResourcesFixture(identity: harness.identity);
         final repository = AdministrationRepository(
@@ -780,10 +817,6 @@ void main() {
       firstGate.complete();
       await Future.wait([firstOpening, firstResume]);
       expect(harness.controller.notificationChat!.key, target('b'));
-      expect(
-        harness.controller.connectionStatus.phase,
-        ServerConnectionPhase.reconnecting,
-      );
       expect(
         harness.controller.connectionStatus.phase,
         ServerConnectionPhase.reconnecting,
@@ -1043,7 +1076,7 @@ void main() {
     await _pumpNavigation(tester);
     expect(harness.controller.current!.chat!.key.sessionId, 'same');
     expect(find.text('a chat'), findsOneWidget);
-    await _expectSinglePopReturnsHome(tester);
+    await _expectRemovingWorkspaceReturnsHome(tester);
   });
 
   testWidgets('notification tap leaves administration and shows its chat', (
@@ -1134,12 +1167,12 @@ void main() {
       await app.currentState!.openProfileNotification(payload);
       await _pumpNavigation(tester);
       expect(_resumeCount(harness, 'a'), 2);
-      await _expectSinglePopReturnsHome(tester);
+      await _expectRemovingWorkspaceReturnsHome(tester);
 
       await app.currentState!.openProfileNotification(payload);
       await _pumpNavigation(tester);
       expect(_resumeCount(harness, 'a'), 3);
-      await _expectSinglePopReturnsHome(tester);
+      await _expectRemovingWorkspaceReturnsHome(tester);
     },
   );
 
@@ -1162,7 +1195,7 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await _pumpNavigation(tester);
     expect(_resumeCount(harness, 'a'), 2);
-    await _expectSinglePopReturnsHome(tester);
+    await _expectRemovingWorkspaceReturnsHome(tester);
   });
 
   testWidgets(
@@ -1225,7 +1258,7 @@ void main() {
         findsNothing,
       );
 
-      await _expectSinglePopReturnsHome(tester);
+      await _expectRemovingWorkspaceReturnsHome(tester);
       await tester.tap(find.text('Review'));
       await _pumpNavigation(tester);
       expect(find.text('Add shared content'), findsNothing);
@@ -1255,7 +1288,7 @@ void main() {
     expect(harness.controller.current!.scope.profileName, 'b');
     expect(_resumeCount(harness, 'a'), 1);
     expect(_resumeCount(harness, 'b'), 1);
-    await _expectSinglePopReturnsHome(tester);
+    await _expectRemovingWorkspaceReturnsHome(tester);
   });
 
   testWidgets('a stale connection identity cannot reach the gateway', (
@@ -1304,7 +1337,7 @@ void main() {
     history.complete();
     await Future.wait([first, retry]);
     await _pumpNavigation(tester);
-    await _expectSinglePopReturnsHome(tester);
+    await _expectRemovingWorkspaceReturnsHome(tester);
   });
 
   testWidgets('a newer target wins when an older target finishes last', (
@@ -1328,7 +1361,7 @@ void main() {
       find.text('This chat is unavailable on its original host or profile.'),
       findsNothing,
     );
-    await _expectSinglePopReturnsHome(tester);
+    await _expectRemovingWorkspaceReturnsHome(tester);
   });
 
   testWidgets('A-B-A makes the final A tap authoritative', (tester) async {
@@ -1357,7 +1390,7 @@ void main() {
       find.text('This chat is unavailable on its original host or profile.'),
       findsNothing,
     );
-    await _expectSinglePopReturnsHome(tester);
+    await _expectRemovingWorkspaceReturnsHome(tester);
   });
 
   testWidgets('slow cold initialization cannot reopen an obsolete target', (
@@ -1452,6 +1485,6 @@ void main() {
       second.id,
     );
     expect(find.byType(ProfileWorkspaceScreen), findsOneWidget);
-    await _expectSinglePopReturnsHome(tester);
+    await _expectRemovingWorkspaceReturnsHome(tester);
   });
 }

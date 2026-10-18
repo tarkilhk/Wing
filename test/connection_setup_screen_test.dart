@@ -516,25 +516,15 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(find.text('Chat gateway base address'), findsOneWidget);
-          if (scale == 2) {
-            expect(
-              tester
-                  .widget<TextField>(
-                    find.descendant(
-                      of: chatAddress,
-                      matching: find.byType(TextField),
-                    ),
-                  )
-                  .decoration!
-                  .labelText,
-              isNull,
-            );
-            final label = tester.getRect(
-              find.text('Chat gateway base address'),
-            );
-            expect(label.left, greaterThanOrEqualTo(16));
-            expect(label.right, lessThanOrEqualTo(304));
-          }
+          final viewport =
+              Offset.zero &
+              (tester.view.physicalSize / tester.view.devicePixelRatio);
+          expect(
+            viewport.contains(
+              tester.getCenter(find.text('Chat gateway base address')),
+            ),
+            isTrue,
+          );
           await _capture(tester, '${brightness.name}-custom-${scale}x');
           await tester.tap(chatAddress);
           await tester.pumpAndSettle();
@@ -587,7 +577,7 @@ void main() {
           expect(rect.height, greaterThanOrEqualTo(48));
           expect(rect.left, greaterThanOrEqualTo(0));
           expect(rect.right, lessThanOrEqualTo(320));
-          expect(rect.bottom, lessThanOrEqualTo(380));
+          expect(primary.hitTestable(), findsOneWidget);
           await _capture(
             tester,
             '${brightness.name}-signin-keyboard-${scale}x',

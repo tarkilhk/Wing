@@ -202,7 +202,10 @@ void main() {
         (AppThemePreference.dark, AppAccentPreference.iris),
       ]);
       await tester.pumpWidget(const SizedBox());
-      await _show(tester, appPreferences);
+      await preferences.reload();
+      final reopened = AppPreferences(preferences);
+      addTearDown(reopened.dispose);
+      await _show(tester, reopened);
       expect(
         tester
             .widget<ChoiceChip>(find.byKey(const ValueKey('theme-dark')))

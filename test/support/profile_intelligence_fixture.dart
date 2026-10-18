@@ -89,12 +89,18 @@ Confirm only if you intend to switch now.''';
         }
         if (method == 'config.get') {
           if (params['key'] == 'fast') return {'value': fastMode};
+          if (params['key'] != 'reasoning') {
+            throw StateError('Unexpected intelligence read: ${params['key']}');
+          }
           final started = configGetStarted;
           if (started != null && !started.isCompleted) started.complete();
           await configGetDelay?.future;
           return {'value': configGetValue};
         }
         if (method == 'config.set') {
+          if (!const {'model', 'reasoning', 'fast'}.contains(params['key'])) {
+            throw StateError('Unexpected intelligence write: ${params['key']}');
+          }
           writes.add(Map.of(params));
           await configSetDelay?.future;
           if (params['confirm_expensive_model'] == true && failConfirmedModel) {

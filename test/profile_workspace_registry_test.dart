@@ -64,9 +64,19 @@ void main() {
       expect(owner.error, contains('Couldn’t open this workspace'));
       host.discoveryFailure = null;
 
-      registry.resumeConnections();
-      for (var attempt = 0; attempt < 20 && !owner.initialized; attempt++) {
-        await Future<void>.delayed(Duration.zero);
+      final initialized = Completer<void>();
+      void observeInitialization() {
+        if (owner.initialized && !initialized.isCompleted) {
+          initialized.complete();
+        }
+      }
+
+      owner.addListener(observeInitialization);
+      try {
+        registry.resumeConnections();
+        await initialized.future;
+      } finally {
+        owner.removeListener(observeInitialization);
       }
 
       expect(
@@ -114,6 +124,7 @@ void main() {
       final retired = hosts.entries.where(
         (entry) => entry.key != current.connectionIdentity,
       );
+      expect(retired, hasLength(24));
       expect(retired.every((entry) => entry.value.closed.isNotEmpty), isTrue);
       final reconnects = {
         for (final entry in retired) entry.key: entry.value.connectCalls,

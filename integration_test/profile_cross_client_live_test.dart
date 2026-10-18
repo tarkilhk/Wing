@@ -41,6 +41,8 @@ void main() {
       preferences: preferences,
       appPreferences: appPreferences,
     );
+    // Register before the first read: failed initialization must also retire I/O.
+    addTearDown(result.dispose);
     await result.initialize();
     await result.switchProfile('android-qa-a');
     expect(result.error, isNull);
@@ -160,21 +162,23 @@ void main() {
               'Opening through the second client must acknowledge read state',
         );
       } finally {
-        if (originalSelection != null && firstChat != null) {
-          await first.openSession(firstChat.key);
-          await first.setIntelligence(
-            firstChat,
-            originalSelection,
-            confirmModelChange: (message) async => throw StateError(message),
-          );
+        try {
+          if (originalSelection != null && firstChat != null) {
+            await first.openSession(firstChat.key);
+            await first.setIntelligence(
+              firstChat,
+              originalSelection,
+              confirmModelChange: (message) async => throw StateError(message),
+            );
+          }
+        } finally {
+          // A failed model restoration must not prevent read-state restoration.
+          if (originalUnread != null) {
+            await first.current!.gateway.updateSession(sessionId, {
+              'unread': originalUnread,
+            }, canDispatch: () => true);
+          }
         }
-        if (originalUnread != null) {
-          await first.current!.gateway.updateSession(sessionId, {
-            'unread': originalUnread,
-          }, canDispatch: () => true);
-        }
-        first.dispose();
-        second.dispose();
       }
     },
     skip: port == 0
@@ -197,43 +201,17 @@ void main() {
         preferences,
         appPreferences,
       );
-      try {
-        Map<String, dynamic> checkJson;
-        try {
-          checkJson = await workspace.current!.gateway.read(
-            'hermes/update/check',
-            {'force': 'true'},
-          );
-        } on DashboardHttpException catch (error) {
-          if ({404, 405, 501}.contains(error.statusCode)) {
-            markTestSkipped(
-              'Local Hermes does not support the read-only update check endpoint.',
-            );
-            return;
-          }
-          rethrow;
-        }
-        final check = BackendUpdateCheck.fromJson(checkJson);
-        expect(check.currentVersion, isNotNull);
+      final checkJson = await workspace.current!.gateway.read(
+        'hermes/update/check',
+        {'force': 'true'},
+      );
+      final check = BackendUpdateCheck.fromJson(checkJson);
+      expect(check.currentVersion, isNotNull);
 
-        Map<String, dynamic> statusJson;
-        try {
-          statusJson = await workspace.current!.gateway.read(
-            'actions/hermes-update/status',
-          );
-        } on DashboardHttpException catch (error) {
-          if ({404, 405, 501}.contains(error.statusCode)) {
-            markTestSkipped(
-              'Local Hermes does not support the read-only update status endpoint.',
-            );
-            return;
-          }
-          rethrow;
-        }
-        expect(BackendUpdateStatus.fromJson(statusJson), isNotNull);
-      } finally {
-        workspace.dispose();
-      }
+      final statusJson = await workspace.current!.gateway.read(
+        'actions/hermes-update/status',
+      );
+      expect(BackendUpdateStatus.fromJson(statusJson), isNotNull);
     },
     skip: port == 0
         ? 'Supply HERMES_TEST_PORT for the local Hermes dashboard.'

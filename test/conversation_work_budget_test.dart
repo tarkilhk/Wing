@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -53,7 +54,12 @@ void main() {
           );
         }
         await tester.pumpWidget(
-          MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+          MaterialApp(
+            home: ProfileWorkspaceScreen(
+              createBotsSession: () => BotsSession((_) async => const []),
+              controller: controller,
+            ),
+          ),
         );
         await tester.pumpAndSettle();
         final field = find.byKey(const Key('profile-message-composer'));

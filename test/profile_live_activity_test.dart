@@ -165,6 +165,7 @@ void main() {
       [jsonEncode(key.toJson())],
     );
     controller.dispose();
+    appPreferences.dispose();
     host.resumedRunning = true;
     await initialize();
   }

@@ -127,6 +127,20 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  Future<void> selectHermes(WidgetTester tester, String label) async {
+    final field = find.byWidgetPredicate(
+      (widget) =>
+          widget is StudioSelect<AppVoiceProcessing> && widget.label == label,
+    );
+    await tester.ensureVisible(field);
+    await tester.tap(
+      find.descendant(of: field, matching: find.byType(TextField)),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hermes · server profile').hitTestable().last);
+    await tester.pumpAndSettle();
+  }
+
   testWidgets(
     'output selection persists; remote voice is a profile link, not a picker',
     (tester) async {
@@ -137,13 +151,7 @@ void main() {
       var links = 0;
       addTearDown(device.stream.close);
       await show(tester, owner, device, link: () => links++);
-      final output = tester
-          .widgetList<StudioSelect<AppVoiceProcessing>>(
-            find.byType(StudioSelect<AppVoiceProcessing>),
-          )
-          .firstWhere((w) => w.label == 'Voice output');
-      output.onChanged!(AppVoiceProcessing.hermes);
-      await tester.pumpAndSettle();
+      await selectHermes(tester, 'Voice output');
       expect(owner.current.values.voiceInput, AppVoiceProcessing.local);
       expect(owner.current.values.voiceOutput, AppVoiceProcessing.hermes);
       expect(find.text('Android voice'), findsNothing);
@@ -155,7 +163,10 @@ void main() {
       await tester.tap(find.text('Open speech synthesis'));
       expect(links, 1);
       await tester.pumpWidget(const SizedBox());
-      await show(tester, owner, device);
+      await prefs.reload();
+      final reopened = AppPreferences(prefs);
+      addTearDown(reopened.dispose);
+      await show(tester, reopened, device);
       expect(
         tester
             .widgetList<StudioSelect<AppVoiceProcessing>>(
@@ -178,20 +189,17 @@ void main() {
     final device = VoiceDeviceFixture();
     addTearDown(device.stream.close);
     await show(tester, owner, device);
-    tester
-        .widgetList<StudioSelect<AppVoiceProcessing>>(
-          find.byType(StudioSelect<AppVoiceProcessing>),
-        )
-        .firstWhere((w) => w.label == 'Voice input')
-        .onChanged!(AppVoiceProcessing.hermes);
-    await tester.pumpAndSettle();
+    await selectHermes(tester, 'Voice input');
     expect(
       find.text('Could not save this voice setting. Please retry.'),
       findsOneWidget,
     );
     expect(owner.current.values.voiceInput, AppVoiceProcessing.local);
     await tester.pumpWidget(const SizedBox());
-    await show(tester, owner, device);
+    await prefs.reload();
+    final reopened = AppPreferences(prefs);
+    addTearDown(reopened.dispose);
+    await show(tester, reopened, device);
     expect(
       tester
           .widgetList<StudioSelect<AppVoiceProcessing>>(
@@ -246,13 +254,7 @@ void main() {
             tester,
             'settings-output-${brightness.name}-${(scale * 100).round()}',
           );
-          tester
-              .widgetList<StudioSelect<AppVoiceProcessing>>(
-                find.byType(StudioSelect<AppVoiceProcessing>),
-              )
-              .firstWhere((w) => w.label == 'Voice output')
-              .onChanged!(AppVoiceProcessing.hermes);
-          await tester.pumpAndSettle();
+          await selectHermes(tester, 'Voice output');
           await tester.ensureVisible(
             find.text('Refresh Android voices and languages'),
           );

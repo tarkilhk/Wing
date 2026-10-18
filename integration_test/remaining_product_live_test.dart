@@ -69,15 +69,6 @@ Future<void> send(
 ) async {
   await client.updateDraft(chat, prompt);
   await client.send(chat);
-  // A failed pre-submit profile read is safe to retry; uncertain delivery is not.
-  if (chat.runtime.execution == ChatExecution.failed &&
-      chat.runtime.error?.contains('Connection closed before full header') ==
-          true &&
-      chat.composer.observation.text == prompt &&
-      !chat.composer.observation.submissionUncertain) {
-    evidence('pre_submit_retry', {'profile_read_closed': true});
-    await client.send(chat);
-  }
 }
 
 Future<void> settled(WidgetTester tester, ProfileChat chat) async {
@@ -633,6 +624,12 @@ void main() {
               .length,
           'unopened_parent_visible': row != null,
         });
+        expect(
+          row,
+          isNotNull,
+          reason:
+              'An unopened parent with running child work must be visible in Activity',
+        );
         await until(
           tester,
           () => chat.subagents.every((child) => child.isTerminal),
@@ -702,7 +699,13 @@ void main() {
           'slash_status': status,
           'structured_loop_present': present,
         });
-        if (present) {
+        expect(
+          present,
+          isTrue,
+          reason:
+              'This acceptance case requires the stock structured loop controls',
+        );
+        {
           expect(
             await client.controlSession(
               chat,

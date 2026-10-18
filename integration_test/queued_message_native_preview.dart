@@ -1,5 +1,6 @@
 import '../test/support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'support/profile_fixture_root.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
@@ -85,7 +86,10 @@ Future<void> main() async {
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: wingTheme(Brightness.dark),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
       ),
     ),
   );

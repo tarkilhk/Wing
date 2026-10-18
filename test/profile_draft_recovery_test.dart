@@ -1,4 +1,5 @@
 import 'support/composer_fixture.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -42,11 +43,14 @@ class _ColdDraftHost {
       if (endpoint == 'sessions') {
         return {
           'sessions': <Map<String, dynamic>>[],
-          'offset': 0,
-          'limit': 50,
+          'offset': int.parse(query['offset'] ?? '0'),
+          'limit': int.parse(query['limit'] ?? '50'),
           'total': 0,
         };
       }
+      if (endpoint == 'model/options') return {'providers': <Object>[]};
+      if (endpoint == 'model/info') return {};
+      if (endpoint == 'logs') return {'file': 'gui', 'lines': <String>[]};
       if (endpoint.endsWith('/messages')) {
         return {
           'session_id': endpoint.split('/')[1],
@@ -145,7 +149,10 @@ void main() {
           ).copyWith(textScaler: TextScaler.linear(2)),
           child: child!,
         ),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -272,9 +279,15 @@ void main() {
       gatewayFactory: host.gateway,
     );
     var controller = buildController();
+    addTearDown(() => controller.dispose());
     await controller.initialize();
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     final row = find.byKey(const ValueKey('saved-draft-orphan-draft'));
@@ -321,10 +334,14 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     controller.dispose();
     controller = buildController();
-    addTearDown(controller.dispose);
     await controller.initialize();
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     expect(row, findsNothing);
@@ -359,6 +376,7 @@ void main() {
           );
 
       var controller = buildController();
+      addTearDown(() => controller.dispose());
       await controller.initialize();
       final original = await controller.createChat(canDispatch: () => true);
       await controller.updateDraft(
@@ -378,7 +396,6 @@ void main() {
       controller.dispose();
 
       controller = buildController();
-      addTearDown(controller.dispose);
       await controller.initialize();
       expect(controller.current!.visibleSessions, isEmpty);
       expect(
@@ -392,7 +409,12 @@ void main() {
       await tester.binding.setSurfaceSize(const Size(430, 900));
       addTearDown(() => tester.binding.setSurfaceSize(null));
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -491,7 +513,12 @@ void main() {
       addTearDown(controller.dispose);
       await controller.initialize();
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
+        ),
       );
       await tester.pumpAndSettle();
 

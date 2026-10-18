@@ -175,52 +175,59 @@ void main() {
         tester,
       ) async {
         final semantics = tester.ensureSemantics();
-        String? selected;
-        await show(
-          tester,
-          brightness: brightness,
-          scale: scale,
-          onSelected: (value) => selected = value,
-        );
-        expect(tester.takeException(), isNull);
-        expect(find.text('Show automated chats'), findsOneWidget);
-        await tester.scrollUntilVisible(find.text('New project'), 160);
-        await tester.pumpAndSettle();
-        expect(find.text('New project').hitTestable(), findsOneWidget);
-        await tester.drag(find.byType(ListView), const Offset(0, 600));
-        await tester.pumpAndSettle();
-        final unread = find.byKey(
-          const ValueKey('chat-menu-include-automated'),
-        );
-        expect(tester.getSize(unread).height, greaterThanOrEqualTo(48));
-        expect(
-          tester
-              .getSemantics(unread)
-              .getSemanticsData()
-              .hasAction(ui.SemanticsAction.tap),
-          isTrue,
-        );
-        if (const bool.fromEnvironment('OPTIONS_REVIEW')) {
-          await tester.runAsync(() async {
-            final boundary = tester.renderObject<RenderRepaintBoundary>(
-              find.byKey(const ValueKey('options-preview')),
-            );
-            final image = await boundary.toImage();
-            final data = await image.toByteData(format: ui.ImageByteFormat.png);
-            final file = File(
-              'build/options-review/${brightness.name}-$scale.png',
-            );
-            await file.parent.create(recursive: true);
-            await file.writeAsBytes(data!.buffer.asUint8List());
-            image.dispose();
-          });
+        try {
+          String? selected;
+          await show(
+            tester,
+            brightness: brightness,
+            scale: scale,
+            onSelected: (value) => selected = value,
+          );
+          expect(tester.takeException(), isNull);
+          expect(find.text('Show automated chats'), findsOneWidget);
+          await tester.scrollUntilVisible(find.text('New project'), 160);
+          await tester.pumpAndSettle();
+          expect(find.text('New project').hitTestable(), findsOneWidget);
+          await tester.drag(find.byType(ListView), const Offset(0, 600));
+          await tester.pumpAndSettle();
+          final unread = find.byKey(
+            const ValueKey('chat-menu-include-automated'),
+          );
+          expect(tester.getSize(unread).height, greaterThanOrEqualTo(48));
+          expect(
+            tester
+                .getSemantics(unread)
+                .getSemanticsData()
+                .hasAction(ui.SemanticsAction.tap),
+            isTrue,
+          );
+          if (const bool.fromEnvironment('OPTIONS_REVIEW')) {
+            await tester.runAsync(() async {
+              final boundary = tester.renderObject<RenderRepaintBoundary>(
+                find.byKey(const ValueKey('options-preview')),
+              );
+              final image = await boundary.toImage();
+              final data = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final file = File(
+                'build/options-review/${brightness.name}-$scale.png',
+              );
+              await file.parent.create(recursive: true);
+              await file.writeAsBytes(data!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+          // The switch edge activates the same single menu action as the label.
+          await tester.tapAt(
+            tester.getTopRight(unread) + const Offset(-20, 24),
+          );
+          await tester.pumpAndSettle();
+          expect(selected, 'include-automated');
+          expect(find.text('Show automated chats'), findsNothing);
+        } finally {
+          semantics.dispose();
         }
-        // The switch edge activates the same single menu action as the label.
-        await tester.tapAt(tester.getTopRight(unread) + const Offset(-20, 24));
-        await tester.pumpAndSettle();
-        expect(selected, 'include-automated');
-        expect(find.text('Show automated chats'), findsNothing);
-        semantics.dispose();
       });
     }
   }
@@ -266,7 +273,10 @@ void main() {
   });
 
   testWidgets('disabled workspace cannot open menu', (tester) async {
-    await show(tester, enabled: false);
-    expect(find.text('Refresh'), findsNothing);
+    String? selected;
+    await show(tester, enabled: false, onSelected: (value) => selected = value);
+    expect(find.text('Show automated chats'), findsNothing);
+    expect(find.text('New project'), findsNothing);
+    expect(selected, isNull);
   });
 }

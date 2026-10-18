@@ -19,68 +19,105 @@ void main() {
   const c = RecentConversationKey.group('host/c');
   const environment = ('dark', 390, 844, 1.0);
 
-  test('borrowers reuse images until replacement or workspace disposal', () {
-    final cache = RecentConversationSnapshots(byteLimit: 300);
-    final first = _Snapshot(100), replacement = _Snapshot(100);
-    cache.record(a, first, live: true, revision: 1, environment: environment);
+  late RecentConversationSnapshots cache;
+  var disposed = false;
+  setUp(() {
+    cache = RecentConversationSnapshots(byteLimit: 300);
+    disposed = false;
+  });
+  tearDown(() {
+    if (!disposed) cache.dispose();
+  });
+
+  void record(RecentConversationKey key, _Snapshot snapshot) => cache.record(
+    key,
+    snapshot,
+    live: true,
+    revision: 1,
+    environment: environment,
+  );
+
+  test('borrowers reuse a snapshot only in its rendering environment', () {
+    final first = _Snapshot(100);
+    record(a, first);
     expect(cache.snapshotFor(a, environment: environment), same(first));
     expect(cache.snapshotFor(a, environment: ('light', 390, 844, 1.0)), isNull);
     expect(cache.snapshotFor(a, environment: environment), same(first));
     expect(first.disposals, 0);
-    final observed = <RecentConversationSnapshot?>[];
-    cache.addListener(() {
-      observed.add(cache.snapshotFor(a, environment: environment));
-    });
-    cache.record(
-      a,
-      replacement,
-      live: false,
-      revision: 2,
-      environment: environment,
-    );
-    expect(first.disposals, 1);
-    expect(observed, [replacement]);
-    expect(cache.snapshotFor(a, environment: environment), same(replacement));
-    cache.dispose();
-    expect(replacement.disposals, 1);
-    expect(cache.retainedBytes, 0);
-    final late = _Snapshot(100);
-    cache.record(a, late, live: false, revision: 3, environment: environment);
-    expect(late.disposals, 1);
-    expect(cache.snapshotFor(a, environment: environment), isNull);
   });
 
-  test('one budget includes simultaneous borrowers and in-flight readback', () {
-    final cache = RecentConversationSnapshots(byteLimit: 300);
+  test('replacement releases the old image before notifying borrowers', () {
+    final first = _Snapshot(100), replacement = _Snapshot(100);
+    record(a, first);
+    final observed = <RecentConversationSnapshot?>[];
+    cache.addListener(() {
+      expect(first.disposals, 1);
+      observed.add(cache.snapshotFor(a, environment: environment));
+    });
+    record(a, replacement);
+    expect(observed, [replacement]);
+    expect(cache.retainedBytes, 100);
+  });
+
+  test(
+    'workspace disposal releases retained images and rejects late images',
+    () {
+      final retained = _Snapshot(100);
+      record(a, retained);
+      cache.dispose();
+      disposed = true;
+      expect(retained.disposals, 1);
+      expect(cache.retainedBytes, 0);
+      final late = _Snapshot(100);
+      record(a, late);
+      expect(late.disposals, 1);
+      expect(cache.snapshotFor(a, environment: environment), isNull);
+    },
+  );
+
+  test('in-flight readback evicts distant images before visible images', () {
     final visible = _Snapshot(100), distant = _Snapshot(100);
-    cache.record(a, visible, live: true, revision: 1, environment: environment);
-    cache.record(
-      b,
-      distant,
-      live: false,
-      revision: 1,
-      environment: environment,
-    );
+    record(a, visible);
+    record(b, distant);
     cache.retain({a});
     cache.reserve(150);
     expect(visible.disposals, 0);
     expect(distant.disposals, 1);
-    cache.reserve(50);
-    expect(cache.reservedBytes, 200);
-    expect(cache.retainedBytes, 100);
-    cache.release(200);
-    final oversize = _Snapshot(301);
-    cache.record(
-      c,
-      oversize,
-      live: false,
-      revision: 1,
-      environment: environment,
-    );
+    expect(cache.retainedBytes + cache.reservedBytes, lessThanOrEqualTo(300));
+  });
+
+  test('releasing readback reservations makes room for new snapshots', () {
+    cache.reserve(250);
+    final rejected = _Snapshot(100);
+    record(a, rejected);
+    expect(rejected.disposals, 1);
+    cache.release(250);
+    final accepted = _Snapshot(100);
+    record(a, accepted);
+    expect(cache.reservedBytes, 0);
+    expect(cache.snapshotFor(a, environment: environment), same(accepted));
+  });
+
+  test('oversize images are rejected without evicting current images', () {
+    final visible = _Snapshot(100), oversize = _Snapshot(301);
+    record(a, visible);
+    record(c, oversize);
     expect(oversize.disposals, 1);
+    expect(visible.disposals, 0);
     expect(cache.snapshotFor(a, environment: environment), same(visible));
-    cache.dispose();
-    expect(visible.disposals, 1);
+  });
+
+  test('invalidating a snapshot releases it and informs borrowers once', () {
+    final snapshot = _Snapshot(100);
+    record(a, snapshot);
+    var notifications = 0;
+    cache.addListener(() => notifications++);
+    cache.invalidate(a);
+    cache.invalidate(a);
+    expect(snapshot.disposals, 1);
+    expect(cache.snapshotFor(a, environment: environment), isNull);
+    expect(cache.retainedBytes, 0);
+    expect(notifications, 1);
   });
 
   BotGroup group(String id, {String identity = 'host'}) => BotGroup(
@@ -106,54 +143,97 @@ void main() {
     text: text,
   );
 
+  late RecentGroupMessages messages;
+  setUp(() => messages = RecentGroupMessages());
+  tearDown(() => messages.dispose());
+
+  test('decoded tails return the requested most recent messages', () {
+    final room = group('room');
+    messages.record(room, [
+      for (var seq = 1; seq <= 12; seq++) event(seq),
+    ], complete: true);
+    expect(messages.borrow(room, limit: 6)!.map((e) => e.sequence), [
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+    ]);
+  });
+
   test(
-    'decoded tails require exact authenticated observation and coverage',
+    'truncated decoded tails cannot claim coverage they no longer retain',
     () {
-      final cache = RecentGroupMessages();
       final room = group('room');
-      cache.record(room, [
+      messages.record(room, [
         for (var seq = 1; seq <= 12; seq++) event(seq),
       ], complete: true);
-      expect(cache.borrow(room, limit: 6)!.map((e) => e.sequence), [
-        7,
-        8,
-        9,
-        10,
-        11,
-        12,
-      ]);
-      expect(cache.borrow(room, limit: 11), isNull);
-      expect(cache.borrow(group('room'), limit: 6), isNull);
-      expect(
-        cache.borrow(group('room', identity: 'other auth'), limit: 6),
-        isNull,
-      );
-      final decorated = room.withIcon();
-      cache.rebind(room, decorated);
-      expect(cache.borrow(room, limit: 6), isNull);
-      expect(cache.borrow(decorated, limit: 6), isNotNull);
-      cache.dispose();
-      expect(cache.borrow(decorated, limit: 6), isNull);
+      expect(messages.borrow(room, limit: 11), isNull);
     },
   );
 
-  test('decoded tails share one room and byte budget across instances', () {
-    final cache = RecentGroupMessages();
-    for (var index = 0; index < 12; index++) {
-      cache.record(group('$index', identity: 'host$index'), [
-        event(1),
-      ], complete: true);
+  for (final identity in ['host', 'other auth']) {
+    test('decoded tails reject a different observation for $identity', () {
+      final room = group('room');
+      messages.record(room, [event(1)], complete: true);
+      expect(
+        messages.borrow(group('room', identity: identity), limit: 1),
+        isNull,
+      );
+    });
+  }
+
+  test('metadata replacement transfers borrowing to the new observation', () {
+    final room = group('room');
+    messages.record(room, [event(1)], complete: true);
+    final decorated = room.withIcon();
+    messages.rebind(room, decorated);
+    expect(messages.borrow(room, limit: 1), isNull);
+    expect(messages.borrow(decorated, limit: 1)!.single.sequence, 1);
+  });
+
+  test('disposed message cache rejects late records', () {
+    final room = group('room');
+    messages.record(room, [event(1)], complete: true);
+    messages.dispose();
+    messages.record(room, [event(2)], complete: true);
+    expect(messages.borrow(room, limit: 1), isNull);
+    expect(messages.retainedBytes, 0);
+  });
+
+  test('room budget evicts the oldest observation across instances', () {
+    final rooms = [
+      for (var index = 0; index < 12; index++)
+        group('$index', identity: 'host$index'),
+    ];
+    for (final room in rooms) {
+      messages.record(room, [event(1)], complete: true);
     }
-    expect(cache.length, RecentGroupMessages.roomLimit);
+    expect(messages.length, RecentGroupMessages.roomLimit);
+    expect(messages.borrow(rooms.first, limit: 1), isNull);
+    expect(messages.borrow(rooms.last, limit: 1)!.single.sequence, 1);
+  });
+
+  test('an oversize decoded tail is not retained', () {
     final room = group('oversize');
-    cache.record(room, [
+    messages.record(room, [
       event(1, text: 'x' * RecentGroupMessages.byteLimit),
     ], complete: true);
-    expect(cache.borrow(room, limit: 1), isNull);
+    expect(messages.borrow(room, limit: 1), isNull);
     expect(
-      cache.retainedBytes,
+      messages.retainedBytes,
       lessThanOrEqualTo(RecentGroupMessages.byteLimit),
     );
-    cache.dispose();
+  });
+
+  test('borrowed message lists cannot mutate the cached tail', () {
+    final room = group('room');
+    messages.record(room, [event(1)], complete: true);
+    expect(
+      () => messages.borrow(room, limit: 1)!.clear(),
+      throwsUnsupportedError,
+    );
+    expect(messages.borrow(room, limit: 1)!.single.sequence, 1);
   });
 }

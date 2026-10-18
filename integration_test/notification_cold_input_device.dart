@@ -50,6 +50,9 @@ Future<void> main() async {
   }
   // The real phone has a saved reading copy after using this chat previously.
   // A new process must reconnect it without requiring the user to open it.
+  final savedMessages = [
+    {'id': 1, 'role': 'assistant', 'content': 'Earlier cached answer'},
+  ];
   final identity = await ProfileConnectionIdentity().resolve(connection);
   await WorkspaceSnapshotStore(prefs, identity).write({
     'selected': 'a',
@@ -64,19 +67,15 @@ Future<void> main() async {
             'id': 'outside',
             'title': 'Outside task',
             'history_session': 'outside',
-            'messages': [
-              {
-                'id': 1,
-                'role': 'assistant',
-                'content': 'Earlier cached answer',
-              },
-            ],
+            'messages': savedMessages,
           },
         ],
       },
     ],
   });
-  final host = NotificationCoverageHost();
+  // A fresh authoritative history read must describe the same saved chat,
+  // rather than falsely reporting that its earlier answer was deleted.
+  final host = NotificationCoverageHost()..history = savedMessages;
   final app = GlobalKey<WingAppState>();
   runApp(
     WingApp(

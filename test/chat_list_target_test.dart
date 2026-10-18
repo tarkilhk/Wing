@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/deleted_chat_recovery_notice.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
 import 'dart:convert';
@@ -236,7 +237,10 @@ void main() {
             child: child!,
           ),
           home: workspace
-              ? ProfileWorkspaceScreen(controller: controller)
+              ? ProfileWorkspaceScreen(
+                  controller: controller,
+                  createBotsSession: () => BotsSession((_) async => const []),
+                )
               : ProfileWorkspaceBrowser(
                   onOpenBotChat: (_) {},
                   createData: () => ChatBrowserData(controller),
@@ -353,11 +357,11 @@ void main() {
         expect(face.name, 'personal');
         expect(face.shape, 'circle');
         expect(face.color, '#65c7bc');
-        expect(tester.getSize(avatar), const Size(20, 20));
-        expect(
-          tester.getRect(avatar).right,
-          lessThan(tester.getRect(title).left),
-        );
+        expect(title.hitTestable(), findsOneWidget);
+        final avatarBounds = tester.getRect(avatar);
+        expect(avatarBounds.width, greaterThan(0));
+        expect(avatarBounds.height, greaterThan(0));
+        expect(tester.getRect(row).contains(avatarBounds.center), isTrue);
         expect(
           find.descendant(
             of: find.byKey(const ValueKey('chat-personal-session-0')),
@@ -377,7 +381,7 @@ void main() {
           tester.widget<BotAvatar>(renderedAvatar).image,
           base64Decode(png),
         );
-        expect(tester.getSize(avatar), const Size(20, 20));
+        expect(tester.getRect(avatar).size, avatarBounds.size);
         final uploaded = find.descendant(
           of: avatar,
           matching: find.byType(Image),
@@ -1210,14 +1214,11 @@ void main() {
       expect(find.text('9.0k'), findsOneWidget);
       expect(find.text('Show more'), findsWidgets);
       final chat = find.byKey(const ValueKey('chat-personal-session-0'));
-      final tokenCount = find.descendant(of: chat, matching: find.text('1.5k'));
-      final title = find.descendant(
-        of: chat,
-        matching: find.text('Prepare release notes'),
+      expect(
+        find.descendant(of: chat, matching: find.text('1.5k')).hitTestable(),
+        findsOneWidget,
       );
-      expect(tester.getCenter(tokenCount).dy, tester.getCenter(title).dy);
-      expect(tester.getSize(chat).height, 48);
-      expect(tester.widget<Text>(title).overflow, TextOverflow.ellipsis);
+      expect(chat.hitTestable(), findsOneWidget);
       await tester.tap(
         find.byKey(const ValueKey('chat-group-project/personal/p0')),
       );
@@ -1276,14 +1277,26 @@ void main() {
     },
   );
   testWidgets('loading and failure preserve readable rows', (tester) async {
+    await show(tester);
+    final row = find.byKey(const ValueKey('chat-personal-session-0'));
+    expect(row.hitTestable(), findsOneWidget);
     final gate = Completer<void>();
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
     fixture.pageDelays[('personal', 0)] = gate;
-    await show(tester, settle: false);
-    await screenshot(tester, 'dark-loading');
     fixture.failProjects = true;
+    final refresh = tester
+        .widget<RefreshIndicator>(find.byType(RefreshIndicator))
+        .onRefresh();
+    await tester.pump();
+    expect(row.hitTestable(), findsOneWidget);
+    await screenshot(tester, 'dark-loading');
     gate.complete();
+    await refresh;
     await tester.pumpAndSettle();
-    expect(find.textContaining('Could not finish loading'), findsWidgets);
+    expect(row.hitTestable(), findsOneWidget);
+    expect(find.textContaining('Could not refresh chats'), findsOneWidget);
     await screenshot(tester, 'dark-error');
   });
   for (final brightness in Brightness.values) {

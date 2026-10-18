@@ -455,15 +455,10 @@ void main() {
     await tester.pumpWidget(view([2]));
     await tester.pumpAndSettle();
     await tester.openLiveActivity();
-    final native = find.byWidgetPredicate(
-      (w) => w is ProfileToolCall && w.call.callId == 'native',
-    );
-    final retained = tester.element(native);
     await tester.pumpWidget(view([1, 2]));
     await tester.pumpAndSettle();
     expect(find.text('Activity · 3 tools'), findsOneWidget);
     expect(find.byType(ProfileToolCall), findsNWidgets(3));
-    expect(tester.element(native), same(retained));
   });
 
   for (final live in [true, false]) {

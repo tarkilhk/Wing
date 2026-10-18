@@ -2,109 +2,98 @@ import 'package:wing/core/services/profile_tool_setup_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_tool_setup_page.dart';
-import 'package:wing/core/screens/administration/admin_widgets.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/administration_fixture.dart';
 
 void main() {
-  testWidgets('selected tool provider moves to the top with an outlined card', (
-    tester,
-  ) async {
-    final fixture = AdministrationFixture();
-    var active = 'Second';
-    fixture.override = (method, path, query, body) async {
-      if (path == 'profiles') {
+  testWidgets(
+    'choosing a tool provider updates the selected row and moves it first',
+    (tester) async {
+      final fixture = AdministrationFixture();
+      var active = 'Second';
+      fixture.override = (method, path, query, body) async {
+        if (path == 'profiles') {
+          return {
+            'profiles': [
+              {'name': 'personal'},
+            ],
+          };
+        }
+        if (method == 'PUT') {
+          active = body!['provider'] as String;
+          return {'ok': true, 'name': 'image_gen', 'provider': active};
+        }
         return {
-          'profiles': [
-            {'name': 'personal'},
+          'name': 'image_gen',
+          'has_category': true,
+          'active_provider': active,
+          'providers': [
+            for (final name in ['First', 'Second', 'Third'])
+              {
+                'name': name,
+                'badge': '',
+                'tag': '',
+                'env_vars': [],
+                'requires_nous_auth': false,
+                'status': 'ready',
+                'is_active': name == active,
+              },
           ],
         };
-      }
-      if (method == 'PUT') {
-        active = body!['provider'] as String;
-        return {'ok': true, 'name': 'image_gen', 'provider': active};
-      }
-      return {
-        'name': 'image_gen',
-        'has_category': true,
-        'active_provider': active,
-        'providers': [
-          for (final name in ['First', 'Second', 'Third'])
-            {
-              'name': name,
-              'badge': '',
-              'tag': '',
-              'env_vars': [],
-              'requires_nous_auth': false,
-              'status': 'ready',
-              'is_active': name == active,
-            },
-        ],
       };
-    };
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: wingTheme(Brightness.light),
-        home: AdminToolSetupPage(
-          createSession: () => ProfileToolSetupSession(
-            fixture.server.profile('personal'),
-            tool: 'image_gen',
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.light),
+          home: AdminToolSetupPage(
+            createSession: () => ProfileToolSetupSession(
+              fixture.server.profile('personal'),
+              tool: 'image_gen',
+            ),
+            onCredential: (_, _) async {},
           ),
-          onCredential: (_, _) async {},
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    final selected = find.byKey(const Key('tool-provider-Second'));
-    expect(
-      tester.getTopLeft(selected).dy,
-      lessThan(
-        tester.getTopLeft(find.byKey(const Key('tool-provider-First'))).dy,
-      ),
-    );
-    expect(tester.widget<AdminGroup>(selected).selected, isTrue);
-    expect(
-      tester
-          .widget<Card>(
-            find.descendant(of: selected, matching: find.byType(Card)),
-          )
-          .color,
-      wingTheme(Brightness.light).colorScheme.primaryContainer,
-    );
-    expect(
-      (tester
-                  .widget<Card>(
-                    find.descendant(of: selected, matching: find.byType(Card)),
-                  )
-                  .shape
-              as RoundedRectangleBorder)
-          .side,
-      BorderSide(
-        color: wingTheme(Brightness.light).colorScheme.primary,
-        width: 2,
-      ),
-    );
-    expect(
-      find.descendant(of: selected, matching: find.text('Selected')),
-      findsOneWidget,
-    );
+      final selected = find.byKey(const Key('tool-provider-Second'));
+      expect(
+        tester.getTopLeft(selected).dy,
+        lessThan(
+          tester.getTopLeft(find.byKey(const Key('tool-provider-First'))).dy,
+        ),
+      );
+      expect(
+        find.descendant(of: selected, matching: find.text('Selected')),
+        findsOneWidget,
+      );
 
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const Key('tool-provider-Third')),
-        matching: find.text('Use provider'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    final updated = find.byKey(const Key('tool-provider-Third'));
-    expect(
-      tester.getTopLeft(updated).dy,
-      lessThan(tester.getTopLeft(selected).dy),
-    );
-    expect(tester.widget<AdminGroup>(updated).selected, isTrue);
-    expect(tester.widget<AdminGroup>(selected).selected, isFalse);
-  });
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const Key('tool-provider-Third')),
+          matching: find.text('Use provider'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final updated = find.byKey(const Key('tool-provider-Third'));
+      expect(
+        tester.getTopLeft(updated).dy,
+        lessThan(tester.getTopLeft(selected).dy),
+      );
+      expect(
+        find.descendant(of: updated, matching: find.text('Selected')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: selected, matching: find.text('Selected')),
+        findsNothing,
+      );
+      expect(active, 'Third');
+      expect(
+        fixture.requests.where((request) => request.$1 == 'PUT'),
+        hasLength(1),
+      );
+    },
+  );
 
   testWidgets('web highlights search and extraction selections separately', (
     tester,
@@ -188,7 +177,10 @@ void main() {
       find.descendant(of: brave, matching: find.text('Selected for search')),
       findsOneWidget,
     );
-    expect(tester.widget<AdminGroup>(other).selected, isFalse);
+    expect(
+      find.descendant(of: other, matching: find.textContaining('Selected')),
+      findsNothing,
+    );
   });
 
   testWidgets(

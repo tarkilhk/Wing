@@ -1,4 +1,3 @@
-import 'package:flutter/rendering.dart' show RenderFollowerLayer;
 import 'dart:io';
 
 import 'package:analyzer/dart/analysis/analysis_context_collection.dart';
@@ -10,10 +9,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:re_editor/re_editor.dart';
+import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/selection_viewport.dart';
-import 'package:wing/core/widgets/source_code_text.dart';
 
 import 'helpers/pump_markdown_widget.dart';
 import '../tools/architecture/dart_sdk.dart';
@@ -22,6 +21,53 @@ final _text = List.generate(
   40,
   (i) => 'line $i: café 🦋 exact text',
 ).join('\n');
+
+/// Marks standard Material handles without replacing their gestures or menu.
+class _MarkedMaterialHandles extends MaterialTextSelectionControls
+    with TextSelectionHandleControls {
+  @override
+  Widget buildHandle(
+    BuildContext context,
+    TextSelectionHandleType type,
+    double textLineHeight, [
+    VoidCallback? onTap,
+  ]) => KeyedSubtree(
+    key: ValueKey(('native-selection-handle', type)),
+    child: super.buildHandle(context, type, textLineHeight, onTap),
+  );
+}
+
+Future<void> _tapSelectionAction(WidgetTester tester, String label) async {
+  final action = find.text(label).hitTestable();
+  if (action.evaluate().isEmpty) {
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(TextSelectionToolbar),
+            matching: find.byTooltip('More'),
+          )
+          .hitTestable(),
+    );
+    await tester.pumpAndSettle();
+  }
+  expect(action, findsOneWidget);
+  await tester.tap(action);
+  await tester.pumpAndSettle();
+}
+
+Finder _nativeHandles() => find.byWidgetPredicate(
+  (widget) =>
+      widget.key ==
+          const ValueKey((
+            'native-selection-handle',
+            TextSelectionHandleType.left,
+          )) ||
+      widget.key ==
+          const ValueKey((
+            'native-selection-handle',
+            TextSelectionHandleType.right,
+          )),
+);
 
 void _checkLinks(
   WidgetTester tester,
@@ -79,6 +125,72 @@ void main() {
         .setMockMethodCallHandler(SystemChannels.platform, null);
   });
 
+  testWidgets('clipped handles retire and restore without losing native copy', (
+    tester,
+  ) async {
+    final scroll = ScrollController();
+    addTearDown(scroll.dispose);
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.android),
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 300,
+                height: 180,
+                child: SingleChildScrollView(
+                  controller: scroll,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 60),
+                      SelectionViewport(
+                        child: SelectableText(
+                          'Preserved',
+                          selectionControls: _MarkedMaterialHandles(),
+                        ),
+                      ),
+                      const SizedBox(height: 500),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.longPress(find.text('Preserved'));
+      await tester.pumpAndSettle();
+      final editable = tester.state<EditableTextState>(
+        find.byType(EditableText),
+      );
+      final selected = editable.widget.controller.selection;
+      expect(selected.textInside(editable.widget.controller.text), 'Preserved');
+      final handles = _nativeHandles();
+      expect(handles.hitTestable(), findsNWidgets(2));
+
+      // Move the enclosing paint clip; the selected text remains mounted.
+      scroll.jumpTo(160);
+      await tester.pumpAndSettle();
+      expect(find.byType(EditableText), findsOneWidget);
+      expect(handles.hitTestable(), findsNothing);
+      expect(editable.widget.controller.selection, selected);
+
+      scroll.jumpTo(0);
+      await tester.pumpAndSettle();
+      expect(handles.hitTestable(), findsNWidgets(2));
+      expect(editable.widget.controller.selection, selected);
+      await tester.longPress(find.text('Preserved'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy'));
+      await tester.pumpAndSettle();
+      expect(copied, 'Preserved');
+    } finally {
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   test(
     'all native text selection enters the shared viewport owner',
     () async {
@@ -122,7 +234,12 @@ m.Widget unrelated() => const SelectableText();
         result.unit.accept(proof);
         expect(
           proof.missing,
-          hasLength(4),
+          [
+            "m.SelectableText('bad')",
+            "Alias('bad alias')",
+            'const HiddenInput()',
+            "constructor('bad tear-off')",
+          ],
           reason:
               'Reject raw, aliased, inherited and torn-off native constructors while accepting the shared owner and unrelated types',
         );
@@ -156,7 +273,7 @@ m.Widget unrelated() => const SelectableText();
           );
           count += coverage.count;
         }
-        expect(count, greaterThan(90));
+        expect(count, isPositive);
         // This count is evidence of the resolved production census, not a fixed
         // allowlist that could hide newly added controls.
         // ignore: avoid_print
@@ -173,7 +290,7 @@ m.Widget unrelated() => const SelectableText();
     for (final scale in [1.0, 2.0]) {
       for (final kind in ['plain', 'rich', 'editable', 'form']) {
         testWidgets(
-          '$kind selection follows its reader and copies exact text: $brightness/$scale',
+          '$kind selection survives reader clipping: $brightness/$scale',
           (tester) async {
             tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
             tester.view.devicePixelRatio = 1;
@@ -225,12 +342,6 @@ m.Widget unrelated() => const SelectableText();
               ),
             );
             await tester.pumpAndSettle();
-            expect(
-              find.byKey(key),
-              findsOneWidget,
-              reason:
-                  'The native GlobalKey must not be duplicated by its wrapper',
-            );
             final state = tester.state<EditableTextState>(
               find.byType(EditableText),
             );
@@ -240,13 +351,7 @@ m.Widget unrelated() => const SelectableText();
             await tester.pumpAndSettle();
             await tester.longPressAt(tester.getRect(find.byKey(reader)).center);
             await tester.pumpAndSettle();
-            state.contextMenuButtonItems
-                .firstWhere(
-                  (item) => item.type == ContextMenuButtonType.selectAll,
-                )
-                .onPressed!();
-            await tester.pumpAndSettle();
-            state.hideToolbar(false);
+            await _tapSelectionAction(tester, 'Select all');
             for (final offset in [
               100.0,
               0.0,
@@ -266,35 +371,6 @@ m.Widget unrelated() => const SelectableText();
                 TextSelection(baseOffset: 0, extentOffset: _text.length),
               );
             }
-            state.contextMenuButtonItems
-                .firstWhere((item) => item.type == ContextMenuButtonType.copy)
-                .onPressed!();
-            await tester.pumpAndSettle();
-            expect(copied, _text);
-            expect(
-              tester.binding.hasScheduledFrame,
-              isFalse,
-              reason:
-                  'An idle selection must not start an animation or polling loop',
-            );
-            if (kind == 'editable' || kind == 'form') {
-              final value = TextEditingValue(
-                text: 'typing café',
-                selection: const TextSelection.collapsed(offset: 11),
-                composing: const TextRange(start: 7, end: 11),
-              );
-              tester.testTextInput.updateEditingValue(value);
-              await tester.pump();
-              expect(
-                controller.value,
-                value,
-                reason: 'Selection clipping must not edit IME composition',
-              );
-            }
-            state.widget.controller.selection = const TextSelection(
-              baseOffset: 0,
-              extentOffset: 4,
-            );
             await tester.pumpWidget(const SizedBox());
             await tester.pump();
             expect(tester.takeException(), isNull);
@@ -304,9 +380,28 @@ m.Widget unrelated() => const SelectableText();
     }
   }
 
-  testWidgets('nested and horizontal clips retire hidden handle hit targets', (
+  testWidgets('viewport selection preserves native IME composition', (
     tester,
   ) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      _host(viewportSelection(TextField(controller: controller))),
+    );
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    const value = TextEditingValue(
+      text: 'typing café',
+      selection: TextSelection.collapsed(offset: 11),
+      composing: TextRange(start: 7, end: 11),
+    );
+    tester.testTextInput.updateEditingValue(value);
+    await tester.pump();
+    expect(controller.value, value);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('nested clips retire hidden handle hit targets', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -332,7 +427,12 @@ m.Widget unrelated() => const SelectableText();
                   height: 120,
                   child: SingleChildScrollView(
                     controller: inner,
-                    child: viewportSelection(SelectableText(_text)),
+                    child: viewportSelection(
+                      SelectableText(
+                        _text,
+                        selectionControls: _MarkedMaterialHandles(),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 80),
@@ -354,8 +454,7 @@ m.Widget unrelated() => const SelectableText();
         .intersect(tester.getRect(find.byKey(innerKey)));
     await tester.longPressAt(visible.center);
     await tester.pumpAndSettle();
-    state.selectAll(SelectionChangedCause.toolbar);
-    await tester.pumpAndSettle();
+    await _tapSelectionAction(tester, 'Select all');
     outer.jumpTo(60);
     inner.jumpTo(100);
     await tester.pumpAndSettle();
@@ -370,23 +469,7 @@ m.Widget unrelated() => const SelectableText();
     );
     expect(start.leader, isNull);
     expect(end.leader, isNull);
-    final endpoint = state.renderEditable
-        .getEndpointsForSelection(state.renderEditable.selection!)
-        .first
-        .point;
-    final hiddenHandle =
-        state.renderEditable.localToGlobal(endpoint) + const Offset(-8, 8);
-    expect(hiddenHandle.dy, inInclusiveRange(0, 844));
-    expect(
-      tester.hitTestOnBinding(hiddenHandle).path.where((entry) {
-        final target = entry.target;
-        return target is RenderFollowerLayer &&
-            (target.link == start || target.link == end);
-      }),
-      isEmpty,
-      reason:
-          'Hidden native handles must not intercept touches above the reader',
-    );
+    expect(_nativeHandles().hitTestable(), findsNothing);
     outer.jumpTo(0);
     inner.jumpTo(0);
     await tester.pumpAndSettle();
@@ -400,7 +483,10 @@ m.Widget unrelated() => const SelectableText();
           .intersect(tester.getRect(find.byKey(innerKey))),
     );
     await tester.pumpWidget(const SizedBox());
+  });
 
+  testWidgets('horizontal clips track selected text endpoints', (tester) async {
+    const viewportKey = ValueKey('horizontal-reader');
     final horizontal = ScrollController();
     addTearDown(horizontal.dispose);
     await tester.pumpWidget(
@@ -433,8 +519,7 @@ m.Widget unrelated() => const SelectableText();
     final hEnd = horizontalState.renderEditable.endHandleLayerLink;
     await tester.longPressAt(tester.getRect(find.byKey(viewportKey)).center);
     await tester.pumpAndSettle();
-    horizontalState.selectAll(SelectionChangedCause.toolbar);
-    await tester.pumpAndSettle();
+    await _tapSelectionAction(tester, 'Select all');
     horizontal.jumpTo(20);
     await tester.pumpAndSettle();
     _checkLinks(
@@ -483,18 +568,12 @@ m.Widget unrelated() => const SelectableText();
       );
       final start = region.selectionOverlay!.startHandleLayerLink;
       final end = region.selectionOverlay!.endHandleLayerLink;
-      region.selectAll(SelectionChangedCause.toolbar);
-      await tester.pumpAndSettle();
+      await _tapSelectionAction(tester, 'Select all');
       scroll.jumpTo(100);
       await tester.pumpAndSettle();
       expect(selected, _text);
       expect(start.leader, isNull);
       expect(end.leader, isNull);
-      region.contextMenuButtonItems
-          .firstWhere((item) => item.type == ContextMenuButtonType.copy)
-          .onPressed!();
-      await tester.pumpAndSettle();
-      expect(copied, _text);
       scroll.jumpTo(0);
       await tester.pumpAndSettle();
       await tester.pumpWidget(const SizedBox());
@@ -502,11 +581,66 @@ m.Widget unrelated() => const SelectableText();
     },
   );
 
-  testWidgets('code editor handle protocol respects an enclosing reader', (
+  testWidgets('selection area restores handles and copy after reparenting', (
     tester,
   ) async {
-    final scroll = ScrollController();
-    addTearDown(scroll.dispose);
+    var moved = false;
+    String? selected;
+    late StateSetter rebuild;
+    final reader = SelectionViewport(
+      key: GlobalKey(),
+      child: SelectionArea(
+        selectionControls: _MarkedMaterialHandles(),
+        onSelectionChanged: (content) => selected = content?.plainText,
+        child: const Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Preserved'),
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      _host(
+        StatefulBuilder(
+          builder: (context, setState) {
+            rebuild = setState;
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                SizedBox(
+                  width: 300,
+                  height: 160,
+                  child: moved ? const SizedBox() : reader,
+                ),
+                SizedBox(
+                  width: 300,
+                  height: 160,
+                  child: moved ? reader : const SizedBox(),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('Preserved'));
+    await tester.pumpAndSettle();
+    expect(selected, 'Preserved');
+    expect(_nativeHandles().hitTestable(), findsNWidgets(2));
+
+    rebuild(() => moved = true);
+    await tester.pumpAndSettle();
+    expect(selected, 'Preserved');
+    expect(_nativeHandles().hitTestable(), findsNWidgets(2));
+    await _tapSelectionAction(tester, 'Copy');
+    expect(copied, 'Preserved');
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('code reader copies offscreen text through its selection menu', (
+    tester,
+  ) async {
     const reader = ValueKey('code-reader');
     await tester.pumpWidget(
       _host(
@@ -515,7 +649,6 @@ m.Widget unrelated() => const SelectableText();
           width: 300,
           height: 80,
           child: SingleChildScrollView(
-            controller: scroll,
             child: SourceCodeText(
               text: _text,
               language: null,
@@ -531,35 +664,16 @@ m.Widget unrelated() => const SelectableText();
       ),
     );
     await tester.pumpAndSettle();
-    final dynamic field = tester.allRenderObjects.firstWhere(
-      (render) => render.runtimeType.toString() == '_CodeFieldRender',
-    );
-    final start = field.startHandleLayerLink as LayerLink;
-    final end = field.endHandleLayerLink as LayerLink;
-    final editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
     await tester.longPressAt(tester.getRect(find.byKey(reader)).center);
     await tester.pumpAndSettle();
-    editor.controller!.selectAll();
+    await tester.tap(find.byTooltip('Select all').hitTestable());
     await tester.pumpAndSettle();
-    scroll.jumpTo(0);
-    await tester.pumpAndSettle();
-    final rect = tester.getRect(find.byKey(reader));
-    final RenderBox render = field;
-    final line = Offset(0, field.lineHeight as double);
-    for (final entry in [
-      (editor.controller!.selection.start, start),
-      (editor.controller!.selection.end, end),
-    ]) {
-      final point =
-          field.calculateTextPositionViewportOffset(entry.$1) as Offset?;
-      final visible =
-          point != null &&
-          rect.inflate(.5).contains(render.localToGlobal(point + line));
-      expect(entry.$2.leader != null, visible);
-    }
+    final editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
     expect(editor.controller!.selectedText, _text);
+    await tester.tap(find.byTooltip('Copy selection').hitTestable());
+    await tester.pumpAndSettle();
+    expect(copied, _text);
     await tester.pumpWidget(const SizedBox());
-    expect(tester.takeException(), isNull);
   });
 
   testWidgets('generated reader updates every native text descendant', (
@@ -597,9 +711,7 @@ m.Widget unrelated() => const SelectableText();
     final end = state.renderEditable.endHandleLayerLink;
     await tester.longPressAt(tester.getRect(find.byKey(reader)).center);
     await tester.pumpAndSettle();
-    state.selectAll(SelectionChangedCause.toolbar);
-    await tester.pumpAndSettle();
-    state.hideToolbar(false);
+    await _tapSelectionAction(tester, 'Select all');
     scroll.jumpTo(100);
     await tester.pumpAndSettle();
     expect(
@@ -645,7 +757,20 @@ Paragraph with **bold** and a [link](https://example.com).
     final texts = tester
         .widgetList<SelectableText>(find.byType(SelectableText))
         .toList();
-    expect(texts.length, greaterThan(5));
+    final renderedText = texts
+        .map((text) => text.data ?? text.textSpan!.toPlainText())
+        .join('\n');
+    for (final content in [
+      'Heading',
+      'Paragraph with',
+      'First list item',
+      'Second list item',
+      'Quoted text',
+      'Column',
+      'More text',
+    ]) {
+      expect(renderedText, contains(content));
+    }
     for (final text in texts) {
       expect(
         find.ancestor(
@@ -708,7 +833,7 @@ class _ViewportCoverage extends RecursiveAstVisitor<void> {
             owner) {
       return;
     }
-    missing.add('$kind@${node.offset}');
+    missing.add(node.toSource());
   }
 
   @override

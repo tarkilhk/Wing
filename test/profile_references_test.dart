@@ -634,9 +634,9 @@ void main() {
         final avatars = tester.widgetList<BotAvatar>(
           find.descendant(of: picker, matching: find.byType(BotAvatar)),
         );
-        expect(avatars.map((a) => (a.name, a.shape, a.color, a.size)), [
-          ('butler', 'hexagon', '#8b5cf6', 32.0),
-          ('hermes', 'squircle', '#65c7bc', 32.0),
+        expect(avatars.map((a) => (a.name, a.shape, a.color)), [
+          ('butler', 'hexagon', '#8b5cf6'),
+          ('hermes', 'squircle', '#65c7bc'),
         ]);
         expect(
           find.descendant(

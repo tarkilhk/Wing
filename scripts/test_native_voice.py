@@ -285,12 +285,16 @@ def main():
              'completed_ms': int(completed), 'voice': voice}
             for sample, start, completed, voice in samples
         ]
-        if int(offline[1]) > 0 and sorted(int(s[0]) for s in samples) != list(range(5)):
-            raise RuntimeError('Installed offline voice did not complete all five TTS samples')
         if int(offline[1]) == 0:
-            driver.evidence['limitations'].append('No installed offline Android voice; five TTS samples unavailable.')
+            raise RuntimeError('Offline speech acceptance requires an installed Android voice')
+        if sorted(int(s[0]) for s in samples) != list(range(5)):
+            raise RuntimeError('Installed offline voice did not complete all five TTS samples')
         if capabilities[1] == 'false':
             driver.evidence['limitations'].append('Android local speech recognition unavailable; rejection path exercised.')
+        else:
+            driver.evidence['limitations'].append(
+                'Missing-local-recognition rejection was skipped because this emulator '
+                'provides on-device recognition; that unavailable-service path was not exercised.')
         driver.evidence['limitations'].extend(re.findall(r'VOICE_LIMITATION ([^\r\n]+)', transcript))
         driver.evidence['status'] = 'passed'
         print('PASS: native microphone denial/grant, background cancellation, AAC capture and playback boundaries')

@@ -339,9 +339,9 @@ void main() {
     await show(tester, f, device);
     await tester.tap(find.text('Play'));
     await tester.pumpAndSettle();
-    tester
-        .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
-        .onChanged!('ElevenLabs');
+    await tester.tap(find.text('Edge'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ElevenLabs').last);
     await tester.pumpAndSettle();
     expect(find.text('Narrator'), findsOneWidget);
     expect(find.text('Aria'), findsNothing);
@@ -485,9 +485,9 @@ void main() {
     final device = VoiceDeviceFixture();
     addTearDown(device.stream.close);
     await show(tester, f, device);
-    tester
-        .widget<StudioSelect<String>>(find.byType(StudioSelect<String>))
-        .onChanged!('ElevenLabs');
+    await tester.tap(find.text('Edge'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ElevenLabs').last);
     await tester.pumpAndSettle();
     expect(
       find.textContaining(

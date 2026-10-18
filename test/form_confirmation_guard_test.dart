@@ -107,6 +107,25 @@ class Local { Object FilledButton({Object? child}) => 0; Object build() => Fille
     addTearDown(workspace.dispose);
     expect(rule.check(workspace.snapshot), isEmpty);
   });
+  for (final body in [
+    "Object build(Function Text) => FilledButton(child: Text('Save'));",
+    "Object build(Function material) => FilledButton(child: material.Text('Save'));",
+    "Object build() { Object Text(String value) => 0; return FilledButton(child: Text('Save')); }",
+  ]) {
+    test('accepts locally bound label factory: $body', () {
+      final workspace = FixtureWorkspace({
+        'files': {
+          'lib/view.dart': {
+            'role': 'view',
+            'source':
+                "import 'package:flutter/material.dart';\nimport 'package:flutter/material.dart' as material;\n$body",
+          },
+        },
+      });
+      addTearDown(workspace.dispose);
+      expect(rule.check(workspace.snapshot), isEmpty);
+    });
+  }
   test('accepts shared actions, navigation, viewers and unrelated names', () {
     final workspace = FixtureWorkspace({
       'files': {

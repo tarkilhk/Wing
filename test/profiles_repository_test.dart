@@ -84,7 +84,7 @@ void main() {
     },
   );
 
-  test('fails closed on duplicate or malformed profile identities', () async {
+  test('fails closed on duplicate profile identities', () async {
     final payload = profilesPayload();
     (payload['profiles'] as List).add({
       'name': 'default',
@@ -97,4 +97,22 @@ void main() {
 
     await expectLater(repository.discover(), throwsFormatException);
   });
+
+  for (final malformed in [
+    <String, dynamic>{'display_name': 'Missing identity'},
+    <String, dynamic>{'name': 42},
+    <String, dynamic>{'name': ''},
+  ]) {
+    test('rejects malformed profile identity $malformed', () async {
+      final repository = ProfilesRepository((endpoint) async {
+        if (endpoint == 'profiles') {
+          return {
+            'profiles': [malformed],
+          };
+        }
+        return {'current': 'default', 'active': 'default'};
+      });
+      await expectLater(repository.discover(), throwsFormatException);
+    });
+  }
 }

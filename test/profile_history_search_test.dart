@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -92,7 +93,10 @@ void main() {
           ).copyWith(disableAnimations: disableAnimations),
           child: child!,
         ),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -106,9 +110,15 @@ void main() {
       final chat = await open();
       expect(chat.reading.messages.first['id'], 571);
       expect(chat.reading.messages.last['id'], 620);
-      while (chat.reading.nextHistoryOffset != null) {
+      final pageLimit = (host.messageCount / 50).ceil();
+      for (
+        var attempt = 0;
+        attempt < pageLimit && chat.reading.nextHistoryOffset != null;
+        attempt++
+      ) {
         await controller.loadOlderMessages(chat);
       }
+      expect(chat.reading.nextHistoryOffset, isNull);
       expect(chat.reading.messages.length, 620);
       expect(
         chat.reading.messages.map((r) => r['id']).toList(),
@@ -121,6 +131,7 @@ void main() {
         true,
       );
       final reads = host.reads.where((r) => r.$1.endsWith('/messages'));
+      expect(reads, isNotEmpty);
       expect(
         reads.every(
           (r) =>
@@ -254,52 +265,53 @@ void main() {
     },
   );
 
-  test(
-    'older and cleared queries cannot publish; navigation retains browser ownership',
-    () async {
-      final delay = host.searchDelays['old'] = Completer<void>();
-      final pending = browser.search('old');
-      await browser.search('new');
-      delay.complete();
-      await pending;
-      expect(browser.project('new').entries, hasLength(2));
-      expect(
-        browser
-            .project('new')
-            .entries
-            .every((entry) => entry.snippet!.contains('new')),
-        isTrue,
-      );
+  test('an older query cannot replace newer search results', () async {
+    final delay = host.searchDelays['old'] = Completer<void>();
+    final pending = browser.search('old');
+    await browser.search('new');
+    delay.complete();
+    await pending;
+    expect(browser.project('new').entries, hasLength(2));
+    expect(
+      browser
+          .project('new')
+          .entries
+          .every((entry) => entry.snippet!.contains('new')),
+      isTrue,
+    );
+  });
 
-      final second = host.searchDelays['away'] = Completer<void>();
-      final away = browser.search('away');
-      await controller.navigateProfile('work');
-      await controller.navigateProfile('personal');
-      second.complete();
-      await away;
-      expect(
-        browser.project('away').entries.map((entry) => entry.profile),
-        containsAll(['personal', 'work']),
-      );
+  test('profile navigation retains browser search ownership', () async {
+    final second = host.searchDelays['away'] = Completer<void>();
+    final away = browser.search('away');
+    await controller.navigateProfile('work');
+    await controller.navigateProfile('personal');
+    second.complete();
+    await away;
+    expect(
+      browser.project('away').entries.map((entry) => entry.profile),
+      containsAll(['personal', 'work']),
+    );
+  });
 
-      final third = host.searchDelays['cleared'] = Completer<void>();
-      final cleared = browser.search('cleared');
-      await browser.search('');
-      third.complete();
-      await cleared;
-      expect(browser.state.searching, isFalse);
-      expect(
-        browser.state.profiles.values.every(
-          (profile) => profile.searchMatches.isEmpty,
-        ),
-        isTrue,
-      );
-      expect(
-        browser.project('').entries.any((entry) => entry.id == 'beyond-list'),
-        isFalse,
-      );
-    },
-  );
+  test('clearing search fences its pending result', () async {
+    final third = host.searchDelays['cleared'] = Completer<void>();
+    final cleared = browser.search('cleared');
+    await browser.search('');
+    third.complete();
+    await cleared;
+    expect(browser.state.searching, isFalse);
+    expect(
+      browser.state.profiles.values.every(
+        (profile) => profile.searchMatches.isEmpty,
+      ),
+      isTrue,
+    );
+    expect(
+      browser.project('').entries.any((entry) => entry.id == 'beyond-list'),
+      isFalse,
+    );
+  });
 
   test('search failure is not an empty result and retry works', () async {
     host.failSearch = true;
@@ -333,14 +345,15 @@ void main() {
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       await tester.pumpAndSettle();
+      final viewport = tester.getRect(list);
       final visible =
           find
                   .byType(SelectableText)
                   .evaluate()
                   .where((e) {
-                    return tester
-                        .getRect(list)
-                        .contains(tester.getCenter(find.byWidget(e.widget)));
+                    final top = tester.getTopLeft(find.byWidget(e.widget)).dy;
+                    return top > viewport.top + viewport.height * .25 &&
+                        top < viewport.top + viewport.height * .75;
                   })
                   .first
                   .widget
@@ -419,7 +432,12 @@ void main() {
       expect(saved.fraction, greaterThan(0));
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
+        ),
       );
       // Temporary empty message bodies must not overwrite the saved target.
       expect(chat.reading.readingPosition.resume?.messageId, saved.messageId);
@@ -445,7 +463,12 @@ void main() {
       await tester.pumpAndSettle();
       await tester.settleMarkdown();
       await tester.pumpAndSettle();
-      expect(host.reads.where((r) => r.$1 == 'sessions/search').length, 2);
+      expect(
+        host.reads
+            .where((r) => r.$1 == 'sessions/search')
+            .map((r) => r.$2['q']),
+        ['needle', 'needle'],
+      );
       expect(find.text('personal archive match'), findsOneWidget);
       expect(find.textContaining('Archived · needle'), findsWidgets);
       await tester.tap(find.byKey(const ValueKey('chat-filter-profile')));

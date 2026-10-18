@@ -88,7 +88,7 @@ class ImageClipboardReaderTest {
         assertTrue(ui.isEmpty())
     }
 
-    @Test fun byteLimitRejectsOversizedContentAndAllowsAnExactBoundary() {
+    @Test fun oversizedClipboardContentIsRejectedAndClosed() {
         val reader = ImageClipboardReader({ it() }, BoundedProviderWork(deadlineMillis = 60_000), maxBytes = 4)
         val rejected = CountDownLatch(1)
         val closed = CountDownLatch(1)
@@ -103,13 +103,19 @@ class ImageClipboardReaderTest {
         }
         await(rejected)
         await(closed)
-        val delivered = CountDownLatch(1)
-        reader.read({ ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)) }) { bytes, error ->
-            assertNull(error)
-            assertArrayEquals(byteArrayOf(1, 2, 3, 4), bytes)
-            delivered.countDown()
-        }
-        await(delivered)
         reader.dispose()
+    }
+
+    @Test fun exactClipboardByteLimitReturnsTheOriginalBytes() {
+        val reader = ImageClipboardReader({ it() }, BoundedProviderWork(deadlineMillis = 60_000), maxBytes = 4)
+        val delivered = CountDownLatch(1)
+        try {
+            reader.read({ ByteArrayInputStream(byteArrayOf(1, 2, 3, 4)) }) { bytes, error ->
+                assertNull(error)
+                assertArrayEquals(byteArrayOf(1, 2, 3, 4), bytes)
+                delivered.countDown()
+            }
+            await(delivered)
+        } finally { reader.dispose() }
     }
 }

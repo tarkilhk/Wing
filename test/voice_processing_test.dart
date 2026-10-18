@@ -284,6 +284,9 @@ void main() {
     );
     expect(result.text, 'Alpha new words omega');
     expect(result.selectionStart, 15);
+    expect(result.selectionEnd, 15);
+  });
+  test('read-aloud text excludes code while preserving prose punctuation', () {
     expect(
       spokenReplyText('Before\n\n    indented code\n\nAfter'),
       'Before\n\nAfter',

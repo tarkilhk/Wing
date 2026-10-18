@@ -108,6 +108,17 @@ void main() {
         attachments: const [],
       );
 
+      await first.write(
+        profileName: 'work',
+        sessionId: 'two',
+        text: 'fourth',
+        attachments: const [],
+      );
+      expect(
+        (await first.read(profileName: 'work', sessionId: 'two'))!.text,
+        'fourth',
+      );
+
       expect(
         (await first.read(profileName: 'work', sessionId: 'one'))!.text,
         'first',

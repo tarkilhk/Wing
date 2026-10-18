@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -40,7 +41,12 @@ void main() {
       ],
     });
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     expect(find.text('What is the recovery marker?'), findsOneWidget);
     await tester.enterText(

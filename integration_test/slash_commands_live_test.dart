@@ -21,6 +21,7 @@ void main() {
     'live mobile command discovery, completion and read-only execution',
     (tester) async {
       expect(port, greaterThan(0), reason: 'Supply the local QA gateway port');
+      SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
       final manager = await ConnectionManager.create(preferences);
       final connection = SavedConnection(
@@ -58,6 +59,7 @@ void main() {
         final deadline = DateTime.now().add(const Duration(seconds: 60));
         while (!condition() && DateTime.now().isBefore(deadline)) {
           await tester.pump(const Duration(milliseconds: 200));
+          expect(tester.takeException(), isNull);
         }
         expect(condition(), isTrue);
       }
@@ -99,8 +101,18 @@ void main() {
       await tester.tap(modelSuggestion.first);
       await tester.pump();
       expect(chat.composer.observation.text, '/model ');
+      final modelOutputCount = chat.reading.messages
+          .where((row) => row['_command_notice'] == true)
+          .length;
       await tester.tap(find.byTooltip('Send'));
-      await until(() => !chat.runtime.commandRunning);
+      await until(
+        () =>
+            !chat.runtime.commandRunning &&
+            chat.reading.messages
+                    .where((row) => row['_command_notice'] == true)
+                    .length >
+                modelOutputCount,
+      );
       expect(chat.runtime.error, isNull, reason: '/model execution');
       expect(
         chat.reading.messages
@@ -154,7 +166,7 @@ void main() {
             .where((row) => row['_command_notice'] == true)
             .map((row) => row['content'])
             .last,
-        isNot('Status unavailable.'),
+        allOf(isA<String>(), isNotEmpty, isNot('Status unavailable.')),
       );
 
       // Expansion is a read-only RPC; verify the actual installed skill body is

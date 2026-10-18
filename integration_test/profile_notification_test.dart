@@ -14,15 +14,22 @@ import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
 /// No model call. Build this target, install with adb install -r to preserve the
-/// user's notification grant, and launch it. Tap the QA notification when posted.
+/// emulator's notification grant, and launch it. Supply HERMES_TEST_SESSION for
+/// an owned android-qa-a chat. Tap the QA notification when posted.
 /// This exercises the production native notification sink and navigation handler.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   const port = int.fromEnvironment('HERMES_TEST_PORT');
+  const session = String.fromEnvironment('HERMES_TEST_SESSION');
   testWidgets(
     'native notification returns B to the original A session',
     (tester) async {
       expect(port, greaterThan(0));
+      expect(
+        session,
+        isNotEmpty,
+        reason: 'Select an owned QA session explicitly',
+      );
       final preferences = await SharedPreferences.getInstance();
       final manager = await ConnectionManager.create(preferences);
       final connection = SavedConnection(
@@ -73,14 +80,11 @@ void main() {
       expect(controller.error, isNull);
       final resource = controller.current!;
       expect(
-        resource.sessions,
-        isNotEmpty,
-        reason: 'Run the bounded live chat test first',
+        resource.sessions.where((row) => row['id'] == session),
+        hasLength(1),
+        reason: 'The selected owned session must exist in android-qa-a',
       );
-      final key = ProfileSessionKey(
-        resource.scope,
-        resource.sessions.first['id'] as String,
-      );
+      final key = ProfileSessionKey(resource.scope, session);
       await controller.openSession(key);
       final chat = controller.current!.chat!;
       emitChatEvent(controller, chat, 'session.title', {

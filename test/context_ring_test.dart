@@ -314,6 +314,10 @@ void main() {
     () {
       final payload = <String, dynamic>{
         ..._sample,
+        'categories': [
+          for (final category in _sample['categories'] as List)
+            Map<String, dynamic>.from(category as Map),
+        ],
         'context_used': 150000,
         'context_percent': 55,
       };
@@ -329,7 +333,6 @@ void main() {
       expect(() => value.categories.clear(), throwsUnsupportedError);
       expect(value.withoutCategories().categories, isEmpty);
       expect(value.withoutCategories().used, 150000);
-      (payload['categories'] as List).removeLast();
     },
   );
 

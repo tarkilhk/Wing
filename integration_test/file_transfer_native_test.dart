@@ -80,16 +80,8 @@ void main() {
         isEmpty,
         reason: 'Owned export stages must be removed.',
       );
-      expect(
-        remaining.files.containsAll(current.files.intersection(previous.files)),
-        isTrue,
-      );
-      expect(
-        remaining.stages.containsAll(
-          current.stages.intersection(previous.stages),
-        ),
-        isTrue,
-      );
+      expect(remaining.files.containsAll(previous.files), isTrue);
+      expect(remaining.stages.containsAll(previous.stages), isTrue);
     });
   });
 
@@ -154,13 +146,15 @@ void main() {
     );
     final current = await fixtureCacheInventory();
     final ownedStages = current.stages.difference(previous.stages);
-    expect(ownedStages, hasLength(1));
-    final exports = ownedStages
-        .expand(
-          (path) => Directory(
-            path,
-          ).listSync(recursive: true, followLinks: false).whereType<File>(),
-        )
+    expect(
+      ownedStages,
+      isEmpty,
+      reason:
+          'Android share handoff releases Wing\'s source even on dismissal.',
+    );
+    final exports = current.files
+        .difference(previous.files)
+        .map(File.new)
         .where(
           (file) =>
               file.uri.pathSegments.last.startsWith('wing-config-') &&
@@ -168,6 +162,7 @@ void main() {
         )
         .toList();
     expect(exports, hasLength(1));
+    expect(exports.single.parent.path, endsWith('/share_plus'));
     expect(await exports.single.readAsString(), contents);
   });
 }

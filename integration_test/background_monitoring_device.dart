@@ -108,7 +108,17 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
   );
   await sink.initialize();
   var alerts = 0;
+  var nextReplyId = 1;
   final generation = DateTime.now().microsecondsSinceEpoch.toString();
+  // Stock session.create returns a new identity. A recreated fixture engine
+  // must not accidentally reopen an earlier generation's persisted outbox.
+  for (final profile in ['a', 'b']) {
+    final id = 'monitoring-$generation-$profile';
+    host.createdSessionIds[profile] = id;
+    host.saved[profile] = [
+      {'id': id, 'profile': profile},
+    ];
+  }
   final appPreferences = AppPreferences(preferences);
   final registry = ProfileWorkspaceRegistry(
     identities: ProfileConnectionIdentity(credentialStore: secrets),
@@ -166,10 +176,32 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
         final profile = event['profile'] as String;
         final chat = chats[profile]!;
         final state = event['state'] as String;
+        final reply = '**Reply ready.** ${'More readable context. ' * 20}';
+        if (state == 'idle') {
+          // Recovery reads the completed reply from its actual profile owner.
+          // Each completed turn has a distinct durable message identity.
+          host.historyByProfile[profile] = [
+            {'id': nextReplyId++, 'role': 'assistant', 'content': reply},
+          ];
+        }
         host.workingProfiles.remove(profile);
         host.waitingProfiles.remove(profile);
         if (state == 'working') host.workingProfiles.add(profile);
         if (state == 'waiting') host.waitingProfiles.add(profile);
+        // Polling and stream observations describe the same backend state.
+        host.active = [
+          for (final entry in chats.entries)
+            {
+              'id': entry.value.runtime.runtimeId,
+              'session_key': entry.value.key.sessionId,
+              'status': host.workingProfiles.contains(entry.key)
+                  ? 'working'
+                  : host.waitingProfiles.contains(entry.key)
+                  ? 'waiting'
+                  : 'idle',
+              'last_active': 1,
+            },
+        ];
         if (state == 'working') {
           if (chat.runtime.pendingQuestion != null) {
             await controller.clarify(chat, 'Continue');
@@ -177,6 +209,13 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
             chat.composer.editText('Native fixture work');
             await controller.send(chat);
           }
+          host.gateways[profile]!.onEvent!(
+            StreamEvent(
+              type: 'message.start',
+              sessionId: chat.runtime.runtimeId,
+              data: const {},
+            ),
+          );
         } else {
           host.gateways[profile]!.onEvent!(
             StreamEvent(
@@ -184,10 +223,7 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
               sessionId: chat.runtime.runtimeId,
               data: state == 'waiting'
                   ? {'request_id': 'question-$profile', 'question': 'Continue?'}
-                  : {
-                      'text':
-                          '**Reply ready.** ${'More readable context. ' * 20}',
-                    },
+                  : {'text': reply},
             ),
           );
         }
@@ -224,6 +260,26 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
           'ready': host.gateways.containsKey('a'),
           'alerts': alerts,
           'active': registry.hasActiveChats,
+          'controllerActive': controller.hasActiveChats,
+          'switching': controller.switching,
+          'selectedProfile': controller.current?.scope.profileName,
+          'chats': {
+            for (final entry in chats.entries)
+              entry.key: {
+                'session': entry.value.key.sessionId,
+                'runtime': entry.value.runtime.runtimeId,
+                'execution': entry.value.runtime.execution.name,
+                'recovery': entry.value.runtime.recovery.name,
+                'liveSessionConfirmed':
+                    entry.value.runtime.liveSessionConfirmed,
+                'needsInput': entry.value.runtime.needsInput,
+                'error': entry.value.runtime.error,
+                'composerError': entry.value.composer.observation.error,
+                'queued': entry.value.composer.observation.queue.length,
+                'paused': entry.value.composer.observation.paused,
+                'sending': entry.value.composer.observation.sending,
+              },
+          },
           'lifecycle': WidgetsBinding.instance.lifecycleState?.name,
           'enabled':
               (preferences.getBool(
@@ -236,8 +292,12 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
                   true),
         }),
       );
-    } catch (_) {
+    } catch (error, stack) {
       request.response.statusCode = 500;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(
+        jsonEncode({'error': error.toString(), 'stack': stack.toString()}),
+      );
     } finally {
       await request.response.close();
     }

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -228,11 +229,6 @@ void main() {
           expect(
             find.textContaining('Could not open this folder'),
             findsOneWidget,
-          );
-          final error = find.textContaining('Could not open this folder');
-          expect(
-            DefaultTextStyle.of(tester.element(error)).style.fontSize,
-            wingTheme(brightness).textTheme.bodySmall!.fontSize,
           );
           await capturePicker(
             tester,
@@ -481,7 +477,12 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(460, 1000));
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 

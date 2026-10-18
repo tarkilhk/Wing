@@ -120,6 +120,10 @@ class BackendUpdateChannelFixture {
     bool Function() canDispatch,
     void Function() onDispatched,
   ) async {
+    final uri = Uri.parse(endpoint);
+    if (uri.path != 'config' || uri.queryParameters['profile'] != 'work') {
+      throw StateError('Unexpected channel write $endpoint');
+    }
     if (!canDispatch()) throw StateError('Retired');
     onDispatched();
     writes.add((endpoint, body));

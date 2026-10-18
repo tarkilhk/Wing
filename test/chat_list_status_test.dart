@@ -12,6 +12,9 @@ void main() {
       ),
       ChatListStatus.needsInput,
     );
+  });
+
+  test('server input request outranks local working and unread', () {
     expect(
       chatListStatus(
         {'unread': true},
@@ -22,20 +25,26 @@ void main() {
     );
   });
 
+  test('local working outranks unread', () {
+    expect(
+      chatListStatus(
+        {'unread': true},
+        runtime: (needsInput: false, working: true, hasMessages: false),
+      ),
+      ChatListStatus.working,
+    );
+  });
+
+  test('confirmed server work appears without a local runtime', () {
+    expect(
+      chatListStatus(const {}, activity: ProfileLiveActivityState.running),
+      ChatListStatus.working,
+    );
+  });
+
   test(
-    'live working outranks unread; retained messages prevent false drafts',
+    'retained messages prevent a stale empty REST row appearing as a draft',
     () {
-      expect(
-        chatListStatus(
-          {'unread': true},
-          runtime: (needsInput: false, working: true, hasMessages: false),
-        ),
-        ChatListStatus.working,
-      );
-      expect(
-        chatListStatus(const {}, activity: ProfileLiveActivityState.running),
-        ChatListStatus.working,
-      );
       expect(
         chatListStatus(
           {'message_count': 0},
@@ -46,9 +55,15 @@ void main() {
     },
   );
 
-  test('REST activity is not runtime proof and unread precedes draft', () {
+  test('REST activity alone cannot establish running work', () {
     expect(chatListStatus({'is_active': true}), ChatListStatus.idle);
+  });
+
+  test('empty saved chat without retained messages appears as a draft', () {
     expect(chatListStatus({'message_count': 0}), ChatListStatus.draft);
+  });
+
+  test('unread takes precedence over an empty REST row', () {
     expect(
       chatListStatus({'unread': true, 'message_count': 0}),
       ChatListStatus.unread,

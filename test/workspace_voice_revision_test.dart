@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,6 +39,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
           controller: controller,
           voiceDevice: device,
         ),

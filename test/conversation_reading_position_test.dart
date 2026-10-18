@@ -111,6 +111,7 @@ void main() {
     built = {};
     read.clear();
   });
+  tearDown(() => reader.dispose());
   void install(int count) => reader.installSavedHistory([
     for (var id = 1; id <= count; id++)
       {'id': id, 'role': 'assistant', 'content': 'Message $id'},
@@ -315,6 +316,10 @@ void main() {
         readThrough: 8,
       );
       var gate = Completer<void>();
+      addTearDown(() async {
+        if (!gate.isCompleted) gate.complete();
+        await tester.pump();
+      });
       var fail = true;
       var loads = 0;
       Future<void> load() async {

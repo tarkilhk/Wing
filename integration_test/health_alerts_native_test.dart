@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/models/health_alert.dart';
 import 'package:wing/core/models/host_thresholds.dart';
+import 'package:wing/core/models/host_resources.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/screens/administration/admin_usage_dashboard.dart';
@@ -79,6 +80,7 @@ class _Observations extends ProfileBrowserFixture {
   bool analyticsUnavailable = false;
   int hostReads = 0;
   final analyticsReads = <String>[];
+  final analyticsModelProfiles = <String>[];
   late ProfileWorkspaceController owner;
 
   @override
@@ -89,13 +91,20 @@ class _Observations extends ProfileBrowserFixture {
       discover: browser.discover,
       rpc: (method, params) async {
         final response = await browser.call(method, params);
+        if (method == 'session.active_list') {
+          return {
+            ...response,
+            'sessions':
+                liveSessions[scope.profileName] ?? <Map<String, dynamic>>[],
+          };
+        }
         if (method == 'session.resume' &&
             params['session_id'] == 'native-live-durable') {
           return {...response, 'running': true};
         }
         return response;
       },
-      get: (path, query) => path.startsWith('sessions')
+      get: (path, query) => path.startsWith('sessions') || path == 'logs'
           ? browser.read(path, query)
           : administration.send('GET', path, query, null),
     );
@@ -105,6 +114,7 @@ class _Observations extends ProfileBrowserFixture {
     SavedConnection connection,
     String identity,
   ) => AdministrationRepository(
+    apiPricing: ({refresh = false}) async => administration.apiPrices,
     connectionId: connection.id,
     connectionIdentity: identity,
     connectionLabel: connection.label,
@@ -121,6 +131,9 @@ class _Observations extends ProfileBrowserFixture {
     request: (method, path, query, body) async {
       if (method == 'GET' && path.startsWith('analytics/')) {
         analyticsReads.add(path);
+        if (path == 'analytics/models') {
+          analyticsModelProfiles.add(query['profile']!);
+        }
         if (analyticsUnavailable) {
           throw DashboardHttpException(503, path);
         }
@@ -163,6 +176,20 @@ Future<void> _capture(String name) async {
 Future<void> _settleScreen(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 600));
+}
+
+Future<void> _waitUntil(
+  WidgetTester tester,
+  bool Function() ready,
+  String outcome,
+) async {
+  await tester.pump();
+  final deadline = DateTime.now().add(const Duration(seconds: 20));
+  while (!ready() && DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(tester.takeException(), isNull);
+  }
+  expect(ready(), isTrue, reason: outcome);
 }
 
 Future<void> _waitFor(WidgetTester tester, Finder target) async {
@@ -446,7 +473,7 @@ void main() {
       expect(MediaQuery.textScalerOf(context).scale(16) >= 24, large);
       expect(
         MediaQuery.sizeOf(context).width,
-        large ? 320 : closeTo(411.43, 1),
+        large ? 320 : inInclusiveRange(360, 480),
       );
       await _capture('$label-chats-healthy');
       await tester.scrollUntilVisible(
@@ -460,6 +487,17 @@ void main() {
             .first,
       );
       await tester.tap(find.text('Improve the conversation list'));
+      await _waitUntil(
+        tester,
+        () =>
+            observations.owner.current?.chat?.key.sessionId == 'newest' &&
+            observations.owner.current?.chat?.runtime.opening == false,
+        'The healthy conversation finishes opening before the incident arrives.',
+      );
+      // Finish any healthy sample before changing the fixture. refresh() joins
+      // an already pending read, so an older sample must not stand in for this
+      // incident's observation.
+      await observations.owner.hostResources().refresh();
       await _settleScreen(tester);
       await _capture('$label-conversation-healthy');
 
@@ -495,8 +533,19 @@ void main() {
         observations.stats['memory']['available'] =
             observations.stats['memory']['total'] -
             observations.stats['memory']['used'];
-        await observations.owner.hostResources().refresh();
-        await tester.pump();
+        final resources = observations.owner.hostResources();
+        await resources.refresh();
+        expect(
+          resources.state.pressure.value?.memory,
+          HostPressure.critical,
+          reason:
+              'The induced incident must reach the canonical host observation.',
+        );
+        await _waitUntil(
+          tester,
+          () => bell.hitTestable().evaluate().isNotEmpty,
+          'A fresh critical memory observation produces a reachable alert bell.',
+        );
         expect(bell, findsOneWidget);
         expect(MediaQuery.disableAnimationsOf(tester.element(bell)), isFalse);
         for (var frame = 0; frame < 20 && observedRotation == 0; frame++) {
@@ -548,17 +597,40 @@ void main() {
       await tester.ensureVisible(nativeMemory);
       await tester.tap(nativeMemory);
       await _settleScreen(tester);
-      final fields = find.byType(TextField);
-      await tester.ensureVisible(fields.at(1));
-      await tester.tap(fields.at(1));
-      await tester.enterText(fields.at(1), '96.5');
-      await tester.showKeyboard(fields.at(1));
-      final keyboardDeadline = DateTime.now().add(const Duration(seconds: 5));
-      while (tester.view.viewInsets.bottom == 0 &&
-          DateTime.now().isBefore(keyboardDeadline)) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
+      final warning = find.descendant(
+        of: find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.label == 'Memory usage Warning threshold',
+        ),
+        matching: find.byType(TextField),
+      );
+      expect(warning, findsOneWidget);
+      await tester.ensureVisible(warning);
       await _settleScreen(tester);
+      expect(warning.hitTestable(), findsOneWidget);
+      await tester.tap(warning);
+      final editable = find.descendant(
+        of: warning,
+        matching: find.byType(EditableText),
+      );
+      await _waitUntil(
+        tester,
+        () =>
+            tester.widget<EditableText>(editable).focusNode.hasFocus &&
+            tester.view.viewInsets.bottom > 0,
+        'Tapping the warning field focuses it and opens the real Android keyboard.',
+      );
+      // Inject the value only after the real IME is established. WidgetTester
+      // editing injection must not race its first native show request.
+      await tester.enterText(warning, '96.5');
+      await _settleScreen(tester);
+      await tester.tap(warning);
+      await _waitUntil(
+        tester,
+        () => tester.view.viewInsets.bottom > 0,
+        'The edited warning remains usable with the real Android keyboard open.',
+      );
       // Dialog removes inherited insets after applying them to its own padding.
       expect(tester.view.viewInsets.bottom, greaterThan(0));
       expect(find.byTooltip('Close rule editor').hitTestable(), findsOneWidget);
@@ -581,7 +653,7 @@ void main() {
       await tester.pageBack();
       await _settleScreen(tester);
       expect(find.text('Improve the conversation list'), findsWidgets);
-      await tester.tap(find.byIcon(Icons.arrow_back).first);
+      await tester.binding.handlePopRoute();
       await _settleScreen(tester);
       expect(find.text('Chats'), findsWidgets);
 
@@ -609,7 +681,6 @@ void main() {
       await _capture('$label-multiple-issues');
       await tester.tap(find.byTooltip('Close alerts'));
       await _settleScreen(tester);
-      final chatsCenter = tester.getCenter(find.text('Chats').first).dy;
       for (final destination in [
         AppDestination.activity,
         AppDestination.settings,
@@ -621,14 +692,30 @@ void main() {
         await tester.ensureVisible(row);
         await tester.tap(row);
         await _settleScreen(tester);
-        expect(bell, findsOneWidget);
         final title = find.descendant(
           of: find.byType(AppBar),
           matching: find.text(destination.label),
         );
-        if (!large) {
-          expect(tester.getCenter(title).dy, closeTo(chatsCenter, .01));
-        }
+        expect(title.hitTestable(), findsOneWidget);
+        expect(bell.hitTestable(), findsOneWidget);
+        await tester.tap(bell);
+        await _settleScreen(tester);
+        final alerts = find.byType(Dialog);
+        final diskIssue = find.descendant(
+          of: alerts,
+          matching: find.text('Critical disk pressure'),
+        );
+        final memoryIssue = find.descendant(
+          of: alerts,
+          matching: find.text('Critical memory pressure'),
+        );
+        expect(diskIssue.hitTestable(), findsOneWidget);
+        await tester.tap(find.byTooltip('Next issue').hitTestable());
+        await _settleScreen(tester);
+        expect(memoryIssue.hitTestable(), findsOneWidget);
+        await tester.tap(find.byTooltip('Close alerts').hitTestable());
+        await _settleScreen(tester);
+        expect(title.hitTestable(), findsOneWidget);
         if (destination == AppDestination.activity) {
           await observations.owner.refreshActivity();
           await _settleScreen(tester);
@@ -648,40 +735,62 @@ void main() {
       await tester.ensureVisible(find.byKey(const ValueKey('nav-analytics')));
       await tester.tap(find.byKey(const ValueKey('nav-analytics')));
       await _settleScreen(tester);
-      await _waitFor(
-        tester,
-        find.textContaining('Could not load model totals.'),
-      );
-      expect(
-        find.textContaining('Could not load model totals.'),
-        findsOneWidget,
-      );
+      await _waitFor(tester, find.text('Unavailable'));
       expect(find.text('Unavailable'), findsWidgets);
-      await _capture('$label-analytics-unavailable');
-
-      observations.analyticsUnavailable = false;
-      final refresh = find.widgetWithText(TextButton, 'Refresh');
       final analyticsScroll = find
           .descendant(
             of: find.byType(UsageDashboard),
             matching: find.byType(Scrollable),
           )
           .first;
+      final unavailable = find.textContaining('Could not load model totals.');
+      await tester.scrollUntilVisible(
+        unavailable,
+        250,
+        scrollable: analyticsScroll,
+      );
+      await _settleScreen(tester);
+      expect(unavailable.hitTestable(), findsOneWidget);
+      await _capture('$label-analytics-unavailable');
+
+      observations.analyticsUnavailable = false;
+      final refresh = find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == 'Refresh usage',
+      );
       await tester.scrollUntilVisible(
         refresh,
         250,
         scrollable: analyticsScroll,
       );
-      await tester.tap(refresh);
       await _settleScreen(tester);
-      await tester.scrollUntilVisible(
-        find.text('639K'),
-        -250,
-        scrollable: analyticsScroll,
+      final readsBeforeRefresh = observations.analyticsReads.length;
+      await tester.tap(refresh);
+      await _waitUntil(
+        tester,
+        () =>
+            observations.analyticsReads.length > readsBeforeRefresh &&
+            unavailable.evaluate().isEmpty &&
+            tester.widget<IconButton>(refresh).onPressed != null,
+        'New analytics reads complete and clear the visible error',
       );
+      expect(unavailable, findsNothing);
+      // The large-text breakdown has its own scroll surface. Drag in the
+      // dashboard gutter so returning to totals scrolls the outer page.
+      final total = find.byKey(const ValueKey('usage-token-total'));
+      final viewport = tester.getRect(analyticsScroll);
+      for (var i = 0; i < 40 && total.evaluate().isEmpty; i++) {
+        await tester.dragFrom(
+          Offset(viewport.left + 4, viewport.center.dy),
+          const Offset(0, 300),
+        );
+        await _settleScreen(tester);
+      }
+      await tester.ensureVisible(total);
+      await _settleScreen(tester);
       expect(find.textContaining('Could not load model totals.'), findsNothing);
       expect(find.text('Unavailable'), findsNothing);
-      expect(find.text('639K'), findsOneWidget);
+      expect(find.text('1.3M'), findsOneWidget);
+      expect(observations.analyticsModelProfiles.toSet(), {'personal', 'work'});
       expect(
         observations.analyticsReads
             .where((p) => p == 'analytics/models')

@@ -101,6 +101,7 @@ void main() {
   num modified = 10;
   setUp(() {
     fixture = AdministrationFixture();
+    addTearDown(fixture.server.close);
     recovery = ProviderRecovery(
       fixture.server.profile('personal'),
       providerId: 'claude-code',
@@ -176,12 +177,9 @@ void main() {
         ('personal', 'auth list anthropic', false),
         ('personal', 'auth refresh anthropic 333ccc', true),
       ]);
-      expect(
-        fixture.requests
-            .where((r) => r.$2 == 'providers/oauth')
-            .every((r) => r.$3['profile'] == 'personal'),
-        isTrue,
-      );
+      final reads = fixture.requests.where((r) => r.$2 == 'providers/oauth');
+      expect(reads, isNotEmpty);
+      expect(reads.map((r) => r.$3['profile']), everyElement('personal'));
     },
   );
 
@@ -221,7 +219,9 @@ void main() {
         ),
         throwsA(isA<ProviderRecoveryFailure>()),
       );
-      expect(fixture.consoleRequests.every((r) => !r.$3), isTrue);
+      expect(fixture.consoleRequests, [
+        ('personal', 'auth list anthropic', false),
+      ]);
     },
   );
 

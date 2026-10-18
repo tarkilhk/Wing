@@ -13,77 +13,75 @@ const imageBytes =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
 void main() {
-  test(
-    'terminal informational exit is neutral and qualified signal exit is not completion',
-    () {
-      final noMatches = receipt(
-        'terminal',
-        {'command': 'rg missing src'},
-        {
-          'output': '',
-          'exit_code': 1,
-          'exit_code_meaning': 'No matches found (not an error)',
-        },
-      );
-      expect(noMatches.exitCode, 1);
-      expect(noMatches.receiptState, ToolReceiptState.completed);
-      expect(noMatches.receiptStatus, 'Completed');
-      expect(noMatches.response.single.copyable, isFalse);
-      final signal = receipt(
-        'terminal',
-        {'command': 'python3 worker.py'},
-        {
-          'output': '',
-          'exit_code': 137,
-          'exit_code_meaning':
-              'Exit code 137 usually means the command was terminated by signal 9: SIGKILL',
-        },
-      );
-      expect(signal.receiptState, ToolReceiptState.error);
-      expect(signal.receiptStatus, 'Exited with code 137');
-      expect(signal.response.single.text, contains('usually'));
-    },
-  );
+  test('terminal informational exit is a neutral completion', () {
+    final noMatches = receipt(
+      'terminal',
+      {'command': 'rg missing src'},
+      {
+        'output': '',
+        'exit_code': 1,
+        'exit_code_meaning': 'No matches found (not an error)',
+      },
+    );
+    expect(noMatches.exitCode, 1);
+    expect(noMatches.receiptState, ToolReceiptState.completed);
+    expect(noMatches.receiptStatus, 'Completed');
+    expect(noMatches.response.single.copyable, isFalse);
+  });
 
-  test(
-    'terminal launch and handoff remain distinct from process completion',
-    () {
-      const command = '  python3 worker.py\n';
-      final launched = receipt(
-        'terminal',
-        {'command': command, 'background': true},
-        {
-          'output': 'Background process started',
-          'exit_code': 0,
-          'session_id': 'process-id',
-          'watch_patterns': ['Ready'],
-          'notify_on_complete': true,
-          'heartbeat_seconds': 60,
-        },
-      );
-      expect(launched.request.single.copyText, command);
-      expect(launched.receiptStatus, 'Started in background');
-      expect(launched.exitCode, isNull);
-      expect(launched.response, isEmpty);
-      expect(launched.metadata, contains('Completion notification armed'));
-      final yielded = receipt(
-        'terminal',
-        {'command': command},
-        {
-          'output': 'Last received partial output.\n',
-          'status': 'yielded_to_background',
-          'session_id': 'process-id',
-          'note': 'Command yielded to the background; do not run it again.',
-        },
-      );
-      expect(yielded.receiptStatus, 'Continuing in background');
-      expect(
-        yielded.response.first.copyText,
-        'Last received partial output.\n',
-      );
-      expect(yielded.response.last.copyable, isFalse);
-    },
-  );
+  test('terminal signal exit is not completion', () {
+    final signal = receipt(
+      'terminal',
+      {'command': 'python3 worker.py'},
+      {
+        'output': '',
+        'exit_code': 137,
+        'exit_code_meaning':
+            'Exit code 137 usually means the command was terminated by signal 9: SIGKILL',
+      },
+    );
+    expect(signal.receiptState, ToolReceiptState.error);
+    expect(signal.receiptStatus, 'Exited with code 137');
+    expect(signal.response.single.text, contains('usually'));
+  });
+
+  test('terminal launch reports started rather than completed', () {
+    const command = '  python3 worker.py\n';
+    final launched = receipt(
+      'terminal',
+      {'command': command, 'background': true},
+      {
+        'output': 'Background process started',
+        'exit_code': 0,
+        'session_id': 'process-id',
+        'watch_patterns': ['Ready'],
+        'notify_on_complete': true,
+        'heartbeat_seconds': 60,
+      },
+    );
+    expect(launched.request.single.copyText, command);
+    expect(launched.receiptStatus, 'Started in background');
+    expect(launched.exitCode, isNull);
+    expect(launched.response, isEmpty);
+    expect(launched.metadata, contains('Completion notification armed'));
+  });
+
+  test('terminal handoff preserves partial output and continuing status', () {
+    const command = '  python3 worker.py\n';
+    final yielded = receipt(
+      'terminal',
+      {'command': command},
+      {
+        'output': 'Last received partial output.\n',
+        'status': 'yielded_to_background',
+        'session_id': 'process-id',
+        'note': 'Command yielded to the background; do not run it again.',
+      },
+    );
+    expect(yielded.receiptStatus, 'Continuing in background');
+    expect(yielded.response.first.copyText, 'Last received partial output.\n');
+    expect(yielded.response.last.copyable, isFalse);
+  });
 
   test('terminal approval never pretends empty console was executed', () {
     final detail = receipt('terminal', {}, {
@@ -175,26 +173,29 @@ void main() {
       expect(timeout.receiptStatus, 'Timed out');
       expect(timeout.receiptState, ToolReceiptState.error);
       expect(timeout.response.where((b) => b.label == 'Error'), isEmpty);
-      final truncated = receipt(
-        'execute_code',
-        {'code': 'print(rows)'},
-        {
-          'status': 'success',
-          'output': 'First\n[... omitted ...]\nLast',
-          'stdout_truncated': true,
-          'stdout_bytes_captured': 50000,
-          'stdout_bytes_omitted': 230000,
-          'stdout_spill_path': '/cache/stdout.txt',
-        },
-      );
-      expect(truncated.response.single.resourceTarget, '/cache/stdout.txt');
-      expect(truncated.metadata, [
-        'Partial output returned',
-        'Captured stdout bytes: 50000',
-        'Omitted stdout bytes: 230000',
-      ]);
     },
   );
+
+  test('code truncation preserves spill path and reported byte counts', () {
+    final truncated = receipt(
+      'execute_code',
+      {'code': 'print(rows)'},
+      {
+        'status': 'success',
+        'output': 'First\n[... omitted ...]\nLast',
+        'stdout_truncated': true,
+        'stdout_bytes_captured': 50000,
+        'stdout_bytes_omitted': 230000,
+        'stdout_spill_path': '/cache/stdout.txt',
+      },
+    );
+    expect(truncated.response.single.resourceTarget, '/cache/stdout.txt');
+    expect(truncated.metadata, [
+      'Partial output returned',
+      'Captured stdout bytes: 50000',
+      'Omitted stdout bytes: 230000',
+    ]);
+  });
 
   test(
     'browser native envelope and saved content list recover one console receipt',
@@ -372,6 +373,12 @@ void main() {
       expect(detail.images.single.target, '/input/original.png');
       expect(detail.response, isEmpty);
       expect(detail.nativeVision, isTrue);
+    },
+  );
+
+  test(
+    'failed native vision keeps the source without claiming native analysis',
+    () {
       final failed = receipt(
         'vision_analyze',
         {'image_url': '/input/original.png'},
@@ -414,7 +421,7 @@ void main() {
   );
 
   test(
-    'auxiliary vision separates actual analysis from failed or empty response receipt',
+    'auxiliary vision separates supplied scale note from exact copied analysis',
     () {
       const scale = 'Coordinates are in the original image.';
       const exact = '[$scale] # Actual answer\nThe label is at the top.\n';
@@ -430,30 +437,36 @@ void main() {
       );
       expect(detail.response.first.copyText, exact);
       expect(detail.response.last.copyable, isFalse);
-      final empty = receipt(
-        'vision_analyze',
-        {'question': 'Where?'},
-        {
-          'success': true,
-          'analysis':
-              'There was a problem with the request and the image could not be analyzed.',
-        },
-      );
-      expect(empty.response.single.label, 'Result');
-      expect(empty.response.single.copyable, isFalse);
-      expect(empty.receiptStatus, 'No analysis returned');
-      final failed = receipt(
-        'vision_analyze',
-        {'question': 'Where?'},
-        {
-          'success': false,
-          'error': 'Provider unavailable.',
-          'analysis': 'Configure a working provider.',
-        },
-      );
-      expect(failed.response.first.label, 'Context');
-      expect(failed.response.first.copyable, isFalse);
-      expect(failed.response.any((b) => b.label == 'Analysis'), isFalse);
     },
   );
+
+  test('empty auxiliary vision result does not claim analysis', () {
+    final empty = receipt(
+      'vision_analyze',
+      {'question': 'Where?'},
+      {
+        'success': true,
+        'analysis':
+            'There was a problem with the request and the image could not be analyzed.',
+      },
+    );
+    expect(empty.response.single.label, 'Result');
+    expect(empty.response.single.copyable, isFalse);
+    expect(empty.receiptStatus, 'No analysis returned');
+  });
+
+  test('failed auxiliary vision treats supplied analysis as context', () {
+    final failed = receipt(
+      'vision_analyze',
+      {'question': 'Where?'},
+      {
+        'success': false,
+        'error': 'Provider unavailable.',
+        'analysis': 'Configure a working provider.',
+      },
+    );
+    expect(failed.response.first.label, 'Context');
+    expect(failed.response.first.copyable, isFalse);
+    expect(failed.response.any((b) => b.label == 'Analysis'), isFalse);
+  });
 }

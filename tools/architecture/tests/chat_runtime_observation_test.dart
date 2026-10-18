@@ -93,6 +93,77 @@ Future<void> _proofMain(List<String> args) async {
   try {
     reset();
     await verdict(0, 'private owner and passive canonical getter');
+    final goodRuntime = File('${root.path}/${rule.runtime}').readAsStringSync();
+    final runtimeWithQuestions = goodRuntime.replaceFirst(
+      'class ChatRuntime',
+      "part 'chat_runtime_questions.dart';\nclass ChatRuntime",
+    );
+    const privateQuestions =
+        "part of 'chat_runtime.dart';\nextension _RuntimeQuestions on ChatRuntime { void _observe() {} }";
+    void questionsPart(String source, {String? execution, String? owner}) {
+      reset(
+        owner: owner,
+        extra: {
+          rule.runtime: execution ?? runtimeWithQuestions,
+          rule.runtimeQuestions: source,
+        },
+      );
+    }
+
+    questionsPart(privateQuestions);
+    await verdict(0, 'explicit private canonical runtime questions part');
+    questionsPart(
+      privateQuestions,
+      owner:
+          imports +
+          chat.replaceFirst(
+            'class ProfileChat {',
+            'class ProfileChat { execution.ChatRuntime get exposed => _runtime;',
+          ),
+    );
+    await verdict(
+      1,
+      'part does not exempt public execution authority',
+      subject: 'ProfileChat.exposed',
+    );
+    questionsPart(
+      privateQuestions,
+      execution: runtimeWithQuestions.replaceFirst(
+        'chat_runtime_questions.dart',
+        'other_questions.dart',
+      ),
+    );
+    await verdict(2, 'unrecognized runtime part rejected');
+    questionsPart(privateQuestions);
+    File('${root.path}/${rule.runtimeQuestions}').deleteSync();
+    await verdict(2, 'declared canonical part must exist');
+    questionsPart(
+      privateQuestions.replaceFirst(
+        "part of 'chat_runtime.dart'",
+        "part of 'other_runtime.dart'",
+      ),
+    );
+    await verdict(2, 'canonical part cannot claim another library');
+    questionsPart(privateQuestions.replaceFirst('on ChatRuntime', 'on Object'));
+    await verdict(2, 'part extension must resolve to canonical runtime');
+    questionsPart(
+      privateQuestions.replaceFirst('_RuntimeQuestions', 'Questions'),
+    );
+    await verdict(2, 'public runtime extension rejected');
+    questionsPart(privateQuestions.replaceFirst('_observe', 'observe'));
+    await verdict(2, 'public runtime part method rejected');
+    questionsPart("$privateQuestions\npart 'extra.dart';");
+    await verdict(2, 'nested parts rejected');
+    questionsPart('$privateQuestions\nclass ChatRuntime {}');
+    await verdict(2, 'part cannot shadow canonical authority');
+    questionsPart(
+      privateQuestions,
+      execution: runtimeWithQuestions.replaceFirst(
+        "part 'chat_runtime_questions.dart';",
+        "part 'chat_runtime_questions.dart';\npart 'chat_runtime_questions.dart';",
+      ),
+    );
+    await verdict(2, 'duplicate canonical part rejected');
     reset(
       owner:
           imports +

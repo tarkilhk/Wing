@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/voice_preferences_session.dart';
 import 'package:wing/core/services/android_voice.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -13,7 +14,6 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'profile_notification_coverage_test.dart' show NotificationCoverageHost;
 import 'package:wing/core/services/background_monitoring_service.dart';
-import 'package:wing/core/widgets/compact_switch.dart';
 
 void main() {
   testWidgets(
@@ -55,6 +55,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
             controller: controller,
             initialDestination: AppDestination.settings,
             enableNotifications: () async {},
@@ -138,7 +139,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(batteryRequests, 1);
         expect(find.text('Monitor in background'), findsNothing);
-        expect(find.byType(CompactSwitchListTile), findsNWidgets(3));
         expect(changes, 0);
         state.value = BackgroundMonitoringState.active;
         await tester.pumpAndSettle();

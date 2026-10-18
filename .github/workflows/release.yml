@@ -26,7 +26,7 @@ jobs:
     name: Build and verify APK
     if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 90
     env:
       PUB_CACHE: ${{ github.workspace }}/.pub-cache
       RELEASE_TOOLS: ${{ github.workspace }}/release-tools/scripts
@@ -109,6 +109,12 @@ jobs:
 
       - name: Test offline QA tooling
         run: python3 -m unittest discover -s tools/qa -p 'test_*.py' -v
+
+      - name: Install transport fixture dependencies
+        run: python3 -m pip install -r tools/fake_gateway/requirements.txt
+
+      - name: Test transport fixture boundaries
+        run: python3 -m unittest tools.fake_gateway.test_fixture_boundaries -v
 
       - name: Check all Dart source contracts
         run: python3 scripts/check_commit_linters.py --dart-only
@@ -194,6 +200,19 @@ jobs:
         timeout-minutes: 15
         run: python3 tools/qa/run_notification_gate.py
 
+      - name: Test Android user journeys and restart recovery
+        id: android_journeys
+        timeout-minutes: 60
+        run: python3 scripts/test_journeys.py
+
+      - name: Upload Android journey diagnostics
+        if: failure() && steps.android_journeys.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-journeys-release
+          path: source/build/android-journeys/
+          if-no-files-found: ignore
+
       - name: Upload notification emulator diagnostics
         if: failure() && steps.notification_device.outcome == 'failure'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -229,6 +248,11 @@ jobs:
 
       - name: Native voice guard fixtures
         run: python3 tools/architecture/native_voice/prove_boundary.py
+
+      - name: Remove QA APK from distributable output
+        # Emulator gates build this owned debug artifact beside signed splits.
+        # Keep the verifier's exact distributable-set check intact.
+        run: rm -f build/app/outputs/flutter-apk/app-debug.apk
 
       - name: Verify release APKs
         run: python3 "$RELEASE_TOOLS/verify_release_apks.py"

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'support/form_family_capture.dart';
 import 'package:wing/core/models/transcript_position.dart';
 import 'package:wing/core/services/conversation_reading_memory.dart';
@@ -101,14 +102,21 @@ void main() {
     expect(host.deleteAttempts, hasLength(attempts));
   }
 
-  Future<void> show(WidgetTester tester) async {
+  Future<void> showWorkspace(WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.light),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
       ),
     );
     await tester.pumpAndSettle();
+  }
+
+  Future<void> show(WidgetTester tester) async {
+    await showWorkspace(tester);
     await filterChatsToProfile(tester, 'personal');
   }
 
@@ -131,6 +139,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.longPress(row);
     await tester.pumpAndSettle();
+  }
+
+  Future<void> waitForHistoryRead() async {
+    for (var tick = 0; tick < 100; tick++) {
+      if (host.reads.any((read) => read.$1.endsWith('/messages'))) return;
+      await Future<void>.delayed(Duration.zero);
+    }
+    fail('Expected history read to start before navigation or mutation');
   }
 
   Future<void> loadNewestUnread() async {
@@ -158,7 +174,10 @@ void main() {
                   ).copyWith(textScaler: TextScaler.linear(scale)),
                   child: child!,
                 ),
-                home: ProfileWorkspaceScreen(controller: controller),
+                home: ProfileWorkspaceScreen(
+                  controller: controller,
+                  createBotsSession: () => BotsSession((_) async => const []),
+                ),
               ),
             ),
           );
@@ -182,7 +201,10 @@ void main() {
           final confirm = find.byKey(const ValueKey('chat-rename-save'));
           expect(confirm.hitTestable(), findsOneWidget);
           expect(tester.getRect(confirm).bottom, lessThanOrEqualTo(584));
-          expect(tester.getSize(confirm), const Size(48, 48));
+          expect(
+            tester.getSize(confirm).shortestSide,
+            greaterThanOrEqualTo(48),
+          );
           host.mutationDelay = Completer<void>();
           host.failMutation = true;
           await tester.tap(confirm);
@@ -253,7 +275,11 @@ void main() {
       expect(request.containsKey('session_id'), isFalse);
       expect(request['input'], isNot(contains('private')));
       expect(request['input'], isNot(contains('hidden machinery')));
-      expect((request['input'] as String).split('\n'), hasLength(24));
+      expect(request['input'], contains('message 29'));
+      expect(
+        (request['input'] as String).split('\n').length,
+        lessThanOrEqualTo(24),
+      );
       expect((request['input'] as String).length, lessThan(12500));
       expect(host.updates, isEmpty);
       expect(issued.state.generatingTitle, isFalse);
@@ -433,7 +459,10 @@ void main() {
                 ),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
             ),
           ),
         );
@@ -489,7 +518,7 @@ void main() {
                 find.byType(CircularProgressIndicator),
               )
               .value,
-          scale == 2 ? 0.75 : null,
+          scale == 2 ? isNotNull : isNull,
         );
         expect(tester.getRect(field), fieldRect);
         expect(tester.getRect(save), saveRect);
@@ -709,9 +738,7 @@ void main() {
     final delay = host.historyDelays[('newest', 0)] = Completer<void>();
     host.reads.clear();
     final opening = controller.openSession(key());
-    while (!host.reads.any((read) => read.$1.endsWith('/messages'))) {
-      await Future<void>.delayed(Duration.zero);
-    }
+    await waitForHistoryRead();
 
     await controller.navigateProfile('work');
     delay.complete();
@@ -728,9 +755,7 @@ void main() {
       final delay = host.historyDelays[('newest', 0)] = Completer<void>();
       host.reads.clear();
       final opening = controller.openSession(key());
-      while (!host.reads.any((read) => read.$1.endsWith('/messages'))) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await waitForHistoryRead();
 
       await controller.mutateSession(
         key(),
@@ -809,30 +834,48 @@ void main() {
         {'id': 10, 'role': 'user', 'content': 'Thanks'},
       ];
       final historyGate = host.historyDelays[('newest', 0)] = Completer<void>();
-      host.mutationDelay = Completer<void>();
+      final mutationGate = host.mutationDelay = Completer<void>();
+      Future<void> until(bool Function() ready, String outcome) async {
+        final deadline = DateTime.now().add(const Duration(seconds: 5));
+        while (!ready() && DateTime.now().isBefore(deadline)) {
+          await Future<void>.delayed(Duration.zero);
+        }
+        expect(ready(), isTrue, reason: outcome);
+      }
+
       final pending = controller.mutateSession(
         key(),
         changes: {'unread': false},
         canDispatch: () => true,
       );
-      while (!host.reads.any((read) => read.$1.endsWith('/messages'))) {
-        await Future<void>.delayed(Duration.zero);
+      try {
+        await until(
+          () => host.reads.any((read) => read.$1.endsWith('/messages')),
+          'Manual read must load the latest saved message before writing unread',
+        );
+        expect(controller.current!.mutatingSessions, contains('newest'));
+        expect(identical(memory.position, before), isTrue);
+        expect(host.updates, isEmpty);
+        historyGate.complete();
+        await until(
+          () => host.updates.isNotEmpty,
+          'Manual read must dispatch its owned unread update after history loads',
+        );
+        expect(identical(memory.position, before), isTrue);
+        host.titleHistory.add({
+          'id': 11,
+          'role': 'assistant',
+          'content': 'Later arrival',
+        });
+        mutationGate.complete();
+        await pending.timeout(const Duration(seconds: 5));
+      } finally {
+        // Release both owned operations before the shared controller is disposed,
+        // including when a held-phase assertion fails.
+        if (!historyGate.isCompleted) historyGate.complete();
+        if (!mutationGate.isCompleted) mutationGate.complete();
+        await pending.timeout(const Duration(seconds: 5));
       }
-      expect(controller.current!.mutatingSessions, contains('newest'));
-      expect(identical(memory.position, before), isTrue);
-      expect(host.updates, isEmpty);
-      historyGate.complete();
-      while (host.updates.isEmpty) {
-        await Future<void>.delayed(Duration.zero);
-      }
-      expect(identical(memory.position, before), isTrue);
-      host.titleHistory.add({
-        'id': 11,
-        'role': 'assistant',
-        'content': 'Later arrival',
-      });
-      host.mutationDelay!.complete();
-      await pending;
       expect(memory.position.resume, isNull);
       expect(memory.position.readThrough, 10);
       expect(controller.current!.mutatingSessions, isEmpty);
@@ -1007,9 +1050,10 @@ void main() {
     final delay = host.pageDelays[('personal', 0)] = Completer<void>();
     final readCount = host.reads.length;
     final refresh = controller.refresh();
-    while (host.reads.length == readCount) {
+    for (var tick = 0; tick < 100 && host.reads.length == readCount; tick++) {
       await Future<void>.delayed(Duration.zero);
     }
+    expect(host.reads.length, greaterThan(readCount));
     host.mutationDelay!.complete();
     await write;
     delay.complete();
@@ -1478,7 +1522,7 @@ void main() {
     tester,
   ) async {
     await controller.createChat(canDispatch: () => true);
-    await show(tester);
+    await showWorkspace(tester);
     await tester.tap(find.textContaining('Unassigned'));
     await tester.pumpAndSettle();
     expect(find.text('Move to project'), findsOneWidget);
@@ -1502,7 +1546,7 @@ void main() {
     await tester.runAsync(() => controller.openSession(key()));
     final chat = controller.current!.chat!;
     await tester.runAsync(() => controller.updateDraft(chat, 'Unsent draft'));
-    await show(tester);
+    await showWorkspace(tester);
     await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('move-project-p2')));
@@ -1552,7 +1596,7 @@ void main() {
     host.resumeSessionId = 'new-chat';
     final chat = await controller.createChat(canDispatch: () => true);
     host.active = true;
-    await show(tester);
+    await showWorkspace(tester);
     await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('move-project-p2')));

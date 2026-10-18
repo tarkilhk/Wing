@@ -39,6 +39,12 @@ class ProfileVoiceFixture extends AdministrationFixture {
     Map<String, dynamic>? body,
   ) async {
     if (path.startsWith('tools/toolsets/tts/')) {
+      if (!const {
+        ('GET', 'tools/toolsets/tts/config'),
+        ('PUT', 'tools/toolsets/tts/provider'),
+      }.contains((method, path))) {
+        throw StateError('Unexpected voice operation: $method $path');
+      }
       requests.add((method, path, {...query}, body));
       if (path.endsWith('/provider')) {
         if (reject) return {'ok': false};
@@ -131,6 +137,13 @@ class ProfileVoiceFixture extends AdministrationFixture {
       putStarted!.complete();
     }
     if (path == 'config/schema' || path.startsWith('audio/')) {
+      if (!const {
+        ('GET', 'config/schema'),
+        ('GET', 'audio/elevenlabs/voices'),
+        ('POST', 'audio/speak'),
+      }.contains((method, path))) {
+        throw StateError('Unexpected voice operation: $method $path');
+      }
       requests.add((method, path, {...query}, body));
       return switch (path) {
         'config/schema' => {

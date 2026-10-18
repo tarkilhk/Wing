@@ -8,6 +8,8 @@ class _Browser extends UrlLauncherPlatform {
   bool supported = true;
   bool previewFails = false;
   bool externalFails = false;
+  bool previewAccepted = true;
+  bool externalAccepted = true;
   final calls = <(String, LaunchOptions)>[];
 
   @override
@@ -24,7 +26,9 @@ class _Browser extends UrlLauncherPlatform {
             externalFails) {
       throw PlatformException(code: 'ACTIVITY_NOT_FOUND');
     }
-    return true;
+    return options.mode == PreferredLaunchMode.inAppBrowserView
+        ? previewAccepted
+        : externalAccepted;
   }
 }
 
@@ -62,30 +66,52 @@ void main() {
     );
   });
 
-  test('preview failure falls back and total failure is recoverable', () async {
-    browser.previewFails = true;
-    expect(await openWebPreview(uri), isTrue);
-    expect(browser.calls.map((call) => call.$2.mode), [
-      PreferredLaunchMode.inAppBrowserView,
-      PreferredLaunchMode.externalApplication,
-    ]);
-    browser.externalFails = true;
-    expect(await openWebPreview(uri), isFalse);
-  });
+  for (final failure in ['exception', 'refusal']) {
+    test('preview $failure opens the exact URL externally', () async {
+      browser.previewFails = failure == 'exception';
+      browser.previewAccepted = false;
+      expect(await openWebPreview(uri), isTrue);
+      expect(browser.calls.map((call) => call.$1), [
+        uri.toString(),
+        uri.toString(),
+      ]);
+      expect(browser.calls.map((call) => call.$2.mode), [
+        PreferredLaunchMode.inAppBrowserView,
+        PreferredLaunchMode.externalApplication,
+      ]);
+    });
 
-  test('invalid or credential-bearing links never reach the browser', () async {
-    for (final href in [
-      'javascript:alert(1)',
-      'file:///private/file',
-      'content://private/file',
-      '/relative',
-      'https:///missing-host',
-      'https://user:password@example.com/',
-    ]) {
+    test('external $failure reports that no browser opened', () async {
+      browser.supported = false;
+      browser.externalFails = failure == 'exception';
+      browser.externalAccepted = false;
+      expect(await openWebPreview(uri), isFalse);
+      expect(
+        browser.calls.single.$2.mode,
+        PreferredLaunchMode.externalApplication,
+      );
+    });
+  }
+
+  for (final href in [
+    'javascript:alert(1)',
+    'file:///private/file',
+    'content://private/file',
+    '/relative',
+    'https:///missing-host',
+    'https://user:password@example.com/',
+  ]) {
+    test('unsafe link never reaches the browser: $href', () async {
       expect(externalWebLink(href), isNull);
       expect(await openWebPreview(Uri.parse(href)), isFalse);
-    }
-    expect(browser.calls, isEmpty);
-    expect(externalWebLink('http://example.com/'), isNotNull);
+      expect(browser.calls, isEmpty);
+    });
+  }
+
+  test('an ordinary HTTP address is an eligible external link', () {
+    expect(
+      externalWebLink('http://example.com/'),
+      Uri.parse('http://example.com/'),
+    );
   });
 }

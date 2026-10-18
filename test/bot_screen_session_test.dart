@@ -3,11 +3,60 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/bot_screen_session.dart';
 import 'support/bot_display_fixture.dart';
 
-Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 15));
+// Observe when the fixture actually reaches a held I/O stage. A sleep cannot
+// establish whether takeover was dispatched or a connection reached its gate.
+class _EnteredGate implements Completer<void> {
+  _EnteredGate() {
+    addTearDown(() {
+      if (!_released.isCompleted) _released.complete();
+    });
+  }
+
+  final entered = Completer<void>();
+  final _released = Completer<void>();
+
+  @override
+  Future<void> get future {
+    if (!entered.isCompleted) entered.complete();
+    return _released.future;
+  }
+
+  @override
+  bool get isCompleted => _released.isCompleted;
+
+  @override
+  void complete([FutureOr<void>? value]) => _released.complete(value);
+
+  @override
+  void completeError(Object error, [StackTrace? stackTrace]) =>
+      _released.completeError(error, stackTrace);
+}
+
+Future<void> connected(BotScreenSession session) async {
+  final ready = Completer<void>();
+  void observe() {
+    if (ready.isCompleted) return;
+    if (session.connected && !session.busy) {
+      ready.complete();
+    } else if (session.error != null) {
+      ready.completeError(StateError(session.error!));
+    }
+  }
+
+  session.addListener(observe);
+  try {
+    observe();
+    await ready.future;
+  } finally {
+    session.removeListener(observe);
+  }
+}
+
 Future<BotScreenSession> open(DisplayFixture fixture) async {
   final bot = (await fixture.roster.repository.bots()).first;
   final session = BotScreenSession(fixture.repository, bot)..setVisible(true);
-  await settle();
+  addTearDown(session.dispose);
+  await connected(session);
   expect(session.connected, true);
   return session;
 }
@@ -24,9 +73,10 @@ void main() {
       screen.pointer(2, 1, 1);
       expect(peer.sent, hasLength(count));
       expect(fixture.calls.where((c) => c.$2.contains('lease.')), isEmpty);
-      fixture.acquireWait = Completer();
+      final acquisition = _EnteredGate();
+      fixture.acquireWait = acquisition;
       final taking = screen.takeOver();
-      await settle();
+      await acquisition.entered.future;
       screen.typeText('blocked');
       expect(peer.sent, hasLength(count));
       fixture.acquireWait!.complete();
@@ -51,7 +101,6 @@ void main() {
       expect(screen.canInput, false);
       expect(fixture.holder, 'agent');
       await screen.close();
-      screen.dispose();
       expect(fixture.releases, 1);
     },
   );
@@ -61,9 +110,10 @@ void main() {
     () async {
       final f = DisplayFixture();
       final screen = await open(f);
-      f.acquireWait = Completer();
+      final acquisition = _EnteredGate();
+      f.acquireWait = acquisition;
       final take = screen.takeOver();
-      await settle();
+      await acquisition.entered.future;
       final close = screen.close();
       expect(screen.canInput, false);
       f.acquireWait!.complete();
@@ -75,7 +125,6 @@ void main() {
           .single;
       expect(release.$3, {'viewer_id': 'phone-viewer'});
       expect(f.releases, 1);
-      screen.dispose();
     },
   );
 
@@ -84,24 +133,25 @@ void main() {
     () async {
       final f = DisplayFixture();
       final s = await open(f);
-      f.beforeAcquire = Completer();
+      final admission = _EnteredGate();
+      f.beforeAcquire = admission;
       final take = s.takeOver();
-      await settle();
+      await admission.entered.future;
       final close = s.close();
       f.beforeAcquire!.complete();
       await take;
       expect(await close, true);
       expect(f.calls.where((c) => c.$2.contains('lease.')), isEmpty);
-      s.dispose();
-      final late = DisplayFixture()..connectWait = Completer();
+      final connection = _EnteredGate();
+      final late = DisplayFixture()..connectWait = connection;
       final bot = (await late.roster.repository.bots()).first;
       final pending = BotScreenSession(late.repository, bot)..setVisible(true);
-      await settle();
+      addTearDown(pending.dispose);
+      await connection.entered.future;
       final exit = pending.close();
       late.connectWait!.complete();
       expect(await exit, true);
       expect(late.peers.single.closed, true);
-      pending.dispose();
     },
   );
 
@@ -116,7 +166,7 @@ void main() {
       expect(s.canInput, false);
       expect(f.holder, 'human');
       s.setVisible(true);
-      await settle();
+      await connected(s);
       expect(s.canInput, true);
       expect(
         f.calls.where((c) => c.$2 == 'display.lease.acquire'),
@@ -125,13 +175,12 @@ void main() {
       f.viewer = 'new-rpc-viewer';
       s.setVisible(false);
       s.setVisible(true);
-      await settle();
+      await connected(s);
       expect(s.canInput, false);
       expect(s.humanHasControl, true);
       await s.handBack(force: true);
       expect(f.calls.last.$3, {'force': true});
       await s.close();
-      s.dispose();
     },
   );
 
@@ -152,7 +201,6 @@ void main() {
       expect(await s.close(), true);
       expect(f.held, 'desktop-viewer');
       expect(f.calls.where((c) => c.$3['force'] == true), isEmpty);
-      s.dispose();
       expect(f.releases, 1);
     },
   );
@@ -181,7 +229,6 @@ void main() {
       session.key(99, modifiers: {0xffe3});
       expect(peer.sent.length, retired);
       await session.close();
-      session.dispose();
     },
   );
   test(
@@ -208,7 +255,6 @@ void main() {
       expect(f.epoch, epoch);
       expect(f.calls.where((c) => c.$2 == 'display.observe'), hasLength(1));
       await session.close();
-      session.dispose();
     },
   );
 }

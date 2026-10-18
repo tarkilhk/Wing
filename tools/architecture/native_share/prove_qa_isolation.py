@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Prove the independent QA isolation Kotlin PSI rule through its actual CLI."""
-import json
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,8 +10,13 @@ from provider_boundary import command
 ID = 'NATIVE_SHARE_QA_ISOLATION'
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from fixture_contract import read_cases, require
+
+
 def main():
-    cases = json.loads(Path(__file__).with_name('qa_isolation.fixture.json').read_text())['cases']
+    cases = read_cases(Path(__file__).with_name('qa_isolation.fixture.json'),
+                       required_names=('missing-debug-fence', 'native-parse-error'))
     run = command()
     for case in cases:
         with tempfile.TemporaryDirectory(prefix='wing-qa-isolation-') as scratch:
@@ -22,15 +26,15 @@ def main():
             gradle.write_text(case['gradle'])
             result = subprocess.run(run + ['--rule=qa-isolation', str(native), str(gradle)],
                                     text=True, capture_output=True)
-            assert result.returncode == case['exit'], (case['name'], result.stdout, result.stderr)
+            require(result.returncode == case['exit'], (case['name'], result.stdout, result.stderr))
             if case['exit']:
-                assert ID in result.stdout + result.stderr, case['name']
+                require(ID in result.stdout + result.stderr, case['name'])
             if case['exit'] == 1:
-                assert ':' + str(case['line']) + ' [' + ID + ']' in result.stdout, (case['name'], result.stdout)
+                require(':' + str(case['line']) + ' [' + ID + ']' in result.stdout, (case['name'], result.stdout))
     with tempfile.TemporaryDirectory(prefix='wing-qa-isolation-') as scratch:
         result = subprocess.run(run + ['--rule=qa-isolation', str(Path(scratch) / 'missing.kt'),
                                       str(Path(scratch) / 'build.gradle.kts')], text=True, capture_output=True)
-        assert result.returncode == 2 and ID in result.stderr, result.stderr
+        require(result.returncode == 2 and ID in result.stderr, result.stderr)
     # Exercise the contributor/CI wrapper too: argument routing cannot omit the rule.
     wrapper = Path(__file__).with_name('provider_boundary.py')
     with tempfile.TemporaryDirectory(prefix='wing-qa-wrapper-') as scratch:
@@ -43,9 +47,9 @@ def main():
             result = subprocess.run([sys.executable, str(wrapper), '--rule', 'qa-isolation',
                                      '--source', str(native), '--gradle', str(gradle)],
                                     text=True, capture_output=True)
-            assert result.returncode == case['exit'], (case['name'], result.stdout, result.stderr)
+            require(result.returncode == case['exit'], (case['name'], result.stdout, result.stderr))
             if case['exit']:
-                assert ID in result.stdout + result.stderr
+                require(ID in result.stdout + result.stderr, 'Proof failed: ID in result.stdout + result.stderr')
     print(f'{ID}: {len(cases) + 4} actual CLI fixture exits proved (1/0/2)')
 
 

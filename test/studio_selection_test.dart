@@ -99,6 +99,40 @@ class _ButtonPressCoverage extends RecursiveAstVisitor<void> {
   }
 }
 
+class _SelectionTickCoverage extends RecursiveAstVisitor<void> {
+  final missing = <String>[];
+
+  @override
+  void visitInstanceCreationExpression(InstanceCreationExpression node) {
+    final type = node.staticType;
+    if (type is InterfaceType) {
+      for (final candidate in [type, ...type.element.allSupertypes]) {
+        if (!candidate.element.library.uri.toString().startsWith(
+          'package:flutter/',
+        )) {
+          continue;
+        }
+        final argument = switch (candidate.element.name) {
+          'ChoiceChip' || 'FilterChip' || 'InputChip' => 'showCheckmark',
+          'SegmentedButton' => 'showSelectedIcon',
+          _ => null,
+        };
+        if (argument == null) continue;
+        final supplied = node.argumentList.arguments
+            .whereType<NamedExpression>()
+            .where((entry) => entry.name.label.name == argument);
+        if (supplied.isEmpty ||
+            supplied.single.expression is! BooleanLiteral ||
+            (supplied.single.expression as BooleanLiteral).value) {
+          missing.add('${candidate.element.name}@$argument');
+        }
+        break;
+      }
+    }
+    super.visitInstanceCreationExpression(node);
+  }
+}
+
 void main() {
   test(
     'all authored action controls use the shared Studio press',
@@ -112,10 +146,10 @@ void main() {
                   )
                   as Map<String, dynamic>)['files']
               as Map<String, dynamic>;
-      final fixture = File(
-        '$root/build/button-migration/coverage_fixture.dart',
-      );
-      fixture.parent.createSync(recursive: true);
+      final directory = Directory('$root/build/button-migration')
+        ..createSync(recursive: true);
+      final fixtureDirectory = directory.createTempSync('case-');
+      final fixture = File('${fixtureDirectory.path}/coverage_fixture.dart');
       fixture.writeAsStringSync('''
 import 'package:flutter/material.dart' as m;
 import 'package:wing/core/theme/wing_theme.dart';
@@ -166,7 +200,13 @@ void examples(bool choose) {
               (file) =>
                   roles[file.path.substring(root.length + 1)]?['role'] ==
                   'view',
-            );
+            )
+            .toList();
+        expect(
+          files,
+          isNotEmpty,
+          reason: 'The production view census must resolve.',
+        );
         for (final file in files) {
           final result = await contexts
               .contextFor(file.path)
@@ -184,39 +224,76 @@ void examples(bool choose) {
         }
       } finally {
         await contexts.dispose();
-        fixture.deleteSync();
+        fixtureDirectory.deleteSync(recursive: true);
       }
     },
     timeout: const Timeout(Duration(minutes: 2)),
   );
 
-  test('all app selection controls suppress automatic ticks', () {
-    for (final file in Directory(
-      'lib',
-    ).listSync(recursive: true).whereType<File>()) {
-      if (!file.path.endsWith('.dart')) continue;
-      final source = file.readAsStringSync();
-      // Only selection-control markers are restricted; status icons are allowed.
-      for (final chip in RegExp(
-        r'\b(?:ChoiceChip|FilterChip|InputChip)\(',
-      ).allMatches(source)) {
+  test(
+    'all app selection controls suppress automatic ticks',
+    () async {
+      final root = Directory.current.absolute.path;
+      final directory = Directory('$root/build/selection-ticks')
+        ..createSync(recursive: true);
+      final fixtureDirectory = directory.createTempSync('case-');
+      final fixture = File('${fixtureDirectory.path}/fixture.dart')
+        ..writeAsStringSync('''
+import 'package:flutter/material.dart' as m;
+typedef AliasChip = m.ChoiceChip;
+class ChoiceChip {}
+void examples() {
+  AliasChip(label: const m.Text('ordered'), selected: true, showCheckmark: false);
+  m.FilterChip(showCheckmark: false, label: const m.Text('filter'), selected: true, onSelected: (_) {});
+  m.SegmentedButton<int>(segments: const [m.ButtonSegment(value: 1, label: m.Text('one'))], selected: const {1}, showSelectedIcon: false);
+  AliasChip(label: const m.Text('missing'), selected: true);
+  m.ChoiceChip(label: const m.Text('comment'), selected: true /* showCheckmark: false, */);
+  m.SegmentedButton<int>(segments: const [m.ButtonSegment(value: 1, label: m.Text('one'))], selected: const {1}, showSelectedIcon: true);
+  ChoiceChip();
+}
+''');
+      final contexts = AnalysisContextCollection(
+        includedPaths: ['$root/lib', fixture.path],
+        sdkPath: dartSdkPath(root),
+      );
+      try {
+        final proof = await contexts
+            .contextFor(fixture.path)
+            .currentSession
+            .getResolvedUnit(fixture.path);
+        expect(proof, isA<ResolvedUnitResult>());
+        final visitor = _SelectionTickCoverage();
+        (proof as ResolvedUnitResult).unit.accept(visitor);
         expect(
-          source.substring(chip.end).trimLeft(),
-          startsWith('showCheckmark: false,'),
-          reason: file.path,
+          visitor.missing,
+          [
+            'ChoiceChip@showCheckmark',
+            'ChoiceChip@showCheckmark',
+            'SegmentedButton@showSelectedIcon',
+          ],
+          reason:
+              'Resolve aliases, ignore unrelated names/comments, and allow any named-argument order.',
         );
+        for (final file in Directory(
+          '$root/lib',
+        ).listSync(recursive: true).whereType<File>()) {
+          if (!file.path.endsWith('.dart')) continue;
+          final result = await contexts
+              .contextFor(file.path)
+              .currentSession
+              .getResolvedUnit(file.path);
+          expect(result, isA<ResolvedUnitResult>(), reason: file.path);
+          final coverage = _SelectionTickCoverage();
+          (result as ResolvedUnitResult).unit.accept(coverage);
+          expect(coverage.missing, isEmpty, reason: file.path);
+        }
+      } finally {
+        await contexts.dispose();
+        fixtureDirectory.deleteSync(recursive: true);
       }
-      for (final segment in RegExp(
-        r'\bSegmentedButton<[^>]+>\(',
-      ).allMatches(source)) {
-        expect(
-          source.substring(segment.end).trimLeft(),
-          startsWith('showSelectedIcon: false,'),
-          reason: file.path,
-        );
-      }
-    }
-  });
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
 
   for (final brightness in Brightness.values) {
     testWidgets(
@@ -314,121 +391,129 @@ void examples(bool choose) {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         final semantics = tester.ensureSemantics();
-        var selected = 'Alpha';
-        var multiple = false;
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: wingTheme(brightness),
-            home: StatefulBuilder(
-              builder: (context, setState) => Scaffold(
-                body: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Accent'),
-                        avatar: const Icon(Icons.circle),
-                        selected: true,
-                        onSelected: (_) {},
-                      ),
-                      FilterChip(
-                        label: const Text('Filter'),
-                        selected: true,
-                        onSelected: (_) {},
-                      ),
-                      InputChip(
-                        label: const Text('Input'),
-                        selected: true,
-                        onSelected: (_) {},
-                      ),
-                      RadioGroup<String>(
-                        groupValue: selected,
-                        onChanged: (value) => setState(() => selected = value!),
-                        child: const Column(
-                          children: [
-                            StudioRadioTile(
-                              value: 'Alpha',
-                              title: Text('Alpha'),
-                              key: Key('alpha'),
-                            ),
-                            StudioRadioTile(
-                              value: 'Beta',
-                              title: Text('Beta'),
-                              key: Key('beta'),
-                            ),
-                            StudioRadioTile(
-                              value: 'Disabled',
-                              title: Text('Disabled'),
-                              enabled: false,
-                            ),
-                          ],
+        try {
+          var selected = 'Alpha';
+          var multiple = false;
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              home: StatefulBuilder(
+                builder: (context, setState) => Scaffold(
+                  body: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Accent'),
+                          avatar: const Icon(Icons.circle),
+                          selected: true,
+                          onSelected: (_) {},
                         ),
-                      ),
-                      StudioSelectionTile(
-                        key: const Key('multiple'),
-                        value: multiple,
-                        title: const Text('Multiple'),
-                        onChanged: (value) => setState(() => multiple = value),
-                      ),
-                      StudioSelectionTile(
-                        value: true,
-                        title: const Text('Disabled selected'),
-                        onChanged: null,
-                      ),
-                    ],
+                        FilterChip(
+                          label: const Text('Filter'),
+                          selected: true,
+                          onSelected: (_) {},
+                        ),
+                        InputChip(
+                          label: const Text('Input'),
+                          selected: true,
+                          onSelected: (_) {},
+                        ),
+                        RadioGroup<String>(
+                          groupValue: selected,
+                          onChanged: (value) =>
+                              setState(() => selected = value!),
+                          child: const Column(
+                            children: [
+                              StudioRadioTile(
+                                value: 'Alpha',
+                                title: Text('Alpha'),
+                                key: Key('alpha'),
+                              ),
+                              StudioRadioTile(
+                                value: 'Beta',
+                                title: Text('Beta'),
+                                key: Key('beta'),
+                              ),
+                              StudioRadioTile(
+                                value: 'Disabled',
+                                title: Text('Disabled'),
+                                enabled: false,
+                              ),
+                            ],
+                          ),
+                        ),
+                        StudioSelectionTile(
+                          key: const Key('multiple'),
+                          value: multiple,
+                          title: const Text('Multiple'),
+                          onChanged: (value) =>
+                              setState(() => multiple = value),
+                        ),
+                        StudioSelectionTile(
+                          value: true,
+                          title: const Text('Disabled selected'),
+                          onChanged: null,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        for (final chip in tester.widgetList<RawChip>(find.byType(RawChip))) {
-          expect(
-            chip.showCheckmark ?? wingTheme(brightness).chipTheme.showCheckmark,
-            isFalse,
           );
-          expect(chip.selected, isTrue);
+          await tester.pumpAndSettle();
+          final chips = tester.widgetList<RawChip>(find.byType(RawChip));
+          expect(chips, hasLength(3));
+          for (final chip in chips) {
+            expect(
+              chip.showCheckmark ??
+                  wingTheme(brightness).chipTheme.showCheckmark,
+              isFalse,
+            );
+            expect(chip.selected, isTrue);
+          }
+          expect(find.byIcon(Icons.circle), findsOneWidget);
+          expect(
+            tester.getSemantics(find.byKey(const Key('alpha'))),
+            matchesSemantics(
+              label: 'Alpha',
+              hasCheckedState: true,
+              isChecked: true,
+              hasSelectedState: true,
+              isSelected: true,
+              isInMutuallyExclusiveGroup: true,
+              hasEnabledState: true,
+              isEnabled: true,
+              isFocusable: true,
+              hasTapAction: true,
+              hasFocusAction: true,
+            ),
+          );
+          final alphaRadio = tester.widget<RawRadio<String>>(
+            find.descendant(
+              of: find.byKey(const Key('alpha')),
+              matching: find.byType(RawRadio<String>),
+            ),
+          );
+          alphaRadio.focusNode.requestFocus();
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+          await tester.pumpAndSettle();
+          expect(selected, 'Beta');
+          await tester.tap(find.text('Disabled'));
+          expect(selected, 'Beta');
+          await tester.tap(find.byKey(const Key('multiple')));
+          await tester.pumpAndSettle();
+          expect(multiple, isTrue);
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+          await tester.sendKeyEvent(LogicalKeyboardKey.space);
+          await tester.pumpAndSettle();
+          expect(multiple, isFalse);
+          expect(tester.takeException(), isNull);
+        } finally {
+          semantics.dispose();
         }
-        expect(find.byIcon(Icons.circle), findsOneWidget);
-        expect(
-          tester.getSemantics(find.byKey(const Key('alpha'))),
-          matchesSemantics(
-            label: 'Alpha',
-            hasCheckedState: true,
-            isChecked: true,
-            hasSelectedState: true,
-            isSelected: true,
-            isInMutuallyExclusiveGroup: true,
-            hasEnabledState: true,
-            isEnabled: true,
-            isFocusable: true,
-            hasTapAction: true,
-            hasFocusAction: true,
-          ),
-        );
-        final alphaRadio = tester.widget<RawRadio<String>>(
-          find.descendant(
-            of: find.byKey(const Key('alpha')),
-            matching: find.byType(RawRadio<String>),
-          ),
-        );
-        alphaRadio.focusNode.requestFocus();
-        await tester.pump();
-        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-        await tester.pumpAndSettle();
-        expect(selected, 'Beta');
-        await tester.tap(find.text('Disabled'));
-        expect(selected, 'Beta');
-        await tester.tap(find.byKey(const Key('multiple')));
-        await tester.pumpAndSettle();
-        expect(multiple, isTrue);
-        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-        await tester.pump();
-        await tester.sendKeyEvent(LogicalKeyboardKey.space);
-        await tester.pumpAndSettle();
-        expect(multiple, isFalse);
-        expect(tester.takeException(), isNull);
-        semantics.dispose();
       },
     );
 

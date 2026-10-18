@@ -1,4 +1,5 @@
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
 
@@ -61,6 +62,7 @@ void main() {
         preferences: fixturePreferences,
         gatewayFactory: fixture.gateway,
       );
+      addTearDown(controller.dispose);
       await controller.initialize();
       final chat = await controller.createChat(canDispatch: () => true);
       emitChatEvent(controller, chat, 'session.title', {
@@ -73,16 +75,18 @@ void main() {
         'running': false,
       });
       addTearDown(() async {
-        for (final file in chat.composer.observation.attachments) {
+        for (final file in chat.composer.observation.attachments.toList()) {
           await controller.removeAttachment(chat, file.id);
         }
-        controller.dispose();
       });
       await tester.pumpWidget(
         MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: wingTheme(Brightness.dark),
-          home: ProfileWorkspaceScreen(controller: controller),
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -113,10 +117,10 @@ void main() {
       final composerBox = tester.getRect(
         find.byKey(const ValueKey('conversation-composer')),
       );
-      expect(
-        tester.getRect(thumbnails.first).left - composerBox.left,
-        lessThan(24),
-      );
+      for (final thumbnail in [thumbnails.first, thumbnails.last]) {
+        expect(thumbnail.hitTestable(), findsOneWidget);
+        expect(composerBox.contains(tester.getRect(thumbnail).center), isTrue);
+      }
       await binding.convertFlutterSurfaceToImage();
       await tester.pumpAndSettle();
       final screenshot = await binding.takeScreenshot('clipboard-thumbnails');

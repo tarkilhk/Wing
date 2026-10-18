@@ -236,6 +236,7 @@ void main() {
     tester,
   ) async {
     final f = AdministrationFixture();
+    var cancelled = false;
     f.override = (method, path, query, body) async {
       if (path == 'profiles') return profiles();
       if (path.endsWith('/start')) {
@@ -248,7 +249,7 @@ void main() {
           'poll_interval': 60,
         };
       }
-      return {'ok': false};
+      return {'ok': cancelled, 'session_id': 'pending'};
     };
     await tester.pumpWidget(
       MaterialApp(
@@ -271,6 +272,15 @@ void main() {
     );
     expect(find.byTooltip('Cancel sign-in'), findsOneWidget);
     expect(find.text('Server A / default'), findsOneWidget);
+    cancelled = true;
+    await tester.tap(find.byTooltip('Cancel sign-in'));
+    await tester.pumpAndSettle();
+    expect(f.requests.where((request) => request.$1 == 'DELETE'), hasLength(2));
+    expect(
+      find.textContaining('Cancellation could not be confirmed'),
+      findsNothing,
+    );
+    expect(find.byType(AdminProviderSignIn), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });
 

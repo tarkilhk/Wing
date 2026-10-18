@@ -6,25 +6,32 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.Rule
+import org.junit.rules.TemporaryFolder
 
 class VoiceFileWorkTest {
     private fun await(latch: CountDownLatch) = assertTrue(latch.await(5, TimeUnit.SECONDS))
     private fun hold(latch: CountDownLatch) { while (true) try { latch.await(); return } catch (_: InterruptedException) {} }
-    private fun root() = java.nio.file.Files.createTempDirectory("wing-voice-jvm-").toFile()
+    @get:Rule val temporary = TemporaryFolder()
+    private fun root() = temporary.newFolder()
 
-    @Test fun changedFileCannotEscapeCapturedActualReadSize() {
-        val directory = root()
-        try {
-            val real = File(directory, "audio").apply { writeBytes(byteArrayOf(1, 2, 3, 4, 5)) }
-            val changed = object : File(real.absolutePath) { override fun length() = 2L }
-            try { LocalVoiceFiles.read(changed) {}; fail("Growing recording must be rejected") }
-            catch (_: IllegalStateException) {}
-            assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5), LocalVoiceFiles.read(real) {})
-            val oversized = object : File(real.absolutePath) { override fun length() = MAX_VOICE_BYTES.toLong() + 1 }
-            try { LocalVoiceFiles.read(oversized) {}; fail("Captured oversized recording must be rejected") }
-            catch (_: IllegalArgumentException) {}
-        } finally { directory.deleteRecursively() }
+    @Test fun fileGrowthBeyondCapturedReadSizeIsRejected() {
+        val real = File(root(), "audio").apply { writeBytes(byteArrayOf(1, 2, 3, 4, 5)) }
+        val changed = object : File(real.absolutePath) { override fun length() = 2L }
+        assertThrows(IllegalStateException::class.java) { LocalVoiceFiles.read(changed) {} }
     }
+
+    @Test fun stableRecordingReadsItsExactBytes() {
+        val real = File(root(), "audio").apply { writeBytes(byteArrayOf(1, 2, 3, 4, 5)) }
+        assertArrayEquals(byteArrayOf(1, 2, 3, 4, 5), LocalVoiceFiles.read(real) {})
+    }
+
+    @Test fun oversizedRecordingIsRejectedBeforeReading() {
+        val real = File(root(), "audio").apply { writeBytes(byteArrayOf(1)) }
+        val oversized = object : File(real.absolutePath) { override fun length() = MAX_VOICE_BYTES.toLong() + 1 }
+        assertThrows(IllegalArgumentException::class.java) { LocalVoiceFiles.read(oversized) {} }
+    }
+
     @Test fun cancelledHeldWriteRetainsAdmissionAndCleansLateFileWithoutPublication() {
         val directory = root()
         val entered = CountDownLatch(1); val unblock = CountDownLatch(1)

@@ -30,18 +30,22 @@ Future<void> capture(WidgetTester tester, GlobalKey key, String name) async {
 }
 
 Future<void> ready(WidgetTester tester, BotScreenSession session) async {
-  for (var i = 0; i < 30 && !session.connected; i++) {
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 10)),
-    );
-    await tester.pump();
+  if (!session.connected) {
+    final connected = Completer<void>();
+    void observe() {
+      if (session.connected && !connected.isCompleted) connected.complete();
+    }
+
+    session.addListener(observe);
+    try {
+      await tester.runAsync(() => connected.future);
+    } finally {
+      session.removeListener(observe);
+    }
   }
-  expect(session.connected, true);
-  await tester.runAsync(
-    () => Future<void>.delayed(const Duration(milliseconds: 10)),
-  );
   await tester.pump();
-  for (var i = 0; i < 30; i++) {
+  // Pixel decoding runs in the engine outside the fake widget clock.
+  for (var i = 0; i < 200; i++) {
     final images = tester.widgetList<RawImage>(find.byType(RawImage));
     if (images.any((image) => image.image != null)) return;
     await tester.runAsync(
@@ -56,6 +60,10 @@ void main() {
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(BotScreenWindow.channel, (_) async => null);
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(BotScreenWindow.channel, null),
+    );
   });
   setUpAll(() async {
     if (!const bool.fromEnvironment('CAPTURE_BOT_SCREEN')) return;

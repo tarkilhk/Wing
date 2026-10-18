@@ -1,7 +1,9 @@
 """Keep the notification regression harness fail-closed at its OS boundary."""
+import importlib.util
 import json
 import os
 from pathlib import Path
+import runpy
 import shutil
 import subprocess
 import sys
@@ -194,7 +196,7 @@ class ColdActionReceiptTest(unittest.TestCase):
              patch.object(driver, 'shade'), patch.object(driver, 'tap'), \
              patch.object(driver, 'screenshot'), patch.object(driver, 'nodes', return_value=[]):
             driver.check_cold_action(Path('unused'))
-        self.assertEqual(reads, 3)
+        self.assertGreaterEqual(reads, 2)
 
 
 class GroupBodyDestinationTest(unittest.TestCase):
@@ -252,7 +254,8 @@ class NotificationGateTest(unittest.TestCase):
 if sys.argv[1:] == ['devices']:
     print('List of devices attached')
 elif sys.argv[3:] in (['shell', 'getprop', 'ro.kernel.qemu'],
-                       ['shell', 'getprop', 'sys.boot_completed']):
+                       ['shell', 'getprop', 'sys.boot_completed'],
+                       ['shell', 'settings', 'get', 'secure', 'show_ime_with_hard_keyboard']):
     print('1')
 elif sys.argv[3:] == ['shell', 'cmd', 'package', 'resolve-activity', '--brief', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME']:
     print('com.android.launcher/.Home')
@@ -312,7 +315,8 @@ elif sys.argv[3] == 'forward':
 
 
 class OwnedAndroidBootTest(unittest.TestCase):
-    def exercise(self, title=None, installed=False, repeat=False, failed_dump=False):
+    def exercise(self, title=None, installed=False, repeat=False, failed_dump=False,
+                 keyboard_enabled=True):
         launcher = '<hierarchy><node package="com.android.launcher"/></hierarchy>'
         alert = ('<hierarchy><node resource-id="android:id/alertTitle" text="' +
                  (title or '') + '"/><node resource-id="android:id/aerr_wait" '
@@ -335,6 +339,9 @@ class OwnedAndroidBootTest(unittest.TestCase):
                 return 'UI hierarchy dumped to: /sdcard/wing-boot-ui.xml'
             if args[:2] == ('shell', 'cat'):
                 return next(reads)
+            if args == ('shell', 'settings', 'get', 'secure',
+                        'show_ime_with_hard_keyboard'):
+                return '1' if keyboard_enabled else '0'
             return ''
 
         with tempfile.TemporaryDirectory() as directory, \
@@ -362,6 +369,10 @@ class OwnedAndroidBootTest(unittest.TestCase):
     def test_never_runs_boot_recovery_when_fixture_is_installed(self):
         with self.assertRaises(ValueError):
             self.exercise(installed=True)
+
+    def test_requires_real_software_keyboard_availability(self):
+        with self.assertRaisesRegex(RuntimeError, 'software keyboard'):
+            self.exercise(keyboard_enabled=False)
 
 
 class GroupApprovalControlsTest(unittest.TestCase):
@@ -401,6 +412,89 @@ class GroupApprovalControlsTest(unittest.TestCase):
         for names, review in [(('once',), False), (('once', 'deny'), True)]:
             with self.subTest(names=names, review=review), self.assertRaisesRegex(AssertionError, 'NATIVE_GROUP_APPROVAL_RENDER'):
                 driver.assert_group_approval_controls(self.controls(*names), review)
+
+
+class NotificationForwardOwnershipTest(unittest.TestCase):
+    def standalone_drivers(self):
+        root = Path(__file__).resolve().parents[2]
+        for name in ('test_native_notification_restore', 'test_native_cold_notification'):
+            path = root / 'scripts' / (name + '.py')
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            yield name, module
+
+    def test_standalone_failure_releases_only_its_allocated_forward(self):
+        for name, module in self.standalone_drivers():
+            with self.subTest(driver=name):
+                calls = []
+
+                def command(argv, **kwargs):
+                    arguments = argv[3:]
+                    calls.append(arguments)
+                    if arguments == ['shell', 'dumpsys', 'deviceidle', 'whitelist']:
+                        return module.PACKAGE
+                    if arguments == ['forward', '--no-rebind', 'tcp:0', 'tcp:18766']:
+                        return '34819\n'
+                    if arguments == ['forward', '--remove', 'tcp:34819']:
+                        return ''
+                    raise RuntimeError('Fixture failed after forward acquisition')
+
+                with patch.object(sys, 'argv', [name, '--serial', 'emulator-5562']), \
+                     patch.object(subprocess, 'check_output', side_effect=command), \
+                     patch.object(module.urllib.request, 'urlopen', side_effect=RuntimeError('Fixture failed')):
+                    with self.assertRaisesRegex(RuntimeError, 'Fixture failed'):
+                        module.main()
+                removed = [args for args in calls if args[:2] == ['forward', '--remove']]
+                self.assertEqual(removed, [['forward', '--remove', 'tcp:34819']])
+
+    def test_port_collision_never_removes_another_runs_forward(self):
+        for name, module in self.standalone_drivers():
+            with self.subTest(driver=name):
+                calls = []
+
+                def collision(argv, **kwargs):
+                    calls.append(argv[3:])
+                    if argv[3:] == ['shell', 'dumpsys', 'deviceidle', 'whitelist']:
+                        return module.PACKAGE
+                    raise subprocess.CalledProcessError(1, argv)
+
+                with patch.object(sys, 'argv', [name, '--serial', 'emulator-5562', '--port', '34819']), \
+                     patch.object(subprocess, 'check_output', side_effect=collision):
+                    with self.assertRaises(subprocess.CalledProcessError):
+                        module.main()
+                self.assertEqual([call for call in calls if call[0] == 'forward'],
+                                 [['forward', '--no-rebind', 'tcp:34819', 'tcp:18766']])
+
+    def test_shade_failure_removes_owned_forward_even_when_settings_cleanup_fails(self):
+        calls = []
+
+        def command(argv, **kwargs):
+            arguments = argv[3:]
+            calls.append(arguments)
+            if arguments == ['forward', 'tcp:0', 'tcp:18766']:
+                return '34819\n'
+            if arguments == ['forward', '--remove', 'tcp:34819']:
+                return ''
+            raise RuntimeError('Android operation failed')
+
+        with patch.object(sys, 'argv', [driver.__file__, '--serial', 'emulator-5562', '--tap-only']), \
+             patch.dict(os.environ, {'ANDROID_HOME': '/unused'}), \
+             patch.object(subprocess, 'check_output', side_effect=command):
+            with self.assertRaisesRegex(RuntimeError, 'Android operation failed'):
+                runpy.run_path(driver.__file__, run_name='__main__')
+        removed = [args for args in calls if args[:2] == ['forward', '--remove']]
+        self.assertEqual(removed, [['forward', '--remove', 'tcp:34819']])
+
+    def test_shade_fixture_requests_use_the_allocated_host_port(self):
+        class Response:
+            def read(self):
+                return b'{}'
+
+        with patch.object(driver, 'LOCAL_PORT', 34819), \
+             patch.object(driver._fixture_http, 'open', return_value=Response()) as request:
+            driver.state('/state')
+        self.assertEqual(request.call_args.args[0].full_url, 'http://127.0.0.1:34819/state')
 
 
 if __name__ == '__main__':

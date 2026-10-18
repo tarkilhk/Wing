@@ -6,6 +6,10 @@ Uses synthetic credentials and isolated preferences/Keystore; contacts no server
 The temporary share receiver and every owned Downloads/cache file are removed.
 """
 
+# These acceptance checks use assertions; optimization would remove their verdict.
+if not __debug__:
+    raise RuntimeError("Native acceptance requires Python assertions; remove -O/PYTHONOPTIMIZE")
+
 import argparse
 import json
 import os
@@ -30,6 +34,10 @@ STEPS = {'share-plain', 'pick-plain', 'share-encrypted',
          'pick-encrypted-wrong', 'pick-encrypted'}
 
 
+class HierarchyUnavailable(RuntimeError):
+    """The current Android transition has not yielded a fresh UI hierarchy."""
+
+
 class Driver:
     def __init__(self, device, output, prefix):
         self.device = device
@@ -42,7 +50,10 @@ class Driver:
         self.process = None
 
     def nodes(self, label):
-        self.device.shell('uiautomator', 'dump', self.dump_path)
+        captured = self.device.shell('uiautomator', 'dump', self.dump_path)
+        if 'dumped to:' not in captured:
+            raise HierarchyUnavailable(
+                'Android UI capture failed; discard the previous hierarchy: ' + repr(captured))
         raw = self.device.shell('cat', self.dump_path)
         (self.output / (label + '.xml')).write_text(raw)
         nodes = list(ET.fromstring(raw).iter('node'))
@@ -61,6 +72,43 @@ class Driver:
         assert len(bounds) == 4, 'Missing native UI bounds'
         self.device.shell('input', 'tap', str((bounds[0] + bounds[2]) // 2),
                           str((bounds[1] + bounds[3]) // 2))
+
+    def reveal_share_targets(self, nodes):
+        """Expand the actual Android chooser, then scroll its visible target list."""
+        chooser = [node for node in nodes
+                   if node.get('package') == 'com.android.intentresolver']
+        panel = next((node for node in chooser
+                      if node.get('resource-id') == 'android:id/contentPanel'), None)
+        if panel is None:
+            return False
+
+        def bounds(node):
+            values = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
+            assert len(values) == 4 and values[2] > values[0] and values[3] > values[1], \
+                'Native chooser has no reachable bounds'
+            return values
+
+        left, top, right, bottom = bounds(panel)
+        drag = next((node for node in chooser
+                     if node.get('resource-id') == 'android:id/drag'), None)
+        if drag is not None:
+            x1, y1, x2, y2 = bounds(drag)
+            start = (y1 + y2) // 2
+            # A half-open sheet exposes suggested apps only. Drag its own
+            # handle upward before trying to scroll the remaining destinations.
+            if start > top + (bottom - top) // 4:
+                self.device.shell('input', 'swipe', str((x1 + x2) // 2), str(start),
+                                  str((x1 + x2) // 2), str(top + (bottom - top) // 8), '400')
+                return True
+        listing = next((node for node in chooser
+                        if node.get('resource-id') == 'android:id/resolver_list'), None)
+        if listing is None:
+            return False
+        left, top, right, bottom = bounds(listing)
+        self.device.shell('input', 'swipe', str((left + right) // 2),
+                          str(top + (bottom - top) * 4 // 5),
+                          str((left + right) // 2), str(top + (bottom - top) // 5), '400')
+        return True
 
     def status(self):
         status = self.device.preferences(HELPER, 'backup_save')
@@ -105,9 +153,19 @@ class Driver:
                 }
                 self.capture(label + '_saved')
                 return
-            nodes = self.nodes(label)
+            try:
+                nodes = self.nodes(label)
+            except HierarchyUnavailable as error:
+                # A stage marker precedes the Android chooser transition. Never
+                # read its previous dump; retry a fresh capture within this stage's
+                # existing deadline, as the notification driver does.
+                print(str(error), flush=True)
+                time.sleep(.3)
+                continue
             if stage.startswith('share-'):
-                target = next((n for n in nodes if n.get('text') == 'Save Wing QA backup'), None)
+                target = next((n for n in nodes if n.get('text') == 'Save Wing QA backup'
+                               and n.get('package') == 'com.android.intentresolver'
+                               and n.get('enabled') == 'true'), None)
                 if target is not None:
                     self.capture(label + '_chooser')
                     self.tap(target)
@@ -115,10 +173,8 @@ class Driver:
                     continue
             external = [n for n in nodes if n.get('package') in DOCUMENTS]
             if not external:
-                more = next((n for n in nodes if n.get('text') in {'More', 'See all'}
-                             and n.get('package') in {'android', 'com.android.intentresolver'}), None)
-                if more is not None:
-                    self.tap(more)
+                if stage.startswith('share-'):
+                    self.reveal_share_targets(nodes)
                 time.sleep(.3)
                 continue
             if not downloads:
@@ -246,7 +302,7 @@ def main():
         assert driver.status().get('prefix') == prefix, 'Save fixture ownership was not configured'
         for package in [PACKAGE, *sorted(DOCUMENTS)]:
             device.shell('am', 'force-stop', package)
-        command = ['flutter', 'test', 'integration_test/config_backup_native_test.dart',
+        command = ['flutter', 'test', '--no-pub', 'integration_test/config_backup_native_test.dart',
                    '-d', args.device, '--no-uninstall', '--reporter', 'expanded',
                    '--dart-define=CONFIG_BACKUP_NATIVE=true']
         with (output / 'flutter.log').open('w') as log:

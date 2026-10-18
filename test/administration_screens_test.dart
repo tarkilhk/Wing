@@ -415,21 +415,29 @@ void main() {
       await tester.pump();
       await tester.tap(find.byTooltip('Save changes'));
       await tester.pump();
-      expect(
-        tester
-            .widget<IconButton>(
-              find.byWidgetPredicate(
-                (widget) =>
-                    widget is IconButton && widget.tooltip == 'Save changes',
-              ),
-            )
-            .onPressed,
-        isNull,
+      final save = find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == 'Save changes',
       );
+      final progress = find.descendant(
+        of: save,
+        matching: find.byType(CircularProgressIndicator),
+      );
+      expect(tester.widget<IconButton>(save).onPressed, isNull);
+      expect(progress, findsOneWidget);
       expect(find.text('Server A / personal'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+      expect(progress, findsOneWidget);
+      await tester.tap(save);
+      await tester.pump();
+      expect(f.requests.where((r) => r.$1 == 'PUT'), hasLength(1));
       f.writeGate!.complete();
       await tester.pumpAndSettle();
-      expect(f.requests.where((r) => r.$1 == 'PUT').length, 1);
+      expect(progress, findsNothing);
+      expect(f.requests.where((r) => r.$1 == 'PUT'), hasLength(1));
+      expect(
+        (f.configs['personal']!['memory'] as Map)['memory_char_limit'],
+        2500,
+      );
     },
   );
 

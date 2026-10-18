@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -26,7 +27,7 @@ void main() {
             }
             expect(request.method, 'PATCH');
             expect(request.url.path, '/api/profiles/work');
-            expect(request.body, '{"new_name":"studio"}');
+            expect(jsonDecode(request.body), _renameBody);
             writes++;
             if (renew && writes == 1) return http.Response('{}', 401);
             return http.Response(
@@ -73,7 +74,7 @@ void main() {
             }
             expect(request.method, 'PATCH');
             expect(request.url.path, '/api/profiles/work');
-            expect(request.body, '{"new_name":"studio"}');
+            expect(jsonDecode(request.body), _renameBody);
             writes++;
             return http.Response('{}', 401);
           }),

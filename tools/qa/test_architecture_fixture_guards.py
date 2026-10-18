@@ -75,6 +75,27 @@ class FixtureGuardChecks(unittest.TestCase):
                             "retired_method = 'session.open'\n")
             self.assertEqual(recovery.check(root), [])
 
+    def test_nested_fixture_module_cannot_hide_a_retired_import(self):
+        for statement in [
+            'from tools.fake_gateway.turn_recovery_contract import Ledger',
+            'from ..turn_recovery_contract import Ledger',
+            'from .. import turn_recovery_contract',
+        ]:
+            with self.subTest(statement=statement), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                path = root / recovery.DIRECTORY / 'support' / 'fixture.py'
+                path.parent.mkdir(parents=True)
+                path.write_text(statement)
+                self.assertTrue(recovery.check(root), 'Nested fixture files remain in guard scope')
+
+    def test_nested_relative_homonym_is_not_the_retired_root_module(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            path = root / recovery.DIRECTORY / 'support' / 'fixture.py'
+            path.parent.mkdir(parents=True)
+            path.write_text('from . import turn_recovery_contract\n')
+            self.assertEqual(recovery.check(root), [])
+
     def test_actual_cli_bad_valid_and_input_error_exits(self):
         checkout = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as temporary:

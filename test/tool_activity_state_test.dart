@@ -96,12 +96,18 @@ void main() {
     expect(pending.request.single.text, 'A new fact');
     expect(pending.response, isEmpty);
     expect(pending.receiptState, isNull);
+  });
+
+  test('Hindsight absent submitted content does not invent a request', () {
     final empty = project(
       'hindsight_retain',
       {},
       'Memory stored successfully.',
     );
     expect(empty.request, isEmpty);
+  });
+
+  test('Hindsight failed receipt preserves submitted intent', () {
     final failed = project(
       'hindsight_retain',
       {'content': 'A new fact'},
@@ -197,6 +203,9 @@ void main() {
     );
     expect(cron.response.where((b) => b.text == 'Script failed'), hasLength(1));
     expect(cron.response.any((b) => b.text == 'Delivery failed'), isTrue);
+  });
+
+  test('session shared context appears once', () {
     final session = project(
       'session_search',
       {'session_id': 's'},
@@ -322,22 +331,25 @@ void main() {
       );
       expect(duplicate.response.single.text, contains('no duplicate added'));
       expect(duplicate.response.single.copyable, isFalse);
-      final staged = project(
-        'memory',
-        {'target': 'user', 'action': 'remove', 'old_text': 'old'},
-        {
-          'success': true,
-          'staged': true,
-          'pending_id': 'pending-id',
-          'message': 'Proposed write awaits approval.',
-        },
-      );
-      expect(staged.receiptStatus, 'Awaiting approval');
-      expect(staged.response.map((b) => b.text), [
-        'Proposed write awaits approval.',
-      ]);
     },
   );
+
+  test('memory staged results remain awaiting approval', () {
+    final staged = project(
+      'memory',
+      {'target': 'user', 'action': 'remove', 'old_text': 'old'},
+      {
+        'success': true,
+        'staged': true,
+        'pending_id': 'pending-id',
+        'message': 'Proposed write awaits approval.',
+      },
+    );
+    expect(staged.receiptStatus, 'Awaiting approval');
+    expect(staged.response.map((b) => b.text), [
+      'Proposed write awaits approval.',
+    ]);
+  });
 
   test(
     'skill uses actual requested name and Result with useful-only payload actions',
@@ -373,20 +385,23 @@ void main() {
         detail.response.any((b) => b.text.contains('Catalog description')),
         isFalse,
       );
-      final binary = project(
-        'skill_view',
-        {'name': 's', 'file_path': 'assets/a.bin'},
-        {
-          'success': true,
-          'is_binary': true,
-          'content': '[Binary file: a.bin, size: 24 bytes]',
-        },
-      );
-      expect(binary.response.single.copyable, isFalse);
-      expect(binary.response.single.resourceTarget, isNull);
-      expect(binary.skill, isNull);
     },
   );
+
+  test('binary skill receipts do not offer text actions', () {
+    final binary = project(
+      'skill_view',
+      {'name': 's', 'file_path': 'assets/a.bin'},
+      {
+        'success': true,
+        'is_binary': true,
+        'content': '[Binary file: a.bin, size: 24 bytes]',
+      },
+    );
+    expect(binary.response.single.copyable, isFalse);
+    expect(binary.response.single.resourceTarget, isNull);
+    expect(binary.skill, isNull);
+  });
 
   test('skill support source and unchanged stub keep receipt scope', () {
     final source = project(
@@ -401,6 +416,9 @@ void main() {
     expect(source.response.single.format, ToolDetailFormat.source);
     expect(source.response.single.markdown, isFalse);
     expect(source.skill, isNull);
+  });
+
+  test('unchanged skill stub retains receipt scope', () {
     final unchanged = project(
       'skill_view',
       {'name': 's'},
@@ -438,6 +456,9 @@ void main() {
     expect(detail.skill!.document.metadata, [(label: 'Version', value: '2.0')]);
     expect(detail.skill!.document.description, isNull);
     expect(detail.skill!.content.copyText, raw);
+  });
+
+  test('malformed skill metadata retains readable content', () {
     final malformed = project(
       'skill_view',
       {'name': 'review'},
@@ -626,25 +647,31 @@ void main() {
         {'error': 'No tasks.'},
       );
       expect(oldInput.request, isEmpty);
-      final steer = project(
-        'delegate_task',
-        {'action': 'steer', 'message': '  Check receipt.\n'},
-        {'status': 'queued'},
-      );
-      expect(steer.request.single.copyText, '  Check receipt.\n');
-      expect(
-        steer.response.single.text,
-        contains('delivery to the child is pending'),
-      );
-      expect(steer.response.single.copyable, isFalse);
-      final stopped = project(
-        'delegate_task',
-        {'action': 'stop'},
-        {'status': 'interrupt_requested'},
-      );
-      expect(stopped.response.single.text, contains('may still be stopping'));
     },
   );
+
+  test('queued steering remains pending delivery', () {
+    final steer = project(
+      'delegate_task',
+      {'action': 'steer', 'message': '  Check receipt.\n'},
+      {'status': 'queued'},
+    );
+    expect(steer.request.single.copyText, '  Check receipt.\n');
+    expect(
+      steer.response.single.text,
+      contains('delivery to the child is pending'),
+    );
+    expect(steer.response.single.copyable, isFalse);
+  });
+
+  test('requested stop remains potentially stopping', () {
+    final stopped = project(
+      'delegate_task',
+      {'action': 'stop'},
+      {'status': 'interrupt_requested'},
+    );
+    expect(stopped.response.single.text, contains('may still be stopping'));
+  });
 
   test(
     'cron background, skipped and inner failure override generic success receipt',
@@ -666,36 +693,42 @@ void main() {
         background.response.single.text,
         contains('completion is pending'),
       );
-      final skipped = project(
-        'cronjob_manage',
-        {'action': 'run', 'job_id': 'j'},
-        {
-          'success': true,
-          'job': {
-            'executed': false,
-            'execution_success': false,
-            'execution_skipped': 'Already being fired.',
-          },
-        },
-      );
-      expect(skipped.receiptStatus, 'Run skipped');
-      expect(skipped.receiptState, isNot(ToolReceiptState.error));
-      final failed = project(
-        'cronjob_manage',
-        {'action': 'run', 'job_id': 'j'},
-        {
-          'success': true,
-          'job': {
-            'executed': true,
-            'execution_success': false,
-            'execution_error': 'Script failed.',
-          },
-        },
-      );
-      expect(failed.receiptState, ToolReceiptState.error);
-      expect(failed.response.single.text, 'Script failed.');
     },
   );
+
+  test('cron skipped execution overrides generic success', () {
+    final skipped = project(
+      'cronjob_manage',
+      {'action': 'run', 'job_id': 'j'},
+      {
+        'success': true,
+        'job': {
+          'executed': false,
+          'execution_success': false,
+          'execution_skipped': 'Already being fired.',
+        },
+      },
+    );
+    expect(skipped.receiptStatus, 'Run skipped');
+    expect(skipped.receiptState, isNot(ToolReceiptState.error));
+  });
+
+  test('cron inner failure overrides generic success', () {
+    final failed = project(
+      'cronjob_manage',
+      {'action': 'run', 'job_id': 'j'},
+      {
+        'success': true,
+        'job': {
+          'executed': true,
+          'execution_success': false,
+          'execution_error': 'Script failed.',
+        },
+      },
+    );
+    expect(failed.receiptState, ToolReceiptState.error);
+    expect(failed.response.single.text, 'Script failed.');
+  });
 
   test(
     'cron saved schedule and actual delivery uncertainty do not create job controls',
@@ -738,17 +771,20 @@ void main() {
         'Prompt excerpt',
       );
       expect(detail.response.any((b) => b.text == 'false'), isFalse);
-      final stale = project(
-        'cronjob',
-        {'action': 'run'},
-        {
-          'success': true,
-          'job': {'executed': true},
-        },
-      );
-      expect(stale.response, isEmpty);
     },
   );
+
+  test('retired cron tool name does not create a receipt', () {
+    final stale = project(
+      'cronjob',
+      {'action': 'run'},
+      {
+        'success': true,
+        'job': {'executed': true},
+      },
+    );
+    expect(stale.response, isEmpty);
+  });
 
   test(
     'session discovery preserves actual message ownership and deduplicates bookends',
@@ -817,6 +853,9 @@ void main() {
     expect(read.response.first.markdown, isFalse);
     expect(read.response.first.facts, contains('Received excerpt'));
     expect(read.response.last.label, 'Partial session');
+  });
+
+  test('session scroll retains rebound warning and tool ownership', () {
     final scroll = project(
       'session_search',
       {'session_id': 'parent', 'around_message_id': 2},
@@ -844,6 +883,9 @@ void main() {
     expect(scroll.response.first.label, 'Tool requested');
     expect(scroll.response.first.copyable, isFalse);
     expect(scroll.response.last.text, 'Rebound to child session.');
+  });
+
+  test('session browse reports no recent sessions', () {
     final browse = project('session_search', {}, {
       'success': true,
       'mode': 'browse',
@@ -851,6 +893,9 @@ void main() {
       'count': 0,
     });
     expect(browse.response.single.text, 'No recent sessions.');
+  });
+
+  test('empty discovery preserves incomplete index warning', () {
     final empty = project(
       'session_search',
       {'query': 'missing'},

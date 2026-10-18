@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../model.dart';
+import '../fixture_contract.dart';
 import '../dart_sdk.dart';
 import '../rules/overview_view_wire.dart' as rule;
 import '../proof_process.dart';
@@ -22,6 +23,13 @@ Future<void> _proofMain(List<String> arguments) async {
     compiled = File(arguments[1]).absolute.path;
   }
   final sdkPath = dartSdkPath(Directory.current.path);
+  const cliCases = {
+    'direct',
+    'owner-command',
+    'dynamic-is-unverifiable',
+    'bare-inherited-capability',
+    'bare-unrelated-callback',
+  };
   final fixture =
       jsonDecode(
             File(
@@ -33,7 +41,10 @@ Future<void> _proofMain(List<String> arguments) async {
   var passed = 0;
   final workspace = Directory.systemTemp.createTempSync('wing-overview-wire-');
   try {
-    for (final entry in fixture['cases'] as List) {
+    for (final entry in validatedProofCases(
+      fixture['cases'],
+      requiredNames: cliCases,
+    )) {
       final sources = Directory('${workspace.path}/lib');
       if (sources.existsSync()) sources.deleteSync(recursive: true);
       final roles = <String, Object>{};
@@ -98,13 +109,7 @@ Future<void> _proofMain(List<String> arguments) async {
       }
       // Prove a bad/valid/input fixture through the actual independent CLI;
       // a swallowed exit status must not pass the quality gate.
-      if ({
-        'direct',
-        'owner-command',
-        'dynamic-is-unverifiable',
-        'bare-inherited-capability',
-        'bare-unrelated-callback',
-      }.contains(entry['name'])) {
+      if (cliCases.contains(entry['name'])) {
         final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/overview_view_wire.dart',

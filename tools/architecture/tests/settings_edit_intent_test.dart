@@ -44,7 +44,7 @@ void main() {
   choices.add('later');
   check(
     'field metadata freezes mutable caller choices',
-    field.choices.length == 1,
+    field.choices.length == 1 && field.choices.single == 'one',
   );
   final baseline = <String, Object?>{
     'budget': 20,
@@ -55,13 +55,19 @@ void main() {
   final intent = SettingsEditIntent(baseline: baseline, desired: desired);
   baseline['budget'] = 999;
   desired['budget'] = 888;
+  (baseline['list'] as List).add('outside edit');
   check(
     'intent freezes opening and desired inputs',
     intent.baseline['budget'] == 20 && intent.desired['budget'] == 30,
   );
   check(
+    'intent detaches nested baseline collections',
+    sameSetting(intent.baseline['list'], ['one']),
+  );
+  final updates = intent.resolve({'budget': 20, 'other': false}).updates;
+  check(
     'independent server fields never enter sparse write',
-    intent.resolve({'budget': 20, 'other': false}).updates.length == 1,
+    updates.length == 1 && updates['budget'] == 30,
   );
   check(
     'already converged desired values are read-only',

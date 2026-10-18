@@ -135,6 +135,8 @@ void main() {
   var postsStarted = 0;
   final decisions = <Map<String, dynamic>>[];
   Completer<void>? heldDecision;
+  late Completer<void> decisionStarted;
+  late Completer<void> postStarted;
   bool failDecision = false;
   GroupNotificationSession create({WorkspaceScope? key}) =>
       GroupNotificationSession(
@@ -146,6 +148,7 @@ void main() {
         command: (method, params) async {
           expect(method, 'groups.approve');
           decisions.add(params);
+          if (!decisionStarted.isCompleted) decisionStarted.complete();
           await heldDecision?.future;
           if (failDecision) throw StateError('Decision failed');
           host.states[params['room_id']]!['driver_status']['pending_actions'] =
@@ -156,6 +159,7 @@ void main() {
         pollInterval: const Duration(days: 1),
         publish: (answer) async {
           postsStarted++;
+          if (!postStarted.isCompleted) postStarted.complete();
           await delivery?.future;
           if (failDelivery) throw StateError('Posting failed');
           await notices.receiveGroupAnswer(answer);
@@ -184,6 +188,8 @@ void main() {
     postsStarted = 0;
     decisions.clear();
     heldDecision = null;
+    decisionStarted = Completer<void>();
+    postStarted = Completer<void>();
     failDecision = false;
   });
   tearDown(() {
@@ -262,9 +268,7 @@ void main() {
         'once',
         notice.expandedBody,
       );
-      for (var i = 0; i < 20 && decisions.isEmpty; i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await decisionStarted.future;
       expect(sink.shown.last.submitting, true);
       expect(
         await watch.resolveApproval(
@@ -296,56 +300,74 @@ void main() {
     },
   );
 
+  test('native group decisions reject stale generations', () async {
+    approval();
+    await watch.activate();
+    final notice = sink.shown.last;
+    approval(generation: 2);
+    expect(
+      await watch.resolveApproval(
+        'one',
+        notice.focus!.id,
+        'once',
+        notice.expandedBody,
+      ),
+      false,
+    );
+    expect(decisions, isEmpty);
+  });
+
+  test('native group decisions reject broad approval scopes', () async {
+    approval();
+    await watch.activate();
+    final notice = sink.shown.last;
+    expect(
+      await watch.resolveApproval(
+        'one',
+        notice.focus!.id,
+        'session',
+        notice.expandedBody,
+      ),
+      false,
+    );
+    expect(decisions, isEmpty);
+  });
+
+  test('native group decisions reject changed commands', () async {
+    approval();
+    await watch.activate();
+    final notice = sink.shown.last;
+    await expectLater(
+      watch.resolveApproval(
+        'one',
+        notice.focus!.id,
+        'once',
+        'different command',
+      ),
+      throwsStateError,
+    );
+    expect(decisions, isEmpty);
+  });
+
   test(
-    'native group decisions reject stale generations, changed commands and broad scopes',
+    'failed native group decision clears progress and permits retry',
     () async {
       approval();
       await watch.activate();
       final notice = sink.shown.last;
-      approval(generation: 2);
-      expect(
-        await watch.resolveApproval(
-          'one',
-          notice.focus!.id,
-          'once',
-          notice.expandedBody,
-        ),
-        false,
-      );
-      expect(decisions, isEmpty);
-      await watch.refresh();
-      final latest = sink.shown.last;
-      expect(
-        await watch.resolveApproval(
-          'one',
-          latest.focus!.id,
-          'session',
-          latest.expandedBody,
-        ),
-        false,
-      );
-      await expectLater(
-        watch.resolveApproval(
-          'one',
-          latest.focus!.id,
-          'once',
-          'different command',
-        ),
-        throwsStateError,
-      );
-      expect(decisions, isEmpty);
       failDecision = true;
       await expectLater(
-        watch.resolveApproval('one', latest.focus!.id, 'deny', null),
+        watch.resolveApproval('one', notice.focus!.id, 'deny', null),
         throwsStateError,
       );
       expect(sink.shown.last.submitting, false);
       expect(sink.shown.last.actionError, contains('Decision not confirmed'));
       failDecision = false;
       expect(
-        await watch.resolveApproval('one', latest.focus!.id, 'deny', null),
+        await watch.resolveApproval('one', notice.focus!.id, 'deny', null),
         true,
       );
+      expect(decisions, hasLength(2));
     },
   );
 
@@ -752,9 +774,7 @@ void main() {
       host.room('one');
       host.event('one', 1, 'message.member', 'Shared final answer');
       final finishing = watch.refresh();
-      for (var i = 0; i < 30 && postsStarted == 0; i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await postStarted.future;
       expect(postsStarted, 1);
       expect(watch.hasActiveGroups, isTrue);
       await service.sync();
@@ -941,9 +961,7 @@ void main() {
       delivery = Completer<void>();
       host.event('one', 1, 'message.member', 'Read while posting');
       final posting = watch.refresh();
-      for (var i = 0; i < 30 && postsStarted == 0; i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await postStarted.future;
       await prefs.setString(
         'bots_group_read_sequences',
         jsonEncode({'owner/one': 1}),

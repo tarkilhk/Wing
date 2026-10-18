@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -45,7 +46,12 @@ void main() {
     ]);
     host.event('a', 'message.start');
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     await tester.pump();
     await tester.settleMarkdown();
@@ -145,7 +151,12 @@ void main() {
     host.event('a', 'message.start');
     host.event('a', 'message.delta', {'text': 'Live answer'});
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     for (var i = 0; i < 10; i++) {
       await tester.pump(const Duration(milliseconds: 100));

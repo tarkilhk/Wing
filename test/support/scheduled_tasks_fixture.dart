@@ -75,6 +75,31 @@ class ScheduledTasksFixture {
     Map<String, dynamic>? body,
   ) async {
     if (intercept != null) return intercept!(method, path, query, body);
+    final jobPath = RegExp(r'^cron/jobs/[^/]+$').hasMatch(path);
+    final actionPath = RegExp(
+      r'^cron/jobs/[^/]+/(pause|resume|trigger)$',
+    ).hasMatch(path);
+    final runPath = RegExp(r'^cron/jobs/[^/]+/runs$').hasMatch(path);
+    final supported = switch (method) {
+      'GET' =>
+        const {
+              'profiles',
+              'profiles/active',
+              'model/options',
+              'cron/delivery-targets',
+              'cron/blueprints',
+              'cron/jobs',
+            }.contains(path) ||
+            jobPath ||
+            runPath,
+      'POST' =>
+        path == 'cron/jobs' ||
+            path == 'cron/blueprints/instantiate' ||
+            actionPath,
+      'PUT' || 'DELETE' => jobPath,
+      _ => false,
+    };
+    if (!supported) throw StateError('Unexpected task request $method $path');
     if (path == 'profiles') {
       return {
         'profiles': [

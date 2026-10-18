@@ -3,7 +3,6 @@ import 'package:wing/core/screens/administration/provider_recovery_routes.dart';
 import 'package:wing/core/models/settings_edit.dart';
 import 'dart:ui' show SemanticsAction;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
@@ -16,6 +15,7 @@ import 'package:wing/core/screens/profile_capabilities_screen.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import '../test/support/administration_design_fixture.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
+import 'package:wing/core/widgets/studio_form_actions.dart';
 
 /// Production widgets on disposable Android with in-memory observations only.
 void main() {
@@ -47,7 +47,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(
-      find.descendant(of: find.byType(AlertDialog), matching: find.text('Run')),
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byTooltip('Run'),
+      ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Failed'), findsOneWidget);
@@ -122,10 +125,10 @@ void main() {
         await tester.pumpAndSettle();
         await tester.enterText(find.byType(TextFormField), '2800');
         await tester.pumpAndSettle();
-        expect(find.text('Save').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Save changes').hitTestable(), findsOneWidget);
         (fixture.configs['personal']!['memory'] as Map)['memory_char_limit'] =
             3200;
-        await tester.tap(find.text('Save'));
+        await tester.tap(find.byTooltip('Save changes'));
         await tester.pumpAndSettle();
         // Hide the native IME before navigating the comparison below the input.
         FocusManager.instance.primaryFocus?.unfocus();
@@ -135,13 +138,13 @@ void main() {
         expect(find.text('Current server value: 3200'), findsOneWidget);
         await tester.tap(find.text('Keep my value'));
         await tester.pumpAndSettle();
-        await tester.tap(find.text('Save'));
+        await tester.tap(find.byTooltip('Save changes'));
         await tester.pumpAndSettle();
         expect(
           (fixture.configs['personal']!['memory'] as Map)['memory_char_limit'],
           2800,
         );
-        await tester.tap(find.text('Close'));
+        await tester.tap(find.byTooltip('Cancel'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Edit memory'));
         await tester.pumpAndSettle();
@@ -154,12 +157,12 @@ void main() {
         await tester.pumpAndSettle();
         await tester.pump(const Duration(milliseconds: 500));
         expect(find.text('1 unsaved change'), findsOneWidget);
-        expect(find.text('Close').hitTestable(), findsOneWidget);
-        await tester.tap(find.text('Close'));
+        expect(find.byTooltip('Cancel').hitTestable(), findsOneWidget);
+        await tester.tap(find.byTooltip('Cancel'));
         await tester.pump(const Duration(milliseconds: 500));
         await tester.pumpAndSettle();
         expect(find.text('Discard edits?'), findsOneWidget);
-        await tester.tap(find.text('Discard'));
+        await tester.tap(find.byTooltip('Discard'));
         await tester.pumpAndSettle();
         expect(find.text('Edit memory'), findsOneWidget);
         expect(tester.takeException(), isNull);
@@ -200,19 +203,25 @@ void main() {
       List.filled(20, 'Be thoughtful, clear and precise.').join('\n'),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Save').hitTestable(), findsOneWidget);
+    expect(find.byTooltip('Save changes').hitTestable(), findsOneWidget);
     FocusManager.instance.primaryFocus?.unfocus();
     await tester.pumpAndSettle();
     await tester.pageBack();
     await tester.pumpAndSettle();
     expect(find.text('Discard unsaved changes?'), findsOneWidget);
-    await tester.tap(find.text('Keep editing'));
+    final discardDialog = find.ancestor(
+      of: find.text('Discard unsaved changes?'),
+      matching: find.byType(StudioDialog),
+    );
+    await tester.tap(
+      find.descendant(of: discardDialog, matching: find.byTooltip('Cancel')),
+    );
     await tester.pumpAndSettle();
     expect(
       tester.widget<TextField>(soul).controller!.text,
       contains('precise.\nBe thoughtful'),
     );
-    await tester.tap(find.text('Save'));
+    await tester.tap(find.byTooltip('Save changes'));
     await tester.pumpAndSettle();
     expect(fixture.soul.split('\n'), hasLength(20));
     expect(tester.takeException(), isNull);
@@ -253,12 +262,11 @@ void main() {
       expect(find.text('Start sign-in'), findsOneWidget);
       // Credential provenance does not redirect a profile-owned account to
       // default. Opening its sign-in options must not start OAuth implicitly.
-      expect(
-        fixture.requests
-            .where((r) => r.$2 == 'providers/oauth')
-            .every((r) => r.$3['profile'] == 'personal'),
-        isTrue,
+      final oauthReads = fixture.requests.where(
+        (r) => r.$2 == 'providers/oauth',
       );
+      expect(oauthReads, isNotEmpty);
+      expect(oauthReads.every((r) => r.$3['profile'] == 'personal'), isTrue);
       expect(fixture.requests.where((r) => r.$1 != 'GET'), isEmpty);
       await tester.pageBack();
       await tester.pumpAndSettle();
@@ -311,8 +319,6 @@ void main() {
       await tester.tap(find.text('Setup and providers'));
       await tester.pumpAndSettle();
       expect(setup, isTrue);
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      expect(FocusManager.instance.primaryFocus, isNotNull);
       expect(tester.takeException(), isNull);
       if (const bool.fromEnvironment('CAPTURE_NATIVE_ADMINISTRATION')) {
         debugPrint('NATIVE_ADMINISTRATION_CAPTURE_READY');

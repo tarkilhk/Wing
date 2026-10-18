@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import '../tools/architecture/dart_sdk.dart';
+import '../tools/architecture/proof_process.dart';
 import '../tools/architecture/rules/loading_family.dart' as loading;
 import 'architecture_contract_test.dart' show FixtureWorkspace;
 
@@ -87,6 +88,27 @@ Object examples() => [LinearProgressIndicator(), CupertinoActivityIndicator(), R
     addTearDown(workspace.dispose);
     expect(loading.check(workspace.snapshot), isEmpty);
   });
+  for (final body in [
+    'Object build(Function StudioLoading) => StudioLoading();',
+    'Object build(dynamic studio) => studio.StudioLoading();',
+    'Object build(dynamic StudioLoading) => StudioLoading.page();',
+    'Object build() { Object StudioLoading() => 0; return StudioLoading(); }',
+  ]) {
+    test('accepts locally bound loading name: $body', () {
+      final workspace = FixtureWorkspace({
+        'files': {
+          loading.owner: {'role': 'presentation', 'source': declarations},
+          'lib/view.dart': {
+            'role': 'view',
+            'source':
+                "import 'package:wing/core/widgets/studio_loading.dart';\nimport 'package:wing/core/widgets/studio_loading.dart' as studio;\n$body",
+          },
+        },
+      });
+      addTearDown(workspace.dispose);
+      expect(loading.check(workspace.snapshot), isEmpty);
+    });
+  }
   test('rejects constructor aliases and tearoffs', () {
     final workspace = fixture(
       'Pulse()',
@@ -194,17 +216,19 @@ Object examples() => [LinearProgressIndicator(), CupertinoActivityIndicator(), R
       imports: "import 'package:flutter/material.dart';",
     );
     addTearDown(workspace.dispose);
-    final result =
-        await Process.run('${dartSdkPath(Directory.current.path)}/bin/dart', [
-          'run',
-          'tools/architecture/rules/loading_family.dart',
-          '--root',
-          workspace.directory.path,
-          '--roles',
-          workspace.rolesPath,
-          '--strict',
-          '--json',
-        ]);
+    final result = await runProofProcess(
+      '${dartSdkPath(Directory.current.path)}/bin/dart',
+      [
+        'run',
+        'tools/architecture/rules/loading_family.dart',
+        '--root',
+        workspace.directory.path,
+        '--roles',
+        workspace.rolesPath,
+        '--strict',
+        '--json',
+      ],
+    );
     expect(result.exitCode, 0, reason: '${result.stdout} ${result.stderr}');
     expect((jsonDecode(result.stdout as String) as Map)['findings'], isEmpty);
   });
@@ -212,7 +236,7 @@ Object examples() => [LinearProgressIndicator(), CupertinoActivityIndicator(), R
     final workspace = fixture('studio.StudioLoadingSlot()');
     addTearDown(workspace.dispose);
     final dart = '${dartSdkPath(Directory.current.path)}/bin/dart';
-    final result = await Process.run(dart, [
+    final result = await runProofProcess(dart, [
       'run',
       'tools/architecture/rules/loading_family.dart',
       '--root',

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/doctor_finding_draft_session.dart';
 import 'package:wing/core/models/administration_operation.dart';
 import 'support/administration_operation_fixture.dart';
@@ -259,7 +260,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.dark),
-          home: ProfileWorkspaceScreen(controller: controller),
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -369,7 +373,10 @@ void main() {
         home: StatefulBuilder(
           builder: (context, setState) => Scaffold(
             body: chatDestination
-                ? ProfileWorkspaceScreen(controller: fixture.controller)
+                ? ProfileWorkspaceScreen(
+                    createBotsSession: () => BotsSession((_) async => const []),
+                    controller: fixture.controller,
+                  )
                 : HermesHealthContent(
                     controller: fixture.controller,
                     repository: fixture.admin.server,

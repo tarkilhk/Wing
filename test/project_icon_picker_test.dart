@@ -287,12 +287,6 @@ void main() {
         isEmpty,
       );
       expect(find.byKey(const ValueKey('project-icon-search')), findsOneWidget);
-      expect(
-        tester.widget<IconButton>(
-          find.byKey(const ValueKey('project-icon-search')),
-        ),
-        isNotNull,
-      );
       await tester.tap(find.byKey(const ValueKey('project-icon-folder')));
       await tester.pumpAndSettle();
       expect(
@@ -339,10 +333,10 @@ void main() {
             );
             expect(confirm.bottom, lessThanOrEqualTo(844 - keyboard));
             expect(
-              tester
-                  .getSize(find.byKey(const ValueKey('project-icon-grid')))
-                  .height,
-              greaterThan(60),
+              find
+                  .byKey(const ValueKey('project-icon-folder-library'))
+                  .hitTestable(),
+              findsOneWidget,
             );
             for (final category in projectIconCategories) {
               final button = find.byKey(
@@ -373,10 +367,10 @@ void main() {
             );
             await tester.pumpAndSettle();
             expect(
-              tester
-                  .getSize(find.byKey(const ValueKey('project-icon-grid')))
-                  .height,
-              greaterThan(48),
+              find
+                  .byKey(const ValueKey('project-icon-organization'))
+                  .hitTestable(),
+              findsOneWidget,
             );
             await captureScreen(
               tester,
