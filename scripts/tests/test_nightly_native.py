@@ -311,6 +311,17 @@ class Catalog(unittest.TestCase):
                         if '--reporter=json' in call.args[1]:
                             self.assertTrue(call.kwargs['expected'])
 
+    def test_new_family_cannot_silently_run_another_family(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runner = nightly.Runner(Path(directory))
+            for family in ('new-family', 'notification-new'):
+                with self.subTest(family=family), \
+                     patch.object(nightly, 'FAMILIES', (*nightly.FAMILIES, family)), \
+                     patch.object(runner, 'install'), patch.object(runner, 'driver') as driver:
+                    with self.assertRaises(KeyError):
+                        runner.family(family)
+                    driver.assert_not_called()
+
     def test_recents_modes_cannot_collapse_to_standard_only(self):
         with tempfile.TemporaryDirectory() as directory:
             runner = nightly.Runner(Path(directory))

@@ -232,7 +232,8 @@ class Runner:
                 raise ValueError('stock-hermes requires --hermes-source with prepared current stock dependencies')
             self.driver('scripts/test_vanilla_hermes.py', '--device', self.device,
                         '--hermes-source', hermes_source, '--output', self.output / 'stock')
-        elif family.startswith('notification-'):
+        elif family in ('notification-actions', 'notification-restore',
+                        'notification-counts', 'notification-cold'):
             target = ('notification_cold_input_device.dart' if family == 'notification-cold'
                       else 'notification_revamp_device.dart')
             self.install('integration_test/' + target, qa=True)
@@ -311,7 +312,9 @@ class Runner:
                 self.flutter(target, expected='registered')
             else:
                 script = {'backup': 'config_backup', 'bots': 'bots',
-                          'file-transfer': 'file_transfer', 'voice': 'voice'}.get(family, 'recents')
+                          'file-transfer': 'file_transfer', 'voice': 'voice',
+                          'recents': 'recents', 'recents-code': 'recents',
+                          'recents-events': 'recents', 'recents-momentum': 'recents'}[family]
                 extra = ['--' + family.removeprefix('recents-') + '-only'] if family.startswith('recents-') else []
                 self.driver('scripts/test_native_' + script + '.py', '--device', self.device,
                             '--output', self.output / family, *extra)
