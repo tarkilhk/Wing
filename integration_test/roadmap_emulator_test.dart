@@ -24,6 +24,7 @@ import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
+import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -709,8 +710,12 @@ void main() {
         find.descendant(of: child, matching: find.byIcon(Icons.chevron_right)),
       );
       await _settle(tester);
-      expect(find.byTooltip('Steer'), findsOneWidget);
-      expect(find.byTooltip('Interrupt'), findsOneWidget);
+      Finder detailAction(String label) => find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byTooltip(label),
+      );
+      expect(detailAction('Steer'), findsOneWidget);
+      expect(detailAction('Interrupt'), findsOneWidget);
 
       // The terminal event must update controls in an already-open inspection.
       // Saving its receipt is independent of the still-streaming parent answer.
@@ -749,26 +754,25 @@ void main() {
       ]);
       await harness.controller.refreshHistory(chat);
       await _settle(tester);
-      expect(find.byTooltip('Steer'), findsNothing);
-      expect(find.byTooltip('Interrupt'), findsNothing);
-      expect(
-        find.text('Release source verified.', findRichText: true),
-        findsOneWidget,
-      );
-      final refreshOutput = find.byTooltip('Refresh live output');
+      expect(detailAction('Steer'), findsNothing);
+      expect(detailAction('Interrupt'), findsNothing);
+      final refreshOutput = detailAction('Refresh live output');
       await tester.ensureVisible(refreshOutput);
       await _settle(tester);
       await tester.tap(refreshOutput);
       await _settle(tester);
-      final output = find.byWidgetPredicate(
-        (widget) =>
-            widget is SourceCodeText &&
-            widget.text == 'Verified the emulator release source.',
+      final output = find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is SourceCodeText &&
+              widget.text == 'Verified the emulator release source.',
+        ),
       );
       await tester.ensureVisible(output);
       await _settle(tester);
       expect(output, findsOneWidget);
-      expect(find.byTooltip('Copy Live output'), findsOneWidget);
+      expect(detailAction('Copy Live output'), findsOneWidget);
       final tailReads = harness.fixture.supervisionRequests.where(
         (request) => request.$1 == 'subagent.tail',
       );
@@ -784,8 +788,17 @@ void main() {
       await tester.binding.handlePopRoute();
       await _settle(tester);
       expect(child, findsOneWidget);
-      expect(find.text('Inspect the emulator release'), findsOneWidget);
-      expect(find.text('Completed'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: child,
+          matching: find.text('Inspect the emulator release'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: child, matching: find.text('Completed')),
+        findsOneWidget,
+      );
       expect(chat.currentSubagents.single.isTerminal, isTrue);
       expect(
         harness.fixture.supervisionRequests.where(
@@ -804,6 +817,10 @@ void main() {
       });
       await _settle(tester);
       expect(chat.runtime.executionActive, isTrue);
+      expect(
+        chat.reading.streaming,
+        contains('Parent stream continues after child completion.'),
+      );
       expect(
         chat.reading.messages.where((row) => row['id'] == 4),
         hasLength(1),
@@ -832,13 +849,26 @@ void main() {
         await tester.tap(latest);
         await _settle(tester);
       }
-      expect(
-        find.textContaining(
-          'Parent stream continues after child completion.',
-          findRichText: true,
-        ),
-        findsOneWidget,
+      final continuedAnswer = find.textContaining(
+        'Parent stream continues after child completion.',
+        findRichText: true,
       );
+      // Expanding Activity preserves its reading anchor. Move through the
+      // actual transcript to the continued answer rather than assuming that
+      // opening the disclosure leaves that lazy row mounted at the newest edge.
+      await tester.scrollUntilVisible(
+        continuedAnswer,
+        -120,
+        scrollable: find
+            .descendant(
+              of: find.byType(ProfileTranscript),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await _settle(tester);
+      await captureJourney(tester, 'continued-parent-answer');
+      expect(continuedAnswer, findsOneWidget);
       expect(chat.runtime.runtimeId, runtime);
       expect(chat.composer.observation.text, draft);
       expect(tester.widget<TextField>(composer).controller!.text, draft);
