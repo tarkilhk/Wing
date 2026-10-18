@@ -542,9 +542,8 @@ void main({
       expect(find.text('gpt-5.6-sol · openai-codex'), findsOneWidget);
       // Refresh checks the newly selected model after reading its configuration.
       fixture.models['client-work'] = 'gpt-6-astra';
-      await tester
-          .widget<RefreshIndicator>(find.byType(RefreshIndicator))
-          .onRefresh();
+      await tester.ensureVisible(find.byTooltip('Refresh profile status'));
+      await tester.tap(find.byTooltip('Refresh profile status'));
       await tester.pumpAndSettle();
       expect(find.text('Access is set up'), findsOneWidget);
       expect(find.text('gpt-6-astra · openai-codex'), findsOneWidget);

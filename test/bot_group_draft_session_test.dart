@@ -46,6 +46,21 @@ Uint8List _photo() => Uint8List.fromList(
   ),
 );
 
+Future<void> _awaitRoster(BotsSession session) async {
+  if (!session.state.loading) return;
+  final settled = Completer<void>();
+  void changed() {
+    if (!session.state.loading && !settled.isCompleted) settled.complete();
+  }
+
+  session.addListener(changed);
+  try {
+    await settled.future.timeout(const Duration(seconds: 5));
+  } finally {
+    session.removeListener(changed);
+  }
+}
+
 /// Stock per-key merge/CAS semantics, without a device preference mirror.
 class _PictureBackend {
   _PictureBackend(this.fixture) {
@@ -396,7 +411,7 @@ void main() {
   );
 
   test(
-    'a renamed or retired room is rejected before editing its icon',
+    'a concurrently renamed room is rejected before editing its icon',
     () async {
       final (fixture, session, _) = await editingRoster();
       final draft = BotGroupDraftSession(
@@ -452,7 +467,7 @@ void main() {
       draft.setName('Blocked');
       expect(await draft.save(canUse: () => true), false);
       expect(fixture.commands, isEmpty);
-      final (_, ready, _) = await editingRoster();
+      final (readyFixture, ready, _) = await editingRoster();
       final admitted = BotGroupDraftSession(
         ready,
         existing: ready.state.groups.single,
@@ -461,6 +476,7 @@ void main() {
       admitted.setName('Not dispatched');
       expect(await admitted.save(canUse: () => false), false);
       expect(admitted.frozen, false);
+      expect(readyFixture.commands, isEmpty);
     },
   );
 
@@ -670,36 +686,66 @@ void main() {
     },
   );
 
+  Future<(BotsFixture, BotGroupDraftSession)> newDraft() async {
+    final fixture = BotsFixture();
+    fixture.profiles.addAll([
+      for (final name in ['pace', 'butler', 'reminder', 'memory'])
+        BotsFixture.profile(name, name),
+    ]);
+    final session = BotsSession((_) async => [fixture.repository]);
+    addTearDown(session.dispose);
+    await session.refresh();
+    final draft = BotGroupDraftSession(session);
+    addTearDown(draft.dispose);
+    return (fixture, draft);
+  }
+
+  test('new groups require at least two selected members', () async {
+    final (fixture, draft) = await newDraft();
+    expect(draft.canSave, false);
+    draft.select(draft.bots[0], true);
+    expect(draft.canSave, false);
+    draft.select(draft.bots[1], true);
+    expect(draft.canSave, true);
+    expect(fixture.commands, isEmpty);
+  });
   test(
-    'optional name tracks selections; explicit name and six-member cap win',
+    'suggested group name follows membership until explicitly named',
     () async {
-      final fixture = BotsFixture();
-      fixture.profiles.addAll([
-        for (final name in ['pace', 'butler', 'reminder', 'memory'])
-          BotsFixture.profile(name, name),
-      ]);
-      final session = BotsSession((_) async => [fixture.repository]);
-      addTearDown(session.dispose);
-      await session.refresh();
-      final draft = BotGroupDraftSession(session);
-      addTearDown(draft.dispose);
-      expect(draft.canSave, false);
+      final (_, draft) = await newDraft();
       draft.select(draft.bots[0], true);
-      expect(draft.canSave, false);
       draft.select(draft.bots[1], true);
       expect(draft.effectiveName, 'Atlas, Mira');
-      expect(draft.canSave, true);
+      draft.select(draft.bots[0], false);
+      expect(draft.effectiveName, 'Mira');
+      draft.setName('  Mission team  ');
+      draft.select(draft.bots[0], true);
+      expect(draft.effectiveName, 'Mission team');
+    },
+  );
+  test(
+    'member search excludes already selected bots without losing selection',
+    () async {
+      final (_, draft) = await newDraft();
+      draft.select(draft.bots[0], true);
+      draft.select(draft.bots[1], true);
       draft.search('@bot_mira');
       expect(draft.matches, isEmpty);
       draft.search('@bot_forge');
       expect(draft.matches.single.profile.name, 'forge');
       expect(draft.selected, hasLength(2));
-      draft.select(draft.bots[0], false);
-      expect(draft.effectiveName, 'Mira');
-      draft.setName('  Mission team  ');
-      expect(draft.effectiveName, 'Mission team');
-      draft.setName('🪽' * 70);
-      expect(draft.name.runes, hasLength(64));
+    },
+  );
+  test('group names are bounded in Unicode codepoints', () async {
+    final (_, draft) = await newDraft();
+    draft.setName('🪽' * 70);
+    expect(draft.name, '🪽' * 64);
+  });
+  test(
+    'seventh group member is refused without changing selected members',
+    () async {
+      final (fixture, draft) = await newDraft();
+      expect(draft.bots.length, greaterThan(6));
       for (final bot in draft.bots) {
         draft.select(bot, true);
       }
@@ -709,33 +755,48 @@ void main() {
     },
   );
 
-  test(
-    'picture crops to 256 square; cancel and invalid replacement retain it',
-    () async {
-      final (fixture, session) = await roster();
-      Uint8List? next = _photo();
-      final draft = BotGroupDraftSession(
-        session,
-        pictureIo: _Picker(() async => next),
-      );
-      addTearDown(draft.dispose);
-      await draft.pickPicture(canUse: () => true);
-      final saved = draft.picture;
-      final decoded = image.decodePng(saved!);
-      expect((decoded!.width, decoded.height), (256, 256));
-      next = null;
-      await draft.pickPicture(canUse: () => true);
-      expect(draft.picture, same(saved));
-      next = Uint8List.fromList([1, 2, 3]);
-      await draft.pickPicture(canUse: () => true);
-      expect(draft.picture, same(saved));
-      expect(draft.error, contains('could not be prepared'));
-      expect(draft.pictureBusy, false);
-      draft.removePicture();
-      expect(draft.picture, isNull);
-      expect(fixture.commands, isEmpty);
-    },
-  );
+  for (final intent in [
+    'crop',
+    'cancel replacement',
+    'invalid replacement',
+    'remove',
+  ]) {
+    test(
+      'room picture $intent preserves the requested draft behavior',
+      () async {
+        final (fixture, session) = await roster();
+        Uint8List? next = _photo();
+        final draft = BotGroupDraftSession(
+          session,
+          pictureIo: _Picker(() async => next),
+        );
+        addTearDown(draft.dispose);
+        await draft.pickPicture(canUse: () => true);
+        final saved = draft.picture;
+        expect(saved, isNotNull);
+        switch (intent) {
+          case 'crop':
+            final decoded = image.decodePng(saved!);
+            expect((decoded!.width, decoded.height), (256, 256));
+          case 'cancel replacement':
+            next = null;
+            await draft.pickPicture(canUse: () => true);
+            expect(draft.picture, same(saved));
+            expect(draft.pictureBusy, isFalse);
+          case 'invalid replacement':
+            next = Uint8List.fromList([1, 2, 3]);
+            await draft.pickPicture(canUse: () => true);
+            expect(draft.picture, same(saved));
+            expect(draft.error, contains('could not be prepared'));
+            expect(draft.pictureBusy, isFalse);
+          case 'remove':
+            draft.removePicture();
+            expect(draft.picture, isNull);
+        }
+        expect(fixture.commands, isEmpty);
+      },
+    );
+  }
 
   test(
     'picture preparation logs its stage while preserving the existing banner',
@@ -911,9 +972,7 @@ void main() {
       expect(draft.effectiveName, 'Atlas, Mira');
       expect(draft.selected, hasLength(2));
       expect(draft.picture, same(picture));
-      while (session.state.loading) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await _awaitRoster(session);
       fixture.room['room_id'] = first['room_id'];
       fixture.room['name'] = first['name'];
       final backend = _PictureBackend(fixture);
@@ -953,9 +1012,7 @@ void main() {
       expect(await draft.save(canUse: () => true), false);
       final first = fixture.commands.first.$3;
       fixture.room['room_id'] = first['room_id'];
-      while (session.state.loading) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await _awaitRoster(session);
       expect(await draft.save(canUse: () => true), true);
       expect(
         fixture.commands.where((cmd) => cmd.$2 == 'profiles.configure'),
@@ -1002,9 +1059,7 @@ void main() {
       await draft.pickPicture(canUse: () => true);
       expect(await draft.save(canUse: () => true), false);
       expect(draft.frozen, true);
-      while (session.state.loading) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await _awaitRoster(session);
       backend.reject = false;
       expect(await draft.save(canUse: () => true), true);
       final write = fixture.commands.last.$3;
@@ -1030,10 +1085,14 @@ void main() {
       _PictureBackend(fixture);
       final held = Completer<Map<String, dynamic>?>();
       var active = true;
-      fixture.readHook = (_, method, params) async =>
-          method == 'profiles.list' && params['include_sessions'] == false
-          ? held.future
-          : null;
+      final started = Completer<void>();
+      fixture.readHook = (_, method, params) async {
+        if (method == 'profiles.list' && params['include_sessions'] == false) {
+          started.complete();
+          return held.future;
+        }
+        return null;
+      };
       final operation = fixture.repository.saveGroupIcon(
         'room-id',
         0,
@@ -1042,6 +1101,7 @@ void main() {
         () => active,
         () {},
       );
+      await started.future;
       active = false;
       held.complete({'profiles': fixture.profiles});
       await expectLater(operation, throwsStateError);

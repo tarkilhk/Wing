@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/host_resources.dart';
 import '../../services/host_resources_session.dart';
 import '../../theme/wing_theme.dart';
+import '../../widgets/studio_loading.dart';
 import 'admin_widgets.dart';
 
 /// A borrowed connection-owned observation. Refresh only reads host data.
@@ -278,12 +279,43 @@ class _HostResourcesConsumerState extends State<_HostResourcesConsumer>
   );
 }
 
-class _HostHeading extends StatelessWidget {
+class _HostHeading extends StatefulWidget {
   const _HostHeading({required this.resources, required this.state});
   final HostResourcesSession resources;
   final HostResourcesState state;
   @override
+  State<_HostHeading> createState() => _HostHeadingState();
+}
+
+class _HostHeadingState extends State<_HostHeading> {
+  Future<void>? _requestedRefresh;
+
+  @override
+  void didUpdateWidget(_HostHeading oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.resources, widget.resources)) {
+      _requestedRefresh = null;
+    }
+  }
+
+  Future<void> _refresh() async {
+    if (_requestedRefresh != null) return;
+    final pending = widget.resources.refresh();
+    setState(() {
+      _requestedRefresh = pending;
+    });
+    try {
+      await pending;
+    } finally {
+      if (mounted && identical(_requestedRefresh, pending)) {
+        setState(() => _requestedRefresh = null);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
     final at = state.stats.readAt?.toLocal();
     final now = DateTime.now();
     final time = at == null
@@ -302,28 +334,34 @@ class _HostHeading extends StatelessWidget {
         : state.stats.isCurrent(now, const Duration(seconds: 30))
         ? 'Read $time'
         : 'Last read $time';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Host', style: Theme.of(context).textTheme.titleMedium),
-                if (!state.refreshing || state.stats.value != null)
-                  Text(label, style: Theme.of(context).textTheme.bodySmall),
-              ],
+    return StudioPageLoading(
+      active: _requestedRefresh != null,
+      label: 'Refreshing host resources',
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Host', style: Theme.of(context).textTheme.titleMedium),
+                  if (!state.refreshing || state.stats.value != null)
+                    Text(label, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ),
-          ),
-          StudioButtonPress(
-            child: IconButton(
-              tooltip: 'Refresh host resources',
-              onPressed: state.refreshing ? null : resources.refresh,
-              icon: const Icon(Icons.refresh),
+            StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Refresh host resources',
+                onPressed: state.refreshing || _requestedRefresh != null
+                    ? null
+                    : _refresh,
+                icon: const Icon(Icons.refresh),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

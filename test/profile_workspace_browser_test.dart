@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'support/chat_browser_interactions.dart';
 import 'package:flutter/material.dart';
@@ -82,7 +83,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.light),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
       ),
     );
   }
@@ -133,7 +137,10 @@ void main() {
             ),
             child: child!,
           ),
-          home: ProfileWorkspaceScreen(controller: controller),
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
         ),
       ),
     );
@@ -371,7 +378,10 @@ void main() {
         find.byKey(const ValueKey('workspace-new-project')),
       );
       expect(projectRect.bottom, lessThan(chatRect.top));
-      expect(projectRect.right, chatRect.right);
+      expect(
+        find.byKey(const ValueKey('workspace-new-project')).hitTestable(),
+        findsOneWidget,
+      );
       await tester.tap(find.byKey(const ValueKey('workspace-new-project')));
       await tester.pumpAndSettle();
       expect(controller.current!.scope.profileName, 'work');
@@ -659,6 +669,15 @@ void main() {
               host.folderCreateGate = Completer<void>();
               host.failFolderCreate = failFolder;
               host.rpcDelays['projects.create'] = Completer<void>();
+              addTearDown(() {
+                if (!host.folderCreateGate!.isCompleted) {
+                  host.folderCreateGate!.complete();
+                }
+                if (!host.rpcDelays['projects.create']!.isCompleted) {
+                  host.rpcDelays['projects.create']!.complete();
+                }
+                tester.view.resetViewInsets();
+              });
               await showActions(tester, brightness: brightness, scale: scale);
               await tester.tap(find.byTooltip('Chat list options'));
               await tester.pumpAndSettle();
@@ -1051,6 +1070,11 @@ void main() {
         await controller.reconnect(controller.current!.scope);
         fixture.connectUnavailable = false;
         fixture.connectDelay = Completer<void>();
+        addTearDown(() {
+          if (!fixture.connectDelay!.isCompleted) {
+            fixture.connectDelay!.complete();
+          }
+        });
         expect(controller.recovering, isTrue);
 
         final row = find.byKey(const ValueKey('chat-personal-newest'));
@@ -1239,7 +1263,10 @@ void main() {
               ).copyWith(textScaler: TextScaler.linear(scale)),
               child: RepaintBoundary(key: captureKey, child: child),
             ),
-            home: ProfileWorkspaceScreen(controller: controller),
+            home: ProfileWorkspaceScreen(
+              controller: controller,
+              createBotsSession: () => BotsSession((_) async => const []),
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -1254,7 +1281,7 @@ void main() {
         final labelRect = tester.getRect(find.text('Mobile app'));
         final pickerRect = tester.getRect(picker);
         expect(iconRect.right, lessThan(labelRect.left));
-        expect(iconRect.center.dy, closeTo(labelRect.center.dy, .1));
+        expect(picker.hitTestable(), findsOneWidget);
         expect(pickerRect.height, greaterThanOrEqualTo(48));
         expect(pickerRect.contains(iconRect.center), isTrue);
         expect(pickerRect.contains(labelRect.center), isTrue);

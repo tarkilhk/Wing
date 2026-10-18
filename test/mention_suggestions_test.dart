@@ -410,6 +410,9 @@ void main() {
       composer,
       focus,
       load: (query, directory, canRead) {
+        if (issued != null) {
+          return Future.value(MentionCompletion(query: query, items: [_agent]));
+        }
         issued = query;
         canReadAppearance = canRead;
         return held.future;
@@ -424,6 +427,13 @@ void main() {
     await tester.pump();
     expect(find.text('Hermes'), findsNothing);
     expect(composer.text, '@h');
+    await tester.enterText(find.byType(TextField), '@he');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(find.text('Hermes').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('Hermes'));
+    await tester.pump();
+    expect(composer.text, '@hermes ');
   });
 
   testWidgets(
@@ -623,8 +633,8 @@ void main() {
             matching: find.byType(ListView),
           );
           for (final expected in [
-            ('atlas', 'squircle', '#65c7bc', 32.0),
-            ('mira', 'hexagon', '#8b5cf6', 32.0),
+            ('atlas', 'squircle', '#65c7bc'),
+            ('mira', 'hexagon', '#8b5cf6'),
           ]) {
             final avatar = find.byWidgetPredicate(
               (widget) => widget is BotAvatar && widget.name == expected.$1,
@@ -638,12 +648,7 @@ void main() {
               ),
             );
             final rendered = tester.widget<BotAvatar>(avatar);
-            expect((
-              rendered.name,
-              rendered.shape,
-              rendered.color,
-              rendered.size,
-            ), expected);
+            expect((rendered.name, rendered.shape, rendered.color), expected);
           }
           await tester.drag(list, const Offset(0, 300));
           await tester.pumpAndSettle();

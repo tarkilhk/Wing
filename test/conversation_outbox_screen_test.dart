@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -102,7 +103,10 @@ void main() {
         ),
         home: RepaintBoundary(
           key: const ValueKey('outbox-capture'),
-          child: ProfileWorkspaceScreen(controller: controller),
+          child: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
         ),
       ),
     );

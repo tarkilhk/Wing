@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/owned_remote_files.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -118,7 +119,12 @@ void main() {
           ProfileSessionKey(controller.current!.scope, 'original'),
         );
         await tester.pumpWidget(
-          MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+          MaterialApp(
+            home: ProfileWorkspaceScreen(
+              createBotsSession: () => BotsSession((_) async => const []),
+              controller: controller,
+            ),
+          ),
         );
         await tester.pump(const Duration(milliseconds: 100));
         await tester.settleMarkdown();

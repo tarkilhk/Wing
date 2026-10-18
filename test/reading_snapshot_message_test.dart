@@ -34,6 +34,9 @@ void main() {
     expect(saved['_review_notice'], 'runtime:12');
     expect(saved['timestamp'], 101.25);
     expect(saved.containsKey('pending_approval'), isFalse);
+  });
+
+  test('a user message cannot claim a trusted review receipt', () {
     expect(
       roundtrip({
         'role': 'user',
@@ -207,25 +210,29 @@ void main() {
       expect(jsonEncode(saved), isNot(contains('excluded')));
       expect(saved.containsKey('started_at'), isFalse);
       expect(saved.containsKey('phase'), isFalse);
-      for (final seconds in [-1, double.nan, double.infinity, '1.25']) {
-        expect(
-          roundtrip({
-            'role': 'tool',
-            'duration_s': seconds,
-          }).containsKey('duration_s'),
-          isFalse,
-        );
-      }
+    },
+  );
+  for (final seconds in [-1, double.nan, double.infinity, '1.25']) {
+    test('tool duration rejects $seconds (${seconds.runtimeType})', () {
       expect(
         roundtrip({
-          'role': 'assistant',
-          'duration_s': 1.25,
-          'tool_call_id': 'bad',
+          'role': 'tool',
+          'duration_s': seconds,
         }).containsKey('duration_s'),
         isFalse,
       );
-    },
-  );
+    });
+  }
+  test('assistant rows cannot claim tool duration', () {
+    expect(
+      roundtrip({
+        'role': 'assistant',
+        'duration_s': 1.25,
+        'tool_call_id': 'bad',
+      }).containsKey('duration_s'),
+      isFalse,
+    );
+  });
 
   test('hidden and synthetic rows remain hidden without runtime fields', () {
     for (final marker in [
@@ -446,13 +453,17 @@ void main() {
       'display_kind': 'async_delegation_complete',
       'display_content': [],
     });
-    for (final count in [0, -1, double.nan, double.infinity, 1e50]) {
+  });
+  for (final count in [0, -1, double.nan, double.infinity, 1e50]) {
+    test('invalid task count $count cannot survive projection', () {
       final projected = projectReadingSnapshotMessage({
         'display_kind': 'async_delegation_complete',
         'display_metadata': {'task_count': count},
       });
       expect(projected.containsKey('display_metadata'), isFalse);
-    }
+    });
+  }
+  test('oversized content-part list cannot survive projection', () {
     final manyParts = projectReadingSnapshotMessage({
       'content': List.filled(257, {'type': 'text', 'text': 'part'}),
     });

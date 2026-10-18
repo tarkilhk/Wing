@@ -83,6 +83,22 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
     }
   }
 
+  Widget _actionIcon(
+    IconData icon, {
+    required bool pending,
+    required String label,
+  }) => SizedBox.square(
+    dimension: 20,
+    child: pending
+        ? CircularProgressIndicator(
+            strokeWidth: 2,
+            backgroundColor: Theme.of(context).colorScheme.outlineVariant,
+            value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
+            semanticsLabel: label,
+          )
+        : Icon(icon, size: 20),
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -104,7 +120,11 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                   onPressed: widget.onDownload == null || _downloading
                       ? null
                       : () => _run(download: true),
-                  icon: const Icon(Icons.download_outlined, size: 20),
+                  icon: _actionIcon(
+                    Icons.download_outlined,
+                    pending: _downloading,
+                    label: 'Saving image',
+                  ),
                 ),
               ),
             ),
@@ -154,7 +174,11 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                   onPressed: widget.onDownload == null || _downloading
                       ? null
                       : () => _run(download: true),
-                  icon: const Icon(Icons.download_outlined, size: 20),
+                  icon: _actionIcon(
+                    Icons.download_outlined,
+                    pending: _downloading,
+                    label: 'Saving file',
+                  ),
                 ),
               ),
               StudioButtonPress(
@@ -167,7 +191,11 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
                   onPressed: widget.onOpen == null || _opening
                       ? null
                       : () => _run(download: false),
-                  icon: const Icon(Icons.visibility_outlined, size: 20),
+                  icon: _actionIcon(
+                    Icons.visibility_outlined,
+                    pending: _opening,
+                    label: 'Opening preview',
+                  ),
                 ),
               ),
             ],

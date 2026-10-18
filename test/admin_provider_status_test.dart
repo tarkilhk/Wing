@@ -82,11 +82,13 @@ void main() {
       expect(find.text('Server A / default'), findsOneWidget);
       await tester.pageBack();
       await tester.pumpAndSettle();
+      final accountReads = fixture.requests
+          .where((request) => request.$2 == 'providers/oauth')
+          .toList();
+      expect(accountReads, isNotEmpty);
       expect(
-        fixture.requests
-            .where((r) => r.$2 == 'providers/oauth')
-            .every((r) => r.$3['profile'] == 'default'),
-        isTrue,
+        accountReads.map((request) => request.$3['profile']),
+        everyElement('default'),
       );
       fail = true;
       await tester.scrollUntilVisible(

@@ -659,12 +659,29 @@ Future<void> _proofMain(List<String> args) async {
           result.exitCode == c.status,
           '${c.name}: actual CLI${result.exitCode} ${result.stdout}${result.stderr}',
         );
-        require(
-          c.status == 2
-              ? '${result.stderr}'.contains('[${rule.id} INPUT]')
-              : '${result.stdout}'.contains('"id":"${rule.id}"'),
-          '${c.name}: actual CLI ID',
-        );
+        if (c.status == 2) {
+          require(
+            '${result.stderr}'.contains('[${rule.id} INPUT]'),
+            '${c.name}: actual CLI input diagnostic',
+          );
+        } else {
+          final output = jsonDecode(result.stdout as String) as Map;
+          final findings = output['findings'] as List;
+          require(
+            output['id'] == rule.id &&
+                findings.length == (c.status == 1 ? 1 : 0),
+            '${c.name}: actual CLI diagnostic count',
+          );
+          if (c.status == 1) {
+            final finding = findings.single as Map;
+            require(
+              finding['id'] == rule.id &&
+                  finding['file'] == c.file &&
+                  finding['line'] == c.line,
+              '${c.name}: actual CLI diagnostic identity and location',
+            );
+          }
+        }
       }
     }
     if (c.name == 'ordinary noncandidate SDK error' ||

@@ -79,7 +79,14 @@ void main() {
     'parallel renewal exchanges one rotating grant and persists before use',
     () async {
       var exchanges = 0, saves = 0;
+      var delivered = 0;
       final release = Completer<void>();
+      final saving = Completer<void>();
+      final saved = Completer<void>();
+      addTearDown(() {
+        if (!release.isCompleted) release.complete();
+        if (!saved.isCompleted) saved.complete();
+      });
       final session = _session(
         client: () => MockClient((request) async {
           exchanges++;
@@ -97,13 +104,27 @@ void main() {
         }),
         persist: () async {
           saves++;
+          saving.complete();
+          await saved.future;
         },
       );
       final requests = List.generate(
         8,
-        (_) => session.bearerFor('https://agent.example:443/hermes/'),
+        (_) => session.bearerFor('https://agent.example:443/hermes/').then((
+          token,
+        ) {
+          delivered++;
+          return token;
+        }),
       );
       release.complete();
+      await saving.future;
+      expect(
+        delivered,
+        0,
+        reason: 'Rotated tokens must be durable before use.',
+      );
+      saved.complete();
       expect(await Future.wait(requests), everyElement('new-access'));
       expect(exchanges, 1);
       expect(saves, 1);
@@ -137,15 +158,32 @@ void main() {
     },
   );
 
-  test('grant cannot be forwarded to another origin or path', () async {
-    final session = _session(expired: false);
-    for (final url in [
-      'https://elsewhere.example/hermes',
-      'https://agent.example/other',
-      'http://agent.example/hermes',
-    ]) {
-      await expectLater(session.bearerFor(url), throwsA(anything));
-    }
+  for (final url in [
+    'https://elsewhere.example/hermes',
+    'https://agent.example/other',
+  ]) {
+    test('grant cannot be forwarded to $url', () async {
+      final session = _session(expired: false);
+      await expectLater(
+        session.bearerFor(url),
+        throwsA(isA<CloudAccessException>()),
+      );
+    });
+  }
+
+  test('insecure grant destination is rejected before renewal', () async {
+    var requests = 0;
+    final session = _session(
+      client: () => MockClient((_) async {
+        requests++;
+        return _tokens();
+      }),
+    );
+    await expectLater(
+      session.bearerFor('http://agent.example/hermes'),
+      throwsFormatException,
+    );
+    expect(requests, 0);
   });
 
   test(
@@ -165,11 +203,11 @@ void main() {
           return http.Response('{"ticket":"single-use"}', 200);
         }),
       );
+      addTearDown(client.close);
       expect(await client.gatewayCredentials(), (
         token: null,
         ticket: 'single-use',
       ));
-      client.close();
     },
   );
 
@@ -200,13 +238,13 @@ void main() {
           return http.Response('{}', 200, request: request);
         }),
       );
+      addTearDown(client.close);
       final first = client.apiGet('first');
       final second = client.apiGet('second');
       await first;
       lateResponse.complete();
       await second;
       expect(exchanges, 1);
-      client.close();
     },
   );
 
@@ -222,11 +260,11 @@ void main() {
               throw StateError('Must never fetch SPA or password login'),
         ),
       );
+      addTearDown(client.close);
       await expectLater(
         client.apiGet('profiles'),
         throwsA(isA<CloudAccessException>()),
       );
-      client.close();
     },
   );
 
@@ -375,6 +413,7 @@ void main() {
           return http.Response('{}', 200);
         }),
       );
+      addTearDown(client.close);
       final pending = client.apiWriteOwned(
         'POST',
         'model/set',
@@ -404,7 +443,6 @@ void main() {
       expect(dispatches, 0);
       expect(failure, isA<DashboardRequestNotSentException>());
       expect(succeeded, isFalse);
-      client.close();
     },
   );
 

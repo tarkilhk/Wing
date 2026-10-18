@@ -1325,22 +1325,22 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           child: Card(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.only(left: 16, right: 8),
+              child: Row(
                 children: [
-                  Text(
-                    'Search result',
-                    style: Theme.of(context).textTheme.titleSmall,
+                  Expanded(
+                    child: Text(
+                      'Search result',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
                   ),
-                  const Text('Nearby messages'),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: StudioButtonPress(
-                      child: TextButton(
-                        onPressed: widget.onBackToLatest,
-                        child: const Text('Back to latest'),
-                      ),
+                  StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Back to latest',
+                      onPressed: widget.onBackToLatest,
+                      icon: const Icon(Icons.arrow_downward_rounded),
                     ),
                   ),
                 ],

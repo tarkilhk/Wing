@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../model.dart';
+import '../fixture_contract.dart';
 import '../rules/deleted_draft_cleanup_boundary.dart' as rule;
 import '../proof_process.dart';
 
@@ -45,7 +46,10 @@ Future<void> _proofMain(List<String> arguments) async {
     'wing-cleanup-boundary-',
   );
   try {
-    for (final entry in fixture['cases'] as List) {
+    for (final entry in validatedProofCases(
+      fixture['cases'],
+      requiredNames: cliCases,
+    )) {
       if (compiled != null && !cliCases.contains(entry['name'])) continue;
       final sources = Directory('${workspace.path}/lib');
       if (sources.existsSync()) sources.deleteSync(recursive: true);
@@ -128,7 +132,9 @@ Future<void> _proofMain(List<String> arguments) async {
         }
         if (expected == 1) {
           final output = jsonDecode(result.stdout as String) as Map;
-          if ((output['findings'] as List).any((f) => f['id'] != rule.id)) {
+          final diagnostics = output['findings'] as List;
+          if (diagnostics.isEmpty ||
+              diagnostics.any((f) => f['id'] != rule.id)) {
             throw StateError('Bad fixture missed the intended diagnostic.');
           }
         }

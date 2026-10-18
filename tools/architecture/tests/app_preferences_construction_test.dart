@@ -488,6 +488,10 @@ Future<void> _proofMain(List<String> args) async {
   ];
   // All 52 resolved API fixtures retain their full identity/location assertions.
   // CLI source/AOT runs need one representative per exit, plus invalid SDK.
+  final cliExits = <String, Set<int>>{
+    'source': {},
+    if (compiled != null) 'aot': {},
+  };
   var passed = 0;
   final workspace = Workspace();
   try {
@@ -554,6 +558,7 @@ Future<void> _proofMain(List<String> args) async {
           result.exitCode == expected,
           '${fixture.name}: actual CLI ${result.exitCode}: ${result.stdout}${result.stderr}',
         );
+        cliExits[prefix.isEmpty ? 'aot' : 'source']!.add(result.exitCode);
         if (expected == 2) {
           require(
             '${result.stderr}'.contains('[${rule.id} INPUT]'),
@@ -595,6 +600,10 @@ Future<void> _proofMain(List<String> args) async {
   } finally {
     workspace.dispose();
   }
+  require(
+    cliExits.values.every((exits) => exits.containsAll({0, 1, 2})),
+    'Every enabled CLI mode must prove rejection, acceptance and input failure',
+  );
   stdout.writeln(
     '${rule.id}: $passed API fixtures; actual source${compiled == null ? '' : '+AOT'} CLI invalid1/valid0/input2 and invalid SDK2 passed.',
   );

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/web_preview.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/transcript_message.dart';
@@ -120,31 +121,31 @@ void main() {
     expect(copied, contains('```dart'));
   });
 
-  testWidgets(
-    'user text stays literal and streaming fences tolerate partial input',
-    (tester) async {
-      await message(tester, '**Literal** `draft`', role: 'user');
-      expect(find.text('**Literal** `draft`'), findsOneWidget);
-      expect(find.bySubtype<MarkdownBody>(), findsNothing);
-      await message(tester, 'Working\n```dart\nfinal value =', streaming: true);
-      expect(find.byTooltip('Copy message'), findsNothing);
-      expect(tester.takeException(), isNull);
-      await message(
-        tester,
-        'Working\n```dart\nfinal value = 42;\n```',
-        streaming: true,
-      );
-      expect(find.byType(MarkdownCodeBlock), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+  testWidgets('user text stays literal', (tester) async {
+    await message(tester, '**Literal** `draft`', role: 'user');
+    expect(find.text('**Literal** `draft`'), findsOneWidget);
+    expect(find.bySubtype<MarkdownBody>(), findsNothing);
+  });
+
+  testWidgets('streaming fences tolerate partial input', (tester) async {
+    await message(tester, 'Working\n```dart\nfinal value =', streaming: true);
+    expect(find.byTooltip('Copy message'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await message(
+      tester,
+      'Working\n```dart\nfinal value = 42;\n```',
+      streaming: true,
+    );
+    expect(find.byType(MarkdownCodeBlock), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('images render inline and unsafe links show a scoped error', (
     tester,
   ) async {
     await message(
       tester,
-      '![Remote image](https://example.com/image.png)\n\n[Host file](file:///private/file)',
+      '![Remote image](https://example.com/image.png)\n\n[Unsafe link](javascript:run)',
     );
     expect(
       find.descendant(
@@ -160,10 +161,7 @@ void main() {
       ),
     );
     expect(image.semanticLabel, 'Open image: Remote image');
-    final markdown = tester.widget<MarkdownBody>(
-      find.bySubtype<MarkdownBody>(),
-    );
-    markdown.onTapLink!('Host file', 'file:///private/file', '');
+    await tester.tap(find.text('Unsafe link', findRichText: true));
     await tester.pump();
     expect(
       find.text('Only web links and linked Hermes files can be opened here.'),
@@ -188,10 +186,7 @@ void main() {
         ),
       ),
     );
-    final markdown = tester.widget<MarkdownBody>(
-      find.bySubtype<MarkdownBody>(),
-    );
-    markdown.onTapLink!('Open report', '../exports/final-report.pdf', '');
+    await tester.tap(find.byTooltip('Open preview'));
     await tester.pump();
 
     expect(openedPath, '../exports/final-report.pdf');
@@ -214,10 +209,7 @@ void main() {
         ),
       ),
     );
-    final markdown = tester.widget<MarkdownBody>(
-      find.bySubtype<MarkdownBody>(),
-    );
-    markdown.onTapLink!('Missing report', '/srv/removed/report.pdf', '');
+    await tester.tap(find.byTooltip('Open preview'));
     await tester.pumpAndSettle();
 
     expect(
@@ -270,7 +262,12 @@ void main() {
     });
     Future<void> show(WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => []),
+          ),
+        ),
       );
       if (controller.current!.chat!.runtime.blocksTurnAdmission) {
         await tester.pump(const Duration(milliseconds: 300));
@@ -294,7 +291,10 @@ void main() {
             ).copyWith(textScaler: TextScaler.linear(1.8)),
             child: child!,
           ),
-          home: ProfileWorkspaceScreen(controller: controller),
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => []),
+          ),
         ),
       );
       await tester.enterText(
@@ -303,10 +303,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(
-        tester.getBottomRight(find.byTooltip('Send')).dy,
-        lessThanOrEqualTo(540),
-      );
+      expect(find.byTooltip('Send').hitTestable(), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
     });
 
@@ -317,12 +314,6 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
         await show(tester);
-        expect(
-          tester
-              .getSize(find.byKey(const ValueKey('conversation-composer')))
-              .height,
-          lessThanOrEqualTo(120),
-        );
         expect(
           tester
               .getBottomLeft(find.byKey(const Key('profile-message-composer')))

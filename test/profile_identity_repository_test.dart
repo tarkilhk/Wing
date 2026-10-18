@@ -19,6 +19,7 @@ class _Host {
   Object? soulWriteError;
   bool malformedAck = false;
   Completer<void>? authentication;
+  final authenticationEntered = Completer<void>();
   void Function()? afterDescriptionAck;
   final reads = <(String, Map<String, String>)>[];
   final writes = <(String, Map<String, dynamic>)>[];
@@ -77,6 +78,9 @@ class _Host {
   ) async {
     expect(method, 'PUT');
     expect(query, isEmpty);
+    if (authentication != null && !authenticationEntered.isCompleted) {
+      authenticationEntered.complete();
+    }
     await authentication?.future;
     if (!canDispatch()) throw StateError('Retired before physical dispatch');
     onDispatched();
@@ -330,7 +334,7 @@ void main() {
       canDispatch: () => active,
       onDispatched: (_) => fail('Retired write was dispatched'),
     );
-    await Future<void>.delayed(Duration.zero);
+    await host.authenticationEntered.future;
     active = false;
     host.authentication!.complete();
     final saved = await pending;

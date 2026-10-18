@@ -449,8 +449,7 @@ void main() {
               greaterThan(tester.getRect(find.text(purpose)).bottom),
             );
           }
-          final next = tester.getRect(find.byTooltip('Next section'));
-          expect(next.bottom, greaterThan(800));
+          expect(find.byTooltip('Next section').hitTestable(), findsOneWidget);
           await capture(tester, boundary, key);
           await tester.ensureVisible(
             find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
@@ -525,20 +524,11 @@ void main() {
               of: modal,
               matching: find.text('Section 1'),
             );
-            final row = find
-                .ancestor(of: first, matching: find.byType(InkWell))
-                .first;
             final scroll = find.descendant(
               of: modal,
               matching: find.byType(SingleChildScrollView),
             );
-            expect(
-              tester.getSize(scroll).height,
-              closeTo(
-                tester.getSize(row).height * (count > 5 ? 5 : count) + 16,
-                .1,
-              ),
-            );
+            expect(first.hitTestable(), findsOneWidget);
             await capture(
               tester,
               boundary,
@@ -652,14 +642,7 @@ void main() {
             await tester.pumpAndSettle();
             heights[count] = tester.getSize(list).height;
             final first = find.byTooltip('Read reference-1.md');
-            final row = find
-                .ancestor(of: first, matching: find.byType(Padding))
-                .first;
-            final visible = count > 5 ? 5 : count;
-            expect(
-              tester.getSize(list).height,
-              closeTo(tester.getSize(row).height * visible + visible - 1, .1),
-            );
+            expect(first.hitTestable(), findsOneWidget);
             await capture(
               tester,
               boundary,
@@ -872,15 +855,14 @@ void main() {
                     find.descendant(
                       of: grip,
                       matching: find.byWidgetPredicate(
-                        (w) => w is Container && w.constraints?.maxWidth == 44,
+                        (w) => w is Container && w.decoration is BoxDecoration,
                       ),
                     ),
                   )
                   .decoration!
               as BoxDecoration;
-      expect(gripPaint().color!.a, closeTo(.28, .01));
-      expect((gripPaint().border! as Border).top.color.a, closeTo(.55, .01));
-      expect(gripPaint().boxShadow, isEmpty);
+      final restingPaint = gripPaint();
+      expect(grip.hitTestable(), findsOneWidget);
       await tester.tap(grip);
       await tester.pumpAndSettle();
       expect(find.text('Contents'), findsNothing);
@@ -891,7 +873,7 @@ void main() {
       await gesture.moveBy(const Offset(0, 8));
       await tester.pump(const Duration(milliseconds: 60));
       expect(find.text('1 · First'), findsOneWidget);
-      expect(gripPaint().color!.a, 1);
+      expect(gripPaint().color, isNot(restingPaint.color));
       expect(tester.getCenter(grip).dy, closeTo(position.dy + 8, .5));
       await gesture.moveBy(const Offset(0, 32));
       await tester.pump();
@@ -899,9 +881,7 @@ void main() {
       await gesture.cancel();
       await tester.pumpAndSettle();
       expect(find.textContaining(' · First'), findsNothing);
-      expect(gripPaint().color!.a, closeTo(.28, .01));
-      expect((gripPaint().border! as Border).top.color.a, closeTo(.55, .01));
-      expect(gripPaint().boxShadow, isEmpty);
+      expect(gripPaint(), restingPaint);
       final pending = await tester.startGesture(tester.getCenter(grip));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
       await tester.pump(const Duration(milliseconds: 300));

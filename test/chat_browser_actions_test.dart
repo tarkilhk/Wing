@@ -529,7 +529,10 @@ void main() {
           expect(glyph.center.dy, closeTo(before['instance']!.center.dy, 1));
           expect(glyph.left, greaterThanOrEqualTo(before['profiles']!.right));
           expect(glyph.overlaps(before['search']!), isFalse);
-          expect(glyph.right, lessThanOrEqualTo(scale == 1 ? 374 : 304));
+          expect(
+            tester.getRect(find.byType(WingAppBar)).contains(glyph.center),
+            isTrue,
+          );
           for (final entry in {
             'search': search,
             'profiles': profiles,

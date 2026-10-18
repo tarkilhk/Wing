@@ -77,6 +77,33 @@ Future<void> main() async {
               .map((row) => Map<String, dynamic>.from(row as Map))
               .toList();
   final otherHost = Host()..running = false;
+  final readAcknowledgements = <Map<String, String>>[];
+  for (final (profile, fixture) in [('a', host), ('b', otherHost)]) {
+    final title = profile == 'a' ? 'Website refresh' : 'Weekly report';
+    fixture
+      ..sessionTitle = title
+      ..indexedSessions = [
+        {'id': 'same', 'title': title, 'profile': profile},
+      ];
+    fixture.ownedPatch = (endpoint, body, canDispatch, onDispatched) async {
+      if (endpoint != 'sessions/same' ||
+          body.length != 5 ||
+          body['profile'] != profile ||
+          body['unread'] != false ||
+          body['request_id'] is! String ||
+          (body['request_id'] as String).isEmpty ||
+          body['expected_revision'] != 0 ||
+          body['expected_generation'] != 0 ||
+          !canDispatch()) {
+        throw StateError(
+          'Unexpected notification read acknowledgement: $endpoint',
+        );
+      }
+      onDispatched();
+      readAcknowledgements.add({'profile': profile, 'session': 'same'});
+      return {'ok': true};
+    };
+  }
   final savedDecisions = prefs.getString('notification_qa_decisions');
   if (savedDecisions != null) {
     for (final row in jsonDecode(savedDecisions) as List) {
@@ -436,6 +463,8 @@ Future<void> main() async {
           'selected_profile':
               controller.current?.chat?.key.workspace.profileName,
           'read_target': chat.reading.notificationReadTarget?.toJson(),
+          'read_acks': readAcknowledgements,
+          'mark_read_failed': chat.markReadFailed,
           'read_guards': {
             'opening': chat.runtime.opening,
             'offline_snapshot': chat.runtime.offline,

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../model.dart';
+import '../fixture_contract.dart';
 import '../dart_sdk.dart';
 import '../rules/view_draft_write.dart' as rule;
 import '../proof_process.dart';
@@ -22,6 +23,7 @@ Future<void> _proofMain(List<String> arguments) async {
     compiled = File(arguments[1]).absolute.path;
   }
   final sdkPath = dartSdkPath(Directory.current.path);
+  const cliCases = {'direct', 'controller-command', 'dynamic-is-unverifiable'};
   final fixture =
       jsonDecode(
             File(
@@ -33,7 +35,10 @@ Future<void> _proofMain(List<String> arguments) async {
   var passed = 0;
   final workspace = Directory.systemTemp.createTempSync('wing-draft-write-');
   try {
-    for (final entry in fixture['cases'] as List) {
+    for (final entry in validatedProofCases(
+      fixture['cases'],
+      requiredNames: cliCases,
+    )) {
       final sources = Directory('${workspace.path}/lib');
       if (sources.existsSync()) sources.deleteSync(recursive: true);
       final roles = <String, Object>{};
@@ -98,11 +103,7 @@ Future<void> _proofMain(List<String> arguments) async {
       }
       // Prove a bad/valid/input fixture through the actual independent CLI;
       // a swallowed exit status must not pass the quality gate.
-      if ({
-        'direct',
-        'controller-command',
-        'dynamic-is-unverifiable',
-      }.contains(entry['name'])) {
+      if (cliCases.contains(entry['name'])) {
         final result = await runProofProcess(proofDartExecutable, [
           'run',
           'tools/architecture/rules/view_draft_write.dart',

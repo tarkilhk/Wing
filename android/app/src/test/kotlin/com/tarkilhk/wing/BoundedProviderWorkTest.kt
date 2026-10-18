@@ -91,10 +91,6 @@ class BoundedProviderWorkTest {
             assertFalse(owner.submit(Any(), { true }, { _ -> fail("capacity must reject") }, { _, _, _ -> }))
             owner.cancel(authority)
             await(failures)
-            // The local actor is independent: acknowledgment/camera work needs no provider permit.
-            val local = java.util.concurrent.Executors.newSingleThreadExecutor()
-            try { assertEquals("ack", local.submit<String> { "ack" }.get(1, TimeUnit.SECONDS)) }
-            finally { local.shutdownNow() }
             assertEquals(2, providers.get())
             unblock.countDown()
             await(finished)

@@ -81,10 +81,20 @@ class _SupportWingSectionState extends State<SupportWingSection> {
             ),
           ),
         ),
-        trailing: Icon(
-          Icons.open_in_new,
-          size: 18,
-          color: primary ? color : tokens.muted,
+        trailing: SizedBox.square(
+          dimension: 18,
+          child: _opening == uri
+              ? CircularProgressIndicator(
+                  strokeWidth: 2,
+                  backgroundColor: Theme.of(context).colorScheme.outlineVariant,
+                  value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
+                  semanticsLabel: 'Opening $platform',
+                )
+              : Icon(
+                  Icons.open_in_new,
+                  size: 18,
+                  color: primary ? color : tokens.muted,
+                ),
         ),
         onTap: enabled ? () => _open(uri) : null,
       ),

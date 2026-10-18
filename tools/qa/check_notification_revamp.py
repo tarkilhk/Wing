@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """Native smoke test for notification_revamp_device.dart, isolated emulator only."""
+# Optimization would remove the verdict assertions below.
+if not __debug__:
+    raise RuntimeError("Native acceptance requires Python assertions; remove -O/PYTHONOPTIMIZE")
+
 import argparse
 import json
 import os
@@ -13,6 +17,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 
 PACKAGE = 'com.tarkilhk.wing.notificationqa'
+LOCAL_PORT = 18766
 SERIAL = 'emulator-5556'
 _fixture_http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -23,7 +28,7 @@ def adb(*args):
 
 
 def state(path='/', data=None):
-    request = urllib.request.Request('http://127.0.0.1:18766' + path,
+    request = urllib.request.Request(f'http://127.0.0.1:{LOCAL_PORT}' + path,
         data=None if data is None else json.dumps(data).encode(),
         headers={'Content-Type': 'application/json'})
     return json.load(_fixture_http.open(request, timeout=5))
@@ -49,6 +54,106 @@ def nodes():
     return list(ET.fromstring(adb('shell', 'cat', '/sdcard/wing-notification-ui.xml')).iter('node'))
 
 
+def notification_card(shown, title, *, headerless_owner=False):
+    """Identify one current System UI conversation card, never adjacent text."""
+    cards = []
+    for node in shown:
+        if node.get('resource-id') != 'com.android.systemui:id/expandableNotificationRow':
+            continue
+        children = list(node.iter('node'))
+        labels = [child.get('text') for child in children
+                  if child.get('resource-id') == 'android:id/app_name_text']
+        owned = labels == ['Wing Dev'] or (not labels and headerless_owner)
+        if (owned and any(child.get('resource-id') in {'android:id/title', 'android:id/conversation_text'}
+                          and child.get('text') == title for child in children)):
+            cards.append(node)
+    assert len(cards) <= 1, f'More than one native notification for {title!r}'
+    return cards[0] if cards else None
+
+
+
+def notification_title_owned(dump, title):
+    """Bind a headerless Android conversation card to one active owned slot."""
+    active = re.search(r'^  Notification List:\n(.*?)(?=^  \S|\Z)',
+                       dump, re.MULTILINE | re.DOTALL)
+    if active is None:
+        return False
+    owners = []
+    for block in re.split(r'(?=NotificationRecord\()', active.group(1)):
+        if not block.startswith('NotificationRecord('):
+            continue
+        titles = re.findall(r'android\.conversationTitle=String \((.*?)\)\n', block)
+        if title not in titles:
+            continue
+        owner = re.search(r'\bpkg=(\S+)', block.splitlines()[0])
+        owners.append(owner.group(1) if owner else None)
+    return owners == [PACKAGE]
+
+
+def notification_text_matches(card, required=(), forbidden=()):
+    # Include accessibility labels: a private preview must not leak there either.
+    text = ' '.join(' '.join(node.get(field, '').split())
+                    for node in card.iter('node') for field in ('text', 'content-desc'))
+    return (all(re.search(r'(?<!\w)' + re.escape(value) + r'(?!\w)', text)
+                for value in required)
+            and not any(value.casefold() in text.casefold() for value in forbidden))
+
+
+def tap_notification_node(node):
+    bounds = list(map(int, re.findall(r'\d+', node.get('bounds', ''))))
+    assert len(bounds) == 4 and bounds[2] > bounds[0] and bounds[3] > bounds[1], \
+        'Native notification target has no reachable bounds'
+    adb('shell', 'input', 'tap', str((bounds[0] + bounds[2]) // 2),
+        str((bounds[1] + bounds[3]) // 2))
+
+
+def shown_notification(title, *, expanded, required=(), forbidden=()):
+    """Observe the requested collapsed/expanded card through real Android controls."""
+    shade(expand=False)
+    def current_card():
+        shown = nodes()
+        current = notification_card(shown, title)
+        if current is not None:
+            return current
+        # API36 collapses conversation headers without an app-name label.
+        # Require a unique active Android slot owned by the QA package before
+        # using that presentation; matching text elsewhere is insufficient.
+        owned = notification_title_owned(
+            adb('shell', 'dumpsys', 'notification', '--noredact'), title)
+        return notification_card(shown, title, headerless_owner=owned)
+
+    def located():
+        current = current_card()
+        return [current] if current is not None else None
+
+    card = until(located, f'Native notification for {title!r} is not visible')[0]
+
+    def expansion_control(current):
+        controls = [node for node in current.iter('node')
+                    if node.get('resource-id') == 'android:id/expand_button']
+        assert len(controls) == 1, 'Notification has no unique expansion control'
+        assert controls[0].get('enabled') == 'true', 'Notification expansion is disabled'
+        return controls[0]
+
+    expected = 'Collapse' if expanded else 'Expand'
+    control = expansion_control(card)
+    if control.get('content-desc') != expected:
+        assert control.get('content-desc') == ('Expand' if expanded else 'Collapse'), \
+            'Notification expansion state is unknown'
+        tap_notification_node(control)
+
+    def rendered():
+        current = current_card()
+        if current is None:
+            return None
+        if expansion_control(current).get('content-desc') != expected:
+            return None
+        return [current] if notification_text_matches(current, required, forbidden) else None
+
+    return until(rendered, f'{title!r} did not show the required '
+                 f'{"expanded" if expanded else "collapsed"} notification content')[0]
+
+
 def tap(resource=None, text=None):
     found = next((n for n in nodes() if
         (resource is not None and n.get('resource-id') == resource) or
@@ -56,6 +161,15 @@ def tap(resource=None, text=None):
     assert found is not None, f'Missing control: {resource or text}'
     x1, y1, x2, y2 = map(int, re.findall(r'\d+', found.get('bounds')))
     adb('shell', 'input', 'tap', str((x1 + x2)//2), str((y1 + y2)//2))
+
+
+def scroll_through_answer(answer):
+    """Use the actual reading gesture; opening a reply is deliberately not read."""
+    until(lambda: any(answer in (node.get('text'), node.get('content-desc'))
+                      for node in nodes()), 'The exact answer is not visible')
+    width, height = map(int, re.findall(r'(\d+)x(\d+)', adb('shell', 'wm', 'size'))[-1])
+    adb('shell', 'input', 'swipe', str(width // 2), str(height * 2 // 3),
+        str(width // 2), str(height // 3), '400')
 
 
 def shade(*, expand=True):
@@ -292,7 +406,6 @@ def check_group_approval_rendering(output):
 
 def reset_fixture():
     assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
-    adb('forward', 'tcp:18766', 'tcp:18766')
     adb('shell', 'pm', 'clear', PACKAGE)
     adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
     # This journey assumes background monitoring was enabled during onboarding.
@@ -361,6 +474,18 @@ def check_monitoring_taps(output):
     print('PASS: monitoring taps open the single chat/group or Recents for multiple chats', flush=True)
 
 
+def wait_for_approval_choices():
+    labels = ('Approve once', 'Approve for session', 'Always approve', 'Reject')
+
+    def visible_choices():
+        shown = nodes()
+        return all(any(label in (node.get('text'), node.get('content-desc'))
+                       and node.get('enabled') == 'true'
+                       for node in shown) for label in labels)
+
+    until(visible_choices, 'Review did not expose all enabled approval choices')
+
+
 def run(output, tap_only=False):
     reset_fixture()
     # Keep the production work lease alive while its loopback QA control
@@ -397,9 +522,10 @@ def run(output, tap_only=False):
     print('PASS: failed submission retains notification and request', flush=True)
     state('/fail', {'enabled': False})
     tap(text='Review')
-    until(lambda: any('Always allow' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Review did not expose approval choices')
-    assert any('Allow for session' in (n.get('text'), n.get('content-desc')) for n in nodes())
-    assert len(state()['decisions']) == 2, 'Review submitted a decision'
+    wait_for_approval_choices()
+    reviewed = state()
+    assert len(reviewed['decisions']) == 2, 'Review submitted a decision'
+    assert reviewed['pending'][0]['request_id'] == 'qa-2', 'Review changed the pending owner'
     screenshot(output / 'approval-review-choices.png')
     print('PASS: Review opens the owning request with Session/Always choices without submitting', flush=True)
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
@@ -429,18 +555,7 @@ def run(output, tap_only=False):
     until(lambda: all(not v['inputs'] for v in json.loads(state()['notices']).values()), 'Watcher did not clear remote decision')
     print('PASS: watcher reconciles a desktop decision without another notification tap', flush=True)
     check_direct_actions(output)
-    # A settled cold action may release its engine; restart this fake app for
-    # the unrelated reply/open checks that follow.
-    adb('shell', 'am', 'start', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity')
-    until(lambda: state()['ready'], 'Fixture did not restart after the cold action')
-    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
-    answer = 'The mobile layout is ready. Read the result before publishing.'
-    state('/reply', {'text': answer})
-    shade()
-    screenshot(output / 'reply.png')
-    tap(text=answer)
-    until(lambda: all(v['result'] is None for k, v in json.loads(state()['notices']).items() if json.loads(k)['profile'] == 'a'), 'Reading the latest answer did not clear its notification')
-    print('PASS: body tap opens latest reply and visibility clears its notification', flush=True)
+    check_reply_read(output)
     check_content_tap_clear()
     check_group_approval_rendering(output)
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
@@ -449,6 +564,31 @@ def run(output, tap_only=False):
     screenshot(output / 'stopped.png')
     state('/stop', {})
 
+
+
+def check_reply_read(output):
+    # A settled cold action may release its engine; restart this fake app for
+    # the unrelated reply/open checks that follow.
+    adb('shell', 'am', 'start', '-n', PACKAGE + '/com.tarkilhk.wing.MainActivity')
+    until(lambda: state()['ready'], 'Fixture did not restart after the cold action')
+    adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
+    until(lambda: state()['lifecycle'] == 'paused', 'Reply fixture did not enter the background')
+    reads_before = len(state()['read_acks'])
+    answer = 'The mobile layout is ready. Read the result before publishing.'
+    state('/reply', {'text': answer})
+    shade()
+    screenshot(output / 'reply.png')
+    tap(text=answer)
+    until(lambda: state()['chat_visible'] and state()['read_guards']['selected_is_target'],
+          'Reply tap did not open its exact owner')
+    assert len(state()['read_acks']) == reads_before, 'Opening alone acknowledged the answer'
+    assert any(v['result'] is not None for k, v in json.loads(state()['notices']).items()
+               if json.loads(k)['profile'] == 'a'), 'Opening alone marked the answer read'
+    scroll_through_answer(answer)
+    until(lambda: all(v['result'] is None for k, v in json.loads(state()['notices']).items() if json.loads(k)['profile'] == 'a'), 'Reading the latest answer did not clear its notification')
+    assert state()['read_acks'][reads_before:] == [{'profile': 'a', 'session': 'same'}]
+    assert not state()['mark_read_failed']
+    print('PASS: opening preserves unread reply; user scrolling acknowledges its exact owner and clears the result', flush=True)
 
 
 def check_direct_actions(output):
@@ -472,6 +612,7 @@ def check_direct_actions(output):
     print('PASS: Once and Deny complete without another confirmation', flush=True)
     long_command = 'echo ' + 'long-command-argument-' * 50
     state('/approval', {'command': long_command})
+    pending_request = state()['pending'][0]['request_id']
     before = len(state()['decisions'])
     for night in ('no', 'yes'):
         for scale in ('1.0', '2.0'):
@@ -483,8 +624,10 @@ def check_direct_actions(output):
             assert notification_actions(shown) == {'review', 'deny'}
             screenshot(output / f"truncated-{'dark' if night == 'yes' else 'light'}-{scale}.png")
     tap(text='Review')
-    until(lambda: any('Allow once' in (n.get('text'), n.get('content-desc')) for n in nodes()), 'Review did not open command choices')
-    assert len(state()['decisions']) == before, 'Review submitted a decision'
+    wait_for_approval_choices()
+    reviewed = state()
+    assert len(reviewed['decisions']) == before, 'Review submitted a decision'
+    assert reviewed['pending'][0]['request_id'] == pending_request, 'Review changed the pending owner'
     adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')
     adb('shell', 'input', 'keyevent', 'KEYCODE_HOME')
     shade()
@@ -536,7 +679,6 @@ def check_recents_visibility(output):
     """Exercise real notification PendingIntents with absent and existing app tasks."""
     assert SERIAL.startswith('emulator-'), 'Use a disposable emulator, never a phone'
     assert adb('shell', 'getprop', 'ro.kernel.qemu').strip() == '1', 'Requires an emulator'
-    adb('forward', 'tcp:18766', 'tcp:18766')
     adb('shell', 'am', 'force-stop', PACKAGE)
     adb('shell', 'pm', 'clear', PACKAGE)
     adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS')
@@ -584,13 +726,12 @@ def check_recents_visibility(output):
                 # Remove only this disposable fixture's task, as a Recents swipe does.
                 adb('shell', 'am', 'stack', 'remove', task_id)
             assert not main_tasks(), 'Original fixture task was not removed'
-        shade()
-        shown = nodes()
-        target = next((n for n in shown if n.get('resource-id') == 'android:id/title'
-                       and n.get('text') in ('Website refresh', 'Weekly report', 'a chat', 'b chat')), None)
+        card = shown_notification('Website refresh', expanded=True,
+                                  required=['WING-RECENTS-REGRESSION'])
+        target = next((n for n in card.iter('node')
+                       if n.get('text') == 'WING-RECENTS-REGRESSION'), None)
         assert target is not None, 'Missing native fixture reply notification'
-        x1, y1, x2, y2 = map(int, re.findall(r'\d+', target.get('bounds')))
-        adb('shell', 'input', 'tap', str((x1 + x2) // 2), str((y1 + y2) // 2))
+        tap_notification_node(target)
         until(lambda: any(component in line for line in
                          adb('shell', 'dumpsys', 'activity', 'activities').splitlines()
                          if 'topResumedActivity=' in line), 'Notification did not open Wing')
@@ -624,6 +765,9 @@ if __name__ == '__main__':
                         help='Check shade dismissal with held history and native group approval rendering')
     args = parser.parse_args()
     SERIAL = args.serial
+    if not SERIAL.startswith('emulator-'):
+        parser.error('Use a disposable emulator, never a phone')
+    LOCAL_PORT = int(adb('forward', 'tcp:0', 'tcp:18766').strip())
     try:
         if args.recents_only:
             check_recents_visibility(args.output)
@@ -632,6 +776,8 @@ if __name__ == '__main__':
             if not args.tap_only:
                 check_recents_visibility(args.output)
     finally:
-        if SERIAL.startswith('emulator-'):
+        try:
             adb('shell', 'settings', 'put', 'system', 'font_scale', '1.0')
             adb('shell', 'cmd', 'uimode', 'night', 'no')
+        finally:
+            adb('forward', '--remove', f'tcp:{LOCAL_PORT}')

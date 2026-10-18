@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'support/color_contrast.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'support/composer_fixture.dart';
@@ -78,7 +79,11 @@ void main() {
           ),
           child: child!,
         ),
-        home: ProfileWorkspaceScreen(key: key, controller: controller),
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          key: key,
+          controller: controller,
+        ),
       ),
     );
     await tester.pumpAndSettle();

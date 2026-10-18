@@ -238,40 +238,52 @@ void main() {
       expect(sentAnswer, '');
     });
 
-    testWidgets(
-      'keeps the input panel available with a generic transport error',
-      (tester) async {
-        await tester.pumpWidget(
-          MaterialApp(
-            home: Scaffold(
-              body: GatewayClarifyDialog(
-                request: GatewayClarifyRequest.fromEventData({
-                  'request_id': 'clarify-error',
-                  'question': 'What should Hermes do?',
-                })!,
-                onRespond: (_) async => throw Exception('raw gateway detail'),
-              ),
+    testWidgets('retains the answer after a transport failure and retries it', (
+      tester,
+    ) async {
+      final sentAnswers = <String>[];
+      var failResponse = true;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: GatewayClarifyDialog(
+              request: GatewayClarifyRequest.fromEventData({
+                'request_id': 'clarify-error',
+                'question': 'What should Hermes do?',
+              })!,
+              onRespond: (answer) async {
+                sentAnswers.add(answer);
+                if (failResponse) throw Exception('raw gateway detail');
+              },
             ),
           ),
-        );
+        ),
+      );
 
-        await tester.enterText(
-          find.byKey(const Key('clarify-other-field')),
-          'Try the mobile layout',
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const Key('clarify-continue')));
-        await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('clarify-other-field')),
+        'Try the mobile layout',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('clarify-continue')));
+      await tester.pumpAndSettle();
 
-        final error = tester.widget<Text>(
-          find.descendant(
-            of: find.byKey(const Key('clarify-error')),
-            matching: find.byType(Text),
-          ),
-        );
-        expect(error.data, isNot(contains('raw gateway detail')));
-        expect(find.text('What should Hermes do?'), findsOneWidget);
-      },
-    );
+      final error = tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(const Key('clarify-error')),
+          matching: find.byType(Text),
+        ),
+      );
+      expect(error.data, isNot(contains('raw gateway detail')));
+      expect(find.text('What should Hermes do?'), findsOneWidget);
+      expect(sentAnswers, ['Try the mobile layout']);
+      failResponse = false;
+      await tester.tap(find.byKey(const Key('clarify-continue')));
+      await tester.pump();
+      expect(sentAnswers, ['Try the mobile layout', 'Try the mobile layout']);
+      expect(find.byKey(const Key('clarify-error')), findsNothing);
+      // The parent retires the accepted request; this panel waits for that update.
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }

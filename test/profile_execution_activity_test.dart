@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -903,6 +904,7 @@ void main() {
           isComplete: true,
         ),
       );
+      expect(restored.messages, hasLength(2));
       expect(
         restored.messages.every((row) => row['duration_s'] == null),
         isTrue,
@@ -964,7 +966,9 @@ void main() {
     });
     expect(chat.todos.single.content, 'Inspect contract');
     expect(chat.todos.single.status, GatewayTodoStatus.inProgress);
+  });
 
+  test('newer todo revision replaces the received task statuses', () {
     host.event('a', 'todo.updated', {
       'revision': 3,
       'todos': [
@@ -1153,9 +1157,7 @@ void main() {
     }
   }
 
-  testWidgets('renders expandable tool, todo, and reasoning details', (
-    tester,
-  ) async {
+  testWidgets('tool details expose raw request and result', (tester) async {
     final tool = GatewayToolActivity.fromGatewayEvent('tool.complete', {
       'tool_id': 'tool-1',
       'name': 'search_files',
@@ -1205,10 +1207,76 @@ void main() {
     );
     await tester.tap(find.text('Raw details'));
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('task summary expands received tasks', (tester) async {
+    final tool = GatewayToolActivity.fromGatewayEvent('tool.complete', {
+      'tool_id': 'tool-1',
+      'name': 'search_files',
+      'args': {'query': 'gateway'},
+      'result': {'matches': 2},
+      'duration_s': 0.4,
+    })!;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [
+              ProfileLiveToolActivity(activities: [tool]),
+              const ProfileTodoPanel(
+                todos: [
+                  GatewayTodo(
+                    id: 'task-5',
+                    content: 'Inspect contract',
+                    status: GatewayTodoStatus.completed,
+                  ),
+                ],
+              ),
+              const ProfileReasoningDisclosure(text: 'Checked the contract.'),
+            ],
+          ),
+        ),
+      ),
+    );
+
     expect(find.text('Inspect contract'), findsNothing);
     await tester.tap(find.text('Tasks 1/1'));
     await tester.pumpAndSettle();
     expect(find.text('Inspect contract'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reasoning disclosure opens the complete text', (tester) async {
+    final tool = GatewayToolActivity.fromGatewayEvent('tool.complete', {
+      'tool_id': 'tool-1',
+      'name': 'search_files',
+      'args': {'query': 'gateway'},
+      'result': {'matches': 2},
+      'duration_s': 0.4,
+    })!;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ListView(
+            children: [
+              ProfileLiveToolActivity(activities: [tool]),
+              const ProfileTodoPanel(
+                todos: [
+                  GatewayTodo(
+                    id: 'task-5',
+                    content: 'Inspect contract',
+                    status: GatewayTodoStatus.completed,
+                  ),
+                ],
+              ),
+              const ProfileReasoningDisclosure(text: 'Checked the contract.'),
+            ],
+          ),
+        ),
+      ),
+    );
+
     expect(
       find.text('Checked the contract.', findRichText: true),
       findsOneWidget,
@@ -1222,6 +1290,7 @@ void main() {
       find.text('Checked the contract.', findRichText: true),
       findsNWidgets(2),
     );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -1493,12 +1562,19 @@ void main() {
     });
     host.event('a', 'message.delta', {'text': 'The native response.'});
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
     );
     await tester.pump(const Duration(milliseconds: 300));
     await tester.settleMarkdown();
-    // Reasoning is readable immediately; each tool run stays initially closed.
+    // Reasoning remains readable between independently collapsed tool runs.
     expect(find.text('Activity · 1 tool'), findsNWidgets(2));
+    expect(find.text('Inspect the contract.'), findsOneWidget);
+    expect(find.text('Compare the results.'), findsOneWidget);
     expect(find.byType(ProfileToolCall), findsNothing);
     expect(
       find.text('The native response.', findRichText: true),

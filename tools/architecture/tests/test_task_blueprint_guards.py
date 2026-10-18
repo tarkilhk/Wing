@@ -8,6 +8,9 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
 ARTIFACT = ROOT / "tools/contracts/hermes_task_blueprints.json"
+sys.path.insert(0, str(ROOT))
+from tools.architecture.fixture_contract import validate_cases
+
 FIXTURES = ROOT / "tools/architecture/fixtures/task_blueprints.fixture.json"
 
 
@@ -15,8 +18,9 @@ class TaskBlueprintGuardsTest(unittest.TestCase):
     def test_independent_cli_fixtures(self):
         rows = json.loads(ARTIFACT.read_text())["blueprints"]
         cases = json.loads(FIXTURES.read_text())
+        self.assertEqual(set(cases), {"schema", "slots"}, "Both independent guards require proofs")
         for kind, fixtures in cases.items():
-            for fixture in fixtures:
+            for fixture in validate_cases(fixtures, required_exits=(0, 1)):
                 with self.subTest(kind=kind, fixture=fixture["name"]):
                     if kind == "schema":
                         payload = {"blueprints": copy.deepcopy(rows)}

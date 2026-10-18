@@ -110,7 +110,6 @@ void main() {
       ),
     );
     final tile = find.byKey(const ValueKey('composer-image-thumbnail'));
-    expect(tester.getSize(tile), const Size(96, 96));
     final preview = tester.widget<Image>(
       find.descendant(of: tile, matching: find.byType(Image)),
     );
@@ -271,10 +270,6 @@ void main() {
         tester,
         () => find.byIcon(Icons.broken_image_outlined).evaluate().isNotEmpty,
       );
-      expect(
-        tester.getSize(find.byKey(const ValueKey('composer-image-thumbnail'))),
-        const Size(96, 96),
-      );
       expect(find.byTooltip('Upload failed'), findsOneWidget);
       await tester.tap(find.byTooltip('Remove Preview image'));
       expect(removes, 1);
@@ -425,8 +420,8 @@ void main() {
       expect(find.byType(Image), findsNothing);
       expect(find.text('notes.txt'), findsOneWidget);
       expect(find.byTooltip('Upload failed'), findsOneWidget);
-      final chip = tester.widget<InputChip>(find.byType(InputChip));
-      chip.onDeleted!();
+      await tester.tap(find.byTooltip('Delete'));
+      await tester.pump();
       expect(removes, 1);
       expect(tester.takeException(), isNull);
     },

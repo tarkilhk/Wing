@@ -138,17 +138,22 @@ void main() {
           final editable = tester.state<EditableTextState>(
             find.byType(EditableText),
           );
-          // At 200% the native adaptive toolbar puts Select all in overflow.
-          // Invoke that same native item; ordinary size exercises its button.
-          if (scale == 1) {
-            await tester.tap(find.text('Select all'));
-          } else {
-            editable.contextMenuButtonItems
-                .singleWhere(
-                  (item) => item.type == ContextMenuButtonType.selectAll,
-                )
-                .onPressed!();
+          // Use the same native controls at both scales, including overflow
+          // when the selection toolbar cannot fit every action.
+          final selectAll = find.text('Select all');
+          if (selectAll.hitTestable().evaluate().isEmpty) {
+            final more = find.descendant(
+              of: find.byType(TextSelectionToolbar),
+              matching: find.byTooltip(
+                MaterialLocalizations.of(editable.context).moreButtonTooltip,
+              ),
+            );
+            expect(more.hitTestable(), findsOneWidget);
+            await tester.tap(more);
+            await tester.pumpAndSettle();
           }
+          expect(selectAll.hitTestable(), findsOneWidget);
+          await tester.tap(selectAll);
           await tester.pumpAndSettle();
           expect(
             editable.widget.controller.selection.textInside(
@@ -250,62 +255,65 @@ void main() {
         addTearDown(tester.view.reset);
         final semantics = tester.ensureSemantics();
         final boundary = GlobalKey();
-        await tester.pumpWidget(
-          MaterialApp(
-            debugShowCheckedModeBanner: false,
-            theme: wingTheme(brightness),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(context).copyWith(
-                textScaler: TextScaler.linear(scale),
-                disableAnimations: true,
+        try {
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: child!,
               ),
-              child: child!,
-            ),
-            home: RepaintBoundary(
-              key: boundary,
-              child: Scaffold(
-                body: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    ProfileActivitySection(
-                      label: 'Activity',
-                      initiallyExpanded: true,
-                      detailsBuilder: (_) => const ProfileActivityTabs(
-                        tabs: [
-                          ProfileActivityTab(
-                            id: 'tasks',
-                            label: 'Tasks 1/4',
-                            child: ProfileTodoPanel(
-                              todos: _todos,
-                              embedded: true,
+              home: RepaintBoundary(
+                key: boundary,
+                child: Scaffold(
+                  body: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      ProfileActivitySection(
+                        label: 'Activity',
+                        initiallyExpanded: true,
+                        detailsBuilder: (_) => const ProfileActivityTabs(
+                          tabs: [
+                            ProfileActivityTab(
+                              id: 'tasks',
+                              label: 'Tasks 1/4',
+                              child: ProfileTodoPanel(
+                                todos: _todos,
+                                embedded: true,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-        );
-        await tester.pumpAndSettle();
-        for (final label in [
-          'Completed task',
-          'Task in progress',
-          'Pending task',
-          'Cancelled task',
-        ]) {
-          expect(find.bySemanticsLabel(label), findsOneWidget);
+          );
+          await tester.pumpAndSettle();
+          for (final label in [
+            'Completed task',
+            'Task in progress',
+            'Pending task',
+            'Cancelled task',
+          ]) {
+            expect(find.bySemanticsLabel(label), findsOneWidget);
+          }
+          expect(find.byIcon(Icons.flag_outlined), findsNothing);
+          expect(
+            tester.widget<Icon>(find.byIcon(Icons.check_circle)).color,
+            WingTokens.forBrightness(brightness).success,
+          );
+          expect(find.byIcon(Icons.block), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        } finally {
+          semantics.dispose();
         }
-        expect(find.byIcon(Icons.flag_outlined), findsNothing);
-        expect(
-          tester.widget<Icon>(find.byIcon(Icons.check_circle)).color,
-          WingTokens.forBrightness(brightness).success,
-        );
-        expect(find.byIcon(Icons.block), findsOneWidget);
-        expect(tester.takeException(), isNull);
-        semantics.dispose();
         Future<void> capture(String state) async {
           if (!_capture) return;
           await tester.runAsync(() async {
@@ -516,7 +524,7 @@ void main() {
     },
   );
 
-  testWidgets('completion replaces the live spinner and updates task count', (
+  testWidgets('completion updates the task state glyph and count', (
     tester,
   ) async {
     var status = GatewayTodoStatus.inProgress;

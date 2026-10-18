@@ -1,3 +1,4 @@
+import 'package:wing/core/models/config_backup_operation.dart';
 import 'package:wing/core/services/administration_logs_session.dart';
 import 'package:wing/core/services/profile_skills_session.dart';
 import 'package:wing/core/services/profile_capabilities_session.dart';
@@ -188,10 +189,7 @@ void main() {
         await tester.enterText(find.byType(TextField), 'Updated instruction');
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        expect(
-          tester.getRect(find.byTooltip('Save skill')).right,
-          lessThanOrEqualTo(304),
-        );
+        expect(find.byTooltip('Save skill').hitTestable(), findsOneWidget);
         await capture(tester, 'skill-editor-${brightness.name}-200-keyboard');
       },
     );
@@ -252,12 +250,16 @@ void main() {
       'capabilities scope and failure remain reachable with keyboard in ${brightness.name}',
       (tester) async {
         narrow(tester);
+        var reads = 0;
         final gateway = ProfileGateway(
           scope: WorkspaceScope(
             connectionId: 'fixture',
             profileName: 'research',
           ),
-          get: (_, _) async => throw StateError('Offline'),
+          get: (_, _) async {
+            reads++;
+            throw StateError('Offline');
+          },
           rpc: (_, _) async => <String, dynamic>{},
           discover: () async => throw StateError('Unexpected discovery'),
         );
@@ -282,6 +284,12 @@ void main() {
           tester,
           'capabilities-error-${brightness.name}-200-keyboard',
         );
+        final previousReads = reads;
+        expect(find.text('Retry').hitTestable(), findsOneWidget);
+        await tester.tap(find.text('Retry'));
+        await tester.pumpAndSettle();
+        expect(reads, greaterThan(previousReads));
+        expect(find.text('Retry').hitTestable(), findsOneWidget);
       },
     );
 
@@ -289,6 +297,7 @@ void main() {
       'long administration failure remains scrollable in ${brightness.name}',
       (tester) async {
         narrow(tester);
+        var retries = 0;
         await tester.pumpWidget(
           app(
             AdminPage(
@@ -297,7 +306,7 @@ void main() {
               child: SingleChildScrollView(
                 child: AdminNotice.error(
                   'This operation could not be confirmed. Your account settings are kept. Check the connection to the server, then retry to refresh the last confirmed observation.',
-                  retry: () {},
+                  retry: () => retries++,
                 ),
               ),
             ),
@@ -308,10 +317,9 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.ensureVisible(find.text('Retry'));
         await tester.pumpAndSettle();
-        expect(
-          tester.getRect(find.text('Retry')).bottom,
-          lessThanOrEqualTo(480),
-        );
+        expect(find.text('Retry').hitTestable(), findsOneWidget);
+        await tester.tap(find.text('Retry'));
+        expect(retries, 1);
         await capture(tester, 'admin-error-${brightness.name}-200-keyboard');
       },
     );
@@ -320,16 +328,19 @@ void main() {
       'restore stays reachable with 320dp/200% and keyboard in ${brightness.name}',
       (tester) async {
         narrow(tester);
+        BackupImportIntent? submitted;
         await tester.pumpWidget(
           app(
             Scaffold(
               body: Builder(
                 builder: (context) => TextButton(
-                  onPressed: () => showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    builder: (_) => const ImportOptionsSheet(),
-                  ),
+                  onPressed: () async {
+                    submitted = await showModalBottomSheet<BackupImportIntent>(
+                      context: context,
+                      isScrollControlled: true,
+                      builder: (_) => const ImportOptionsSheet(),
+                    );
+                  },
                   child: const Text('Open restore'),
                 ),
               ),
@@ -349,11 +360,15 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(
-          tester.getRect(find.byKey(const Key('import_confirm_button'))).bottom,
-          lessThanOrEqualTo(480),
+          find.byKey(const Key('import_confirm_button')).hitTestable(),
+          findsOneWidget,
         );
         expect(tester.takeException(), isNull);
         await capture(tester, 'restore-${brightness.name}-200-keyboard');
+        await tester.tap(find.byKey(const Key('import_confirm_button')));
+        await tester.pumpAndSettle();
+        expect(submitted?.passphrase, 'example-passphrase');
+        expect(find.byType(ImportOptionsSheet), findsNothing);
       },
     );
 
@@ -430,8 +445,8 @@ void main() {
         await tester.tap(find.text('Open models'));
         await tester.pumpAndSettle();
         expect(
-          tester.getRect(find.byKey(const Key('profile-model-save'))).bottom,
-          lessThanOrEqualTo(480),
+          find.byKey(const Key('profile-model-save')).hitTestable(),
+          findsOneWidget,
         );
         expect(tester.takeException(), isNull);
         await capture(tester, 'default-model-${brightness.name}-200-keyboard');

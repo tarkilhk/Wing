@@ -16,6 +16,7 @@ class ReferenceHost {
   List<String> profiles = ['hermes', 'butler'];
   String? readTarget;
   Completer<void>? hold;
+  Completer<void>? readStarted;
 
   Future<Map<String, dynamic>> read(
     String endpoint,
@@ -57,6 +58,7 @@ class ReferenceHost {
       };
     }
     if (endpoint == 'files/read') {
+      readStarted?.complete();
       await hold?.future;
       final content = files[path]!;
       return {
@@ -551,27 +553,35 @@ void main() {
     expect(host.reads, ['profiles:']);
   });
 
-  test(
-    'missing file, budget overflow and canonical retargeting reject whole preparation',
-    () async {
-      final host = ReferenceHost();
-      Future<String> prepare(String path, int limit) =>
-          host.preparation().prepare(
-            '@file:$path',
-            selected: const [],
-            cwd: '/work',
-            contextLimit: limit,
-            requireCurrent: () {},
-          );
+  for (final scenario in [
+    (
+      name: 'missing file',
+      path: '/work/missing.md',
+      limit: 10000,
+      target: null,
+    ),
+    (name: 'budget overflow', path: '/work/note.md', limit: 10, target: null),
+    (
+      name: 'canonical retargeting',
+      path: '/work/note.md',
+      limit: 10000,
+      target: '/work/other.md',
+    ),
+  ]) {
+    test('${scenario.name} rejects whole preparation', () async {
+      final host = ReferenceHost()..readTarget = scenario.target;
       await expectLater(
-        prepare('/work/missing.md', 10000),
+        host.preparation().prepare(
+          '@file:${scenario.path}',
+          selected: const [],
+          cwd: '/work',
+          contextLimit: scenario.limit,
+          requireCurrent: () {},
+        ),
         throwsFormatException,
       );
-      await expectLater(prepare('/work/note.md', 10), throwsFormatException);
-      host.readTarget = '/work/other.md';
-      await expectLater(prepare('/work/note.md', 10000), throwsFormatException);
-    },
-  );
+    });
+  }
 
   test('credential alias is rejected before a byte read', () async {
     final host = ReferenceHost()..readTarget = '/work/.env';
@@ -589,7 +599,9 @@ void main() {
   });
 
   test('retired preparation cannot publish held file bytes', () async {
-    final host = ReferenceHost()..hold = Completer<void>();
+    final host = ReferenceHost()
+      ..hold = Completer<void>()
+      ..readStarted = Completer<void>();
     var current = true;
     final operation = host.preparation().prepare(
       '@file:/work/note.md',
@@ -600,7 +612,7 @@ void main() {
         if (!current) throw StateError('retired');
       },
     );
-    await Future<void>.delayed(Duration.zero);
+    await host.readStarted!.future;
     current = false;
     host.hold!.complete();
     await expectLater(operation, throwsStateError);

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
@@ -95,7 +96,10 @@ void main() {
             ).copyWith(textScaler: TextScaler.linear(scale)),
             child: child!,
           ),
-          home: ProfileWorkspaceScreen(controller: controller),
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
         ),
       ),
     );

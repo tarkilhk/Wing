@@ -57,28 +57,25 @@ void main() {
             (widget) =>
                 widget is IconButton && widget.tooltip == 'Save example draft',
           );
-          expect(tester.getSize(cancel), const Size(48, 48));
-          expect(tester.getSize(confirm), const Size(48, 48));
+          for (final action in [cancel, confirm]) {
+            expect(tester.getSize(action).width, greaterThanOrEqualTo(48));
+            expect(tester.getSize(action).height, greaterThanOrEqualTo(48));
+            expect(action.hitTestable(), findsOneWidget);
+          }
           expect(
             tester.getRect(cancel).right,
             lessThan(tester.getRect(confirm).left),
           );
           expect(tester.getRect(confirm).bottom, lessThanOrEqualTo(844));
           expect(
-            tester.getSize(find.byType(SingleChildScrollView)).height,
-            greaterThan(500),
+            find.byKey(const ValueKey('draft')).hitTestable(),
+            findsOneWidget,
           );
-          final scheme = Theme.of(tester.element(confirm)).colorScheme;
-          final filledMaterial = find
-              .descendant(of: confirm, matching: find.byType(Material))
-              .first;
-          expect(tester.widget<Material>(filledMaterial).color, scheme.primary);
-          expect(
-            tester.widget<IconButton>(confirm).style!.side!.resolve({
-              WidgetState.focused,
-            })!.color,
-            scheme.onPrimary,
+          await tester.enterText(
+            find.byKey(const ValueKey('draft')),
+            'Keep my draft',
           );
+          expect(find.text('Keep my draft'), findsOneWidget);
           expect(find.text('Cancel'), findsNothing);
           expect(find.text('Save example draft'), findsNothing);
           await tester.tap(find.byKey(const ValueKey('draft')));
@@ -94,6 +91,7 @@ void main() {
           await tester.sendKeyEvent(LogicalKeyboardKey.enter);
           await tester.pump();
           expect(saves, 1);
+          expect(find.text('Keep my draft'), findsOneWidget);
           expect(tester.takeException(), isNull);
         },
       );

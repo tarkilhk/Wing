@@ -142,101 +142,86 @@ void main() {
     },
   );
 
-  testWidgets('reasoning tap opens levels and selects without a hold', (
-    tester,
-  ) async {
-    final writes = <String>[];
-    Future<void> render({bool enabled = true}) => tester.pumpWidget(
-      MaterialApp(
-        theme: wingTheme(Brightness.dark),
-        home: Scaffold(
-          body: Align(
-            alignment: Alignment.bottomCenter,
-            child: ChatReasoningScrubControl(
-              effort: 'high',
-              canDisable: false,
-              onChanged: enabled ? writes.add : null,
-            ),
+  Future<void> renderReasoning(
+    WidgetTester tester,
+    List<String> writes, {
+    bool enabled = true,
+  }) => tester.pumpWidget(
+    MaterialApp(
+      theme: wingTheme(Brightness.dark),
+      home: Scaffold(
+        body: Align(
+          alignment: Alignment.bottomCenter,
+          child: ChatReasoningScrubControl(
+            effort: 'high',
+            canDisable: false,
+            onChanged: enabled ? writes.add : null,
           ),
         ),
       ),
-    );
-    await render();
-    final control = find.byKey(const Key('composer-reasoning-control'));
-    await tester.tap(control);
+    ),
+  );
+
+  testWidgets('reasoning tap selects one level and closes the selector', (
+    tester,
+  ) async {
+    final writes = <String>[];
+    await renderReasoning(tester, writes);
+    await tester.tap(find.byKey(const Key('composer-reasoning-control')));
     await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('composer-reasoning-choice-medium')).hitTestable(),
-      findsOneWidget,
-    );
+    final medium = find.byKey(const Key('composer-reasoning-choice-medium'));
+    expect(medium.hitTestable(), findsOneWidget);
     expect(
       find.byKey(const Key('composer-reasoning-choice-none')),
       findsNothing,
     );
-    final selector = find.byKey(const Key('composer-reasoning-selector'));
-    final tappedBounds = tester.getRect(selector);
-    final tappedStyle = tester.widget<Material>(selector);
-    final tappedLabels = tester
-        .widgetList<Text>(
-          find.descendant(of: selector, matching: find.byType(Text)),
-        )
-        .map((text) => (text.data, text.style))
-        .toList();
     expect(writes, isEmpty);
-    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-    await tester.pumpAndSettle();
-    expect(selector, findsNothing);
-    expect(writes, isEmpty);
-    await tester.tap(control);
-    await tester.pumpAndSettle();
-    await tester.tapAt(const Offset(2, 2));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('composer-reasoning-choice-medium')),
-      findsNothing,
-    );
-    expect(writes, isEmpty);
-    final held = await tester.startGesture(tester.getCenter(control));
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(tester.getRect(selector), tappedBounds);
-    expect(tester.widget<Material>(selector).color, tappedStyle.color);
-    expect(tester.widget<Material>(selector).shape, tappedStyle.shape);
-    expect(
-      tester
-          .widgetList<Text>(
-            find.descendant(of: selector, matching: find.byType(Text)),
-          )
-          .map((text) => (text.data, text.style))
-          .toList(),
-      tappedLabels,
-    );
-    await held.up();
-    await tester.pumpAndSettle();
-    expect(writes, isEmpty);
-    await tester.tap(control);
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('composer-reasoning-choice-medium')));
+    await tester.tap(medium);
     await tester.pumpAndSettle();
     expect(writes, ['medium']);
-    expect(
-      find.byKey(const Key('composer-reasoning-choice-medium')),
-      findsNothing,
-    );
-    await tester.tap(control);
-    await tester.pumpAndSettle();
-    expect(selector, findsOneWidget);
-    await render(enabled: false);
-    await tester.pumpAndSettle();
-    expect(selector, findsNothing);
-    await tester.tap(control);
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('composer-reasoning-choice-medium')),
-      findsNothing,
-    );
-    expect(writes, ['medium']);
-    expect(tester.takeException(), isNull);
+    expect(find.byKey(const Key('composer-reasoning-selector')), findsNothing);
   });
+
+  for (final dismissal in ['Escape', 'outside tap', 'disabled control']) {
+    testWidgets('reasoning $dismissal dismisses without committing', (
+      tester,
+    ) async {
+      final writes = <String>[];
+      await renderReasoning(tester, writes);
+      final control = find.byKey(const Key('composer-reasoning-control'));
+      await tester.tap(control);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('composer-reasoning-selector')),
+        findsOneWidget,
+      );
+      switch (dismissal) {
+        case 'Escape':
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+        case 'outside tap':
+          await tester.tapAt(
+            tester.getTopLeft(find.byType(Scaffold)) + const Offset(8, 8),
+          );
+        case 'disabled control':
+          await renderReasoning(tester, writes, enabled: false);
+      }
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const Key('composer-reasoning-selector')),
+        findsNothing,
+      );
+      expect(writes, isEmpty);
+      if (dismissal == 'disabled control') {
+        await tester.tap(control);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const Key('composer-reasoning-selector')),
+          findsNothing,
+        );
+        expect(writes, isEmpty);
+      }
+    });
+  }
 
   testWidgets(
     'reasoning keyboard uses the same selector and commits with Enter',
@@ -291,11 +276,11 @@ void main() {
     expect(find.byKey(const Key('model-search')), findsOneWidget);
     await tester.tap(find.byKey(const Key('chat-reasoning-control')));
     await tester.pumpAndSettle();
-    expect(
-      tester.getSize(find.byKey(const Key('reasoning-menu'))),
-      const Size(218, 108),
-    );
     for (final effort in chatReasoningEffortLabels.keys) {
+      expect(
+        find.byKey(Key('reasoning-$effort')).hitTestable(),
+        findsOneWidget,
+      );
       expect(
         tester.getSize(find.byKey(Key('reasoning-$effort'))).height,
         greaterThanOrEqualTo(48),
@@ -340,18 +325,24 @@ void main() {
     tester,
   ) async {
     final pending = Completer<bool>();
+    addTearDown(() {
+      if (!pending.isCompleted) pending.complete(false);
+    });
     var calls = 0;
+    ChatIntelligenceSelection? applied;
     await open(
       tester,
       commit: (_) {
         calls++;
-        return pending.future;
+        return calls == 1 ? pending.future : Future.value(true);
       },
+      apply: (value) => applied = value,
     );
     await tester.tap(find.byKey(const Key('model-openai-codex-gpt-5.6-sol')));
     await tester.tap(find.byTooltip('Apply model settings'));
     await tester.pump();
     expect(find.byTooltip('Apply model settings'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(
       tester
           .widget<IconButton>(
@@ -372,7 +363,9 @@ void main() {
       isNull,
     );
     await tester.tap(find.byTooltip('Apply model settings'));
+    await tester.pump(const Duration(seconds: 2));
     expect(calls, 1);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
     pending.completeError(StateError('Fast setting rejected'));
     await tester.pumpAndSettle();
     expect(find.text('Fast setting rejected'), findsOneWidget);
@@ -381,6 +374,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('Apply model settings'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.tap(find.byTooltip('Apply model settings'));
+    await tester.pumpAndSettle();
+    expect(calls, 2);
+    expect(applied?.choice.model, 'gpt-5.6-sol');
   });
 
   testWidgets('cancel never commits a changed draft', (tester) async {

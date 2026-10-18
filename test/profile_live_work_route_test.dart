@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'dart:async';
 import 'dart:io';
@@ -122,7 +123,10 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
       ),
     );
     await tester.pump(const Duration(milliseconds: 300));
@@ -312,7 +316,10 @@ void main() {
                 child: RepaintBoundary(key: frame, child: child!),
               ),
             ),
-            home: ProfileWorkspaceScreen(controller: controller),
+            home: ProfileWorkspaceScreen(
+              createBotsSession: () => BotsSession((_) async => const []),
+              controller: controller,
+            ),
           ),
         );
         Future<void> settle() async {
@@ -582,19 +589,20 @@ void main() {
         await settle();
         expect(chat.runtime.executionActive, isTrue);
         expect(chat.reading.messages.any((row) => row['id'] == 4), isTrue);
-        // Reveal the lazy current row after the expanded drawer/keyboard visit.
-        for (
-          var attempt = 0;
-          attempt < 12 &&
-              find.byKey(const ValueKey('live-activity')).evaluate().isEmpty;
-          attempt++
-        ) {
-          await tester.drag(
-            find.byKey(const ValueKey('profile-transcript')),
-            const Offset(0, 160),
-          );
-          await settle();
-        }
+        // At enlarged text the retained Activity row can sit above the viewport
+        // even at the newest edge. Scroll back to its disclosure, rather than
+        // assuming that a jump-to-latest control must exist.
+        await tester.scrollUntilVisible(
+          find.byKey(const ValueKey('live-activity')),
+          120,
+          scrollable: find
+              .descendant(
+                of: find.byType(ProfileTranscript),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await settle();
         await tester.openLiveActivity();
         await settle();
         final liveTabs = find.descendant(
@@ -641,6 +649,7 @@ void main() {
           });
         }
         await settle();
+        expect(chat.subagents, hasLength(2));
         expect(chat.subagents.every((agent) => agent.isTerminal), isTrue);
         expect(chat.reading.streamingMessage, isNull);
         expect(find.byType(ProfileLiveWorkDock), findsOneWidget);
@@ -662,6 +671,15 @@ void main() {
           of: saved,
           matching: find.text('Activity · 1 tool'),
         );
+        // The live-history handoff retains the current reading position. Start
+        // from the newest answer before browsing back to its saved Activity;
+        // that row may not yet be built on the newer side of the old anchor.
+        final latestAnswer = find.byKey(const ValueKey('jump-to-latest'));
+        if (latestAnswer.evaluate().isNotEmpty) {
+          expect(latestAnswer.hitTestable(), findsOneWidget);
+          await tester.tap(latestAnswer);
+          await settle();
+        }
         // Navigate through the actual viewport. Whole-row ensureVisible can
         // place a lazily resized row's header outside a short enlarged viewport.
         for (var i = 0; i < 20; i++) {
@@ -777,9 +795,9 @@ void main() {
         expect(tab(0, overlay: false), findsNothing);
         expect(tab(1, overlay: false), findsOneWidget);
         expect(find.text('2 subagents'), findsNothing);
+        expect(output, findsOneWidget);
         await tester.ensureVisible(output);
         await settle();
-        expect(output, findsOneWidget);
         await picture('next-round-previous-agents');
         keyboard.value = 260;
         await settle();
@@ -849,7 +867,10 @@ void main() {
                 ),
                 child: RepaintBoundary(key: frame, child: child!),
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                createBotsSession: () => BotsSession((_) async => const []),
+                controller: controller,
+              ),
             ),
           );
           Future<void> settle() async {

@@ -61,6 +61,7 @@ void main() {
         isVisible: () => true,
         onOpenSession: (_) async {},
       );
+      addTearDown(session.dispose);
       await session.refresh();
       expect(session.state.history, hasLength(20));
       expect(session.state.canShowMore, true);
@@ -71,7 +72,6 @@ void main() {
       await session.refresh();
       expect(session.state.history, hasLength(22));
       expect(session.state.error, isNotNull);
-      session.dispose();
     },
   );
 
@@ -79,11 +79,15 @@ void main() {
     'late history response cannot replace a newer captured task observation',
     () async {
       final first = Completer<Map<String, dynamic>>();
+      final firstReadEntered = Completer<void>();
       final stock = ScheduledTasksFixture();
       var requests = 0;
       fixture.intercept = (method, path, query, body) {
         if (path.endsWith('/runs')) {
-          if (++requests == 1) return first.future;
+          if (++requests == 1) {
+            firstReadEntered.complete();
+            return first.future;
+          }
           return Future.value({
             'runs': [
               {'id': 'new', 'source': 'cron_output', 'title': 'New'},
@@ -98,10 +102,9 @@ void main() {
         isVisible: () => true,
         onOpenSession: (_) async {},
       );
+      addTearDown(session.dispose);
       final old = session.refresh();
-      while (requests == 0) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      await firstReadEntered.future;
       await session.refresh();
       first.complete({
         'runs': [
@@ -110,7 +113,6 @@ void main() {
       });
       await old;
       expect(session.state.history!.single.id, 'new');
-      session.dispose();
     },
   );
 
@@ -126,11 +128,11 @@ void main() {
           opened = key;
         },
       );
+      addTearDown(session.dispose);
       await session.refresh();
       await session.open(session.state.history!.single);
       expect(opened!.workspace, fixture.profile.scope);
       expect(opened!.sessionId, 'cron_morning_123');
-      session.dispose();
     },
   );
 
@@ -148,6 +150,7 @@ void main() {
           return timer = _ManualTimer(callback);
         },
       );
+      addTearDown(observation.dispose);
       final before = fixture.admin.requests.length;
       timer.fire();
       expect(fixture.admin.requests, hasLength(before));

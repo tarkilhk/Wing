@@ -33,9 +33,14 @@ class ActivityDetailAction extends StatelessWidget {
       tooltip: label,
       onPressed: busy ? null : onPressed,
       icon: busy
-          ? const SizedBox.square(
+          ? SizedBox.square(
               dimension: 16,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                backgroundColor: Theme.of(context).colorScheme.outlineVariant,
+                value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
+                semanticsLabel: label,
+              ),
             )
           : Icon(icon, size: 16),
     ),

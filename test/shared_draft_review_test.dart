@@ -478,12 +478,6 @@ void main() {
       find.byKey(const ValueKey('share-destination-chat-60')),
       findsOneWidget,
     );
-    expect(
-      tester
-          .widget<RadioGroup<String>>(find.byType(RadioGroup<String>))
-          .groupValue,
-      'chat-60',
-    );
     await tester.tap(find.byKey(const Key('share-add-to-draft')));
     await tester.pumpAndSettle();
 

@@ -1,5 +1,8 @@
 import 'package:wing/core/widgets/activity/activity_detail_actions.dart';
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 
 import 'package:flutter/material.dart';
@@ -40,6 +43,172 @@ Future<void> pump(WidgetTester tester, Widget child) async {
 }
 
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_ACTIVITY_ACTIONS');
+  setUpAll(() async {
+    if (!capture) return;
+    const fonts = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': 'Roboto-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            File(
+              '$fonts/${font.value}',
+            ).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
+
+  Future<void> capturePending(WidgetTester tester, String name) async {
+    if (!capture) return;
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const Key('activity-capture')),
+    );
+    await tester.runAsync(() async {
+      final bitmap = await boundary.toImage();
+      try {
+        final bytes = await bitmap.toByteData(format: ui.ImageByteFormat.png);
+        final file = File('build/design-previews/activity-pending/$name.png');
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes(bytes!.buffer.asUint8List());
+      } finally {
+        bitmap.dispose();
+      }
+    });
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final enlarged in [false, true]) {
+      for (final outcome in ['success', 'failure', 'departure']) {
+        final name =
+            '${brightness.name}-${enlarged ? 'large-reduced' : 'normal'}-$outcome';
+        testWidgets('activity sharing retains visible feedback through $name', (
+          tester,
+        ) async {
+          tester.view.physicalSize = Size(enlarged ? 320 : 390, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final pending = Completer<void>();
+          addTearDown(() {
+            if (!pending.isCompleted) pending.complete();
+          });
+          final shared = <String>[];
+          const raw =
+              '# Review output\n\nRead the actual error before changing code.\n';
+          const channel = MethodChannel('dev.fluttercommunity.plus/share');
+          tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+            channel,
+            (call) async {
+              if (call.method != 'share') {
+                throw StateError('Unexpected ${call.method}');
+              }
+              shared.add((call.arguments as Map)['text'] as String);
+              await pending.future;
+              if (outcome == 'failure' && shared.length == 1) {
+                throw PlatformException(code: 'unavailable');
+              }
+              return 'dev.fluttercommunity.plus/share/success';
+            },
+          );
+          addTearDown(
+            () => tester.binding.defaultBinaryMessenger
+                .setMockMethodCallHandler(channel, null),
+          );
+          await tester.pumpWidget(
+            MaterialApp(
+              debugShowCheckedModeBanner: false,
+              theme: wingTheme(brightness),
+              builder: (context, child) => RepaintBoundary(
+                key: const Key('activity-capture'),
+                child: MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(enlarged ? 2 : 1),
+                    disableAnimations: enlarged,
+                  ),
+                  child: child!,
+                ),
+              ),
+              home: Scaffold(
+                body: SingleChildScrollView(
+                  child: ToolActivityDetailsView(
+                    call: call(
+                      'skill_view',
+                      {'name': 'review-output'},
+                      {
+                        'success': true,
+                        'name': 'review-output',
+                        '_source_path':
+                            '/workspace/skills/review-output/SKILL.md',
+                        'content': raw,
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Open skill instructions'));
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          await tester.tap(find.byTooltip('Show raw content'));
+          await tester.pumpAndSettle();
+          final share = find.byTooltip('Share content');
+          final before = tester.getRect(share);
+          await tester.tap(share);
+          await tester.pump();
+          final progress = find.descendant(
+            of: share,
+            matching: find.byType(CircularProgressIndicator),
+          );
+          expect(progress, findsOneWidget);
+          expect(tester.getRect(share), before);
+          expect(
+            tester.widget<CircularProgressIndicator>(progress).value,
+            enlarged ? isNotNull : isNull,
+          );
+          expect(
+            tester.widget<CircularProgressIndicator>(progress).backgroundColor,
+            isNotNull,
+            reason:
+                'The first frame must paint a visible track before indeterminate motion advances.',
+          );
+          expect(find.text(raw), findsOneWidget);
+          await capturePending(tester, name);
+          await tester.tap(share);
+          await tester.pump(const Duration(seconds: 2));
+          expect(shared, [raw]);
+          expect(progress, findsOneWidget);
+          if (outcome == 'departure') {
+            await tester.pageBack();
+            await tester.pumpAndSettle();
+            expect(find.byTooltip('Share content'), findsNothing);
+            pending.complete();
+            await tester.pumpAndSettle();
+            expect(find.byTooltip('Open skill instructions'), findsOneWidget);
+            expect(find.byType(CircularProgressIndicator), findsNothing);
+          } else {
+            pending.complete();
+            await tester.pumpAndSettle();
+            expect(progress, findsNothing);
+            expect(share.hitTestable(), findsOneWidget);
+            if (outcome == 'failure') {
+              expect(
+                find.text('Could not share this text. Try again.'),
+                findsOneWidget,
+              );
+              await tester.tap(share);
+              await tester.pumpAndSettle();
+              expect(shared, [raw, raw]);
+              expect(progress, findsNothing);
+            }
+          }
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
+  }
   testWidgets(
     'short code can toggle wrapping while prose and empty code cannot',
     (tester) async {

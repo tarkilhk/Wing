@@ -365,7 +365,11 @@ void main() {
               )
               .first;
           final position = tester.state<ScrollableState>(outer).position;
-          while (find.byTooltip('Refresh usage').evaluate().isEmpty) {
+          for (
+            var attempt = 0;
+            find.byTooltip('Refresh usage').evaluate().isEmpty && attempt < 30;
+            attempt++
+          ) {
             position.jumpTo(
               (position.pixels + 200).clamp(0, position.maxScrollExtent),
             );
@@ -641,7 +645,7 @@ void main() {
     expect(find.textContaining('Unavailable'), findsWidgets);
   });
 
-  testWidgets('sub-cent estimates and duplicate contributions are preserved', (
+  testWidgets('duplicate contributions are combined in one passive model row', (
     tester,
   ) async {
     rows = [_astra(), _astra()];
@@ -651,6 +655,10 @@ void main() {
     await tap(tester, find.text('gpt-6-astra'));
     expect(find.text('Model details'), findsNothing);
     expect(find.byType(BottomSheet), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('sub-cent estimates are never rounded to free', (tester) async {
     rows = [
       _sol()..addAll({
         'input_tokens': 1,
@@ -658,7 +666,7 @@ void main() {
         'output_tokens': 0,
       }),
     ];
-    await tap(tester, find.byTooltip('Refresh usage'));
+    await show(tester);
     await reveal(tester, find.text('< USD 0.01'));
     expect(find.textContaining('USD 0.00'), findsNothing);
     expect(tester.takeException(), isNull);

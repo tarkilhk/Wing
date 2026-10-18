@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -377,7 +378,10 @@ void main() {
                 ),
                 child: child!,
               ),
-              home: ProfileWorkspaceScreen(controller: controller),
+              home: ProfileWorkspaceScreen(
+                createBotsSession: () => BotsSession((_) async => const []),
+                controller: controller,
+              ),
             ),
           ),
         );

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -61,7 +62,12 @@ void main() {
       ProfileSessionKey(controller.current!.scope, 'chat-0'),
     );
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     host.reads.clear();
@@ -123,13 +129,12 @@ void main() {
 
     final chat = controller.current!.chat!;
     expect(find.text('Search result'), findsOneWidget);
-    expect(find.text('Nearby messages'), findsOneWidget);
-    expect(find.text('Back to latest'), findsOneWidget);
+    expect(find.byTooltip('Back to latest'), findsOneWidget);
     expect(find.text('Saved /srv/earlier.pdf'), findsOneWidget);
     expect(chat.reading.messages, hasLength(50));
     expect(chat.reading.messages.any((row) => row['id'] == 9500), isFalse);
 
-    await tester.tap(find.text('Back to latest'));
+    await tester.tap(find.byTooltip('Back to latest'));
     await tester.pumpAndSettle();
     await tester.settleMarkdown();
     expect(find.text('Search result'), findsNothing);
@@ -189,7 +194,12 @@ void main() {
         ProfileSessionKey(controller.current!.scope, 'chat-0'),
       );
       await tester.pumpWidget(
-        MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+        MaterialApp(
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       host.reads.clear();

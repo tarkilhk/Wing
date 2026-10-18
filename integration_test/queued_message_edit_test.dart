@@ -1,5 +1,6 @@
 import '../test/support/composer_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
@@ -108,6 +109,9 @@ void main() {
     final directory = await getTemporaryDirectory();
     final cached = File('${directory.path}/$name');
     await cached.writeAsString('Isolated queued-message device test');
+    addTearDown(() async {
+      if (await cached.exists()) await cached.delete();
+    });
     return AttachmentDraft(
       id: name,
       cachedPath: cached.path,
@@ -133,7 +137,10 @@ void main() {
           ).copyWith(textScaler: TextScaler.linear(scale)),
           child: child!,
         ),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
       ),
     );
     await frames(tester);
@@ -146,8 +153,8 @@ void main() {
     await frames(tester);
     expect(chat.composer.observation.displayedText, original);
     expect(find.byType(AlertDialog), findsNothing);
-    expect(find.text('Queue'), findsOneWidget);
-    expect(find.text('Steer'), findsOneWidget);
+    expect(find.byTooltip('Save queued message'), findsOneWidget);
+    expect(find.byTooltip('Steer queued message'), findsOneWidget);
   }
 
   late AppPreferences appPreferences;
@@ -238,7 +245,7 @@ void main() {
         'Review spacing first\nThen check contrast.',
       );
       await frames(tester);
-      await tester.tap(find.text('Queue'));
+      await tester.tap(find.byTooltip('Save queued message'));
       await frames(tester);
       expect(chat.composer.observation.queue.map((prompt) => prompt.text), [
         'Review spacing first\nThen check contrast.',
@@ -265,7 +272,7 @@ void main() {
     await edit(tester, 'Review the layout');
     await tester.enterText(composer, 'Discard this modification');
     await frames(tester);
-    await tester.tap(find.text('Cancel'));
+    await tester.tap(find.byTooltip('Cancel queued message editing'));
     await frames(tester);
     expect(chat.composer.observation.queue.first.text, 'Review the layout');
     expect(
@@ -289,7 +296,7 @@ void main() {
     await tester.tap(
       find.descendant(
         of: find.byType(AlertDialog),
-        matching: find.text('Cancel'),
+        matching: find.byTooltip('Cancel'),
       ),
     );
     await frames(tester);
@@ -297,7 +304,12 @@ void main() {
     expect(chat.composer.observation.displayedText, 'Review the layout');
     await tester.tap(find.byTooltip('Delete queued message'));
     await frames(tester);
-    await tester.tap(find.text('Delete'));
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byTooltip('Delete queued message'),
+      ),
+    );
     await frames(tester);
     expect(chat.composer.observation.queue.single.text, 'Then check the tests');
     expect(
@@ -321,14 +333,12 @@ void main() {
       await edit(tester, 'Review the layout');
       await tester.enterText(composer, 'Focus on spacing now');
       await frames(tester);
-      await tester.tap(find.text('Steer'));
+      await tester.tap(find.byTooltip('Steer queued message'));
       await frames(tester);
       expect(chat.composer.observation.saving, isTrue);
       expect(
         tester
-            .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Steer'),
-            )
+            .widget<IconButton>(find.byTooltip('Steer queued message'))
             .onPressed,
         isNull,
       );
@@ -374,7 +384,7 @@ void main() {
     await edit(tester, 'Review the layout');
     await tester.enterText(composer, 'Keep this edited instruction');
     await frames(tester);
-    await tester.tap(find.text('Steer'));
+    await tester.tap(find.byTooltip('Steer queued message'));
     await frames(tester);
     expect(chat.composer.observation.queue, hasLength(2));
     expect(
@@ -383,7 +393,7 @@ void main() {
     );
     expect(find.text('Hermes rejected the steering message.'), findsOneWidget);
     fixture.steerReply = Completer<Map<String, dynamic>>();
-    await tester.tap(find.text('Steer'));
+    await tester.tap(find.byTooltip('Steer queued message'));
     await frames(tester);
     fixture.steerReply!.completeError(
       StateError('Device test connection lost'),
@@ -421,13 +431,11 @@ void main() {
       );
       expect(
         tester
-            .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Steer'),
-            )
+            .widget<IconButton>(find.byTooltip('Steer queued message'))
             .onPressed,
         isNull,
       );
-      await tester.tap(find.text('Queue'));
+      await tester.tap(find.byTooltip('Save queued message'));
       await frames(tester);
       expect(fixture.submissions, hasLength(1));
       expect(
@@ -465,17 +473,22 @@ void main() {
       await frames(tester);
       await tester.enterText(composer, 'Check the attached notes');
       await frames(tester);
-      await tester.ensureVisible(find.text('Queue'));
+      await tester.ensureVisible(find.byTooltip('Save queued message'));
       await capture(tester, 'queue-06-large-text-attachment');
       expect(
         tester
-            .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Steer'),
+            .widget<IconButton>(
+              find.descendant(
+                of: find.byTooltip(
+                  'Hermes only supports steering text-only messages.',
+                ),
+                matching: find.byType(IconButton),
+              ),
             )
             .onPressed,
         isNull,
       );
-      await tester.tap(find.text('Queue'));
+      await tester.tap(find.byTooltip('Save queued message'));
       await frames(tester);
       expect(
         chat.composer.observation.queue.last.text,

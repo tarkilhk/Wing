@@ -153,6 +153,7 @@ void main() {
         navigatorKey: navigator,
         home: ProfileWorkspaceScreen(
           controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
           initialDestination: destination,
         ),
       ),

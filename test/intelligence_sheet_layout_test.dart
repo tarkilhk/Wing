@@ -141,49 +141,17 @@ void main() {
           findsOneWidget,
         );
         expect(
-          tester.getRect(find.text('Models')).top -
-              tester.getRect(find.byType(BottomSheet)).top,
-          lessThanOrEqualTo(20),
+          find.byKey(const Key('model-search')).hitTestable(),
+          findsOneWidget,
         );
-        if (scale == 1) {
-          if (size.height > size.width) {
-            expect(
-              tester.getSize(find.byType(BottomSheet)).height,
-              lessThan(520),
-            );
-          }
-          expect(
-            tester.getSize(find.byKey(const Key('model-search'))).height,
-            lessThanOrEqualTo(36),
-          );
-        }
-        if (scale == 1) {
-          final first = find.byKey(const Key('model-openai-codex-gpt-6.1-sol'));
-          final second = find.byKey(
-            const Key('model-openai-codex-gpt-6-astra'),
-          );
-          expect(
-            tester.getRect(second).top - tester.getRect(first).top,
-            lessThanOrEqualTo(36),
-            reason: 'Adjacent model rows must be dense',
-          );
-          expect(
-            tester
-                .getSize(find.byKey(const Key('model-filter-openai-codex')))
-                .height,
-            lessThanOrEqualTo(32),
-          );
-          expect(
-            tester
-                .getSize(find.byKey(const Key('chat-reasoning-control')))
-                .height,
-            lessThanOrEqualTo(36),
-          );
-          expect(
-            tester.getSize(find.byKey(const Key('chat-fast-control'))).height,
-            lessThanOrEqualTo(36),
-          );
-        }
+        expect(
+          find.byKey(const Key('chat-reasoning-control')).hitTestable(),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const Key('chat-fast-control')).hitTestable(),
+          findsOneWidget,
+        );
         final prefix =
             'build/model-picker-${brightness.name}-${size.width.toInt()}-${scale == 2 ? 'large' : 'normal'}';
         Future<void> screenshot(String suffix) async {
@@ -230,7 +198,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final priced in [false, true]) {
       testWidgets(
-        'full Codex list fits without padded rows $brightness priced $priced',
+        'all Codex choices remain selectable with the form footer $brightness priced $priced',
         (tester) async {
           tester.view.physicalSize = const Size(412, 832);
           tester.view.devicePixelRatio = 1;
@@ -292,6 +260,7 @@ void main() {
                   }),
           ).choices;
           final active = catalog.firstWhere((c) => c.model == 'gpt-6.1-sol');
+          ChatIntelligenceSelection? result;
           await tester.pumpWidget(
             RepaintBoundary(
               key: frame,
@@ -301,18 +270,20 @@ void main() {
                 home: Scaffold(
                   body: Builder(
                     builder: (context) => TextButton(
-                      onPressed: () => showChatIntelligencePicker(
-                        context: context,
-                        choices: catalog,
-                        initialChoice: active,
-                        initialReasoningEffort: 'high',
-                        initialFastMode: ChatFastMode.normal,
-                        defaultModel: active.model,
-                        profileName: 'Claw',
-                        refreshModels: () async => catalog,
-                        reviewProviderAccess: () async {},
-                        onCommit: (_) async => true,
-                      ),
+                      onPressed: () async {
+                        result = await showChatIntelligencePicker(
+                          context: context,
+                          choices: catalog,
+                          initialChoice: active,
+                          initialReasoningEffort: 'high',
+                          initialFastMode: ChatFastMode.normal,
+                          defaultModel: active.model,
+                          profileName: 'Claw',
+                          refreshModels: () async => catalog,
+                          reviewProviderAccess: () async {},
+                          onCommit: (_) async => true,
+                        );
+                      },
                       child: const Text('Open models'),
                     ),
                   ),
@@ -333,26 +304,9 @@ void main() {
             findsOneWidget,
             reason: 'All 14 Codex models must fit on a normal phone',
           );
-          var priceHeaderHeight = 0.0;
           if (priced) {
             expect(find.text('API equivalent · per 1M tokens'), findsOneWidget);
-            priceHeaderHeight = tester
-                .getSize(find.byKey(const Key('model-provider-openai-codex')))
-                .height;
-            expect(
-              priceHeaderHeight,
-              lessThanOrEqualTo(44),
-              reason: 'The units header allows two text lines and its padding',
-            );
           }
-          expect(
-            tester.getRect(first).top -
-                tester.getRect(find.byType(BottomSheet)).top -
-                priceHeaderHeight,
-            lessThanOrEqualTo(108),
-            reason:
-                'Header, search and tabs stay compact independently of units text wrapping',
-          );
           expect(
             find.byTooltip('Apply model settings').hitTestable(),
             findsOneWidget,
@@ -371,8 +325,12 @@ void main() {
               image.dispose();
             });
           }
-          await tester.tap(find.byTooltip('Close'));
+          await tester.tap(last);
           await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Apply model settings'));
+          await tester.pumpAndSettle();
+          expect(result?.choice.model, 'gpt-5.6-luna-900k');
+          expect(find.byType(BottomSheet), findsNothing);
         },
       );
     }

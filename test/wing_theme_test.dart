@@ -159,9 +159,11 @@ void main() {
         await tester.drag(find.text('Row 3'), const Offset(0, -180));
         await tester.pumpAndSettle();
         expect(scroll.offset, greaterThan(0));
-        for (final motion in tester.widgetList<Transform>(
+        final transforms = tester.widgetList<Transform>(
           find.byKey(const ValueKey('studio-button-press-transform')),
-        )) {
+        );
+        expect(transforms, isNotEmpty);
+        for (final motion in transforms) {
           expect(motion.transform.entry(0, 0), 1);
         }
       },
@@ -386,7 +388,6 @@ void main() {
 
       final mid = dark.lerp(light, 0.5);
 
-      expect(mid, isA<WingTokens>());
       expect(mid.accent, Color.lerp(dark.accent, light.accent, .5));
       expect(mid.surface, isNot(dark.surface));
     });
@@ -495,12 +496,12 @@ void main() {
       }
     });
 
-    test('muted text still meets the AA large-text floor', () {
+    test('muted text meets the AA ordinary-text floor', () {
       for (final brightness in Brightness.values) {
         final tokens = _tokensFrom(wingTheme(brightness))!;
         expect(
           contrastRatio(tokens.muted, tokens.surface),
-          greaterThanOrEqualTo(3.0),
+          greaterThanOrEqualTo(4.5),
           reason: 'secondary text must remain legible in $brightness',
         );
       }

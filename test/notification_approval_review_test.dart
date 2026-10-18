@@ -66,6 +66,15 @@ void main() {
     await tester.tap(find.byTooltip('Allow once'));
     await tester.pump();
     expect(find.bySemanticsLabel('Sending approval decision'), findsOneWidget);
+    expect(
+      find
+          .descendant(
+            of: find.byType(NotificationApprovalReview),
+            matching: find.byType(CircularProgressIndicator),
+          )
+          .hitTestable(),
+      findsOneWidget,
+    );
     expect(find.text('Sending decision…'), findsNothing);
     gate.complete();
     await tester.pumpAndSettle();
@@ -95,6 +104,7 @@ void main() {
         final changes = ChangeNotifier();
         addTearDown(changes.dispose);
         final frame = GlobalKey();
+        var submitted = 0;
         await tester.pumpWidget(
           MaterialApp(
             theme: wingTheme(brightness),
@@ -124,7 +134,9 @@ void main() {
                     changes: changes,
                     offline: () => false,
                     pending: () => true,
-                    submit: () async {},
+                    submit: () async {
+                      submitted++;
+                    },
                   ),
                 ),
                 child: const Text('Open'),
@@ -142,19 +154,14 @@ void main() {
         );
         expect(find.text('Backend says this is one-shot.'), findsNothing);
         expect(
-          tester
-              .getRect(
-                find.text(
-                  'Permanently allow matching commands, including in future chats.',
-                ),
+          find
+              .text(
+                'Permanently allow matching commands, including in future chats.',
               )
-              .bottom,
-          lessThan(915),
+              .hitTestable(),
+          findsOneWidget,
         );
-        expect(
-          tester.getRect(find.byTooltip('Always allow')).bottom,
-          lessThan(915),
-        );
+        expect(find.byTooltip('Always allow').hitTestable(), findsOneWidget);
         expect(tester.takeException(), isNull);
         if (capture) {
           await tester.runAsync(() async {
@@ -171,6 +178,10 @@ void main() {
             image.dispose();
           });
         }
+        await tester.tap(find.byTooltip('Always allow'));
+        await tester.pumpAndSettle();
+        expect(submitted, 1);
+        expect(find.byType(NotificationApprovalReview), findsNothing);
       });
     }
   }

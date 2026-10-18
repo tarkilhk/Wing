@@ -46,6 +46,7 @@ class VoiceDeviceFixture implements VoiceDevice {
   @override
   Future<Uint8List?> stop(String id) async {
     calls.add('stop');
+    if (recording != id) return null;
     return local == true ? null : Uint8List.fromList([1, 2, 3]);
   }
 

@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/transcript_position.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
@@ -235,7 +236,12 @@ void main() {
       {'id': 1, 'role': 'assistant', 'content': 'The unread result is ready.'},
     ]);
     await tester.pumpWidget(
-      MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          createBotsSession: () => BotsSession((_) async => const []),
+          controller: controller,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
     expect(reads, isEmpty);

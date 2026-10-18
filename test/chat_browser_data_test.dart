@@ -164,6 +164,7 @@ void main() {
       expect(data.state.searching, isFalse);
       expect(data.state.profiles['work']!.searchMatches, isNotEmpty);
       expect(data.state.profiles['personal']!.searchMatches, healthy);
+      expect(fixture.attempts, isNotEmpty);
       expect(fixture.attempts.every((read) => read.$1 == 'work'), isTrue);
       held.completeError(TimeoutException('Retired blocked search'));
       await pending;
@@ -987,6 +988,7 @@ void main() {
       fixture.failWorkSearch = false;
       fixture.attempts.clear();
       await data.recover();
+      expect(fixture.attempts, isNotEmpty);
       expect(fixture.attempts.every((r) => r.$1 == 'work'), isTrue);
       expect(
         data.state.profiles['personal']?.searchMatches,
@@ -1143,13 +1145,21 @@ void main() {
   );
 
   test('refresh publication does not grow with the number of pages', () async {
-    fixture.count = 1000;
     await data.refresh(archivedOnly: false);
     var publications = 0;
     data.addListener(() => publications++);
     await data.refresh(archivedOnly: false);
+    final baseline = publications;
+    expect(baseline, greaterThan(0));
+    publications = 0;
+    fixture.count = 1000;
+    await data.refresh(archivedOnly: false);
     expect(data.entries.length, 2000);
-    expect(publications, 4, reason: 'start, one snapshot per profile, finish');
+    expect(
+      publications,
+      lessThanOrEqualTo(baseline),
+      reason: 'more pages must not produce per-page publications',
+    );
   });
 
   test(
@@ -1246,13 +1256,33 @@ void main() {
   test(
     'disposing prevents late publication and still closes temporary readers',
     () async {
+      final live = {...fixture.opened};
       final gate = Completer<void>();
-      fixture.pageDelays[('personal', 0)] = gate;
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      fixture.connectionDelays['work'] = gate;
+      fixture.connectionEntered = Completer<void>();
       final pending = data.refresh(archivedOnly: false);
+      await fixture.connectionEntered!.future;
+      final temporary = fixture.opened.difference(live);
+      expect(temporary, isNotEmpty);
+      final retainedKeys = data.entries.map((entry) => entry.key).toList();
+      final completedProfiles = {
+        for (final entry in data.state.profiles.entries)
+          if (entry.value.complete) entry.key,
+      };
       data.dispose();
       gate.complete();
       await pending;
-      // Replace for the common teardown; disposal itself is the assertion.
+      expect(data.entries.map((entry) => entry.key), retainedKeys);
+      expect({
+        for (final entry in data.state.profiles.entries)
+          if (entry.value.complete) entry.key,
+      }, completedProfiles);
+      expect(fixture.closed, containsAll(temporary));
+      expect(fixture.closed.intersection(live), isEmpty);
+      // Replace only for the common teardown, after checking retirement.
       data = ChatBrowserData(
         controller,
         readBotAppearances: fixture.botAppearances,

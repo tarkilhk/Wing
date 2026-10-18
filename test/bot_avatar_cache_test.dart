@@ -346,6 +346,7 @@ void main() {
         ..replaceDemand({scope('atlas')});
       await settle();
       final original = borrower.imageFor(scope('atlas'));
+      expect(original, isNotNull);
       fixture.profiles.first['has_avatar'] = false;
       failed = true;
       now = now.add(const Duration(seconds: 30));
@@ -405,7 +406,7 @@ void main() {
   );
 
   test(
-    'retired borrowers and removed sources reject held image publication',
+    'removed sources reject held image publication for mounted borrowers',
     () async {
       final fixture = BotsFixture();
       fixture.profiles.first['has_avatar'] = true;
@@ -422,11 +423,12 @@ void main() {
       await settle();
       connected = false;
       await owner.refresh();
-      borrower.dispose();
       held.complete({'found': true, 'data': png});
       await settle();
       expect(owner.retainedAvatarCount, 0);
       expect(owner.cachedAppearance(key('atlas')), isNull);
+      expect(borrower.imageFor(scope('atlas')), isNull);
+      borrower.dispose();
     },
   );
   test('foreground wakes share a recently validated avatar', () async {

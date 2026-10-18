@@ -1,3 +1,4 @@
+import 'package:wing/core/services/bots_session.dart';
 import 'dart:async';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/profile_supervision_session.dart';
@@ -251,7 +252,7 @@ void main() {
     expect(find.text('dart test'), findsOneWidget);
   });
 
-  testWidgets('keeps a rejected process and dismisses only an exited row', (
+  testWidgets('keeps a process when the server rejects stopping it', (
     tester,
   ) async {
     fixture.rejectStop = true;
@@ -269,6 +270,16 @@ void main() {
       findsOneWidget,
     );
 
+    expect(
+      fixture.requests.where((request) => request.$1 == 'process.kill'),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('dismissing an exited process does not stop running work', (
+    tester,
+  ) async {
+    await showPanel(tester);
     await tester.tap(find.text('dart test'));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byTooltip('Dismiss'));
@@ -280,7 +291,7 @@ void main() {
     expect(find.text('dart test'), findsNothing);
     expect(
       fixture.requests.where((request) => request.$1 == 'process.kill'),
-      hasLength(1),
+      isEmpty,
     );
   });
 
@@ -387,7 +398,10 @@ void main() {
           data: MediaQuery.of(context).copyWith(disableAnimations: true),
           child: child!,
         ),
-        home: ProfileWorkspaceScreen(controller: controller),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => []),
+        ),
       ),
     );
     await tester.pumpAndSettle();

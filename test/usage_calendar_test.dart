@@ -188,10 +188,12 @@ void main() {
         contains('297,927,473 tokens'),
       );
 
-      await tester.tapAt(const Offset(300, 300));
+      await tester.tapAt(
+        tester.getBottomRight(find.byType(Scaffold)) - const Offset(16, 16),
+      );
       await tester.pumpAndSettle(const Duration(milliseconds: 250));
       expect(
-        find.textContaining('Tokens unavailable', findRichText: true),
+        find.textContaining('298M tokens', findRichText: true),
         findsNothing,
       );
       expect(tester.takeException(), isNull);

@@ -3,6 +3,10 @@ import 'dart:io';
 import 'package:yaml/yaml.dart';
 
 const _qaCommand = "python3 -m unittest discover -s tools/qa -p 'test_*.py' -v";
+const _fixtureDependencyCommand =
+    'python3 -m pip install -r tools/fake_gateway/requirements.txt';
+const _fixtureTransportCommand =
+    'python3 -m unittest tools.fake_gateway.test_fixture_boundaries -v';
 const _sourceCommand = 'python3 scripts/check_commit_linters.py --dart-only';
 const _boundSourceCommand =
     '$_sourceCommand --baseline-reference "build/architecture-baseline-reference.json"';
@@ -36,6 +40,7 @@ const _notificationBoundaryCommand =
 const _notificationFixtureCommand =
     'python3 tools/architecture/native_notification/prove_boundary.py';
 const _notificationDeviceCommand = 'python3 tools/qa/run_notification_gate.py';
+const _androidJourneyCommand = 'python3 scripts/test_journeys.py';
 const _declarationBoundaryCommand =
     'python3 tools/architecture/native_notification/retired_declaration.py';
 const _declarationFixtureCommand =
@@ -70,6 +75,7 @@ List<String> checkRequiredQualityGates(Directory root) {
       final steps = (job['steps'] as List).whereType<Map>().toList();
       for (final gate in [
         ('offline-qa', _qaCommand),
+        ('transport-fixture', _fixtureTransportCommand),
         (
           'linter-runner-tests',
           target.$2 == 'quality'
@@ -111,6 +117,7 @@ List<String> checkRequiredQualityGates(Directory root) {
         ('native-notification-action', _notificationBoundaryCommand),
         ('native-notification-fixtures', _notificationFixtureCommand),
         ('notification-device', _notificationDeviceCommand),
+        ('android-journeys', _androidJourneyCommand),
         ('native-retired-declarations', _declarationBoundaryCommand),
         ('native-retired-declaration-fixtures', _declarationFixtureCommand),
         ('native-voice-boundary', _voiceBoundaryCommand),
@@ -118,6 +125,7 @@ List<String> checkRequiredQualityGates(Directory root) {
         ('native-voice-fixtures', _voiceFixtureCommand),
       ]) {
         final native =
+            gate.$2 == _androidJourneyCommand ||
             gate.$2 == _nativeBoundaryCommand ||
             gate.$2 == _nativeFixtureCommand ||
             gate.$2 == _notificationBoundaryCommand ||
@@ -135,6 +143,18 @@ List<String> checkRequiredQualityGates(Directory root) {
                   _hardFailure(entry.$2['continue-on-error']) &&
                   _mandatory(entry.$2['if']) &&
                   _runsFinalCommand(entry.$2['run'], gate.$2) &&
+                  (gate.$2 != _fixtureTransportCommand ||
+                      steps
+                          .take(entry.$1)
+                          .any(
+                            (setup) =>
+                                _hardFailure(setup['continue-on-error']) &&
+                                _mandatory(setup['if']) &&
+                                _runsFinalCommand(
+                                  setup['run'],
+                                  _fixtureDependencyCommand,
+                                ),
+                          )) &&
                   (gate.$2 != _changedTestsCommand ||
                       (_boundTestBase(entry.$2['env']) &&
                           steps

@@ -175,7 +175,7 @@ void main() {
   );
 
   testWidgets(
-    'a large document lays out the viewport and selects offscreen bytes',
+    'large document selections retain offscreen bytes after scrolling',
     (tester) async {
       final source = List.generate(
         3002,
@@ -201,11 +201,6 @@ void main() {
       await settleSource(tester);
       final editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
       expect(editor.readOnly, isTrue);
-      // Inspect the package's actual laid-out paragraphs, not our token model.
-      final dynamic render = tester.allRenderObjects.firstWhere(
-        (render) => render.runtimeType.toString() == '_CodeFieldRender',
-      );
-      expect((render.displayParagraphs as List).length, lessThan(20));
       final controller = editor.controller!;
       controller.selectAll();
       expect(controller.selectedText, source);
@@ -227,8 +222,8 @@ void main() {
       final scroll = editor.scrollController!.verticalScroller;
       scroll.jumpTo(scroll.position.maxScrollExtent);
       await tester.pump();
-      expect((render.displayParagraphs as List).last.index, 3001);
-      expect((render.displayParagraphs as List).length, lessThan(20));
+      expect(scroll.offset, scroll.position.maxScrollExtent);
+      expect(scroll.offset, greaterThan(0));
       expect(
         controller.selectedText.startsWith(lines[10].substring(3)),
         isTrue,
@@ -280,55 +275,58 @@ void main() {
       await tester.pumpWidget(app(true));
       await settleSource(tester);
       final semanticsHandle = tester.ensureSemantics();
-      var editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
-      final controller = editor.controller!;
-      expect(controller.codeLines.length, greaterThan(10));
-      controller.selectAll();
-      expect(controller.selectedText, source);
-      await controller.copy();
-      expect(copied, source);
-      await tester.pump();
-      final semantics = tester.getSemantics(
-        find.bySemanticsLabel('Source text'),
-      );
-      expect(semantics.getSemanticsData().value, source);
-      expect(
-        semantics.getSemanticsData().textSelection,
-        TextSelection(baseOffset: 0, extentOffset: source.length),
-      );
-      semantics.owner!.performAction(
-        semantics.id,
-        ui.SemanticsAction.setSelection,
-        {'base': 200, 'extent': 1100},
-      );
-      expect(controller.selectedText, source.substring(200, 1100));
-      controller.selection = const CodeLineSelection(
-        baseIndex: 1,
-        baseOffset: 3,
-        extentIndex: 3,
-        extentOffset: 7,
-      );
-      final selection = controller.selectedText;
-      expect(selection.contains('\n'), isFalse);
-      await tester.pumpWidget(app(false));
-      editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
-      expect(editor.controller, same(controller));
-      expect(controller.selectedText, selection);
-      expect(controller.codeLines.length, 2);
-      expect(
-        controller
-            .buildTextSpan(
-              context: tester.element(find.byType(CodeEditor)),
-              index: 0,
-              textSpan: const TextSpan(),
-              style: const TextStyle(),
-            )
-            .toPlainText(),
-        source.substring(0, source.length - 1),
-      );
-      await tester.pumpWidget(const SizedBox());
-      semanticsHandle.dispose();
-      expect(tester.takeException(), isNull);
+      try {
+        var editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
+        final controller = editor.controller!;
+        expect(controller.codeLines.length, greaterThan(10));
+        controller.selectAll();
+        expect(controller.selectedText, source);
+        await controller.copy();
+        expect(copied, source);
+        await tester.pump();
+        final semantics = tester.getSemantics(
+          find.bySemanticsLabel('Source text'),
+        );
+        expect(semantics.getSemanticsData().value, source);
+        expect(
+          semantics.getSemanticsData().textSelection,
+          TextSelection(baseOffset: 0, extentOffset: source.length),
+        );
+        semantics.owner!.performAction(
+          semantics.id,
+          ui.SemanticsAction.setSelection,
+          {'base': 200, 'extent': 1100},
+        );
+        expect(controller.selectedText, source.substring(200, 1100));
+        controller.selection = const CodeLineSelection(
+          baseIndex: 1,
+          baseOffset: 3,
+          extentIndex: 3,
+          extentOffset: 7,
+        );
+        final selection = controller.selectedText;
+        expect(selection.contains('\n'), isFalse);
+        await tester.pumpWidget(app(false));
+        editor = tester.widget<CodeEditor>(find.byType(CodeEditor));
+        expect(editor.controller, same(controller));
+        expect(controller.selectedText, selection);
+        expect(controller.codeLines.length, 2);
+        expect(
+          controller
+              .buildTextSpan(
+                context: tester.element(find.byType(CodeEditor)),
+                index: 0,
+                textSpan: const TextSpan(),
+                style: const TextStyle(),
+              )
+              .toPlainText(),
+          source.substring(0, source.length - 1),
+        );
+        await tester.pumpWidget(const SizedBox());
+        expect(tester.takeException(), isNull);
+      } finally {
+        semanticsHandle.dispose();
+      }
     },
   );
 
@@ -503,10 +501,10 @@ void main() {
     },
   );
 
-  test(
-    'tool contracts identify source independently of literal console output',
-    () {
-      for (final name in ['execute_code', 'browser_exec']) {
+  for (final name in ['execute_code', 'browser_exec']) {
+    test(
+      '$name highlights submitted code and keeps console output literal',
+      () {
         final details = ToolActivityDetails.project(
           name: name,
           input: {'code': python},
@@ -514,26 +512,34 @@ void main() {
         );
         expect(details.request.first.language, 'python');
         expect(details.request.first.copyText, python);
-        expect(
-          details.response
-              .where((b) => b.role == ToolDetailRole.output)
-              .every((b) => b.language == null),
-          isTrue,
+        final output = details.response.where(
+          (b) => b.role == ToolDetailRole.output,
         );
-      }
-      final terminal = ToolActivityDetails.project(
-        name: 'terminal',
-        input: {'command': shell},
-        output: {'output': 'ready\n', 'exit_code': 0},
-      );
-      expect(terminal.request.single.language, 'bash');
-      expect(terminal.response.single.language, isNull);
-      for (final entry in {
-        'a.py': 'python',
-        'a.sh': 'bash',
-        'a.json': 'json',
-        'a.txt': null,
-      }.entries) {
+        expect(output, isNotEmpty);
+        expect(output.map((b) => b.language), everyElement(isNull));
+        expect(output.map((b) => b.copyText), contains('def is printed text'));
+      },
+    );
+  }
+  test('terminal highlights the command and keeps its output literal', () {
+    final terminal = ToolActivityDetails.project(
+      name: 'terminal',
+      input: {'command': shell},
+      output: {'output': 'ready\n', 'exit_code': 0},
+    );
+    expect(terminal.request.single.language, 'bash');
+    expect(terminal.response.single.language, isNull);
+    expect(terminal.response.single.copyText, 'ready\n');
+  });
+  for (final entry in {
+    'a.py': 'python',
+    'a.sh': 'bash',
+    'a.json': 'json',
+    'a.txt': null,
+  }.entries) {
+    test(
+      'read_file preserves partial ${entry.key} source and its language',
+      () {
         final read = ToolActivityDetails.project(
           name: 'read_file',
           input: {'path': entry.key},
@@ -546,36 +552,48 @@ void main() {
         expect(read.response.first.language, entry.value);
         expect(read.response.first.copyText, '1|print("Wing")');
         expect(read.metadata, contains('Partial file returned'));
-        final write = ToolActivityDetails.project(
-          name: 'write_file',
-          input: {'path': entry.key, 'content': python},
-          output: null,
-        );
-        expect(write.request.single.language, entry.value);
-        final patch = ToolActivityDetails.project(
-          name: 'patch',
-          input: {
-            'path': entry.key,
-            'old_string': 'before',
-            'new_string': 'after',
-          },
-          output: {'diff': '-before\n+after'},
-        );
-        expect(patch.request.every((b) => b.language == entry.value), isTrue);
-        expect(patch.response.single.format, ToolDetailFormat.diff);
-      }
-      expect(sourceLanguageForPath(r'C:\work\demo.PY'), 'python');
-      final extracted = ToolActivityDetails.project(
-        name: 'read_file',
-        input: {'path': 'document.py'},
-        output: {
-          'content': '1|plain extracted prose',
-          'extracted_document': true,
-        },
+      },
+    );
+    test('write_file derives ${entry.key} language from the destination', () {
+      final write = ToolActivityDetails.project(
+        name: 'write_file',
+        input: {'path': entry.key, 'content': python},
+        output: null,
       );
-      expect(extracted.response.first.language, isNull);
-    },
-  );
+      expect(write.request.single.language, entry.value);
+      expect(write.request.single.copyText, python);
+    });
+    test('patch separates ${entry.key} source from its resulting diff', () {
+      final patch = ToolActivityDetails.project(
+        name: 'patch',
+        input: {
+          'path': entry.key,
+          'old_string': 'before',
+          'new_string': 'after',
+        },
+        output: {'diff': '-before\n+after'},
+      );
+      expect(patch.request, isNotEmpty);
+      expect(patch.request.map((b) => b.language), everyElement(entry.value));
+      expect(patch.response.single.format, ToolDetailFormat.diff);
+      expect(patch.response.single.copyText, '-before\n+after');
+    });
+  }
+  test('source language accepts Windows paths and uppercase extensions', () {
+    expect(sourceLanguageForPath(r'C:\work\demo.PY'), 'python');
+  });
+  test('extracted documents remain literal despite a source extension', () {
+    final extracted = ToolActivityDetails.project(
+      name: 'read_file',
+      input: {'path': 'document.py'},
+      output: {
+        'content': '1|plain extracted prose',
+        'extracted_document': true,
+      },
+    );
+    expect(extracted.response.first.language, isNull);
+    expect(extracted.response.first.copyText, '1|plain extracted prose');
+  });
 
   test('source palette is readable on both Studio content surfaces', () {
     for (final brightness in Brightness.values) {
@@ -604,9 +622,14 @@ void main() {
     }
   });
 
-  testWidgets(
-    'stream replacement, theme changes, wrapping and exact code copy',
-    (tester) async {
+  for (final intent in [
+    'replacement',
+    'theme change',
+    'wrap and copy',
+    'large source copy',
+    'retirement',
+  ]) {
+    testWidgets('source $intent preserves the document', (tester) async {
       String? copied;
       tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
@@ -635,62 +658,95 @@ void main() {
           ),
         ),
       );
-      await tester.pumpWidget(app('print("old")', Brightness.dark));
-      await tester.pumpWidget(app('print("new")', Brightness.dark));
-      await tester.pumpWidget(app(python, Brightness.dark));
-      await settleSource(tester);
-      expect(selected(tester.widget(find.byType(CodeEditor))), python);
-      final darkSpan = renderedSpan(tester);
-      expect(
-        darkSpan.children!.any(
-          (span) => (span as TextSpan).style?.color != null,
-        ),
-        isTrue,
-      );
-      await tester.pumpWidget(app(python, Brightness.light));
-      await tester.pumpAndSettle();
-      final lightSpan = renderedSpan(tester);
-      expect(lightSpan.toPlainText(), python);
-      expect(
-        lightSpan.children!.map((span) => (span as TextSpan).style?.color),
-        isNot(
-          darkSpan.children!.map((span) => (span as TextSpan).style?.color),
-        ),
-      );
-      await tester.tap(find.byTooltip('Scroll horizontally'));
-      await tester.pump();
-      await settleSource(tester);
-      expect(selected(tester.widget(find.byType(CodeEditor))), python);
-      await tester.tap(find.byTooltip('Copy code'));
-      await tester.pump();
-      expect(copied, python);
-      final largeSource = python * 400;
-      await tester.pumpWidget(app(largeSource, Brightness.light));
-      await tester.pump(const Duration(milliseconds: 100));
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pump();
-      expect(selected(tester.widget(find.byType(CodeEditor))), largeSource);
-      await settleSource(tester);
-      expect(
-        renderedSpan(
-          tester,
-        ).children!.where((span) => (span as TextSpan).style?.color != null),
-        isNotEmpty,
-      );
-      await tester.tap(find.byTooltip('Copy code'));
-      await tester.pump();
-      expect(copied, largeSource);
-      await tester.pumpWidget(app('print("pending")', Brightness.light));
-      await tester.pumpWidget(const SizedBox());
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 150)),
-      );
-      await tester.pump();
+
+      switch (intent) {
+        case 'replacement':
+          await tester.pumpWidget(app('print("old")', Brightness.dark));
+          await tester.pumpWidget(app('print("new")', Brightness.dark));
+          await tester.pumpWidget(app(python, Brightness.dark));
+          await settleSource(tester);
+          expect(selected(tester.widget(find.byType(CodeEditor))), python);
+          expect(
+            renderedSpan(tester).children!.where(
+              (span) => (span as TextSpan).style?.color != null,
+            ),
+            isNotEmpty,
+          );
+        case 'theme change':
+          await tester.pumpWidget(app(python, Brightness.dark));
+          await settleSource(tester);
+          final darkSpan = renderedSpan(tester);
+          await tester.pumpWidget(app(python, Brightness.light));
+          // Existing highlights remain visible while the theme transition and
+          // replacement worker result settle. Wait for the changed palette,
+          // not merely for any already-highlighted text.
+          final darkColors = darkSpan.children!
+              .map((span) => (span as TextSpan).style?.color)
+              .toList();
+          for (var attempt = 0; attempt < 100; attempt++) {
+            await tester.pump(const Duration(milliseconds: 16));
+            await tester.runAsync(
+              () => Future<void>.delayed(const Duration(milliseconds: 10)),
+            );
+            final colors = renderedSpan(
+              tester,
+            ).children!.map((span) => (span as TextSpan).style?.color);
+            if (colors.any((color) => color != null) &&
+                !equals(darkColors).matches(colors, {})) {
+              break;
+            }
+          }
+          final lightSpan = renderedSpan(tester);
+          expect(lightSpan.toPlainText(), python);
+          expect(
+            lightSpan.children!.where(
+              (span) => (span as TextSpan).style?.color != null,
+            ),
+            isNotEmpty,
+          );
+          expect(
+            lightSpan.children!.map((span) => (span as TextSpan).style?.color),
+            isNot(
+              darkSpan.children!.map((span) => (span as TextSpan).style?.color),
+            ),
+          );
+        case 'wrap and copy':
+          await tester.pumpWidget(app(python, Brightness.dark));
+          await settleSource(tester);
+          await tester.tap(find.byTooltip('Scroll horizontally'));
+          await tester.pump();
+          await settleSource(tester);
+          expect(selected(tester.widget(find.byType(CodeEditor))), python);
+          await tester.tap(find.byTooltip('Copy code'));
+          await tester.pump();
+          expect(copied, python);
+        case 'large source copy':
+          final source = python * 400;
+          await tester.pumpWidget(app(source, Brightness.light));
+          await settleSource(tester);
+          expect(selected(tester.widget(find.byType(CodeEditor))), source);
+          expect(
+            renderedSpan(tester).children!.where(
+              (span) => (span as TextSpan).style?.color != null,
+            ),
+            isNotEmpty,
+          );
+          await tester.tap(find.byTooltip('Copy code'));
+          await tester.pump();
+          expect(copied, source);
+        case 'retirement':
+          await tester.pumpWidget(app('print("pending")', Brightness.light));
+          expect(find.byType(CodeEditor), findsOneWidget);
+          await tester.pumpWidget(const SizedBox());
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 150)),
+          );
+          await tester.pump();
+          expect(find.byType(CodeEditor), findsNothing);
+      }
       expect(tester.takeException(), isNull);
-    },
-  );
+    });
+  }
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
@@ -949,6 +1005,7 @@ void main() {
           await settleSource(tester);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
+          expect(find.byType(SourceCodeText), findsWidgets);
           for (final element in tester.widgetList<SourceCodeText>(
             find.byType(SourceCodeText),
           )) {

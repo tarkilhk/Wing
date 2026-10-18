@@ -1,5 +1,6 @@
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:io';
@@ -112,6 +113,7 @@ void main() {
             child: ProfileWorkspaceScreen(
               controller: controller,
               voiceDevice: device,
+              createBotsSession: () => BotsSession((_) async => []),
             ),
           ),
         ),
@@ -136,23 +138,30 @@ void main() {
     });
   }
 
+  testWidgets('completed dictation inserts editable text without sending', (
+    tester,
+  ) async {
+    final chat = controller.current!.chat!;
+    await controller.updateDraft(chat, 'Existing draft');
+    await show(tester);
+    await tester.tap(find.byTooltip('Dictate message'));
+    await tester.pump();
+    expect(find.textContaining('Recording ·'), findsOneWidget);
+    device.stream.add({
+      'id': device.recording,
+      'text': 'new words',
+      'final': true,
+    });
+    await tester.pumpAndSettle();
+    expect(chat.composer.observation.text, 'Existing draft new words');
+    expect(fixture.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
+  });
   testWidgets(
-    'dictation inserts editable text without sending and cancellation preserves draft',
+    'cancelling dictation discards partial text and preserves the draft',
     (tester) async {
       final chat = controller.current!.chat!;
       await controller.updateDraft(chat, 'Existing draft');
       await show(tester);
-      await tester.tap(find.byTooltip('Dictate message'));
-      await tester.pump();
-      expect(find.textContaining('Recording ·'), findsOneWidget);
-      device.stream.add({
-        'id': device.recording,
-        'text': 'new words',
-        'final': true,
-      });
-      await tester.pumpAndSettle();
-      expect(chat.composer.observation.text, 'Existing draft new words');
-      expect(fixture.calls.where((c) => c.$2 == 'session.prompt'), isEmpty);
       await tester.tap(find.byTooltip('Dictate message'));
       await tester.pump();
       device.stream.add({
@@ -163,7 +172,8 @@ void main() {
       await tester.pump();
       await tester.tap(find.byTooltip('Cancel recording'));
       await tester.pumpAndSettle();
-      expect(chat.composer.observation.text, 'Existing draft new words');
+      expect(chat.composer.observation.text, 'Existing draft');
+      expect(fixture.calls.where((c) => c.$2 == 'prompt.submit'), isEmpty);
     },
   );
   testWidgets(
@@ -209,15 +219,17 @@ void main() {
     await tester.tap(find.byTooltip('Dictate message'));
     await tester.pump();
     final id = device.recording;
+    addTearDown(() {
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    });
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump();
     device.stream.add({'id': id, 'text': 'late', 'final': true});
     await tester.pump();
     expect(device.cancelled, contains(id));
     expect(controller.current!.chat!.composer.observation.text, isEmpty);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
   });
   for (final brightness in Brightness.values) {
     testWidgets('recording composer fits 320dp at 200% text in $brightness', (

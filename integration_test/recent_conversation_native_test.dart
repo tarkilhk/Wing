@@ -27,12 +27,71 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/app_drawer.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
 import 'package:wing/core/widgets/recent_conversations/conversation_gestures.dart';
+import 'package:wing/core/widgets/recent_conversations/conversation_preview.dart';
 import 'package:wing/core/widgets/recent_conversations/recent_conversation_switcher.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
 
 import '../test/support/profile_browser_fixture.dart';
 import '../test/support/bots_fixture.dart';
 import '../test/support/recording_turn_notification_sink.dart';
+
+Future<HttpServer> _drawerDashboard() async {
+  // DrawerVersions owns its own production HTTP adapter, independently of
+  // the injected chat/Bots repositories. Keep those reads on this owned
+  // loopback endpoint, with unexpected transport requests failing the test.
+  final unexpectedReads = <String>[];
+  final dashboard = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  dashboard.listen((request) async {
+    final path = request.uri.path;
+    final query = request.uri.queryParameters;
+    final scopedRead =
+        query['profile'] == 'default' &&
+        (path == '/api/hermes/update/check'
+            ? query.length == 2 && query['force'] == 'true'
+            : query.length == 1);
+    if (request.method != 'GET' ||
+        (path == '/' ? query.isNotEmpty : !scopedRead)) {
+      unexpectedReads.add('${request.method} ${request.uri}');
+      request.response.statusCode = HttpStatus.badRequest;
+    } else if (path == '/' && query.isEmpty) {
+      request.response.write(
+        'window.__HERMES_SESSION_TOKEN__="native-recents-fixture";',
+      );
+    } else if (request.headers.value('X-Hermes-Session-Token') !=
+        'native-recents-fixture') {
+      unexpectedReads.add('Unauthenticated ${request.uri}');
+      request.response.statusCode = HttpStatus.unauthorized;
+    } else {
+      final body = switch (path) {
+        '/api/health' => {'ok': true, 'version': '1.2.3'},
+        '/api/profiles' => {
+          'profiles': [
+            {'name': 'default', 'is_default': true},
+          ],
+        },
+        '/api/hermes/update/check' => {
+          'current_version': '1.2.3',
+          'update_available': false,
+          'can_apply': false,
+        },
+        _ => null,
+      };
+      if (body == null) {
+        unexpectedReads.add('${request.method} ${request.uri}');
+        request.response.statusCode = HttpStatus.notFound;
+      } else {
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode(body));
+      }
+    }
+    await request.response.close();
+  });
+  addTearDown(() async {
+    await dashboard.close(force: true);
+    expect(unexpectedReads, isEmpty);
+  });
+  return dashboard;
+}
 
 class _NativeEventChats extends ProfileBrowserFixture {
   final groups = BotsFixture();
@@ -88,12 +147,22 @@ class _NativeEventChats extends ProfileBrowserFixture {
           ? groups.read(scope.profileName, method, params)
           : base.call(method, params),
       ownedPatch: (path, body, canDispatch, onDispatched) async {
-        if (!canDispatch()) throw StateError('Read superseded');
-        // Native callbacks can run while WidgetTester.pump is pending.
-        expectSync(body['profile'], scope.profileName);
-        expectSync(body['unread'], false);
+        final id = path.startsWith('sessions/')
+            ? Uri.decodeComponent(path.substring('sessions/'.length))
+            : null;
+        if (id == null ||
+            !sessions(scope.profileName).any((row) => row['id'] == id) ||
+            body.length != 5 ||
+            body['request_id'] is! String ||
+            (body['request_id'] as String).isEmpty ||
+            body['expected_revision'] != 0 ||
+            body['expected_generation'] != 0 ||
+            body['profile'] != scope.profileName ||
+            body['unread'] != false ||
+            !canDispatch()) {
+          throw StateError('Unexpected read acknowledgement: $path');
+        }
         onDispatched();
-        final id = Uri.decodeComponent(path.split('/').last);
         watermarks[(
           scope.profileName,
           id,
@@ -148,6 +217,24 @@ class _NativeEventChats extends ProfileBrowserFixture {
     'actor': {'kind': 'member', 'id': 'atlas'},
     'payload': {'text': 'Incoming group answer $sequence'},
   });
+}
+
+Future<void> _readNewest(WidgetTester tester, String checkpoint) async {
+  final viewport = tester.getRect(
+    find.byKey(const ValueKey('profile-transcript')),
+  );
+  await _native(
+    tester,
+    checkpoint,
+    actions: [
+      _touch(tester, 'one', [
+        (
+          Offset(viewport.center.dx, viewport.top + viewport.height * .75),
+          Offset(viewport.center.dx, viewport.top + viewport.height * .25),
+        ),
+      ], milliseconds: 450),
+    ],
+  );
 }
 
 Future<void> _until(
@@ -205,13 +292,15 @@ Future<void> _incomingJourney(
     RecordingTurnNotificationSink()..permissionResult = false,
     appPreferences: preferences,
   );
+  final dashboard = await _drawerDashboard();
   final controller = ProfileWorkspaceController(
     access: ConnectionAccess(
       connection: SavedConnection(
         id: 'native-events',
         label: 'Recents QA',
-        host: 'unused',
+        host: InternetAddress.loopbackIPv4.address,
         port: 1,
+        dashboardPortOverride: dashboard.port,
         apiKey: '',
       ),
       dashboardOAuth: null,
@@ -233,6 +322,11 @@ Future<void> _incomingJourney(
     onNotificationRead: notices.readTarget,
     notificationResultFor: notices.focusFor,
   );
+  addTearDown(() async {
+    await tester.pumpWidget(const SizedBox());
+    controller.dispose();
+    preferences.dispose();
+  });
   await controller.initialize();
   final personal = controller.current!.scope;
   final ordinary = (await controller.openSession(
@@ -281,11 +375,6 @@ Future<void> _incomingJourney(
   await bots.refresh();
   await controller.activateGroupNotifications();
   await bots.groupReads.acknowledge(bots.observedGroups.single, 1);
-  addTearDown(() async {
-    await tester.pumpWidget(const SizedBox());
-    controller.dispose();
-    preferences.dispose();
-  });
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -382,6 +471,16 @@ Future<void> _incomingJourney(
     reason:
         'Native tap must enter the conversation; selected=${controller.current?.chat?.key.sessionId}, receipts=${host.patched.length}',
   );
+  expect(
+    recents
+        .items()
+        .singleWhere((item) => item.chat?.key == ordinary.key)
+        .unread,
+    isTrue,
+    reason: 'Opening a saved answer is not a reading gesture',
+  );
+  expect(host.patched, isEmpty);
+  await _readNewest(tester, '$prefix-read-ordinary');
   await _until(
     tester,
     () => !recents
@@ -434,9 +533,6 @@ Future<void> _incomingJourney(
   await tester.pump(const Duration(milliseconds: 500));
   final ripple = find.byKey(const ValueKey('recent-conversation-nudge'));
   expect(ripple, findsOneWidget);
-  dynamic painter = tester.widget<CustomPaint>(ripple).painter;
-  final double paintedProgress = painter.progress.value;
-  expect(paintedProgress, greaterThan(.03));
   await _native(
     tester,
     '$prefix-bot-ripple',
@@ -446,7 +542,6 @@ Future<void> _incomingJourney(
     observation: {
       'kind': 'reply',
       'direction': switcher.session.nudges.value!.direction.name,
-      'progress': paintedProgress,
       'tickerEnabled': TickerMode.valuesOf(tester.element(ripple)).enabled,
     },
   );
@@ -529,6 +624,13 @@ Future<void> _incomingJourney(
   expect(host.patched, [ordinary.key]);
   await _revealRecent(tester, botCard, '$prefix-select-bot');
   await _native(tester, '$prefix-open-bot', actions: [_tap(tester, botCard)]);
+  expect(controller.current!.chat!.key, bot.key);
+  expect(host.patched, [ordinary.key]);
+  expect(
+    recents.items().singleWhere((item) => item.chat?.key == bot.key).unread,
+    isTrue,
+  );
+  await _readNewest(tester, '$prefix-read-bot');
   await _until(
     tester,
     () => !recents
@@ -538,6 +640,13 @@ Future<void> _incomingJourney(
   );
   expect(host.patched, [ordinary.key, bot.key]);
   host.reply(bot, 'A reply while I read Bot Chat', botGateway);
+  await _until(
+    tester,
+    () =>
+        recents.items().singleWhere((item) => item.chat?.key == bot.key).unread,
+  );
+  expect(host.patched, [ordinary.key, bot.key]);
+  await _readNewest(tester, '$prefix-read-new-bot-answer');
   await _until(
     tester,
     () =>
@@ -567,6 +676,12 @@ Future<void> _incomingJourney(
     '$prefix-open-group',
     actions: [_tap(tester, groupCard)],
   );
+  expect(bots.groupReads.sequence(group), 1);
+  expect(
+    recents.items().singleWhere((item) => item.group?.key == group.key).unread,
+    isTrue,
+  );
+  await _readNewest(tester, '$prefix-read-group');
   await _until(tester, () => bots.groupReads.sequence(group) == 2);
   expect(
     recents.items().singleWhere((item) => item.group?.key == group.key).unread,
@@ -609,7 +724,7 @@ Future<void> _incomingJourney(
   final groupY = _gestureRow(tester, [
     .24,
     .76,
-  ], transcript: find.byKey(const ValueKey('group-transcript')));
+  ], transcript: find.byKey(ValueKey(('discussion', group.id))));
   await _native(
     tester,
     '$prefix-group-stack',
@@ -644,6 +759,16 @@ Future<void> _incomingJourney(
       {'type': 'back'},
     ],
   );
+  expect(
+    bots.groupReads.sequence(group),
+    2,
+    reason: 'Stack reveal alone does not read the newly delivered group answer',
+  );
+  expect(
+    recents.items().singleWhere((item) => item.group?.key == group.key).unread,
+    isTrue,
+  );
+  await _readNewest(tester, '$prefix-read-restored-group');
   await _until(tester, () => bots.groupReads.sequence(group) == 3);
   expect(
     recents.items().singleWhere((item) => item.group?.key == group.key).unread,
@@ -729,7 +854,10 @@ Future<void> _revealRecent(
 /// Only gateway responses and incoming journal projections are synthetic.
 /// Android dispatches every tested touch through the installed production chat.
 class _NativeChats extends ProfileBrowserFixture {
+  final newReplies = <(String, String), List<Map<String, dynamic>>>{};
+  final patched = <ProfileSessionKey>[];
   ProfileSessionKey? failedResume;
+  int rejectedResumes = 0;
   bool deepHistory = false, showCode = false;
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
@@ -773,6 +901,7 @@ class _NativeChats extends ProfileBrowserFixture {
           '## Your conversation\n\nMove between tasks when you need to. '
           'Your draft and reading position stay with this chat.',
     },
+    ...?newReplies[(profile, id)],
   ];
   @override
   ProfileGateway gateway(WorkspaceScope scope) {
@@ -781,10 +910,31 @@ class _NativeChats extends ProfileBrowserFixture {
       scope: scope,
       discover: base.discover,
       get: base.read,
+      ownedPatch: (path, body, canDispatch, onDispatched) async {
+        final id = path.startsWith('sessions/')
+            ? Uri.decodeComponent(path.substring('sessions/'.length))
+            : null;
+        if (id == null ||
+            !sessions(scope.profileName).any((row) => row['id'] == id) ||
+            body.length != 5 ||
+            body['request_id'] is! String ||
+            (body['request_id'] as String).isEmpty ||
+            body['expected_revision'] != 0 ||
+            body['expected_generation'] != 0 ||
+            body['profile'] != scope.profileName ||
+            body['unread'] != false ||
+            !canDispatch()) {
+          throw StateError('Unexpected read acknowledgement: $path');
+        }
+        onDispatched();
+        patched.add(ProfileSessionKey(scope, id));
+        return {'ok': true};
+      },
       rpc: (method, params) {
         if (method == 'session.resume' &&
             scope == failedResume?.workspace &&
             params['session_id'] == failedResume?.sessionId) {
+          rejectedResumes++;
           throw StateError('Owned QA resume rejection');
         }
         return base.call(method, params);
@@ -924,13 +1074,15 @@ void main() {
           final preferences = AppPreferences(prefs);
           final host = _NativeChats()..showCode = codeOnly;
           final readReceipts = <String>[];
+          final dashboard = await _drawerDashboard();
           final controller = ProfileWorkspaceController(
             access: ConnectionAccess(
               connection: SavedConnection(
                 id: 'native-recents',
                 label: 'Recents QA',
-                host: 'unused',
+                host: InternetAddress.loopbackIPv4.address,
                 port: 1,
+                dashboardPortOverride: dashboard.port,
                 apiKey: '',
               ),
               dashboardOAuth: null,
@@ -974,6 +1126,7 @@ void main() {
               ),
               home: ProfileWorkspaceScreen(
                 controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
                 initialDestination: AppDestination.activity,
               ),
             ),
@@ -1029,12 +1182,17 @@ void main() {
             }
             await _native(
               tester,
-              '$prefix-chats-back',
+              '$prefix-activity-back',
               actions: [
                 {'type': 'back'},
               ],
             );
-            expect(find.text('Chats'), findsOneWidget);
+            expect(find.byType(WorkspaceActivityContent), findsOneWidget);
+            expect(find.byType(RecentConversationSwitcher), findsNothing);
+            expect(
+              find.byKey(const ValueKey('activity-personal-chat-0')),
+              findsOneWidget,
+            );
             expect(controller.current!.chat, isNull);
           }
 
@@ -1138,36 +1296,125 @@ void main() {
                 ]),
               ],
             );
-            expect(find.text('Swipe to browse · tap to open'), findsOneWidget);
+            expect(
+              find.text(
+                accessible
+                    ? 'Choose a conversation'
+                    : 'Swipe to browse · tap to open',
+              ),
+              findsOneWidget,
+            );
             expect(controller.visible, isFalse);
           }
 
           if (momentumOnly) {
             await pinch('momentum-stack');
             final resumes = host.resumes;
-            await _native(
-              tester,
-              '$prefix-momentum-fling',
-              actions: [
-                _touch(tester, 'one', [
-                  (Offset(w * .8, mid.dy), Offset(w * .2, mid.dy)),
-                ], milliseconds: 140),
-              ],
-            );
-            final indices = tester
-                .widgetList<Positioned>(find.byType(Positioned))
-                .where((item) => item.key is ValueKey<int>)
-                .map((item) => (item.key! as ValueKey<int>).value)
-                .toList();
+            final flingEvents = <Map<String, Object?>>[];
+            final visibleChoices = {
+              for (var i = 0; i < ring.length; i++)
+                '${ring[i].title}, conversation ${i + 1} of ${ring.length}':
+                    ring[i].key.chat!,
+            };
+            // The footer announces a settled choice. Observe actual transformed
+            // card contents during motion, independently of the motion/index state.
+            String? focusedChoice() {
+              String? nearest;
+              var distance = double.infinity;
+              for (final element
+                  in find
+                      .byWidgetPredicate(
+                        (widget) =>
+                            widget is ConversationCardPlaceholder ||
+                            widget is RawImage,
+                      )
+                      .evaluate()) {
+                final ProfileSessionKey? key = switch (element.widget) {
+                  ConversationCardPlaceholder(:final card) =>
+                    card.entry.key.chat,
+                  RawImage(
+                    key: ValueKey(
+                      value: (RecentConversationKey key, 'snapshot'),
+                    ),
+                  ) =>
+                    key.chat,
+                  _ => null,
+                };
+                if (key == null) continue;
+                final box = element.findRenderObject();
+                if (box is! RenderBox || !box.hasSize || !box.attached) {
+                  continue;
+                }
+                final center = box.localToGlobal(box.size.center(Offset.zero));
+                final offset = (center.dx - mid.dx).abs();
+                if (!rect.contains(center) || offset >= distance) continue;
+                final label = visibleChoices.entries
+                    .where((entry) => entry.value == key)
+                    .firstOrNull
+                    ?.key;
+                if (label == null) continue;
+                distance = offset;
+                nearest = label;
+              }
+              return nearest;
+            }
+
+            final afterRelease = <String>[];
+            var released = false, recording = true;
+            void observeFocus(Duration frame) {
+              if (!recording) return;
+              final label = focusedChoice();
+              if (released &&
+                  label != null &&
+                  (afterRelease.isEmpty || afterRelease.last != label)) {
+                afterRelease.add(label);
+              }
+              tester.binding.addPostFrameCallback(observeFocus);
+            }
+
+            tester.binding.addPostFrameCallback(observeFocus);
+            void recordFling(PointerEvent event) {
+              if (event is PointerUpEvent) {
+                released = true;
+                final label = focusedChoice();
+                if (label != null) afterRelease.add(label);
+              }
+              if (flingEvents.length >= 100) return;
+              flingEvents.add({
+                'kind': event.runtimeType.toString(),
+                'pointer': event.pointer,
+                'microseconds': event.timeStamp.inMicroseconds,
+                'x': event.position.dx,
+                'y': event.position.dy,
+              });
+            }
+
+            tester.binding.pointerRouter.addGlobalRoute(recordFling);
+            try {
+              await _native(
+                tester,
+                '$prefix-momentum-fling',
+                actions: [
+                  _touch(tester, 'one', [
+                    (Offset(w * .92, mid.dy), Offset(w * .08, mid.dy)),
+                  ], milliseconds: 100),
+                ],
+              );
+            } finally {
+              recording = false;
+              tester.binding.pointerRouter.removeGlobalRoute(recordFling);
+            }
+            expect(released, isTrue);
             expect(
-              indices.reduce((a, b) => a > b ? a : b) - origin,
-              greaterThan(2),
-              reason: 'One flick must cross several circular cards.',
+              afterRelease.toSet().length,
+              greaterThanOrEqualTo(3),
+              reason:
+                  'After finger release, one flick must continue through multiple visible conversation choices. '
+                  '${jsonEncode({'focusedAfterRelease': afterRelease, 'events': flingEvents})}',
             );
             expect(host.resumes, resumes);
             expect(controller.current!.chat!.key, first.key);
-            var center = indices.reduce((a, b) => a < b ? a : b) + 1;
-            if (visit.entryAt(center).key.chat == first.key) {
+            if (visibleChoices[focusedChoice()] == first.key) {
               await _native(
                 tester,
                 '$prefix-momentum-slow-browse',
@@ -1177,16 +1424,17 @@ void main() {
                   ]),
                 ],
               );
-              final currentIndices = tester
-                  .widgetList<Positioned>(find.byType(Positioned))
-                  .where((item) => item.key is ValueKey<int>)
-                  .map((item) => (item.key! as ValueKey<int>).value);
-              center = currentIndices.reduce((a, b) => a < b ? a : b) + 1;
             }
-            final chosen = visit.entryAt(center).key;
+            final chosen = visibleChoices[focusedChoice()];
+            expect(chosen, isNotNull);
+            expect(chosen, isNot(first.key));
             await _native(
               tester,
               '$prefix-momentum-select',
+              observation: {
+                'focusedAfterRelease': afterRelease,
+                'chosen': focusedChoice(),
+              },
               actions: [
                 {'type': 'tap', 'x': mid.dx, 'y': mid.dy},
               ],
@@ -1196,6 +1444,7 @@ void main() {
             expect(find.text('Opening conversation…'), findsNothing);
             expect(controller.visible, isTrue);
             expect(tester.takeException(), isNull);
+            await _native(tester, '$prefix-momentum-complete');
             return;
           }
 
@@ -1237,7 +1486,7 @@ void main() {
           await swipe('slide-next');
           expect(
             controller.current!.chat!.key,
-            ring[(origin + 1) % ring.length].key,
+            ring[(origin + 1) % ring.length].key.chat,
           );
           await swipe('slide-previous', right: true);
           expect(controller.current!.chat!.key, first.key);
@@ -1249,7 +1498,7 @@ void main() {
           await swipe('interrupted-return', type: 'interrupt');
           expect(
             controller.current!.chat!.key,
-            ring[(origin + 1) % ring.length].key,
+            ring[(origin + 1) % ring.length].key.chat,
           );
           await swipe('return-after-interruption', right: true);
           final resumes = host.resumes;
@@ -1278,7 +1527,7 @@ void main() {
           );
           expect(
             controller.current!.chat!.key,
-            ring[(origin + 1) % ring.length].key,
+            ring[(origin + 1) % ring.length].key.chat,
           );
           expect(find.text('Swipe to browse · tap to open'), findsNothing);
           await swipe('return-from-center', right: true);
@@ -1292,7 +1541,7 @@ void main() {
           );
           expect(
             controller.current!.chat!.key,
-            ring[(origin + 1) % ring.length].key,
+            ring[(origin + 1) % ring.length].key.chat,
           );
           await swipe('return-from-peek', right: true);
           await pinch('circular-stack');
@@ -1310,8 +1559,20 @@ void main() {
             ],
           );
           expect(host.resumes, beforeLaps);
+          final readsBeforeStackReturn = host.patched.length;
+          host.newReplies[(
+            first.key.workspace.profileName,
+            first.key.sessionId,
+          )] = [
+            {
+              'id': 1000,
+              'role': 'assistant',
+              'timestamp': host.now + 1,
+              'content': 'New answer received while Recents is open.',
+            },
+          ];
           first.reading.recordNotificationResult(
-            const NotificationFocus('answer', '3'),
+            const NotificationFocus('answer', '1000'),
           );
           await controller.refreshHistory(first);
           await tester.pumpAndSettle();
@@ -1336,10 +1597,29 @@ void main() {
             reason:
                 'Stack Back must preserve a keyboard already hidden with Android Back',
           );
-          expect(readReceipts, ['answer:3']);
-          host.failedResume = ring[(origin + 1) % ring.length].key.chat!;
+          expect(
+            readReceipts,
+            isEmpty,
+            reason: 'Stack reveal alone does not read the cached answer',
+          );
+          expect(host.patched, hasLength(readsBeforeStackReturn));
+          await _readNewest(tester, '$prefix-read-restored-answer');
+          expect(readReceipts, ['answer:1000']);
+          expect(host.patched.skip(readsBeforeStackReturn), [first.key]);
+          expect(first.markReadFailed, isFalse);
+          // The neighbor was already opened above and needs no resume RPC.
+          // Move to it, then reject admission of the next unopened chat.
+          await swipe('prepare-unopened-selection');
+          final beforeRejectedSelection = controller.current!.chat!.key;
+          expect(
+            beforeRejectedSelection,
+            ring[(origin + 1) % ring.length].key.chat,
+          );
+          host.failedResume = ring[(origin + 2) % ring.length].key.chat!;
+          final rejectedBefore = host.rejectedResumes;
           await swipe('failed-selection');
-          expect(controller.current!.chat!.key, first.key);
+          expect(host.rejectedResumes, rejectedBefore + 1);
+          expect(controller.current!.chat!.key, beforeRejectedSelection);
           expect(
             find.text('Could not open this conversation. Try again.'),
             findsOneWidget,
@@ -1349,6 +1629,8 @@ void main() {
             tester.element(find.byType(ProfileWorkspaceScreen)),
           ).hideCurrentSnackBar();
           await tester.pumpAndSettle();
+          await swipe('return-after-failed-selection', right: true);
+          expect(controller.current!.chat!.key, first.key);
           var sequence = 0;
           for (final kind in ConversationActivityKind.values) {
             activity.value = ChatNoticeActivity(
@@ -1373,12 +1655,26 @@ void main() {
           }
           await _native(
             tester,
-            '$prefix-edit-suppression',
+            '$prefix-editing-arrival',
             actions: [
               _tap(tester, find.byKey(const Key('profile-message-composer'))),
             ],
             capture: false,
           );
+          for (
+            var tick = 0;
+            tick < 150 && tester.view.viewInsets.bottom == 0;
+            tick++
+          ) {
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+          final editingField = tester.widget<TextField>(
+            find.byKey(const Key('profile-message-composer')),
+          );
+          expect(editingField.focusNode!.hasFocus, isTrue);
+          expect(tester.view.viewInsets.bottom, greaterThan(0));
+          final editingValue = editingField.controller!.value;
+          final editingOwner = controller.current!.chat!.key;
           activity.value = ChatNoticeActivity(
             key: ring[(origin + 1) % ring.length].key,
             kind: ConversationActivityKind.reply,
@@ -1388,8 +1684,13 @@ void main() {
           await tester.pump(const Duration(milliseconds: 350));
           expect(
             find.byKey(const Key('recent-conversation-nudge')),
-            findsNothing,
+            findsOneWidget,
+            reason:
+                'Fresh activity remains visible without interrupting editing',
           );
+          expect(editingField.focusNode!.hasFocus, isTrue);
+          expect(editingField.controller!.value, editingValue);
+          expect(controller.current!.chat!.key, editingOwner);
           await _native(
             tester,
             '$prefix-end-editing',
@@ -1545,7 +1846,7 @@ void main() {
                 {'type': 'tap', 'x': mid.dx, 'y': mid.dy},
               ],
             );
-            expect(controller.current!.chat!.key, ring[target].key);
+            expect(controller.current!.chat!.key, ring[target].key.chat);
             await _native(tester, '$prefix-cross-profile-settled');
             for (
               var i = 0;

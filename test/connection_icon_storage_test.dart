@@ -129,25 +129,41 @@ void main() {
       }
       expect(secrets.values, originalSecrets);
       expect(secrets.writes, writes);
-      await manager.updateConnection(
-        saved.id,
-        'Renamed',
-        saved.baseUrl,
-        saved.port,
-        saved.apiKey,
-      );
-      expect(manager.getConnections().single.icon, ConnectionIcon.desktop);
-      await manager.updateConnection(
-        saved.id,
-        'Renamed',
-        saved.baseUrl,
-        saved.port,
-        saved.apiKey,
-        icon: ConnectionIcon.star,
-      );
-      expect(manager.getConnections().single.icon, ConnectionIcon.star);
     },
   );
+
+  for (final replacement in [null, ConnectionIcon.star]) {
+    test(
+      'connection edit ${replacement == null ? 'preserves its selected icon' : 'applies an explicit icon replacement'}',
+      () async {
+        SharedPreferences.setMockInitialValues({});
+        final prefs = await SharedPreferences.getInstance();
+        final manager = await ConnectionManager.create(
+          prefs,
+          credentialStore: _Secrets(),
+        );
+        final saved = await manager.saveConnection(
+          'Claw',
+          'https://hermes.example',
+          443,
+          '',
+          icon: ConnectionIcon.cloud,
+        );
+        await manager.updateConnection(
+          saved.id,
+          'Renamed',
+          saved.baseUrl,
+          saved.port,
+          saved.apiKey,
+          icon: replacement,
+        );
+        expect(
+          manager.getConnections().single.icon,
+          replacement ?? ConnectionIcon.cloud,
+        );
+      },
+    );
+  }
 
   for (final mode in ConfigImportMode.values) {
     for (final passphrase in ['', 'test-passphrase']) {

@@ -82,10 +82,10 @@ void _expectNoPlaintextCredentials(SharedPreferences prefs) {
 }
 
 void main() {
-  test(
-    'password bytes remain exact in access, secure save and cold reload',
-    () async {
-      for (final password in [' test password ', '   ', '']) {
+  for (final password in [' test password ', '   ', '']) {
+    test(
+      'password bytes remain exact across save, reload and login: ${jsonEncode(password)}',
+      () async {
         SharedPreferences.setMockInitialValues({});
         final prefs = await SharedPreferences.getInstance();
         final store = _FaultInjectingCredentialStore();
@@ -108,10 +108,16 @@ void main() {
             .replaceAll('=', '');
         final encoded = store.values['connection_credentials_v1.$encodedId']!;
         expect((jsonDecode(encoded) as Map)['dashboard_password'], password);
-        await manager.loadConnectionsWithSecrets();
-        expect(manager.getConnections().single.dashboardPassword, password);
-        expect(manager.accessFor(saved).connection.dashboardPassword, password);
-        final descriptor = manager.accessFor(saved).connection;
+        final restored = await ConnectionManager.create(
+          prefs,
+          credentialStore: store,
+        );
+        expect(restored.getConnections().single.dashboardPassword, password);
+        expect(
+          restored.accessFor(saved).connection.dashboardPassword,
+          password,
+        );
+        final descriptor = restored.accessFor(saved).connection;
         final loginBodies = <Map<String, dynamic>>[];
         final client = DashboardClient(
           host: descriptor.host,
@@ -144,9 +150,9 @@ void main() {
         } else {
           expect(loginBodies, isEmpty);
         }
-      }
-    },
-  );
+      },
+    );
+  }
 
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -234,122 +240,116 @@ void main() {
     },
   );
 
-  test('update, clear, and delete keep secure storage synchronized', () async {
-    final prefs = await SharedPreferences.getInstance();
-    final store = _FaultInjectingCredentialStore();
-    final manager = await ConnectionManager.create(
-      prefs,
-      credentialStore: store,
-    );
+  for (final operation in ['update', 'clear', 'delete']) {
+    test('$operation keeps secure storage synchronized', () async {
+      final prefs = await SharedPreferences.getInstance();
+      final store = _FaultInjectingCredentialStore();
+      final manager = await ConnectionManager.create(
+        prefs,
+        credentialStore: store,
+      );
 
-    await manager.saveConnection(
-      'Home',
-      '192.0.2.10',
-      8642,
-      'synthetic-api-old',
-      dashboardUsername: 'operator',
-      dashboardPassword: 'synthetic-password-old',
-    );
-    final original = manager.getConnections().single;
-    expect(store.values, hasLength(1));
-    _expectNoPlaintextCredentials(prefs);
+      await manager.saveConnection(
+        'Home',
+        '192.0.2.10',
+        8642,
+        'synthetic-api-old',
+        dashboardUsername: 'operator',
+        dashboardPassword: 'synthetic-password-old',
+      );
+      final original = manager.getConnections().single;
+      expect(store.values, hasLength(1));
+      _expectNoPlaintextCredentials(prefs);
 
-    await manager.updateConnection(
-      original.id,
-      'Moved',
-      'https://hermes.example.com',
-      8642,
-      'synthetic-api-new',
-      dashboardUsername: 'operator',
-      dashboardPassword: 'synthetic-password-new',
-    );
-    var updated = manager.getConnections().single;
-    expect(updated.id, original.id);
-    expect(updated.label, 'Moved');
-    expect(updated.host, 'hermes.example.com');
-    expect(updated.port, 443);
-    expect(updated.apiKey, 'synthetic-api-new');
-    expect(updated.dashboardPassword, 'synthetic-password-new');
-    _expectNoPlaintextCredentials(prefs);
+      if (operation == 'delete') {
+        await manager.deleteConnection(original.id);
+        expect(manager.getConnections(), isEmpty);
+        expect(_storedMetadata(prefs), isEmpty);
+        expect(store.values, isEmpty);
+        return;
+      }
 
-    await manager.updateConnection(
-      updated.id,
-      updated.label,
-      Uri(
-        scheme: updated.useHttps ? 'https' : 'http',
-        host: updated.host,
-      ).toString(),
-      updated.port,
-      '',
-      icon: updated.icon,
-      gatewayPrefix: updated.gatewayPrefix,
-      dashboardPrefix: updated.dashboardPrefix,
-      dashboardProxied: updated.dashboardProxied,
-      desktopGatewayUrl: updated.desktopGatewayUrl,
-      dashboardPort: updated.dashboardPortOverride,
-      dashboardUsername: updated.dashboardUsername,
-      dashboardPassword: updated.dashboardPassword,
-      cloudInstanceId: updated.cloudInstanceId,
-      cloudOrganization: updated.cloudOrganization,
-      dashboardGrant: updated.dashboardGrant,
-      gatewayHeaders: updated.gatewayHeaders,
-    );
-    await manager.updateConnection(
-      updated.id,
-      updated.label,
-      Uri(
-        scheme: updated.useHttps ? 'https' : 'http',
-        host: updated.host,
-      ).toString(),
-      updated.port,
-      '',
-      icon: updated.icon,
-      gatewayPrefix: updated.gatewayPrefix,
-      dashboardPrefix: updated.dashboardPrefix,
-      dashboardProxied: updated.dashboardProxied,
-      desktopGatewayUrl: updated.desktopGatewayUrl,
-      dashboardPort: updated.dashboardPortOverride,
-      dashboardUsername: '',
-      dashboardPassword: '',
-      cloudInstanceId: updated.cloudInstanceId,
-      cloudOrganization: updated.cloudOrganization,
-      dashboardGrant: updated.dashboardGrant,
-      gatewayHeaders: updated.gatewayHeaders,
-    );
-    updated = manager.getConnections().single;
-    expect(updated.apiKey, isEmpty);
-    expect(updated.dashboardPassword, isNull);
-    expect(store.values, isEmpty);
-    _expectNoPlaintextCredentials(prefs);
+      await manager.updateConnection(
+        original.id,
+        'Moved',
+        'https://hermes.example.com',
+        8642,
+        'synthetic-api-new',
+        dashboardUsername: 'operator',
+        dashboardPassword: 'synthetic-password-new',
+      );
+      var updated = manager.getConnections().single;
+      expect(updated.id, original.id);
+      expect(updated.label, 'Moved');
+      expect(updated.host, 'hermes.example.com');
+      expect(updated.port, 443);
+      expect(updated.apiKey, 'synthetic-api-new');
+      expect(updated.dashboardPassword, 'synthetic-password-new');
+      _expectNoPlaintextCredentials(prefs);
+      if (operation == 'update') {
+        final restored = await ConnectionManager.create(
+          prefs,
+          credentialStore: store,
+        );
+        expect(restored.getConnections().single.apiKey, 'synthetic-api-new');
+        expect(
+          restored.getConnections().single.dashboardPassword,
+          'synthetic-password-new',
+        );
+        return;
+      }
 
-    await manager.updateConnection(
-      updated.id,
-      updated.label,
-      Uri(
-        scheme: updated.useHttps ? 'https' : 'http',
-        host: updated.host,
-      ).toString(),
-      updated.port,
-      'synthetic-api-restored',
-      icon: updated.icon,
-      gatewayPrefix: updated.gatewayPrefix,
-      dashboardPrefix: updated.dashboardPrefix,
-      dashboardProxied: updated.dashboardProxied,
-      desktopGatewayUrl: updated.desktopGatewayUrl,
-      dashboardPort: updated.dashboardPortOverride,
-      dashboardUsername: updated.dashboardUsername,
-      dashboardPassword: updated.dashboardPassword,
-      cloudInstanceId: updated.cloudInstanceId,
-      cloudOrganization: updated.cloudOrganization,
-      dashboardGrant: updated.dashboardGrant,
-      gatewayHeaders: updated.gatewayHeaders,
-    );
-    expect(store.values, hasLength(1));
-    await manager.deleteConnection(original.id);
-    expect(manager.getConnections(), isEmpty);
-    expect(_storedMetadata(prefs), isEmpty);
-    expect(store.values, isEmpty);
-  });
+      await manager.updateConnection(
+        updated.id,
+        updated.label,
+        Uri(
+          scheme: updated.useHttps ? 'https' : 'http',
+          host: updated.host,
+        ).toString(),
+        updated.port,
+        '',
+        icon: updated.icon,
+        gatewayPrefix: updated.gatewayPrefix,
+        dashboardPrefix: updated.dashboardPrefix,
+        dashboardProxied: updated.dashboardProxied,
+        desktopGatewayUrl: updated.desktopGatewayUrl,
+        dashboardPort: updated.dashboardPortOverride,
+        dashboardUsername: updated.dashboardUsername,
+        dashboardPassword: updated.dashboardPassword,
+        cloudInstanceId: updated.cloudInstanceId,
+        cloudOrganization: updated.cloudOrganization,
+        dashboardGrant: updated.dashboardGrant,
+        gatewayHeaders: updated.gatewayHeaders,
+      );
+      await manager.updateConnection(
+        updated.id,
+        updated.label,
+        Uri(
+          scheme: updated.useHttps ? 'https' : 'http',
+          host: updated.host,
+        ).toString(),
+        updated.port,
+        '',
+        icon: updated.icon,
+        gatewayPrefix: updated.gatewayPrefix,
+        dashboardPrefix: updated.dashboardPrefix,
+        dashboardProxied: updated.dashboardProxied,
+        desktopGatewayUrl: updated.desktopGatewayUrl,
+        dashboardPort: updated.dashboardPortOverride,
+        dashboardUsername: '',
+        dashboardPassword: '',
+        cloudInstanceId: updated.cloudInstanceId,
+        cloudOrganization: updated.cloudOrganization,
+        dashboardGrant: updated.dashboardGrant,
+        gatewayHeaders: updated.gatewayHeaders,
+      );
+      updated = manager.getConnections().single;
+      expect(updated.apiKey, isEmpty);
+      expect(updated.dashboardPassword, isNull);
+      expect(store.values, isEmpty);
+      _expectNoPlaintextCredentials(prefs);
+    });
+  }
 
   test('gateway headers stay secure and update as one verified set', () async {
     final prefs = await SharedPreferences.getInstance();

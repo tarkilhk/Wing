@@ -309,24 +309,27 @@ void main() {
         expect(tester.takeException(), isNull);
         await native('complete', action: 'cleanup');
       } finally {
-        if (session != null) {
-          final closed = await session.close();
-          expect(closed, isTrue, reason: 'Own test lease must be released');
-          if (started && closed) {
-            final latest = await repository.displayStatus(session.bot);
-            if (latest.lease.holder == 'agent') {
-              await repository.screenPower(
-                session.bot,
-                false,
-                () => true,
-                () {},
-              );
+        try {
+          if (session != null) {
+            final closed = await session.close();
+            expect(closed, isTrue, reason: 'Own test lease must be released');
+            if (started && closed) {
+              final latest = await repository.displayStatus(session.bot);
+              if (latest.lease.holder == 'agent') {
+                await repository.screenPower(
+                  session.bot,
+                  false,
+                  () => true,
+                  () {},
+                );
+              }
             }
           }
+        } finally {
+          await tester.pumpWidget(const SizedBox());
+          server.close();
+          status.dispose();
         }
-        await tester.pumpWidget(const SizedBox());
-        server.close();
-        status.dispose();
       }
     },
     skip: !enabled,

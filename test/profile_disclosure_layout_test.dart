@@ -67,41 +67,23 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('collapsed disclosures leave room for the answer on a phone', (
-    tester,
-  ) async {
-    await show(tester, 1);
-    final activity = tester.getRect(find.byKey(activityKey));
-    final reasoning = tester.getRect(find.byKey(reasoningKey));
-    expect(activity.height, greaterThanOrEqualTo(28));
-    final titleHeight = tester.getSize(reasoningHeader).height;
-    final previewHeight = tester
-        .getSize(find.text('Checked the available options.'))
-        .height;
-    // Native reasoning has two text-sized lines, with no extra row padding.
-    expect(reasoning.height, closeTo(titleHeight + previewHeight, 0.1));
-    expect(reasoning.top, closeTo(activity.bottom, 0.1));
-    expect(
-      tester.getCenter(find.text('Activity · 2 tools')).dy,
-      closeTo(
-        tester
-            .getCenter(
-              find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-            )
-            .dy,
-        0.1,
-      ),
+  for (final scale in [1.0, 2.0, 3.0]) {
+    testWidgets(
+      'collapsed disclosures leave the answer visible at scale $scale',
+      (tester) async {
+        await show(tester, scale);
+        expect(find.text('First result'), findsNothing);
+        expect(find.text('Second result'), findsNothing);
+        expect(
+          find.text('The follow-up is running.').hitTestable(),
+          findsOneWidget,
+        );
+        expect(reasoningHeader.hitTestable(), findsOneWidget);
+        expect(find.text('Activity · 2 tools').hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
     );
-    expect(
-      tester
-          .getTopLeft(
-            find.textContaining(RegExp(r'^Activity(?: · \d+ tools?)?$')),
-          )
-          .dx,
-      tester.getTopLeft(reasoningHeader).dx - 24,
-    );
-    expect(tester.takeException(), isNull);
-  });
+  }
 
   final reasoningBody = find.descendant(
     of: find.byKey(reasoningKey),

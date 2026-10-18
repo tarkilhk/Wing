@@ -31,18 +31,30 @@ extension PumpMarkdownWidget on WidgetTester {
       final disclosure = find.byElementPredicate(
         (candidate) => candidate == element,
       );
-      final icon = widget<Icon>(
-        find.descendant(of: disclosure, matching: find.byType(Icon)).first,
+      final label = widget<ProfileActivitySection>(disclosure).label;
+      final header = find.ancestor(
+        of: find.descendant(of: disclosure, matching: find.text(label)),
+        matching: find.byType(ListTile),
       );
-      if (icon.icon != Icons.keyboard_arrow_right_rounded) continue;
-      final label = (element.widget as ProfileActivitySection).label;
-      final title = find
-          .descendant(of: disclosure, matching: find.text(label))
-          .first;
-      await ensureVisible(title);
+      expect(header, findsOneWidget);
+      final expand = find.descendant(
+        of: header,
+        matching: find.byIcon(Icons.keyboard_arrow_right_rounded),
+      );
+      if (expand.evaluate().isEmpty) {
+        expect(
+          find.descendant(
+            of: header,
+            matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
+          ),
+          findsOneWidget,
+        );
+        continue;
+      }
+      await ensureVisible(expand);
       await pump(const Duration(milliseconds: 300));
-      final rect = getRect(title);
-      await tapAt(Offset(rect.left + 4, rect.center.dy));
+      expect(expand.hitTestable(), findsOneWidget);
+      await tap(expand);
       await pump();
       await pump(const Duration(milliseconds: 300));
       await settleMarkdown();

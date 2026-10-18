@@ -251,6 +251,7 @@ void main() {
         'Exchange pending',
         'Exchange complete',
       ]);
+      expect(timeline.entries.skip(8), hasLength(3));
       expect(timeline.entries.skip(8).every((e) => e.suppressed), isTrue);
     },
   );
@@ -391,18 +392,20 @@ void main() {
       expect(receipt.label, 'Exchange complete');
       expect(receipt.text, 'The exchange completed without a reply.');
       expect(receipt.timestamp, isNull);
-      final plain = _call(
-        _timeline([
-          ..._rows(),
-          _notice(_envelope('{"source":"an authored JSON reply"}')),
-        ]),
-      );
-      expect(
-        plain.exchangeReceipts.single.text,
-        '{"source":"an authored JSON reply"}',
-      );
     },
   );
+  test('authored JSON replies remain exact visible text', () {
+    final plain = _call(
+      _timeline([
+        ..._rows(),
+        _notice(_envelope('{"source":"an authored JSON reply"}')),
+      ]),
+    );
+    expect(
+      plain.exchangeReceipts.single.text,
+      '{"source":"an authored JSON reply"}',
+    );
+  });
 
   test('relay heading is omitted and authored whitespace survives copying', () {
     const reply = '  Reply with indentation\n\n';

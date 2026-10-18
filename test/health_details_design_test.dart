@@ -50,6 +50,7 @@ void main() {
       for (final page in ['usage', 'logs', 'audit']) {
         testWidgets('$page ${brightness.name} at $scale', (tester) async {
           final fixture = AdministrationDesignFixture();
+          addTearDown(fixture.server.close);
           if (page != 'usage') {
             fixture.override = (method, path, query, body) async =>
                 switch (path) {
@@ -150,6 +151,19 @@ void main() {
             expect(find.text('Research model'), findsOneWidget);
             await snapshot(tester, '$page-${brightness.name}-$scale-breakdown');
           } else {
+            expect(fixture.requests, isNotEmpty);
+            if (page == 'audit') {
+              await tester.tap(find.text('Diagnostic output'));
+              await tester.pumpAndSettle();
+            }
+            expect(
+              find.textContaining(
+                page == 'logs'
+                    ? 'Gateway connected'
+                    : 'Security audit completed.',
+              ),
+              findsOneWidget,
+            );
             expect(
               fixture.requests.every(
                 (r) => r.$1 == 'GET' && !r.$3.containsKey('profile'),
@@ -165,7 +179,6 @@ void main() {
           }
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
-          fixture.server.close();
         });
       }
     }

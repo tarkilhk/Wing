@@ -70,7 +70,7 @@ void main() {
         );
         await _tap(tester, 'Check connection');
         expect(saved, isNull);
-        expect(find.text('Save and open'), findsNothing);
+        expect(find.byTooltip('Save and open'), findsNothing);
         expect(find.textContaining('private-server-detail'), findsNothing);
         await captureJourney(
           tester,
@@ -85,7 +85,7 @@ void main() {
           'Home',
         );
         await captureJourney(tester, 'connection-${brightness.name}-verified');
-        await _tap(tester, 'Save and open');
+        await _tap(tester, 'Save and open', iconAction: true);
         expect(
           find.textContaining('Couldn’t save this connection on this device'),
           findsOneWidget,
@@ -97,7 +97,7 @@ void main() {
           tester,
           'connection-${brightness.name}-storage-error',
         );
-        await _tap(tester, 'Save and open');
+        await _tap(tester, 'Save and open', iconAction: true);
         expect(saved?.label, 'Home');
         expect(saved?.dashboardPrefix, '/agent');
         expect(saved?.dashboardPassword, 'synthetic password');
@@ -114,8 +114,12 @@ void main() {
   }
 }
 
-Future<void> _tap(WidgetTester tester, String label) async {
-  final target = find.text(label);
+Future<void> _tap(
+  WidgetTester tester,
+  String label, {
+  bool iconAction = false,
+}) async {
+  final target = iconAction ? find.byTooltip(label) : find.text(label);
   await tester.pumpAndSettle();
   final deadline = DateTime.now().add(const Duration(seconds: 5));
   do {

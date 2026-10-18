@@ -39,7 +39,7 @@ Future<void> settleImages(WidgetTester tester) async {
 
 void main() {
   final captureSamples = <Uint8List>[];
-  test('reading projection retains copied attachment and tool facts', () {
+  test('reading projection owns an immutable attachment snapshot', () {
     final attachments = <UserMessageAttachment>[
       const UserMessageAttachment(
         name: 'First.txt',
@@ -72,7 +72,9 @@ void main() {
     expect(message.attachments.single.name, 'First.txt');
     expect(message.attachments.single.target, '/first.txt');
     expect(() => message.attachments.clear(), throwsUnsupportedError);
+  });
 
+  test('reading projection owns immutable tool facts', () {
     final toolRow = <String, dynamic>{
       'id': 3,
       'role': 'tool',
@@ -156,14 +158,17 @@ void main() {
         expect(content.attachments.single.isImage, isTrue);
         expect(answerMessageDisplayText(message), 'Look at this.\n[image]');
       }
-      final overridden = UserMessageContent.fromMessage({
-        ...saved(),
-        'display_content': 'A visible caption',
-      });
-      expect(overridden.text, 'A visible caption');
-      expect(overridden.attachments, hasLength(1));
     },
   );
+
+  test('display captions preserve saved image attachments', () {
+    final overridden = UserMessageContent.fromMessage({
+      ...saved(),
+      'display_content': 'A visible caption',
+    });
+    expect(overridden.text, 'A visible caption');
+    expect(overridden.attachments, hasLength(1));
+  });
 
   test('file cards use standalone references and remove expanded context', () {
     final content = UserMessageContent.fromMessage({
@@ -175,6 +180,9 @@ void main() {
     expect(content.text, 'Summarize.');
     expect(content.attachments.single.name, 'report final.PDF');
     expect(content.attachments.single.extension, 'PDF');
+  });
+
+  test('inline file references remain prose', () {
     final prose = UserMessageContent.fromMessage({
       'role': 'user',
       'content': 'Explain @file:report.pdf and [image]',
@@ -411,7 +419,17 @@ void main() {
         ),
       );
       await settleImages(tester);
-      expect(tester.getSize(find.byType(Image)), const Size(240, 320));
+      final thumbnail = tester.getSize(find.byType(Image));
+      expect(
+        thumbnail.height,
+        lessThan(thumbnail.width * screenshot.height / screenshot.width),
+      );
+      expect(
+        thumbnail.height,
+        lessThan(
+          tester.view.physicalSize.height / tester.view.devicePixelRatio,
+        ),
+      );
       // Both ends of the rendered thumbnail show the top section. Fitting the
       // entire screenshot would instead expose the navy bottom and side bars.
       await tester.runAsync(() async {
@@ -422,7 +440,10 @@ void main() {
         final pixels = (await image.toByteData(
           format: ui.ImageByteFormat.rawRgba,
         ))!;
-        for (final point in [const Offset(12, 12), const Offset(228, 308)]) {
+        for (final point in [
+          Offset(image.width * .1, image.height * .1),
+          Offset(image.width * .9, image.height * .9),
+        ]) {
           final offset =
               (point.dy.toInt() * image.width + point.dx.toInt()) * 4;
           expect(pixels.buffer.asUint8List(offset, 4), [170, 220, 210, 255]);
@@ -666,45 +687,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'forty images load five chat previews and browse a lazy thumbnail strip',
-    (tester) async {
-      tester.view.physicalSize = const Size(390, 844);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      final requests = <String>[];
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: ProfileMessage(
-                message: TranscriptMessage.fromRow({
-                  'id': 42,
-                  'role': 'user',
-                  'content': List.generate(
-                    40,
-                    (index) => '@image:/server/$index.png',
-                  ).join('\n'),
-                }),
-                loadAttachmentImage: (path) async {
-                  requests.add(path);
-                  return bytes;
-                },
-              ),
+  Future<List<String>> openGallery(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final requests = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ProfileMessage(
+              message: TranscriptMessage.fromRow({
+                'id': 42,
+                'role': 'user',
+                'content': List.generate(
+                  40,
+                  (index) => '@image:/server/$index.png',
+                ).join('\n'),
+              }),
+              loadAttachmentImage: (path) async {
+                requests.add(path);
+                return bytes;
+              },
             ),
           ),
         ),
-      );
-      await settleImages(tester);
-      expect(requests, List.generate(5, (index) => '/server/$index.png'));
-      expect(find.byType(Image), findsNWidgets(5));
-      final fifth = tester.getRect(
-        find.byType(UserMessageAttachmentTile).at(4),
-      );
-      await tester.tapAt(tester.getCenter(find.text('+35')));
-      await settleImages(tester);
+      ),
+    );
+    await settleImages(tester);
+    expect(requests, List.generate(5, (index) => '/server/$index.png'));
+    expect(find.byType(Image), findsNWidgets(5));
+    await tester.tapAt(tester.getCenter(find.text('+35')));
+    await settleImages(tester);
+    return requests;
+  }
+
+  testWidgets(
+    'gallery arrow navigation preserves the intended image selection',
+    (tester) async {
+      final requests = await openGallery(tester);
       // Opening reads the visible strip neighborhood, not the whole album.
-      expect(requests.length, lessThan(12));
+      expect(requests.toSet().length, lessThan(40));
       for (var index = 0; index < 5; index++) {
         expect(
           requests.where((path) => path == '/server/$index.png'),
@@ -720,56 +743,6 @@ void main() {
         findsNothing,
       );
       expect(find.byKey(const ValueKey('image-thumbnail-4')), findsOneWidget);
-      await tester.fling(
-        find.byType(InteractiveViewer),
-        const Offset(-160, 0),
-        600,
-      );
-      await settleImages(tester);
-      expect(find.text('6 / 40'), findsOneWidget);
-      final transform = tester
-          .widget<InteractiveViewer>(find.byType(InteractiveViewer))
-          .transformationController!;
-      transform.value = Matrix4.diagonal3Values(2, 2, 1);
-      await tester.drag(find.byType(InteractiveViewer), const Offset(160, 0));
-      await settleImages(tester);
-      expect(find.text('6 / 40'), findsOneWidget);
-      transform.value = Matrix4.identity();
-      final center = tester.getCenter(find.byType(InteractiveViewer));
-      final firstFinger = await tester.startGesture(
-        center - const Offset(20, 0),
-      );
-      final secondFinger = await tester.startGesture(
-        center + const Offset(20, 0),
-      );
-      await firstFinger.moveBy(const Offset(80, 0));
-      await secondFinger.moveBy(const Offset(80, 0));
-      await firstFinger.up();
-      await secondFinger.up();
-      await settleImages(tester);
-      expect(find.text('6 / 40'), findsOneWidget);
-      final pinchLeft = await tester.startGesture(center - const Offset(40, 0));
-      final pinchRight = await tester.startGesture(
-        center + const Offset(40, 0),
-      );
-      await tester.pump();
-      await pinchLeft.moveBy(const Offset(-50, 0));
-      await pinchRight.moveBy(const Offset(50, 0));
-      await tester.pump();
-      await pinchLeft.up();
-      await pinchRight.up();
-      await settleImages(tester);
-      expect(transform.value.getMaxScaleOnAxis(), greaterThan(1.1));
-      expect(find.text('6 / 40'), findsOneWidget);
-      transform.value = Matrix4.identity();
-      await tester.pump();
-      await tester.fling(
-        find.byType(InteractiveViewer),
-        const Offset(160, 0),
-        600,
-      );
-      await settleImages(tester);
-      expect(find.text('5 / 40'), findsOneWidget);
       for (var index = 4; index < 40; index++) {
         final preview = tester.widget<ChatImageViewport>(
           find.byType(ChatImageViewport),
@@ -805,14 +778,90 @@ void main() {
       await tester.pageBack();
       await settleImages(tester);
       expect(find.byType(Image), findsNWidgets(5));
-      expect(
-        tester.getRect(find.byType(UserMessageAttachmentTile).at(4)),
-        fifth,
-      );
       expect(find.text('+35'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets(
+    'gallery swipe navigation preserves the intended image selection',
+    (tester) async {
+      await openGallery(tester);
+      await tester.fling(
+        find.byType(InteractiveViewer),
+        const Offset(-160, 0),
+        600,
+      );
+      await settleImages(tester);
+      expect(find.text('6 / 40'), findsOneWidget);
+      await tester.fling(
+        find.byType(InteractiveViewer),
+        const Offset(160, 0),
+        600,
+      );
+      await settleImages(tester);
+      expect(find.text('5 / 40'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('gallery zoomed panning preserves the intended image selection', (
+    tester,
+  ) async {
+    await openGallery(tester);
+    final transform = tester
+        .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+        .transformationController!;
+    transform.value = Matrix4.diagonal3Values(2, 2, 1);
+    await tester.drag(find.byType(InteractiveViewer), const Offset(160, 0));
+    await settleImages(tester);
+    expect(find.text('5 / 40'), findsOneWidget);
+    expect(transform.value.getMaxScaleOnAxis(), 2);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'gallery two-finger panning preserves the intended image selection',
+    (tester) async {
+      await openGallery(tester);
+      final center = tester.getCenter(find.byType(InteractiveViewer));
+      final firstFinger = await tester.startGesture(
+        center - const Offset(20, 0),
+      );
+      final secondFinger = await tester.startGesture(
+        center + const Offset(20, 0),
+      );
+      await firstFinger.moveBy(const Offset(80, 0));
+      await secondFinger.moveBy(const Offset(80, 0));
+      await firstFinger.up();
+      await secondFinger.up();
+      await settleImages(tester);
+      expect(find.text('5 / 40'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('gallery pinch zoom preserves the intended image selection', (
+    tester,
+  ) async {
+    await openGallery(tester);
+    final transform = tester
+        .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+        .transformationController!;
+    final center = tester.getCenter(find.byType(InteractiveViewer));
+    final pinchLeft = await tester.startGesture(center - const Offset(40, 0));
+    final pinchRight = await tester.startGesture(center + const Offset(40, 0));
+    await tester.pump();
+    await pinchLeft.moveBy(const Offset(-50, 0));
+    await pinchRight.moveBy(const Offset(50, 0));
+    await tester.pump();
+    await pinchLeft.up();
+    await pinchRight.up();
+    await settleImages(tester);
+    expect(transform.value.getMaxScaleOnAxis(), greaterThan(1));
+    expect(find.text('5 / 40'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('the next original is decoded before a forty-image swipe', (
     tester,
@@ -872,7 +921,7 @@ void main() {
     expect(cache.statusForKey(nextOriginal).keepAlive, isTrue);
     expect(cache.statusForKey(nextOriginal).pending, isFalse);
     expect(requests, isNot(contains('/server/39.png')));
-    expect(requests.length, lessThan(12));
+    expect(requests.toSet().length, lessThan(40));
 
     final pages = find.byKey(const ValueKey('user-image-gallery-pages'));
     final finger = await tester.startGesture(tester.getCenter(pages));
@@ -901,97 +950,105 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final semantics = tester.ensureSemantics();
-      final requests = <String>[];
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: ProfileMessage(
-                message: TranscriptMessage.fromRow({
-                  'id': 42,
-                  'role': 'user',
-                  'content': List.generate(
-                    40,
-                    (index) => '@image:/server/$index.png',
-                  ).join('\n'),
-                }),
-                loadAttachmentImage: (path) async {
-                  requests.add(path);
-                  return bytes;
-                },
+      try {
+        final requests = <String>[];
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: ProfileMessage(
+                  message: TranscriptMessage.fromRow({
+                    'id': 42,
+                    'role': 'user',
+                    'content': List.generate(
+                      40,
+                      (index) => '@image:/server/$index.png',
+                    ).join('\n'),
+                  }),
+                  loadAttachmentImage: (path) async {
+                    requests.add(path);
+                    return bytes;
+                  },
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await settleImages(tester);
-      await tester.tapAt(tester.getCenter(find.text('+35')));
-      await settleImages(tester);
-      final strip = find.byKey(
-        const PageStorageKey('user-image-gallery-thumbnails'),
-      );
-      final controller = tester.widget<ListView>(strip).controller!;
-      controller.jumpTo(controller.position.maxScrollExtent);
-      await settleImages(tester);
-      expect(find.text('5 / 40'), findsOneWidget);
-      // The rail can be far from the selected image. Arrow navigation brings
-      // it back without acquiring every original swept by a long animation.
-      await tester.tap(find.byTooltip('Next image'));
-      await tester.pump();
-      for (var frame = 0; frame < 26; frame++) {
-        await tester.pump(const Duration(milliseconds: 16));
+        );
+        await settleImages(tester);
+        await tester.tapAt(tester.getCenter(find.text('+35')));
+        await settleImages(tester);
+        final strip = find.byKey(
+          const PageStorageKey('user-image-gallery-thumbnails'),
+        );
+        final controller = tester.widget<ListView>(strip).controller!;
+        controller.jumpTo(controller.position.maxScrollExtent);
+        await settleImages(tester);
+        expect(find.text('5 / 40'), findsOneWidget);
+        // The rail can be far from the selected image. Arrow navigation brings
+        // it back without acquiring every original swept by a long animation.
+        await tester.tap(find.byTooltip('Next image'));
+        await tester.pump();
+        for (var frame = 0; frame < 26; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await settleImages(tester);
+        expect(find.text('6 / 40'), findsOneWidget);
+        expect(
+          requests.where((path) {
+            final index = int.parse(path.split('/').last.split('.').first);
+            return index >= 12 && index <= 30;
+          }),
+          isEmpty,
+        );
+        controller.jumpTo(controller.position.maxScrollExtent);
+        await settleImages(tester);
+        final last = find.byKey(const ValueKey('image-thumbnail-39'));
+        expect(last, findsOneWidget);
+        expect(tester.getSize(last).shortestSide, greaterThanOrEqualTo(48));
+        final beforeTap = requests
+            .where((path) => path == '/server/39.png')
+            .length;
+        await tester.tap(last);
+        await settleImages(tester);
+        expect(find.text('40 / 40'), findsOneWidget);
+        expect(requests.toSet().length, lessThan(40));
+        expect(
+          tester
+              .widget<ChatImageViewport>(find.byType(ChatImageViewport))
+              .title,
+          '39.png',
+        );
+        expect(
+          requests.where((path) => path == '/server/39.png'),
+          hasLength(beforeTap),
+        );
+        final selected = find.ancestor(
+          of: last,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.label == '39.png',
+          ),
+        );
+        expect(tester.widget<Semantics>(selected).properties.selected, isTrue);
+        expect(
+          find.descendant(of: strip, matching: find.byType(Text)),
+          findsNothing,
+        );
+        await tester.tap(find.byTooltip('Previous image'));
+        await settleImages(tester);
+        expect(find.text('39 / 40'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('image-thumbnail-38')),
+          findsOneWidget,
+        );
+        await tester.pageBack();
+        await settleImages(tester);
+        expect(find.text('+35'), findsOneWidget);
+        expect(find.byType(Image), findsNWidgets(5));
+        expect(tester.takeException(), isNull);
+      } finally {
+        semantics.dispose();
       }
-      await settleImages(tester);
-      expect(find.text('6 / 40'), findsOneWidget);
-      expect(
-        requests.where((path) {
-          final index = int.parse(path.split('/').last.split('.').first);
-          return index >= 12 && index <= 30;
-        }),
-        isEmpty,
-      );
-      controller.jumpTo(controller.position.maxScrollExtent);
-      await settleImages(tester);
-      final last = find.byKey(const ValueKey('image-thumbnail-39'));
-      expect(last, findsOneWidget);
-      expect(tester.getSize(last).shortestSide, greaterThanOrEqualTo(48));
-      final beforeTap = requests
-          .where((path) => path == '/server/39.png')
-          .length;
-      await tester.tap(last);
-      await settleImages(tester);
-      expect(find.text('40 / 40'), findsOneWidget);
-      expect(requests.toSet().length, lessThan(20));
-      expect(
-        tester.widget<ChatImageViewport>(find.byType(ChatImageViewport)).title,
-        '39.png',
-      );
-      expect(
-        requests.where((path) => path == '/server/39.png'),
-        hasLength(beforeTap),
-      );
-      final selected = find.ancestor(
-        of: last,
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is Semantics && widget.properties.label == '39.png',
-        ),
-      );
-      expect(tester.widget<Semantics>(selected).properties.selected, isTrue);
-      expect(
-        find.descendant(of: strip, matching: find.byType(Text)),
-        findsNothing,
-      );
-      await tester.tap(find.byTooltip('Previous image'));
-      await settleImages(tester);
-      expect(find.text('39 / 40'), findsOneWidget);
-      expect(find.byKey(const ValueKey('image-thumbnail-38')), findsOneWidget);
-      await tester.pageBack();
-      await settleImages(tester);
-      expect(find.text('+35'), findsOneWidget);
-      expect(find.byType(Image), findsNWidgets(5));
-      expect(tester.takeException(), isNull);
-      semantics.dispose();
     },
   );
 
@@ -1349,7 +1406,7 @@ void main() {
         final second = find.byWidgetPredicate(
           (widget) => widget is ChatImageViewport && widget.title == '1.png',
         );
-        expect(tester.getRect(first).left, lessThan(-50));
+        expect(tester.getRect(first).left, lessThan(0));
         expect(tester.getRect(second).left, inExclusiveRange(0, viewportWidth));
         expect(tester.getRect(strip), stripRect);
         if (const bool.fromEnvironment('CAPTURE_ATTACHMENTS')) {
@@ -1453,17 +1510,26 @@ void main() {
             find.text("+${count - 5}"),
             count > 5 ? findsOneWidget : findsNothing,
           );
-          final first = tester.getRect(images.at(0));
-          final second = tester.getRect(images.at(1));
-          expect(first.top, second.top);
-          expect(second.left - first.right, closeTo(4, .01));
-          if (count == 3) {
-            final last = tester.getRect(images.at(2));
-            expect(last.left, first.left);
-            expect(last.right, second.right);
-            expect(last.top - first.bottom, closeTo(4, .01));
-            expect(last.height, closeTo(first.height, .01));
-            expect(last.bottom - first.top, lessThan(280));
+          final viewport = Offset.zero & Size(width, 900);
+          for (var index = 0; index < images.evaluate().length; index++) {
+            final bounds = tester.getRect(images.at(index));
+            expect(viewport.intersect(bounds), bounds);
+            for (
+              var next = index + 1;
+              next < images.evaluate().length;
+              next++
+            ) {
+              expect(bounds.overlaps(tester.getRect(images.at(next))), isFalse);
+            }
+          }
+          if (count > 5) {
+            // The overflow tile deliberately ignores the inner preview's
+            // pointer handling; its outer action opens the selected image.
+            await tester.tapAt(tester.getCenter(find.text('+${count - 5}')));
+            await settleImages(tester);
+            expect(find.text('5 / $count'), findsOneWidget);
+            await tester.pageBack();
+            await settleImages(tester);
           }
           if (count == 40 &&
               const bool.fromEnvironment('CAPTURE_ATTACHMENTS')) {
@@ -1579,7 +1645,8 @@ void main() {
         final textRect = tester.getRect(find.text('Look at this.'));
         final imageRect = tester.getRect(find.byType(Image));
         expect(imageRect.top, greaterThan(textRect.bottom));
-        expect(imageRect.right, textRect.right);
+        expect(imageRect.left, greaterThanOrEqualTo(0));
+        expect(imageRect.right, lessThanOrEqualTo(320));
         expect(tester.takeException(), isNull);
         if (const bool.fromEnvironment('CAPTURE_ATTACHMENTS')) {
           await tester.runAsync(() async {

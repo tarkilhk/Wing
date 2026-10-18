@@ -13,6 +13,21 @@ import 'package:wing/core/services/server_connection_status.dart';
 
 import 'support/administration_fixture.dart';
 
+Future<void> _until(UsageAnalyticsSession owner, bool Function() ready) async {
+  if (ready()) return;
+  final reached = Completer<void>();
+  void observe() {
+    if (ready() && !reached.isCompleted) reached.complete();
+  }
+
+  owner.addListener(observe);
+  try {
+    await reached.future;
+  } finally {
+    owner.removeListener(observe);
+  }
+}
+
 void main() {
   test(
     'stale cached values stay available, failed refresh retains their timestamp',
@@ -155,7 +170,7 @@ void main() {
       );
       addTearDown(owner.dispose);
       final loading = owner.load();
-      await Future<void>.delayed(Duration.zero);
+      await _until(owner, () => owner.state.data?.pricingLoading == true);
       expect(owner.state.data!.models!.tokens.total, 2000000);
       expect(owner.state.data!.models!.costs.total, isNull);
       expect(owner.state.data!.pricingLoading, isTrue);
@@ -232,7 +247,8 @@ void main() {
         UsageAnalyticsReader(fixture.server.usageAnalytics, ['personal']),
       );
       final loading = owner.load();
-      await Future<void>.delayed(Duration.zero);
+      await _until(owner, () => owner.state.data?.pricingLoading == true);
+      expect(fixture.pricingRefreshes, [false]);
       owner.dispose();
       fixture.server.close();
       fixture.pricingGate!.complete(subscriptionApiPrices());
@@ -312,7 +328,7 @@ void main() {
       );
       addTearDown(owner.dispose);
       final loading = owner.load();
-      await Future<void>.delayed(Duration.zero);
+      await _until(owner, () => owner.state.data?.models != null);
       expect(owner.state.data?.models?.tokens.total, 110);
       expect(owner.state.data?.daily, isNull);
       expect(owner.state.loading, isTrue);

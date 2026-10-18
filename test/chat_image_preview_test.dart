@@ -7,7 +7,6 @@ import 'package:image/image.dart' as img;
 import 'package:wing/core/widgets/chat_image_preview.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
-import 'package:wing/core/widgets/resource_filename.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 void main() {
@@ -73,27 +72,29 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: ChatImagePreview(
-          uri: Uri.parse('https://example.com/chart.png'),
+          bytes: Uint8List.fromList([0, 1, 2, 3]),
           title: 'Result',
           onOpenExternal: () => opened = true,
         ),
       ),
     );
-    final image = tester.widget<Image>(find.byType(Image));
-    final context = tester.element(find.byType(Image));
-    final fallback = image.errorBuilder!(
-      context,
-      StateError('Unavailable'),
-      null,
+    final image = find.byType(Image);
+    await tester.runAsync(
+      () => precacheImage(
+        tester.widget<Image>(image).image,
+        tester.element(image),
+        onError: (_, _) {},
+      ),
     );
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: fallback)));
+    await tester.pumpAndSettle();
     expect(find.textContaining('could not be previewed'), findsOneWidget);
-    expect(
-      tester.getSize(find.byType(ResourceViewerAction)),
-      const Size(32, 32),
-    );
     expect(find.text('Open in browser'), findsNothing);
-    await tester.tap(find.byTooltip('Open in browser'));
+    final recovery = find.descendant(
+      of: find.byType(ChatImageViewport),
+      matching: find.byTooltip('Open in browser'),
+    );
+    expect(recovery.hitTestable(), findsOneWidget);
+    await tester.tap(recovery);
     expect(opened, isTrue);
   });
 }

@@ -1,4 +1,5 @@
 import 'support/composer_fixture.dart';
+import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -56,6 +57,23 @@ void main() {
           .load();
     }
   });
+
+  Future<void> until(bool Function() complete) async {
+    if (complete()) return;
+    final completed = Completer<void>();
+    void changed() {
+      if (complete() && !completed.isCompleted) completed.complete();
+    }
+
+    controller.addListener(changed);
+    controller.composerChanges.addListener(changed);
+    try {
+      await completed.future;
+    } finally {
+      controller.removeListener(changed);
+      controller.composerChanges.removeListener(changed);
+    }
+  }
 
   Future<void> pumpFrames(WidgetTester tester) async {
     for (var frame = 0; frame < 8; frame++) {
@@ -183,32 +201,36 @@ void main() {
     },
   );
 
-  test(
-    'invalid and unavailable clipboard data leaves the draft intact',
-    () async {
-      await controller.updateDraft(chat, 'Keep this');
-      for (final bytes in [
-        Uint8List(0),
-        Uint8List.fromList([1, 2, 3]),
-      ]) {
-        await expectLater(
-          controller.addPastedImage(chat, () async => bytes),
-          throwsA(isA<AttachmentDraftException>()),
-        );
-      }
-      await expectLater(
-        controller.addPastedImage(
-          chat,
-          () async => throw StateError('expired'),
+  for (final scenario
+      in <({String name, Future<Uint8List> Function() read, Matcher error})>[
+        (
+          name: 'empty',
+          read: () async => Uint8List(0),
+          error: isA<AttachmentDraftException>(),
         ),
-        throwsStateError,
+        (
+          name: 'invalid',
+          read: () async => Uint8List.fromList([1, 2, 3]),
+          error: isA<AttachmentDraftException>(),
+        ),
+        (
+          name: 'unavailable',
+          read: () async => throw StateError('expired'),
+          error: isA<StateError>(),
+        ),
+      ]) {
+    test('${scenario.name} clipboard data leaves the draft intact', () async {
+      await controller.updateDraft(chat, 'Keep this');
+      await expectLater(
+        controller.addPastedImage(chat, scenario.read),
+        throwsA(scenario.error),
       );
       expect(chat.composer.observation.text, 'Keep this');
       expect(chat.composer.observation.attachments, isEmpty);
       expect(await cache.list().toList(), isEmpty);
       expect(controller.canAddAttachment(chat), isTrue);
-    },
-  );
+    });
+  }
 
   test('pasted images enforce the existing attachment count limit', () async {
     for (var i = 0; i < maxRemoteAttachmentDrafts; i++) {
@@ -242,7 +264,10 @@ void main() {
             ).copyWith(textScaler: TextScaler.linear(scale)),
             child: child!,
           ),
-          home: ProfileWorkspaceScreen(controller: controller),
+          home: ProfileWorkspaceScreen(
+            controller: controller,
+            createBotsSession: () => BotsSession((_) async => const []),
+          ),
         ),
       ),
     );
@@ -303,7 +328,7 @@ void main() {
           await tester.tap(find.byTooltip('More'));
           await pumpFrames(tester);
         }
-        await tester.tap(find.text('Paste'));
+        await tester.runAsync(() => tester.tap(find.text('Paste')));
         await tester.pump();
         expect(find.bySemanticsLabel('Adding photo…'), findsOneWidget);
         expect(
@@ -312,16 +337,10 @@ void main() {
         );
         await snapshot(tester, '$name-pending');
         read.complete(png);
-        for (
-          var attempt = 0;
-          attempt < 200 && !controller.canAddAttachment(chat);
-          attempt++
-        ) {
-          await tester.runAsync(
-            () => Future<void>.delayed(const Duration(milliseconds: 10)),
-          );
-          await tester.pump();
-        }
+        await tester.pump();
+        await tester.runAsync(
+          () => until(() => controller.canAddAttachment(chat)),
+        );
         await pumpFrames(tester);
         expect(chat.composer.observation.preparing, isFalse);
         expect(chat.composer.observation.attachments, hasLength(1));
@@ -342,7 +361,11 @@ void main() {
         await tester.runAsync(() async {
           await tester.tap(find.byTooltip('Send'));
           await chat.composer.admittedWrites;
-          await Future<void>.delayed(const Duration(milliseconds: 100));
+          await until(
+            () => running
+                ? chat.composer.observation.queue.isNotEmpty
+                : host.calls.any((call) => call.$2 == 'prompt.submit'),
+          );
         });
         await pumpFrames(tester);
         expect(chat.composer.observation.text, isEmpty);
@@ -385,42 +408,40 @@ void main() {
     }
   }
 
-  testWidgets(
-    'pasted and picked images share left-aligned removable thumbnails',
-    (tester) async {
-      await tester.runAsync(() async {
-        await controller.addPastedImage(chat, () async => png);
-        final picked = File('${cache.path}/picked.jpg');
-        await picked.writeAsBytes(
-          image.encodeJpg(image.Image(width: 4, height: 3)),
-        );
-        await controller.addAttachments(chat, [
-          (path: picked.path, name: 'picked.jpg'),
-        ]);
-      });
-      await show(tester);
-      final thumbnails = find.byKey(const ValueKey('composer-image-thumbnail'));
-      expect(thumbnails, findsNWidgets(2));
-      expect(find.text('Pasted image.png'), findsNothing);
-      expect(find.text('picked.jpg'), findsNothing);
-      final composer = tester.getRect(
-        find.byKey(const ValueKey('conversation-composer')),
+  testWidgets('removing a pasted image preserves the separately picked image', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      await controller.addPastedImage(chat, () async => png);
+      final picked = File('${cache.path}/picked.jpg');
+      await picked.writeAsBytes(
+        image.encodeJpg(image.Image(width: 4, height: 3)),
       );
-      final first = tester.getRect(thumbnails.first);
-      expect(first.left - composer.left, lessThan(24));
-      expect(first.width, inInclusiveRange(64, 96));
-      await tester.runAsync(() async {
-        await tester.tap(find.byTooltip('Remove Pasted image.png'));
-        // The callback returns before its file deletion finishes. Let that
-        // operation complete before tearDown removes the same cache directory.
-        while (chat.composer.observation.saving) {
-          await Future<void>.delayed(const Duration(milliseconds: 10));
-        }
-      });
-      await tester.pumpAndSettle();
-      expect(chat.composer.observation.attachments.single.name, 'picked.jpg');
-    },
-  );
+      await controller.addAttachments(chat, [
+        (path: picked.path, name: 'picked.jpg'),
+      ]);
+    });
+    await show(tester);
+    final thumbnails = find.byKey(const ValueKey('composer-image-thumbnail'));
+    expect(thumbnails, findsNWidgets(2));
+    expect(
+      find.byTooltip('Remove Pasted image.png').hitTestable(),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('Remove picked.jpg').hitTestable(), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('Remove Pasted image.png'));
+      // The callback returns before its file deletion finishes. Let that
+      // operation complete before tearDown removes the same cache directory.
+      await chat.composer.admittedWrites;
+      await until(() => controller.canAddAttachment(chat));
+    });
+    await pumpFrames(tester);
+    expect(chat.composer.observation.attachments.single.name, 'picked.jpg');
+    expect(find.byTooltip('Remove Pasted image.png'), findsNothing);
+    expect(find.byTooltip('Remove picked.jpg').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('keyboard advertises image types and inserts into the draft', (
     tester,
@@ -447,9 +468,7 @@ void main() {
         ),
         (_) {},
       );
-      while (!controller.canAddAttachment(chat)) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await until(() => controller.canAddAttachment(chat));
     });
     await tester.pumpAndSettle();
     expect(chat.composer.observation.attachments.single.isImage, isTrue);
@@ -510,9 +529,7 @@ void main() {
     expect(calls, ['hasImage']);
     await tester.runAsync(() async {
       await tester.tap(find.text('Paste'));
-      while (!controller.canAddAttachment(chat)) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
+      await until(() => controller.canAddAttachment(chat));
     });
     await tester.pumpAndSettle();
     expect(calls, ['hasImage', 'readImage']);

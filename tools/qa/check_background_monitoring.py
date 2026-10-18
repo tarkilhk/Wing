@@ -4,6 +4,10 @@
 Build/install integration_test/background_monitoring_device.dart first.
 This fixture must never be installed over a user's production app.
 """
+# Optimization would remove the verdict assertions below.
+if not __debug__:
+    raise RuntimeError("Native acceptance requires Python assertions; remove -O/PYTHONOPTIMIZE")
+
 import argparse
 import json
 import re
@@ -14,19 +18,41 @@ import urllib.request
 from pathlib import Path
 
 
+def require_single_monitoring_card(dump, package):
+    """Every active monitoring-channel record belongs to the one FGS card."""
+    records = []
+    for block in re.split(r'(?=NotificationRecord\()', dump):
+        if not block:
+            continue
+        header = block.splitlines()[0]
+        if (re.match(r'NotificationRecord\([^\n]*pkg=' + re.escape(package) + r'(?:\s|$)', header)
+                and re.search(r'\bchannel=hermes_monitoring\b', header)):
+            records.append(header)
+    assert len(records) == 1, f'Expected one monitoring card, got {len(records)}: {records}'
+    assert re.search(r'\bid=214601\b', records[0]), records
+    assert 'FOREGROUND_SERVICE' in records[0], records
+    return records[0]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', default='emulator-5554')
-    parser.add_argument('--port', type=int, default=18765)
+    parser.add_argument('--port', type=int, default=0,
+                        help='Host forward port; zero allocates an owned ephemeral port.')
+    parser.add_argument('--output', type=Path, required=True,
+                        help='Attempt-owned status and failure diagnostics directory.')
     parser.add_argument('--resource-dir', type=Path,
                         help='Optional CPU/PSS diagnostics during the two 35s polling windows; no battery verdict.')
     args = parser.parse_args()
     if not args.serial.startswith('emulator-'):
         raise SystemExit('This test changes device power settings; use an emulator.')
+    if not 0 <= args.port <= 65535:
+        raise SystemExit('Forward port must be between 0 and 65535')
+    args.output.mkdir(parents=True, exist_ok=True)
     package = 'com.tarkilhk.wing.dev'
 
     def adb(*parts):
-        return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True)
+        return subprocess.check_output(['adb', '-s', args.serial, *parts], text=True, timeout=30)
 
     def shell(*parts):
         return adb('shell', *parts)
@@ -76,8 +102,10 @@ def main():
         until(foreground, 'Working chat did not start monitoring')
         icon = until(lambda: notification_icon(214601), 'Monitoring card missing')
         assert not notification_present(214602), 'Obsolete monitoring summary was posted'
-        record = notification_record(214601)
-        assert record and 'hermes_monitoring' in record, 'Monitoring card used the wrong channel'
+        dump = shell('dumpsys', 'notification', '--noredact')
+        capture = args.output / f'monitoring-cards-{time.monotonic_ns()}.txt'
+        capture.write_text(dump)
+        require_single_monitoring_card(dump, package)
         locks = shell('dumpsys', 'power').split('Wake Locks:', 1)[1].split('Suspend Blockers:', 1)[0]
         assert 'hermes-monitoring' in locks, 'Working chat has no monitoring wake lock'
         return icon
@@ -86,8 +114,40 @@ def main():
         shell('am', 'start', '-n', f'{package}/com.tarkilhk.wing.MainActivity')
         until(lambda: request()['lifecycle'] == 'resumed', 'Wing did not resume')
 
+    def background():
+        shell('input', 'keyevent', 'KEYCODE_HOME')
+        until(lambda: request()['lifecycle'] == 'paused',
+              'Wing did not finish entering the background')
+
     def event(profile, state):
-        return request('/event', json.dumps({'profile': profile, 'state': state}))
+        status = request('/event', json.dumps({'profile': profile, 'state': state}))
+        with (args.output / 'events.jsonl').open('a') as stream:
+            stream.write(json.dumps({'profile': profile, 'requested_state': state,
+                                     'observed': status}) + '\n')
+        return status
+
+    def capture_failure():
+        # Keep the original verdict; diagnostics cannot replace or mask it.
+        try:
+            (args.output / 'failure-status.json').write_text(json.dumps(request(), indent=2))
+        except Exception as error:
+            (args.output / 'failure-status-error.txt').write_text(repr(error))
+        probes = {
+            'services': ('dumpsys', 'activity', 'services', package),
+            'activities': ('dumpsys', 'activity', 'activities'),
+            'window': ('dumpsys', 'window', 'windows'),
+            'power': ('dumpsys', 'power'),
+            'notifications': ('dumpsys', 'notification', '--noredact'),
+            'deviceidle': ('dumpsys', 'deviceidle'),
+            'fixture-logcat': ('logcat', '-d', '-t', '300', '-s', 'flutter', 'MonitoringRuntime'),
+        }
+        for name, command in probes.items():
+            try:
+                value = shell(*command)
+            except Exception as error:
+                value = repr(error)
+            (args.output / (name + '.txt')).write_text(value)
+
 
     def alert(number):
         until(lambda: notification_present(240000 + number), 'Chat notification missing')
@@ -160,7 +220,9 @@ def main():
               f'ticks={probe["ticks"] - baseline["notificationPoll"]["ticks"]}', flush=True)
 
     prior_exempt = package in shell('dumpsys', 'deviceidle', 'whitelist')
-    adb('forward', f'tcp:{args.port}', 'tcp:18765')
+    allocated = adb('forward', '--no-rebind', f'tcp:{args.port}', 'tcp:18765').strip()
+    if args.port == 0:
+        args.port = int(allocated)
     try:
         shell('cmd', 'statusbar', 'collapse')
         shell('am', 'force-stop', package)
@@ -169,10 +231,15 @@ def main():
         # before this monitoring-only fixture starts work. Permission denial and
         # retry are exercised separately by the native voice-permission driver.
         shell('pm', 'grant', package, 'android.permission.RECORD_AUDIO')
+        # Completed onboarding is required before working-state/Doze checks.
+        # Otherwise Android's startup battery dialog leaves the app inactive.
+        # Startup prompting is a separate acceptance boundary.
+        shell('dumpsys', 'deviceidle', 'whitelist', f'+{package}')
         shell('input', 'keyevent', 'KEYCODE_WAKEUP')
         shell('wm', 'dismiss-keyguard')
         launch()
-        until(lambda: request()['ready'], 'Fixture did not establish its gateway')
+        until(lambda: request()['ready'] and request()['lifecycle'] == 'resumed',
+              'Fixture did not establish its gateway in the foreground')
         generation = request()['generation']
         stopped()
         assert polling_status()['notificationPoll']['active'] == 0, 'Idle startup scheduled notification polling'
@@ -182,8 +249,7 @@ def main():
         monitoring_icon = monitoring_started()
         event('b', 'working')
         assert monitoring_started() == monitoring_icon, 'Second chat changed the monitoring icon'
-        shell('input', 'keyevent', 'KEYCODE_HOME')
-        until(lambda: request()['lifecycle'] != 'resumed', 'App stayed in foreground')
+        background()
         until(lambda: polling_status()['notificationPoll']['active'] == 1, 'Working chats did not schedule polling')
         observe_polling(active=True)
         event('a', 'waiting')
@@ -204,7 +270,7 @@ def main():
         assert not foreground(), 'Opening a waiting chat restarted monitoring'
         event('a', 'working')
         monitoring_started()
-        shell('input', 'keyevent', 'KEYCODE_HOME')
+        background()
         event('a', 'idle')
         alert(3)
         stopped()
@@ -237,7 +303,7 @@ def main():
         event('a', 'working')
         event('b', 'working')
         monitoring_started()
-        shell('input', 'keyevent', 'KEYCODE_HOME')
+        background()
         shell('input', 'keyevent', 'KEYCODE_SLEEP')
         shell('dumpsys', 'battery', 'unplug')
         shell('dumpsys', 'deviceidle', 'force-idle')
@@ -262,7 +328,7 @@ def main():
         stopped()
         request('/alerts', 'true')
         monitoring_started()
-        shell('input', 'keyevent', 'KEYCODE_HOME')
+        background()
         event('a', 'idle')
         until(lambda: request()['alerts'] == 3, 'Final reply did not post')
         stopped()
@@ -276,12 +342,32 @@ def main():
         assert 'Monitoring fixture / a' in rich, 'Connection/profile missing'
         assert 'vis=PRIVATE' in rich, 'Chat content is not private on the lock screen'
         print('PASS: alert preferences and rich private notifications are preserved', flush=True)
+    except BaseException:
+        capture_failure()
+        raise
     finally:
-        shell('dumpsys', 'deviceidle', 'unforce')
-        shell('dumpsys', 'battery', 'reset')
-        if not prior_exempt:
-            shell('dumpsys', 'deviceidle', 'whitelist', f'-{package}')
-        adb('forward', '--remove', f'tcp:{args.port}')
+        failed = sys.exc_info()[0] is not None
+        cleanup_errors = []
+        cleanup = [
+            ('deviceidle', lambda: shell('dumpsys', 'deviceidle', 'unforce')),
+            ('battery', lambda: shell('dumpsys', 'battery', 'reset')),
+            *([] if prior_exempt else [
+                ('whitelist', lambda: shell('dumpsys', 'deviceidle', 'whitelist', f'-{package}'))]),
+            ('forward', lambda: adb('forward', '--remove', f'tcp:{args.port}')),
+        ]
+        for name, action in cleanup:
+            try:
+                action()
+            except Exception as error:
+                cleanup_errors.append({'resource': name, 'error': repr(error)})
+        (args.output / 'cleanup.json').write_text(json.dumps({
+            'forward_port': args.port, 'errors': cleanup_errors,
+        }, indent=2) + '\n')
+        if cleanup_errors:
+            if failed:
+                print('Additional cleanup failures: ' + repr(cleanup_errors), file=sys.stderr)
+            else:
+                raise RuntimeError('Native cleanup failed: ' + repr(cleanup_errors))
 
 
 if __name__ == '__main__':

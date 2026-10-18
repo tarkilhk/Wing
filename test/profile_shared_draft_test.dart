@@ -28,6 +28,11 @@ void main() {
   late _FailingPreferences platform;
 
   setUp(() async {
+    final previousPlatform = SharedPreferencesStorePlatform.instance;
+    addTearDown(() {
+      SharedPreferencesStorePlatform.instance = previousPlatform;
+      SharedPreferences.resetStatic();
+    });
     SharedPreferences.setMockInitialValues({});
     platform = _FailingPreferences();
     SharedPreferencesStorePlatform.instance = platform;
@@ -355,55 +360,54 @@ void main() {
     expect(attachments.removedIds, isEmpty);
   });
 
-  test(
-    'reconnecting chat stages locally while foreign ownership still fails',
-    () async {
-      controller
-          .browserResource(chat.key.workspace.profileName)
-          .gateway
-          .onConnectionChanged!(false);
-      await restoreComposerFixture(
-        chat: chat,
-        preferences: controller.preferences,
-        text: 'Keep reconnecting draft',
-        appendQueued: [QueuedPromptDraft(text: 'keep queued')],
-        paused: true,
-      );
-      const payload = AndroidSharePayload(
-        text: 'Shared while reconnecting',
-        files: [
-          AndroidSharedFile(
-            path: '/file',
-            name: 'file.txt',
-            mediaType: 'text/plain',
-            byteLength: 1,
-          ),
-        ],
-      );
-      await controller.stageSharedDraft(chat, payload);
+  test('reconnecting chat stages shared work locally', () async {
+    controller
+        .browserResource(chat.key.workspace.profileName)
+        .gateway
+        .onConnectionChanged!(false);
+    await restoreComposerFixture(
+      chat: chat,
+      preferences: controller.preferences,
+      text: 'Keep reconnecting draft',
+      appendQueued: [QueuedPromptDraft(text: 'keep queued')],
+      paused: true,
+    );
+    const payload = AndroidSharePayload(
+      text: 'Shared while reconnecting',
+      files: [
+        AndroidSharedFile(
+          path: '/file',
+          name: 'file.txt',
+          mediaType: 'text/plain',
+          byteLength: 1,
+        ),
+      ],
+    );
+    await controller.stageSharedDraft(chat, payload);
 
-      expect(
-        chat.composer.observation.text,
-        'Keep reconnecting draft\n\nShared while reconnecting',
-      );
-      expect(chat.composer.observation.attachments.single.name, 'file.txt');
-      expect(chat.composer.observation.queue.single.text, 'keep queued');
-      expect(chat.composer.observation.paused, isTrue);
+    expect(
+      chat.composer.observation.text,
+      'Keep reconnecting draft\n\nShared while reconnecting',
+    );
+    expect(chat.composer.observation.attachments.single.name, 'file.txt');
+    expect(chat.composer.observation.queue.single.text, 'keep queued');
+    expect(chat.composer.observation.paused, isTrue);
+  });
 
-      final foreign = composeChat(
-        controller: controller,
-        preferences: controller.preferences,
-        key: chat.key,
-        runtime: ChatRuntime(runtimeId: chat.runtime.runtimeId),
-        title: chat.title,
-      );
-      await expectLater(
-        controller.stageSharedDraft(foreign, payload),
-        throwsArgumentError,
-      );
-      expect(attachments.prepareCount, 1);
-    },
-  );
+  test('foreign chat cannot stage attachments into the owned draft', () async {
+    final foreign = composeChat(
+      controller: controller,
+      preferences: controller.preferences,
+      key: chat.key,
+      runtime: ChatRuntime(runtimeId: chat.runtime.runtimeId),
+      title: chat.title,
+    );
+    await expectLater(
+      controller.stageSharedDraft(foreign, _sharedFile),
+      throwsArgumentError,
+    );
+    expect(attachments.prepareCount, 0);
+  });
 }
 
 const _sharedFile = AndroidSharePayload(

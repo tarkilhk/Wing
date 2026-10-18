@@ -141,6 +141,7 @@ void main() {
         [jsonEncode(key.toJson())],
       );
       controller.dispose();
+      appPreferences.dispose();
       await initialize();
       final chat = controller.current!.chats['chat-0']!;
       expect(chat.title, 'personal chat 0');

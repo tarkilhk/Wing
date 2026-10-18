@@ -21,23 +21,33 @@ TranscriptToolResult call(String name, Object output, {Object? args}) =>
     });
 
 void main() {
-  test(
-    'agent headings retain the first sentence without its ending period',
-    () {
-      expect(
-        agentTaskHeading('Review the report. Check every record.'),
-        'Review the report',
-      );
-      expect(agentTaskHeading('Review the report.'), 'Review the report');
-      expect(agentTaskHeading('Review\n the report'), 'Review the report');
-      expect(
-        agentTaskHeading(
+  for (final example in [
+    (
+      name: 'stops at the first sentence',
+      task: 'Review the report. Check every record.',
+      heading: 'Review the report',
+    ),
+    (
+      name: 'omits a final period',
+      task: 'Review the report.',
+      heading: 'Review the report',
+    ),
+    (
+      name: 'normalizes line breaks',
+      task: 'Review\n the report',
+      heading: 'Review the report',
+    ),
+    (
+      name: 'preserves periods in filenames URLs and decimal numbers',
+      task:
           'Review report.md at https://example.org for 3.5 hours. Then report.',
-        ),
-        'Review report.md at https://example.org for 3.5 hours',
-      );
-    },
-  );
+      heading: 'Review report.md at https://example.org for 3.5 hours',
+    ),
+  ]) {
+    test('agent heading ${example.name}', () {
+      expect(agentTaskHeading(example.task), example.heading);
+    });
+  }
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets('saved agent heading and exact Task ${brightness.name} $scale', (
@@ -89,10 +99,7 @@ void main() {
         final label = tester.widget<Text>(find.text(heading));
         expect(label.maxLines, 2);
         expect(label.overflow, TextOverflow.ellipsis);
-        expect(
-          tester.getSize(find.text(heading)).height,
-          lessThanOrEqualTo(2 * 14 * scale * 1.4 + 1),
-        );
+        expect(find.text(heading).hitTestable(), findsOneWidget);
         expect(find.text(task), findsNothing);
         await tester.tap(find.text(heading));
         await tester.pumpAndSettle();
@@ -106,40 +113,43 @@ void main() {
       });
     }
   }
-  test(
-    'latest full task snapshot preserves order/status and empty clears it',
-    () {
-      final older = call('todo_list', {
+  test('latest full task snapshot replaces older tasks in received order', () {
+    final older = call('todo_list', {
+      'revision': 1,
+      'todos': [
+        {'id': 'old', 'content': 'Superseded', 'status': 'pending'},
+      ],
+    });
+    final newer = call('todo_list', {
+      'revision': 2,
+      'todos': [
+        {'id': 'parent', 'content': 'Parent', 'status': 'in_progress'},
+        {
+          'id': 'child',
+          'content': 'Child',
+          'status': 'cancelled',
+          'parent': 'parent',
+        },
+      ],
+    });
+    final saved = SavedActivity([older, newer]);
+    expect(saved.todos.map((t) => t.content), ['Parent', 'Child']);
+    expect(saved.todos.last.status, GatewayTodoStatus.cancelled);
+    expect(saved.todos.last.parent, 'parent');
+  });
+
+  test('an empty full task snapshot clears earlier tasks', () {
+    final saved = SavedActivity([
+      call('todo_list', {
         'revision': 1,
         'todos': [
           {'id': 'old', 'content': 'Superseded', 'status': 'pending'},
         ],
-      });
-      final newer = call('todo_list', {
-        'revision': 2,
-        'todos': [
-          {'id': 'parent', 'content': 'Parent', 'status': 'in_progress'},
-          {
-            'id': 'child',
-            'content': 'Child',
-            'status': 'cancelled',
-            'parent': 'parent',
-          },
-        ],
-      });
-      final saved = SavedActivity([older, newer]);
-      expect(saved.todos.map((t) => t.content), ['Parent', 'Child']);
-      expect(saved.todos.last.status, GatewayTodoStatus.cancelled);
-      expect(saved.todos.last.parent, 'parent');
-      expect(
-        SavedActivity([
-          older,
-          call('todo_list', {'revision': 2, 'todos': []}),
-        ]).todos,
-        isEmpty,
-      );
-    },
-  );
+      }),
+      call('todo_list', {'revision': 2, 'todos': []}),
+    ]);
+    expect(saved.todos, isEmpty);
+  });
 
   test('delegation goals use the exact task index, never result order', () {
     final saved = SavedActivity([

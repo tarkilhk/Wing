@@ -1,10 +1,16 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/chat_reading_session.dart';
 import 'package:wing/core/widgets/chat_find_sheet.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 
 ProfileHistoryPage page(
   List<Map<String, dynamic>> rows, {
@@ -13,6 +19,165 @@ ProfileHistoryPage page(
 }) => ProfileHistoryPage('chat', rows, offset, limit);
 
 void main() {
+  const capture = bool.fromEnvironment('CAPTURE_FIND_FEEDBACK');
+  setUpAll(() async {
+    if (!capture) return;
+    const fonts = String.fromEnvironment('CAPTURE_FONT_DIR');
+    for (final font in {
+      'Roboto': 'Roboto-Regular.ttf',
+      'MaterialIcons': 'MaterialIcons-Regular.otf',
+    }.entries) {
+      await (FontLoader(font.key)..addFont(
+            File(
+              '$fonts/${font.value}',
+            ).readAsBytes().then(ByteData.sublistView),
+          ))
+          .load();
+    }
+  });
+
+  Future<void> captureFrame(WidgetTester tester, String name) async {
+    if (!capture) return;
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find.byKey(const Key('find-capture')),
+    );
+    await tester.runAsync(() async {
+      final bitmap = await boundary.toImage();
+      try {
+        final bytes = await bitmap.toByteData(format: ui.ImageByteFormat.png);
+        final file = File('build/design-previews/find-feedback/$name.png');
+        await file.parent.create(recursive: true);
+        await file.writeAsBytes(bytes!.buffer.asUint8List());
+      } finally {
+        bitmap.dispose();
+      }
+    });
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final enlarged in [false, true]) {
+      for (final outcome in ['success', 'failure', 'departure']) {
+        final name =
+            '${brightness.name}-${enlarged ? 'large-reduced' : 'normal'}-$outcome';
+        testWidgets('older search retains visible feedback through $name', (
+          tester,
+        ) async {
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = Size(enlarged ? 320 : 390, 844);
+          addTearDown(tester.view.reset);
+          final pending = Completer<ProfileHistoryPage>();
+          addTearDown(() {
+            if (!pending.isCompleted) pending.complete(page([], offset: 500));
+          });
+          var olderReads = 0;
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: const Key('find-capture'),
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(enlarged ? 2 : 1),
+                    disableAnimations: enlarged,
+                  ),
+                  child: child!,
+                ),
+                home: _findSheet(
+                  loadHistory: (offset) {
+                    if (offset == 0) {
+                      return Future.value(
+                        page([
+                          for (var i = 0; i < 500; i++)
+                            {
+                              'id': i + 501,
+                              'role': 'assistant',
+                              'content': i == 499
+                                  ? 'recent needle'
+                                  : 'filler $i',
+                            },
+                        ]),
+                      );
+                    }
+                    olderReads++;
+                    return olderReads == 1
+                        ? pending.future
+                        : Future.value(
+                            page([
+                              {
+                                'id': 1,
+                                'role': 'assistant',
+                                'content': 'older needle',
+                              },
+                            ], offset: 500),
+                          );
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), 'needle');
+          await tester.pumpAndSettle();
+          final header = tester.getRect(find.byType(TextField));
+          final olderSearch = find.byTooltip('Search older messages');
+          await tester.ensureVisible(olderSearch);
+          await tester.pumpAndSettle();
+          expect(olderSearch.hitTestable(), findsOneWidget);
+          await tester.tap(olderSearch);
+          await tester.pump();
+          await tester.pump();
+          expect(olderReads, 1);
+          final feedback = find.byType(StudioLoading);
+          expect(feedback, findsOneWidget);
+          expect(tester.getSize(feedback).shortestSide, greaterThan(0));
+          expect(tester.getRect(find.byType(TextField)), header);
+          expect(find.text('recent needle').hitTestable(), findsOneWidget);
+          await tester.tap(find.byTooltip('Search older messages'));
+          await tester.pump(const Duration(milliseconds: 250));
+          expect(olderReads, 1);
+          expect(feedback, findsOneWidget);
+          await captureFrame(tester, '$name-pending');
+          if (outcome == 'departure') {
+            await tester.pumpWidget(
+              const MaterialApp(home: Text('Search closed')),
+            );
+            pending.complete(page([], offset: 500));
+            await tester.pumpAndSettle();
+            expect(find.text('Search closed'), findsOneWidget);
+            expect(feedback, findsNothing);
+          } else if (outcome == 'failure') {
+            pending.completeError(StateError('synthetic search failure'));
+            await tester.pumpAndSettle();
+            expect(feedback, findsNothing);
+            expect(find.text('recent needle'), findsOneWidget);
+            await tester.ensureVisible(find.byTooltip('Retry search'));
+            await tester.pumpAndSettle();
+            expect(
+              find.byTooltip('Retry search').hitTestable(),
+              findsOneWidget,
+            );
+            await captureFrame(tester, '$name-failed');
+            await tester.tap(find.byTooltip('Retry search'));
+            await tester.pumpAndSettle();
+            expect(find.text('older needle'), findsOneWidget);
+            expect(olderReads, 2);
+          } else {
+            pending.complete(
+              page([
+                {'id': 1, 'role': 'assistant', 'content': 'older needle'},
+              ], offset: 500),
+            );
+            await tester.pumpAndSettle();
+            expect(feedback, findsNothing);
+            expect(find.text('older needle'), findsOneWidget);
+          }
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
+  }
+
   testWidgets('returns the source page and row ID for a selected match', (
     tester,
   ) async {
@@ -95,31 +260,40 @@ void main() {
     expect(find.text('Need the deployment checklist'), findsOneWidget);
     expect(find.text('Here is the checklist'), findsNothing);
     expect(find.text('1 matching message'), findsOneWidget);
+    expect(calls, 1);
   });
 
   testWidgets('keeps recent matches first after loading older messages', (
     tester,
   ) async {
     final older = Completer<ProfileHistoryPage>();
+    var olderReads = 0;
+    addTearDown(() {
+      if (!older.isCompleted) older.complete(page([]));
+    });
     await tester.pumpWidget(
       MaterialApp(
         home: _findSheet(
-          loadHistory: (offset) async => offset == 0
-              ? page([
-                  {
-                    'id': 501,
-                    'role': 'assistant',
-                    'content': 'recent earlier needle',
-                  },
-                  for (var i = 502; i < 1000; i++)
-                    {'id': i, 'content': 'recent filler $i'},
-                  {
-                    'id': 1000,
-                    'role': 'assistant',
-                    'content': 'recent newest needle',
-                  },
-                ])
-              : older.future,
+          loadHistory: (offset) async {
+            if (offset > 0) {
+              olderReads++;
+              return older.future;
+            }
+            return page([
+              {
+                'id': 501,
+                'role': 'assistant',
+                'content': 'recent earlier needle',
+              },
+              for (var i = 502; i < 1000; i++)
+                {'id': i, 'content': 'recent filler $i'},
+              {
+                'id': 1000,
+                'role': 'assistant',
+                'content': 'recent newest needle',
+              },
+            ]);
+          },
         ),
       ),
     );
@@ -137,9 +311,14 @@ void main() {
 
     await tester.tap(find.byTooltip('Search older messages'));
     await tester.pump();
+    await tester.pump();
     expect(find.text('Searching older messages…'), findsNothing);
     expect(find.byTooltip('Search older messages'), findsOneWidget);
-    expect(find.bySemanticsLabel('Searching messages'), findsNothing);
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(
+      tester.widget<StudioLoading>(find.byType(StudioLoading)).label,
+      'Searching messages',
+    );
     expect(
       tester
           .widget<IconButton>(
@@ -152,6 +331,11 @@ void main() {
           .onPressed,
       isNull,
     );
+    await tester.tap(find.byTooltip('Search older messages'));
+    await tester.pump(const Duration(seconds: 2));
+    expect(olderReads, 1);
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.text('recent newest needle'), findsOneWidget);
     older.complete(
       page([
         {'id': 1, 'role': 'assistant', 'content': 'oldest needle'},
@@ -160,6 +344,7 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 1));
+    expect(find.byType(StudioLoading), findsNothing);
 
     expect(
       tester
@@ -223,7 +408,21 @@ void main() {
       tester.widget<SelectableText>(find.byType(SelectableText)).data,
       longText,
     );
-    await tester.drag(find.byType(ListView), const Offset(0, -10000));
+    await tester.scrollUntilVisible(
+      find.text('needle 1'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  widget.axisDirection == AxisDirection.down,
+            ),
+          )
+          .first,
+      maxScrolls: 100,
+    );
     await tester.pumpAndSettle();
     expect(find.text('needle 1'), findsOneWidget);
   });

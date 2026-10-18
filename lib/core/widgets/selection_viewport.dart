@@ -26,6 +26,7 @@ class _SelectionViewportState extends State<SelectionViewport> {
   final _key = GlobalKey();
   _AreaAnchors? _selectionArea;
   _AreaAnchors get _area => _selectionArea ??= (_AreaAnchors(() {
+    if (!_active) return null;
     final render = _key.currentContext?.findRenderObject();
     return render is RenderBox && render.hasSize ? render : null;
   }, () => MediaQuery.sizeOf(context))..addListener(_changed));
@@ -33,13 +34,14 @@ class _SelectionViewportState extends State<SelectionViewport> {
   final _editables = <RenderEditable, _EditableAnchors>{};
   bool _focused = false;
   bool _queued = false;
+  bool _active = true;
 
   void _changed() {
-    if (_queued || !mounted) return;
+    if (_queued || !_active || !mounted) return;
     _queued = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _queued = false;
-      if (!mounted) return;
+      if (!_active || !mounted) return;
       _refresh();
       // Follow any frame which changes an ancestor clip or transform. Registering
       // a callback does not request another frame, so idle selection stays idle.
@@ -48,6 +50,7 @@ class _SelectionViewportState extends State<SelectionViewport> {
   }
 
   void _refresh() {
+    if (!_active) return;
     final root = _key.currentContext?.findRenderObject();
     if (root == null) return;
     if (widget.child is SelectionArea) {
@@ -96,6 +99,7 @@ class _SelectionViewportState extends State<SelectionViewport> {
 
   void _observe(bool focused) {
     _focused = focused;
+    if (!_active) return;
     _changed();
     WidgetsBinding.instance.ensureVisualUpdate();
   }
@@ -117,11 +121,32 @@ class _SelectionViewportState extends State<SelectionViewport> {
   }
 
   @override
-  void dispose() {
+  void deactivate() {
+    // Descendant selection containers release their handles before this State
+    // is disposed. mounted is still true then, but render lookup is invalid.
+    _active = false;
+    _restoreAnchors();
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _active = true;
+    _changed();
+  }
+
+  void _restoreAnchors() {
     if (_anchors?.render.attached == true) _anchors?.restore();
     for (final anchors in _editables.values) {
       if (anchors.render.attached) anchors.restore();
     }
+  }
+
+  @override
+  void dispose() {
+    _active = false;
+    _restoreAnchors();
     _selectionArea?.dispose();
     super.dispose();
   }

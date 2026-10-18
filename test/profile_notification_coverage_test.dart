@@ -35,6 +35,8 @@ class NotificationCoverageHost {
   final resumeDelays = <int, Completer<void>>{};
   final resumeSnapshots = <int, Map<String, dynamic>>{};
   List<Map<String, dynamic>> history = [];
+  final historyByProfile = <String, List<Map<String, dynamic>>>{};
+  final createdSessionIds = <String, String>{};
   bool activeFails = false;
   bool groupFails = false;
   bool historyFails = false;
@@ -104,13 +106,14 @@ class NotificationCoverageHost {
           if (path == 'logs') return {'entries': <Map<String, dynamic>>[]};
           await historyDelay?.future;
           if (historyFails) throw StateError('history unavailable');
+          final savedHistory = historyByProfile[scope.profileName] ?? history;
           return {
             'session_id': path.split('/')[1],
-            'messages': history,
+            'messages': savedHistory,
             'pagination': {
               'offset': 0,
               'limit': 50,
-              'returned': history.length,
+              'returned': savedHistory.length,
               'order': 'latest',
             },
           };
@@ -169,7 +172,7 @@ class NotificationCoverageHost {
               if (resumeFails) throw StateError('resume unavailable');
             }
             final sessionId = method == 'session.create'
-                ? 'loaded'
+                ? createdSessionIds[scope.profileName] ?? 'loaded'
                 : params['session_id'] as String;
             if (method == 'session.resume' && liveUnpersistedResume) {
               // Stock _resume_live_unpersisted has no running/open_requests.

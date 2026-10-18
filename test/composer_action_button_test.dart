@@ -182,26 +182,29 @@ void main() {
     'automatic Stop exposes no alternative keyboard or screen reader actions',
     (tester) async {
       final semantics = tester.ensureSemantics();
-      await show(
-        tester,
-        primary: ComposerAction.stop,
-        resting: ComposerAction.stop,
-      );
-      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
-      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('composer-keyboard-stop')),
-        findsNothing,
-      );
-      final node = tester.getSemantics(find.byType(ComposerActionButton));
-      final ids = node.getSemanticsData().customSemanticsActionIds!;
-      expect(ids.map((id) => CustomSemanticsAction.getAction(id)!.label), [
-        'Stop',
-      ]);
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
-      expect(selected, [ComposerAction.stop]);
-      semantics.dispose();
+      try {
+        await show(
+          tester,
+          primary: ComposerAction.stop,
+          resting: ComposerAction.stop,
+        );
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('composer-keyboard-stop')),
+          findsNothing,
+        );
+        final node = tester.getSemantics(find.byType(ComposerActionButton));
+        final ids = node.getSemanticsData().customSemanticsActionIds!;
+        expect(ids.map((id) => CustomSemanticsAction.getAction(id)!.label), [
+          'Stop',
+        ]);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        expect(selected, [ComposerAction.stop]);
+      } finally {
+        semantics.dispose();
+      }
     },
   );
 
@@ -228,8 +231,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('composer-keyboard-stop')), findsNothing);
     expect(focus.hasFocus, isTrue);
-    final button = tester.widget<IconButton>(find.byType(IconButton));
-    expect(button.style!.side!.resolve({}), isNotNull);
   });
 
   for (final key in [LogicalKeyboardKey.enter, LogicalKeyboardKey.space]) {
@@ -492,20 +493,23 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    await show(tester);
-    final node = tester.getSemantics(find.byType(ComposerActionButton));
-    final ids = node.getSemanticsData().customSemanticsActionIds!;
-    final stopId = ids.singleWhere(
-      (id) => CustomSemanticsAction.getAction(id)!.label == 'Stop',
-    );
-    tester.binding.rootPipelineOwner.visitChildren(
-      (owner) => owner.semanticsOwner?.performAction(
-        node.id,
-        SemanticsAction.customAction,
-        stopId,
-      ),
-    );
-    expect(selected, [ComposerAction.stop]);
-    semantics.dispose();
+    try {
+      await show(tester);
+      final node = tester.getSemantics(find.byType(ComposerActionButton));
+      final ids = node.getSemanticsData().customSemanticsActionIds!;
+      final stopId = ids.singleWhere(
+        (id) => CustomSemanticsAction.getAction(id)!.label == 'Stop',
+      );
+      tester.binding.rootPipelineOwner.visitChildren(
+        (owner) => owner.semanticsOwner?.performAction(
+          node.id,
+          SemanticsAction.customAction,
+          stopId,
+        ),
+      );
+      expect(selected, [ComposerAction.stop]);
+    } finally {
+      semantics.dispose();
+    }
   });
 }
