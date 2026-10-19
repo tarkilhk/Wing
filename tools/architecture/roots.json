@@ -6597,6 +6597,16 @@
   ],
   "files": [
     {
+      "path": ".agents/skills/verify-wing/SKILL.md",
+      "area": ".agents",
+      "provenance": "tracked"
+    },
+    {
+      "path": ".agents/skills/verify-wing/references/verification-policy.md",
+      "area": ".agents",
+      "provenance": "tracked"
+    },
+    {
       "path": ".gitattributes",
       "area": "root",
       "provenance": "tracked"
@@ -7207,6 +7217,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "docs/FEATURE_MAP.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
       "path": "docs/FILES.md",
       "area": "docs",
       "provenance": "tracked"
@@ -7298,6 +7313,181 @@
     },
     {
       "path": "docs/VOICE.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/administration-behavior.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/administration-connectors.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/administration-health.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/administration-memory.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/administration-providers.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/administration-skills-tools.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/administration.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/app-preferences-backup.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/app-shell.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/attachments-and-sharing.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/bots.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/chat-activity.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/chat-browser.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/chat-inputs.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/cloud-access.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/composer-references.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/connections.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/conversation.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/health-alerts.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/host-resources.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/markdown.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/model-selection.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/multi-surface-journeys.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/notifications.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/outputs-and-viewers.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/performance-tooling.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/platform-lifecycle.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/privacy.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/profiles.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/scheduled-tasks.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/server-files.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/ui-foundations.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/usage-analytics.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/versions-updates.md",
+      "area": "docs",
+      "provenance": "tracked"
+    },
+    {
+      "path": "docs/features/voice.md",
       "area": "docs",
       "provenance": "tracked"
     },

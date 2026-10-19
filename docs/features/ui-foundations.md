@@ -1,0 +1,35 @@
+# Use accessible and responsive controls
+
+Use shared selection, loading, focus and recovery controls across themes and text sizes, with visible feedback while an action settles and retained reader state.
+
+Feature ID: `ui-foundations`.
+
+## Sub-features
+
+- `ui-foundations.feedback` — Show immediate visible action progress through settlement.
+- `ui-foundations.access` — Keep selection focus and controls usable.
+- `ui-foundations.retain` — Preserve reader and recovery state.
+
+## How to get to it (user POV)
+
+Use a shared selection control, form, dialog or reader in light/dark themes and enlarged text. Start and fail a refresh or save while keeping the rest of its page usable.
+
+## Driving it with Wing harnesses
+
+Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.
+
+- **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
+
+  ```sh
+  flutter test --no-pub test/studio_loading_test.dart test/studio_selection_test.dart test/profile_focus_recovery_test.dart
+  ```
+
+- **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
+
+  ```sh
+  python3 scripts/test_nightly_native.py journeys --output build/feature-verification/ui-foundations
+  ```
+
+## Gotchas
+
+A controller busy flag does not prove visible feedback. Check the immediate header/region response and reachable icon actions. Human TalkBack use is distinct from host semantics.
