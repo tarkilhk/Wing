@@ -1,6 +1,9 @@
 # Wing workspace
 
-Before planning or editing Wing, read [the internal working instructions](internal/AGENTS.md).
+Before planning or editing Wing, read [the internal working instructions](internal/AGENTS.md)
+and the [Wing feature map](internal/docs/FEATURE_MAP.md). The feature map is the
+golden product reference; follow its [maintenance contract](internal/docs/FEATURE_MAP.md#maintain-a-feature)
+for feature changes, fixes, refactoring and test-coverage work.
 For every feature or fix that changes a visible control, navigation, action
 admission or asynchronous UI behavior, follow the [UI workflow](internal/AGENTS.md#ui-design)
 before planning or editing, even when the implementation is mostly controller code.
