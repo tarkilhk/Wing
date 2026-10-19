@@ -9,7 +9,11 @@ bugs. Include Android and Wing versions, the Hermes revision if known, expected
 behavior and minimal steps. Follow [Security](SECURITY.md) before attaching logs
 or screenshots.
 
-Engineering plans, specifications and development procedures are maintained in
+For feature changes, start from the [feature map](docs/FEATURE_MAP.md) and follow
+its [maintenance contract](docs/FEATURE_MAP.md#maintain-a-feature) in the same PR.
+Use [verify-wing](.agents/skills/verify-wing/SKILL.md) for repeatable user-path proof.
+
+Other engineering plans, specifications and development procedures are maintained in
 the project's private workspace. For agent work, start with [AGENTS.md](AGENTS.md)
 and obtain workspace access from the project owner.
 

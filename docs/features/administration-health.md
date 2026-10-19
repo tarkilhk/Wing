@@ -1,0 +1,41 @@
+# Diagnose Hermes health
+
+Open health findings or logs, refresh diagnostics, inspect a result and retry a failed read without losing previously received findings.
+
+Feature ID: `administration-health`.
+
+## Sub-features
+
+- `administration-health.inspect` — Read the right diagnostic and timestamp.
+- `administration-health.refresh` — Retry while retaining earlier findings.
+- `administration-health.ask` — Open a draft for the captured finding.
+
+## How to get to it (user POV)
+
+Choose Hermes health. Open Host, Server or Profile, inspect Doctor/security output or Logs, and use the relevant refresh or retry action. Findings can offer Ask Hermes.
+
+## Driving it with Wing harnesses
+
+Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.
+
+- **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
+
+  ```sh
+  flutter test --no-pub test/administration_health_session_test.dart test/administration_health_test.dart test/administration_retry_test.dart
+  ```
+
+- **Android `health-entry`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
+
+  ```sh
+  python3 scripts/test_nightly_native.py health-entry --output build/feature-verification/administration-health
+  ```
+
+- **Android `administration`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
+
+  ```sh
+  python3 scripts/test_nightly_native.py administration --output build/feature-verification/administration-health
+  ```
+
+## Gotchas
+
+Host Server and Profile have independent check times. Ask Hermes prepares an editable draft; it does not send or repair automatically. Configuration checks do not prove model inference or job execution.
