@@ -290,9 +290,33 @@ void main() {
           );
           await tester.tap(find.text('Asked a question'));
           await tester.pumpAndSettle();
-          expect(find.text('Question'), findsOneWidget);
-          expect(find.text('Choices'), findsOneWidget);
-          expect(find.text('Answer'), findsOneWidget);
+          Finder section(String label) => find.ancestor(
+            of: find.text(label),
+            matching: find.byType(ActivityDetailSection),
+          );
+          expect(
+            find.descendant(
+              of: section('Question'),
+              matching: find.text(prompt, findRichText: true),
+            ),
+            findsOneWidget,
+          );
+          for (final choice in choices) {
+            expect(
+              find.descendant(
+                of: section('Choices'),
+                matching: find.textContaining(choice, findRichText: true),
+              ),
+              findsOneWidget,
+            );
+          }
+          expect(
+            find.descendant(
+              of: section('Answer'),
+              matching: find.text(answer, findRichText: true),
+            ),
+            findsOneWidget,
+          );
           expect(find.text('Answered'), findsOneWidget);
           expect(find.text('Completed'), findsOneWidget);
           expect(find.byType(ProfileActivitySection), findsNothing);
