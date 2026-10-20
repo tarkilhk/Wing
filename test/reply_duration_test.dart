@@ -32,6 +32,43 @@ TranscriptTimeline _timeline(List<Map<String, dynamic>> rows, {int? live}) =>
 
 void main() {
   test(
+    'live execution uses the current prompt and positioned answer timestamps',
+    () {
+      final timeline = _timeline([
+        _row(1, 'user', 1000),
+        _row(2, 'assistant', 1010),
+        _row(3, 'user', 2000.125),
+        {..._row(4, 'user', 2005), 'display_kind': 'steer'},
+        _row(5, 'tool', 2010),
+        _row(6, 'assistant', 2040.625),
+      ]);
+      final timing = timeline.executionTimingBefore(6);
+      expect(
+        timing.end!.difference(timing.start!),
+        const Duration(milliseconds: 40500),
+      );
+      expect(timeline.executionTimingBefore(null).start, timing.start);
+      expect(timeline.executionTimingBefore(999), (start: null, end: null));
+      final missing = _timeline([
+        _row(1, 'user', 1000),
+        _row(2, 'user', null),
+        _row(3, 'tool', 2000),
+      ]);
+      expect(missing.executionTimingBefore(null).start, isNull);
+      final process = _timeline([
+        _row(1, 'user', 1000),
+        {..._row(2, 'user', 2000), 'display_kind': 'process_complete'},
+        _row(3, 'tool', 2010),
+      ]);
+      expect(
+        process.executionTimingBefore(null).start,
+        isNull,
+        reason: 'An internal trigger cannot borrow an older human prompt.',
+      );
+    },
+  );
+
+  test(
     'bot delivery starts its own reply interval after an older human turn',
     () {
       final timeline = _timeline([

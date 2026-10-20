@@ -38,6 +38,27 @@ final class TranscriptTimeline {
   final bool hasLiveMessage;
   final Map<Object, Duration> _replyDurations;
 
+  /// Message boundaries for the positioned live execution, before reasoning
+  /// divides it into runs. Steering and internal notices are not new prompts.
+  ({DateTime? start, DateTime? end}) executionTimingBefore(Object? answerId) {
+    final endIndex = answerId == null
+        ? entries.length
+        : entries.indexWhere((entry) => entry.presentationId == answerId);
+    if (endIndex < 0) return (start: null, end: null);
+    final end = answerId == null ? null : entries[endIndex].timestamp;
+    for (var index = endIndex - 1; index >= 0; index--) {
+      final entry = entries[index];
+      if (!isHiddenAnswerMessage(entry._row) && _isProcessReceipt(entry._row)) {
+        return (start: null, end: end);
+      }
+      if (entry.suppressed || entry.role != 'user') continue;
+      if (entry._startsReply) {
+        return (start: entry.timestamp, end: end);
+      }
+    }
+    return (start: null, end: end);
+  }
+
   /// The current reading window admits older pages while holding newer saved
   /// rows until the reader reaches Latest. Input facts remain unchanged.
   TranscriptTimeline through(Object presentationId) {
@@ -380,6 +401,13 @@ final class TranscriptTimelineEntry {
   // viewport row or an opened disclosure asks for them; no rendered tree lives
   // in this transient index. Identity/grouping must never force these getters.
   final Map<String, dynamic> _row;
+  DateTime? get timestamp {
+    final seconds = _savedTimestamp(_row['timestamp']);
+    return seconds == null
+        ? null
+        : DateTime.fromMicrosecondsSinceEpoch((seconds * 1000000).round());
+  }
+
   final String role;
   final Object? id;
   final bool isReview;
@@ -403,6 +431,10 @@ final class TranscriptTimelineEntry {
   final int? savedMessageId;
   late final bool editablePrompt =
       savedMessageId != null && isHumanAnswerPrompt(_row);
+  bool get _startsReply =>
+      role == 'user' &&
+      (isHumanAnswerPrompt(_row) ||
+          transcriptUserDelivery(_row)?.kind == 'agent_message');
   final bool branchAnswer;
 }
 
@@ -579,9 +611,7 @@ Map<Object, Duration> _savedReplyDurations(
       continue;
     }
     if (entry.suppressed) continue;
-    if (entry.role == 'user' &&
-        (isHumanAnswerPrompt(entry._row) ||
-            transcriptUserDelivery(entry._row)?.kind == 'agent_message')) {
+    if (entry._startsReply) {
       record();
       prompt = entry;
       reply = null;

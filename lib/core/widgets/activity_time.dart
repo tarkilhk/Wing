@@ -17,7 +17,26 @@ class ActivityTime extends StatefulWidget {
     this.showUnavailable = false,
     this.clock = toolActivityNow,
     this.wallClock = DateTime.now,
-  });
+  }) : _intervalStart = null;
+
+  /// Conversation interval, using saved message times and first live receipt.
+  ActivityTime.interval({
+    super.key,
+    required DateTime start,
+    DateTime? end,
+    this.wallClock = DateTime.now,
+  }) : durationSeconds = end == null
+           ? null
+           : end.difference(start).inMicroseconds / 1000000,
+       backendStartedAt = null,
+       startedAt = null,
+       subject = 'Activity',
+       showUnavailable = false,
+       clock = toolActivityNow,
+       _intervalStart = start;
+
+  final DateTime? _intervalStart;
+  bool get _interval => _intervalStart != null;
   final double? durationSeconds;
   final Duration? startedAt;
 
@@ -65,7 +84,9 @@ class _ActivityTimeState extends State<ActivityTime>
     _timer = null;
     final lifecycle = WidgetsBinding.instance.lifecycleState;
     if (widget.durationSeconds != null ||
-        (widget.startedAt == null && widget.backendStartedAt == null) ||
+        (widget.startedAt == null &&
+            widget.backendStartedAt == null &&
+            widget._intervalStart == null) ||
         !TickerMode.valuesOf(context).enabled ||
         (lifecycle != null && lifecycle != AppLifecycleState.resumed)) {
       return;
@@ -86,7 +107,9 @@ class _ActivityTimeState extends State<ActivityTime>
   Widget build(BuildContext context) {
     final finalTime = widget.durationSeconds;
     final start = widget.startedAt;
-    final backendStart = widget.backendStartedAt;
+    final backendStart = widget._intervalStart == null
+        ? widget.backendStartedAt
+        : widget._intervalStart!.microsecondsSinceEpoch / 1000000;
     final unavailable =
         finalTime == null && start == null && backendStart == null;
     if (unavailable && !widget.showUnavailable) {
@@ -102,9 +125,17 @@ class _ActivityTimeState extends State<ActivityTime>
                   .clamp(0.0, double.infinity);
     final text = unavailable
         ? '—'
-        : '${finalTime == null ? '≈ ' : ''}${formatToolDuration(elapsed)}';
+        : '${widget._interval
+                  ? '· '
+                  : finalTime == null
+                  ? '≈ '
+                  : ''}'
+              '${formatToolDuration(elapsed)}';
     return Tooltip(
-      message: unavailable
+      message: widget._interval
+          ? 'Time from the preceding user message or reasoning block. '
+                'Live reasoning is timed when first received on this device.'
+          : unavailable
           ? 'No backend timing available for this call'
           : finalTime == null
           ? backendStart != null
@@ -112,7 +143,10 @@ class _ActivityTimeState extends State<ActivityTime>
                 : 'Approximate time since backend tool start was received'
           : 'Backend duration',
       child: Semantics(
-        label: unavailable
+        label: widget._interval
+            ? 'Activity ${finalTime == null ? 'elapsed time' : 'duration'} '
+                  '${formatToolDuration(elapsed)}'
+            : unavailable
             ? '${widget.subject} duration unavailable'
             : finalTime == null
             ? '${widget.subject} running; approximate elapsed time'
@@ -122,11 +156,13 @@ class _ActivityTimeState extends State<ActivityTime>
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              color: WingTokens.of(context).muted,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
+            style: widget._interval
+                ? const TextStyle(fontFeatures: [FontFeature.tabularFigures()])
+                : TextStyle(
+                    fontSize: 12,
+                    color: WingTokens.of(context).muted,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
           ),
         ),
       ),

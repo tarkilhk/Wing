@@ -85,13 +85,21 @@ class _ProfileTranscriptDisclosureState
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(widget.label),
-                    ?widget.summary,
-                    Icon(
-                      _expanded
-                          ? Icons.keyboard_arrow_down_rounded
-                          : Icons.keyboard_arrow_right_rounded,
-                      size: 16,
-                      color: color,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.summary != null) ...[
+                          Flexible(child: widget.summary!),
+                          const SizedBox(width: 8),
+                        ],
+                        Icon(
+                          _expanded
+                              ? Icons.keyboard_arrow_down_rounded
+                              : Icons.keyboard_arrow_right_rounded,
+                          size: 16,
+                          color: color,
+                        ),
+                      ],
                     ),
                   ],
                 ),

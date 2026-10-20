@@ -23,6 +23,7 @@ import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/activity_time.dart';
 import 'package:wing/core/widgets/transcript_latest_button.dart';
 
 import 'helpers/pump_markdown_widget.dart';
@@ -228,6 +229,174 @@ void main() {
   });
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'streaming Activity durations production route ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          SharedPreferences.setMockInitialValues({});
+          final prefs = await SharedPreferences.getInstance();
+          final app = AppPreferences(prefs);
+          final host = _LiveWorkHost();
+          final controller = ProfileWorkspaceController(
+            connectionIdentity: 'timed-activity-render',
+            access: ConnectionAccess(
+              connection: identityTestConnection(),
+              dashboardOAuth: null,
+            ),
+            preferences: prefs,
+            appPreferences: app,
+            gatewayFactory: host.gateway,
+          );
+          addTearDown(() {
+            controller.dispose();
+            app.dispose();
+          });
+          await controller.initialize();
+          final chat = await controller.createChat(canDispatch: () => true);
+          host.historyMessages = [
+            {
+              'id': 1,
+              'role': 'user',
+              'content': 'Check the fees.',
+              'timestamp': DateTime.now().millisecondsSinceEpoch / 1000 - 84,
+            },
+          ];
+          await controller.refreshHistory(chat);
+          host.event('a', 'message.start');
+          host.event('a', 'tool.complete', {
+            'tool_id': 'first',
+            'name': 'web_search',
+            'result': 'Official fee details.',
+            'duration_s': .2,
+          });
+          host.event('a', 'reasoning.available', {
+            'text': 'Confirming fee details.',
+          });
+          host.event('a', 'tool.start', {
+            'tool_id': 'current',
+            'name': 'web_search',
+          });
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(
+                createBotsSession: () => BotsSession((_) async => const []),
+                controller: controller,
+              ),
+            ),
+          );
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.settleMarkdown();
+          final intervals = tester
+              .widgetList<ActivityTime>(
+                find.descendant(
+                  of: find.byType(ProfileLiveExecution),
+                  matching: find.byType(ActivityTime),
+                ),
+              )
+              .toList();
+          expect(intervals, hasLength(2));
+          expect(intervals.first.durationSeconds, closeTo(84, 2));
+          expect(intervals.last.durationSeconds, isNull);
+          expect(find.text('· 1m 24s'), findsOneWidget);
+          expect(find.byType(ProfileToolCall), findsNothing);
+          for (final time in find.byType(ActivityTime).evaluate()) {
+            final bounds = tester.getRect(
+              find.byElementPredicate((element) => element == time),
+            );
+            final section = find
+                .ancestor(
+                  of: find.byElementPredicate((element) => element == time),
+                  matching: find.byType(ProfileActivitySection),
+                )
+                .first;
+            final chevron = find
+                .descendant(
+                  of: section,
+                  matching: find.byIcon(Icons.keyboard_arrow_right_rounded),
+                )
+                .first;
+            expect(
+              tester.getCenter(chevron).dy,
+              closeTo(bounds.center.dy, .1),
+              reason:
+                  'The disclosure chevron stays beside the duration when metadata wraps.',
+            );
+            expect(bounds.left, greaterThanOrEqualTo(0));
+            expect(bounds.right, lessThanOrEqualTo(scale == 1 ? 390 : 320));
+          }
+          if (capture) {
+            await tester.runAsync(() async {
+              final bitmap =
+                  await (frame.currentContext!.findRenderObject()!
+                          as RenderRepaintBoundary)
+                      .toImage(pixelRatio: 1);
+              try {
+                final bytes = await bitmap.toByteData(
+                  format: ui.ImageByteFormat.png,
+                );
+                final target = File(
+                  'build/design-previews/live-work-native/route-${brightness.name}-$scale-timed-activity.png',
+                );
+                await target.parent.create(recursive: true);
+                await target.writeAsBytes(bytes!.buffer.asUint8List());
+              } finally {
+                bitmap.dispose();
+              }
+            });
+          }
+          final sections = find.descendant(
+            of: find.byType(ProfileLiveExecution),
+            matching: find.byType(ProfileActivitySection),
+          );
+          for (final element in sections.evaluate().toList()) {
+            final section = find.byElementPredicate(
+              (candidate) => candidate == element,
+            );
+            final header = find
+                .descendant(of: section, matching: find.byType(ListTile))
+                .first;
+            await Scrollable.ensureVisible(
+              tester.element(header),
+              alignment: .5,
+            );
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.tap(
+              find.descendant(
+                of: header,
+                matching: find.byIcon(Icons.keyboard_arrow_right_rounded),
+              ),
+            );
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.settleMarkdown();
+            expect(find.byType(ProfileToolCall), findsOneWidget);
+            await Scrollable.ensureVisible(
+              tester.element(header),
+              alignment: .5,
+            );
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.tap(
+              find.descendant(
+                of: header,
+                matching: find.byIcon(Icons.keyboard_arrow_down_rounded),
+              ),
+            );
+            await tester.pump(const Duration(milliseconds: 300));
+          }
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
       testWidgets('live work production route ${brightness.name} $scale', (
         tester,
       ) async {

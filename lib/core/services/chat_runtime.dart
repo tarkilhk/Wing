@@ -592,7 +592,11 @@ class ChatRuntime {
     }
   }
 
-  void observeReasoning(String type, Map<String, dynamic> data) {
+  void observeReasoning(
+    String type,
+    Map<String, dynamic> data, {
+    DateTime? receivedAt,
+  }) {
     if (_closed) return;
     final update = GatewayReasoningUpdate.fromGatewayEvent(type, data);
     if (update == null) return;
@@ -607,6 +611,7 @@ class ChatRuntime {
       source: current?.source ?? type,
       availableText: available && current != null ? update.text : null,
       running: !available,
+      postedAt: current?.postedAt ?? receivedAt ?? DateTime.now(),
     );
     if (current == null) {
       _activity.add(entry);

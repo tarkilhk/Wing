@@ -8,6 +8,7 @@ import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/activity_time.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/tool_activity_details.dart';
@@ -15,6 +16,243 @@ import 'package:wing/core/widgets/tool_activity_details.dart';
 import 'helpers/pump_markdown_widget.dart';
 
 void main() {
+  test('reasoning keeps its first posting time through deltas and sealing', () {
+    final runtime = execution.ChatRuntime(runtimeId: 'timed-reasoning');
+    runtime.beginTurn(submitting: false);
+    final first = DateTime.fromMillisecondsSinceEpoch(1000000);
+    runtime.observeReasoning('reasoning.delta', {
+      'text': 'First',
+    }, receivedAt: first);
+    runtime.observeReasoning('reasoning.delta', {
+      'text': ' chunk',
+    }, receivedAt: first.add(const Duration(seconds: 8)));
+    runtime.observeReasoning('reasoning.available', {
+      'text': 'Summary',
+    }, receivedAt: first.add(const Duration(seconds: 9)));
+    expect(
+      (runtime.observation.activityEntries.single as ChatReasoningEntry)
+          .postedAt,
+      first,
+    );
+    runtime.observeTool('tool.start', {'tool_id': 'next', 'name': 'terminal'});
+    final next = first.add(const Duration(seconds: 20));
+    runtime.observeReasoning('reasoning.delta', {
+      'text': 'Next',
+    }, receivedAt: next);
+    runtime.finishSegment();
+    final entries = runtime.observation.activityEntries
+        .whereType<ChatReasoningEntry>();
+    expect(entries.map((entry) => entry.postedAt), [first, next]);
+    expect(entries.every((entry) => !entry.running), isTrue);
+  });
+
+  testWidgets('streaming runs use message boundaries rather than tool times', (
+    tester,
+  ) async {
+    final start = DateTime.fromMillisecondsSinceEpoch(1000000);
+    ChatToolEntry tool(String id) => ChatToolEntry(
+      GatewayToolActivity.fromGatewayEvent('tool.complete', {
+        'tool_id': id,
+        'name': 'terminal',
+        'duration_s': .2,
+      })!,
+    );
+    final entries = <ChatActivityEntry>[
+      tool('first'),
+      ChatReasoningEntry(
+        identity: 'r1',
+        text: 'First reasoning',
+        source: 'reasoning.delta',
+        postedAt: start.add(const Duration(seconds: 12)),
+      ),
+      tool('second'),
+      ChatReasoningEntry(
+        identity: 'r2',
+        text: 'Second reasoning',
+        source: 'reasoning.available',
+        postedAt: start.add(const Duration(seconds: 31)),
+      ),
+      tool('current'),
+    ];
+    Future<void> show({bool running = true, DateTime? end}) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.dark),
+          home: Scaffold(
+            body: ProfileLiveExecution(
+              entries: entries,
+              startedAt: start,
+              endedAt: end,
+              running: running,
+            ),
+          ),
+        ),
+      );
+      await tester.settleMarkdown();
+    }
+
+    await show();
+    expect(find.text('· 12 s'), findsOneWidget);
+    expect(find.text('· 19 s'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<ActivityTime>(find.byType(ActivityTime))
+          .map((time) => time.durationSeconds),
+      [12, 19, null],
+    );
+    expect(find.byType(ProfileToolCall), findsNothing);
+    await tester.tap(find.text('Activity · 1 tool').first);
+    await tester.pumpAndSettle();
+    final opened = tester.element(find.byType(ProfileToolCall).first);
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('· 12 s'), findsOneWidget);
+    expect(find.text('· 19 s'), findsOneWidget);
+    await show(running: false, end: start.add(const Duration(seconds: 40)));
+    expect(find.text('· 9.0 s'), findsOneWidget);
+    expect(tester.element(find.byType(ProfileToolCall).first), same(opened));
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+    'saved and native boundaries share timing and omit unknown intervals',
+    (tester) async {
+      final start = DateTime.fromMillisecondsSinceEpoch(1000000);
+      final timeline = TranscriptTimeline.project([
+        {
+          'id': 1,
+          'role': 'tool',
+          'tool_call_id': 'saved',
+          'tool_name': 'terminal',
+          'content': 'Done',
+        },
+        {
+          'id': 2,
+          'role': 'assistant',
+          'content': '',
+          'reasoning': 'Saved reasoning',
+          'timestamp': 1005,
+        },
+      ], presentationId: (row) => row['id']!);
+      final tool = ChatToolEntry(
+        GatewayToolActivity.fromGatewayEvent('tool.complete', {
+          'tool_id': 'native',
+          'name': 'terminal',
+        })!,
+      );
+      final entries = <ChatActivityEntry>[
+        tool,
+        ChatReasoningEntry(
+          identity: 'r',
+          text: 'Native reasoning',
+          source: 'reasoning.available',
+          postedAt: start.add(const Duration(seconds: 20)),
+        ),
+        ChatToolEntry(
+          GatewayToolActivity.fromGatewayEvent('tool.start', {
+            'tool_id': 'current',
+            'name': 'terminal',
+          })!,
+        ),
+      ];
+      Future<void> show(DateTime? initial) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: ProfileLiveExecution(
+                entries: entries,
+                savedActivity: timeline.sections.single,
+                startedAt: initial,
+              ),
+            ),
+          ),
+        );
+        await tester.settleMarkdown();
+      }
+
+      await show(start);
+      expect(
+        tester
+            .widgetList<ActivityTime>(find.byType(ActivityTime))
+            .map((time) => time.durationSeconds),
+        [5, 15, null],
+      );
+      await show(null);
+      expect(
+        tester
+            .widgetList<ActivityTime>(find.byType(ActivityTime))
+            .map((time) => time.durationSeconds),
+        [15, null],
+      );
+      await show(start.add(const Duration(seconds: 6)));
+      expect(
+        tester
+            .widgetList<ActivityTime>(find.byType(ActivityTime))
+            .map((time) => time.durationSeconds),
+        [15, null],
+        reason: 'Reversed timestamps must not invent a duration.',
+      );
+      await show(start.add(const Duration(seconds: 5)));
+      expect(find.text('· 0 ms'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'interval counter ticks alone, freezes and resumes from wall time',
+    (tester) async {
+      final start = DateTime(2026, 10, 20, 12);
+      var now = start.add(const Duration(seconds: 3));
+      var parentBuilds = 0;
+      Future<void> show({DateTime? end, bool enabled = true}) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TickerMode(
+                enabled: enabled,
+                child: Builder(
+                  builder: (_) {
+                    parentBuilds++;
+                    return ActivityTime.interval(
+                      start: start,
+                      end: end,
+                      wallClock: () => now,
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+      }
+
+      await show();
+      final builds = parentBuilds;
+      expect(find.text('· 3.0 s'), findsOneWidget);
+      now = now.add(const Duration(seconds: 2));
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('· 5.0 s'), findsOneWidget);
+      expect(parentBuilds, builds);
+      await show(enabled: false);
+      now = now.add(const Duration(seconds: 30));
+      await tester.pump(const Duration(seconds: 30));
+      expect(find.text('· 5.0 s'), findsOneWidget);
+      await show();
+      expect(find.text('· 35 s'), findsOneWidget);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      now = now.add(const Duration(seconds: 10));
+      await tester.pump(const Duration(seconds: 10));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump();
+      expect(find.text('· 45 s'), findsOneWidget);
+      await show(end: start.add(const Duration(seconds: 7)));
+      now = now.add(const Duration(minutes: 1));
+      await tester.pump(const Duration(seconds: 2));
+      expect(find.text('· 7.0 s'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(seconds: 2));
+    },
+  );
+
   testWidgets(
     'history commentary does not replay reasoning or move open Activity',
     (tester) async {

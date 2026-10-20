@@ -81,7 +81,15 @@ results are labelled accordingly. These times describe different events, not
 a measured delivery duration. Expand Raw details for exact inputs, original
 output and delivery notifications.
 
-## Approximate reply time
+## Activity timing
+
+While a reply streams, each Activity header shows its duration. A run followed
+by Reasoning keeps the time between that reasoning block and the preceding user
+message or reasoning block. The current run counts upward from the preceding
+message, updating every second. Live reasoning uses the time it first arrives on
+your phone; saved reasoning uses its message timestamp. The tooltip explains
+this timing. Missing timestamps can leave a duration absent.
+
 
 A saved reply's collapsed Activity header can show "Activity · 11 tools · 1m 24s".
 This is the interval between the message that started the turn (your prompt or

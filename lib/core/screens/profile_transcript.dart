@@ -661,10 +661,15 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       _liveExecutionView = null;
       return null;
     }
+    final timing = widget.presentation.timeline.executionTimingBefore(
+      activity.beforeMessagePresentationId,
+    );
     final inputs = (
       widget.presentation.identity,
       _joinedLiveActivity,
       activity.beforeMessagePresentationId,
+      timing,
+      activity.live,
       widget.loadImage != null,
       widget.onOpenResource != null,
       widget.onShareResource != null,
@@ -677,6 +682,8 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     _liveExecutionEntries = List.of(activity.entries);
     return _liveExecutionView = activity.liveExecution(
       savedActivity: _joinedLiveActivity,
+      startedAt: timing.start,
+      endedAt: timing.end,
       loadImage: widget.loadImage == null ? null : _loadActivityImage,
       onOpenResource: widget.onOpenResource == null
           ? null

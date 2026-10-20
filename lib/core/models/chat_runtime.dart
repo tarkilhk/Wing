@@ -39,6 +39,7 @@ final class ChatReasoningEntry extends ChatActivityEntry {
     required this.source,
     this.availableText,
     this.running = false,
+    this.postedAt,
   });
   @override
   final Object identity;
@@ -49,11 +50,15 @@ final class ChatReasoningEntry extends ChatActivityEntry {
   final String? availableText;
   final bool running;
 
+  /// First receipt of this reasoning block, retained across deltas and sealing.
+  final DateTime? postedAt;
+
   ChatReasoningEntry sealed() => ChatReasoningEntry(
     identity: identity,
     text: text,
     source: source,
     availableText: availableText,
+    postedAt: postedAt,
   );
 }
 

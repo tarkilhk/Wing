@@ -8,6 +8,7 @@ import '../models/transcript_timeline.dart';
 import 'profile_execution_activity.dart';
 import 'profile_activity_tabs.dart';
 import 'profile_tool_activity.dart';
+import 'activity_time.dart';
 
 /// Readable live reasoning separates independently collapsed tool runs.
 class ProfileLiveExecution extends StatefulWidget {
@@ -15,6 +16,9 @@ class ProfileLiveExecution extends StatefulWidget {
     super.key,
     required this.entries,
     this.savedActivity,
+    this.startedAt,
+    this.endedAt,
+    this.running = true,
     this.loadImage,
     this.onOpenResource,
     this.onShareResource,
@@ -22,6 +26,9 @@ class ProfileLiveExecution extends StatefulWidget {
 
   final List<ChatActivityEntry> entries;
   final TranscriptTimelineSection? savedActivity;
+  final DateTime? startedAt;
+  final DateTime? endedAt;
+  final bool running;
   final Future<Uint8List> Function(String)? loadImage;
   final Future<void> Function(ChatOutput)? onOpenResource;
   final Future<void> Function(ChatOutput)? onShareResource;
@@ -55,7 +62,8 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
     var liveTools = <ChatActivityEntry>[];
     final runIdentities = <Object>{};
     Object boundary = 'initial';
-    void flush() {
+    DateTime? startedAt = widget.startedAt;
+    void flush({DateTime? endedAt, bool running = false}) {
       if (savedGroups.isEmpty && liveTools.isEmpty) return;
       final saved = List<TranscriptTimelineGroup>.unmodifiable(savedGroups);
       final live = List<ChatActivityEntry>.unmodifiable(liveTools);
@@ -75,6 +83,11 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
           label: count == 0
               ? 'Activity'
               : 'Activity · $count ${count == 1 ? 'tool' : 'tools'}',
+          subtitle:
+              startedAt != null &&
+                  (endedAt != null ? !endedAt.isBefore(startedAt) : running)
+              ? ActivityTime.interval(start: startedAt, end: endedAt)
+              : null,
           detailsBuilder: (_) => ProfileActivityTabs(
             tabs: [
               ProfileActivityTab(
@@ -103,7 +116,8 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
       if (group.isReasoning) {
         final entry = group.messages.first;
         if (entry.reasoning.trim().isEmpty) continue;
-        flush();
+        flush(endedAt: entry.timestamp);
+        startedAt = entry.timestamp;
         boundary = ('saved-reasoning', entry.presentationId);
         children.add(
           ProfileReasoningContent(
@@ -123,7 +137,8 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
           liveTools.add(entry);
         case ChatReasoningEntry():
           if (entry.text.trim().isEmpty) continue;
-          flush();
+          flush(endedAt: entry.postedAt);
+          startedAt = entry.postedAt;
           boundary = ('reasoning', entry.identity);
           children.add(
             ProfileReasoningContent(
@@ -134,7 +149,7 @@ class _ProfileLiveExecutionState extends State<ProfileLiveExecution>
           );
       }
     }
-    flush();
+    flush(endedAt: widget.endedAt, running: widget.running);
     _runKeys.removeWhere((identity, _) => !runIdentities.contains(identity));
     return Column(
       key: const ValueKey('live-activity'),
