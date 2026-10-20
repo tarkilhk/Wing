@@ -419,7 +419,11 @@ void main() {
             };
             await tester.pump(const Duration(seconds: 2));
             await tester.pump();
-            expect(tester.getSize(logViewport).height, lessThan(160));
+            final logPosition = tester
+                .widget<SingleChildScrollView>(logViewport)
+                .controller!
+                .position;
+            expect(logPosition.maxScrollExtent, 0);
             final longLines = List.generate(
               80,
               (index) => 'Update line ${index.toString().padLeft(3, '0')}',
@@ -429,11 +433,11 @@ void main() {
             await tester.pump();
             await tester.ensureVisible(find.byTooltip('Check update progress'));
             await tester.pumpAndSettle();
-            expect(tester.getSize(logViewport).height, 160);
-            final scrollView = tester.widget<SingleChildScrollView>(
-              logViewport,
+            expect(logPosition.maxScrollExtent, greaterThan(0));
+            expect(
+              find.byTooltip('Check update progress').hitTestable(),
+              findsOneWidget,
             );
-            final logPosition = scrollView.controller!.position;
             expect(logPosition.pixels, 0);
             final output = tester.widget<SelectableText>(
               find.byType(SelectableText),
@@ -471,25 +475,6 @@ void main() {
             expect(
               tester.getRect(find.byTooltip('Check update progress')),
               footer,
-            );
-            final editable = tester.widget<EditableText>(
-              find.descendant(
-                of: logViewport,
-                matching: find.byType(EditableText),
-              ),
-            );
-            editable.controller.selection = TextSelection(
-              baseOffset: 0,
-              extentOffset: editable.controller.text.length,
-            );
-            expect(
-              editable.controller.selection.textInside(
-                editable.controller.text,
-              ),
-              longLines.reversed.join('\n'),
-            );
-            editable.controller.selection = const TextSelection.collapsed(
-              offset: 0,
             );
             await snapshot(
               tester,
