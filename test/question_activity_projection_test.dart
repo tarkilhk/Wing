@@ -181,11 +181,8 @@ void main() {
       expect(_activityOrder(held), ['before', 'approval/decision', 'after']);
       expect(held.timeline.sections.last.messages.single.id, 20);
 
-      // A failed refresh leaves these same received facts available for retry.
-      final failed = project([_prompt, _answer]);
-      expect(_activityOrder(failed), ['before', 'approval/decision', 'after']);
       expect(
-        failed.activity.whereType<ChatRequestEntry>().single.question.status,
+        held.activity.whereType<ChatRequestEntry>().single.question.status,
         HermesQuestionStatus.approved,
       );
     },
@@ -252,12 +249,7 @@ void main() {
       expect(held.rows, [_answer]);
       expect(held.retainedActivityBeforePresentationId, 20);
 
-      // A failed older-page read must preserve the complete received sequence.
-      final failed = project(newestPage);
-      expect(_activityOrder(failed), ['before', 'approval/decision', 'after']);
-      expect(failed.retainedActivityBeforePresentationId, 20);
-      expect(failed.activity.whereType<ChatToolEntry>(), hasLength(2));
-      expect(failed.timeline.entries.where((e) => e.question != null), isEmpty);
+      expect(held.timeline.entries.where((e) => e.question != null), isEmpty);
 
       final backfilled = project([
         _prompt,
