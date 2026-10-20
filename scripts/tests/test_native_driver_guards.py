@@ -498,6 +498,86 @@ class NativeBotsCompletion(unittest.TestCase):
             require_completed_cases([], 'nonexistent journey')
 
 
+class NativeRecentsTouchTiming(unittest.TestCase):
+    """Exercise the real Java injector with a stalled Android input boundary."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.directory = tempfile.TemporaryDirectory(prefix='wing-recents-touch-')
+        cls.addClassCleanup(cls.directory.cleanup)
+        directory = Path(cls.directory.name)
+        stubs = {
+            'android/os/SystemClock.java': """package android.os;
+public class SystemClock {
+ public static long now = 10000;
+ public static long uptimeMillis() { return now; }
+ public static void sleep(long ms) { now += ms; }
+}""",
+            'android/view/InputDevice.java': """package android.view; public class InputDevice { public static int SOURCE_TOUCHSCREEN = 4098; }""",
+            'android/view/InputEvent.java': """package android.view; public class InputEvent {}""",
+            'android/view/MotionEvent.java': """package android.view;
+public class MotionEvent extends InputEvent {
+ public static final int ACTION_DOWN=0, ACTION_UP=1, ACTION_MOVE=2, ACTION_POINTER_DOWN=5, ACTION_POINTER_UP=6, ACTION_POINTER_INDEX_SHIFT=8, TOOL_TYPE_FINGER=1;
+ public static class PointerProperties { public int id, toolType; }
+ public static class PointerCoords { public float x,y,pressure,size; }
+ public int action; public long time; public float x;
+ public static MotionEvent obtain(long down, long time, int action, int count, PointerProperties[] props, PointerCoords[] coords, int meta, int buttons, float xp, float yp, int device, int edge, int source, int flags) {
+  MotionEvent e = new MotionEvent(); e.action = action; e.time = time; e.x = coords[0].x; return e;
+ }
+ public void recycle() {}
+}""",
+            'android/hardware/input/InputManagerGlobal.java': """package android.hardware.input;
+import android.os.SystemClock;
+import android.view.InputEvent;
+import android.view.MotionEvent;
+public class InputManagerGlobal {
+ public static InputManagerGlobal getInstance() { return new InputManagerGlobal(); }
+ public boolean injectInputEvent(InputEvent event, int mode) {
+  MotionEvent e = (MotionEvent) event;
+  System.out.println("event=" + e.action + "," + e.time + "," + e.x);
+  SystemClock.sleep(Long.getLong("touch.delayMs", 0)); // Synchronous Android processing on a loaded runner.
+  return true;
+ }
+}""",
+        }
+        for name, source in stubs.items():
+            path = directory / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(source)
+        subprocess.run([
+            'javac', '-d', str(directory), *map(str, directory.rglob('*.java')),
+            str(ROOT / 'integration_test/fixtures/recents_touch/NativeRecentsTouch.java'),
+        ], check=True, capture_output=True, text=True)
+
+    def test_injection_delays_preserve_requested_movement_and_release_timing(self):
+        for mode, duration in (('one', 100), ('two', 320), ('interrupt', 320)):
+            for delay in (0, 12, 40):
+                with self.subTest(mode=mode, delay=delay):
+                    contacts = ['900', '500', '100', '500']
+                    if mode != 'one':
+                        contacts += ['950', '500', '150', '500']
+                    args = [mode, *contacts, str(duration)]
+                    if mode == 'interrupt':
+                        args.append('-24')
+                    result = subprocess.run([
+                        'java', f'-Dtouch.delayMs={delay}', '-cp',
+                        self.directory.name, 'NativeRecentsTouch', *args,
+                    ], check=True, capture_output=True, text=True)
+                    events = [line.split('=')[1].split(',')
+                              for line in result.stdout.splitlines()
+                              if line.startswith('event=')]
+                    times = [int(event[1]) for event in events]
+                    self.assertEqual(times, sorted(times))
+                    moves = [event for event in events if event[0] == '2'][-24:]
+                    self.assertEqual(len(moves), 24)
+                    self.assertEqual(int(moves[-1][1]) - int(moves[0][1]),
+                                     duration - duration // 24,
+                                     'Injection latency changed the requested swipe velocity')
+                    self.assertEqual(events[-1][0], '1')
+                    self.assertEqual(int(events[-1][1]), int(moves[-1][1]),
+                                     'Injection latency introduced a pause before release')
+
+
 class NativeRecentsCompletion(unittest.TestCase):
     def records(self, mode='standard'):
         prefix = 'events-' if mode == 'events' else ''

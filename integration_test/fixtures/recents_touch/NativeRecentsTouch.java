@@ -10,7 +10,7 @@ public final class NativeRecentsTouch {
     private static Method inject;
     private static long down;
 
-    private static void send(int action, float[][] positions) throws Exception {
+    private static void send(int action, float[][] positions, long at) throws Exception {
         MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[positions.length];
         MotionEvent.PointerCoords[] coordinates = new MotionEvent.PointerCoords[positions.length];
         for (int i = 0; i < positions.length; i++) {
@@ -23,7 +23,7 @@ public final class NativeRecentsTouch {
             coordinates[i].pressure = 1;
             coordinates[i].size = .1f;
         }
-        MotionEvent event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action,
+        MotionEvent event = MotionEvent.obtain(down, at, action,
                 positions.length, properties, coordinates, 0, 0, 1, 1, 0, 0,
                 InputDevice.SOURCE_TOUCHSCREEN, 0);
         try {
@@ -37,10 +37,11 @@ public final class NativeRecentsTouch {
 
     private static void drag(float[][] start, float[][] end, int milliseconds) throws Exception {
         down = SystemClock.uptimeMillis();
-        send(MotionEvent.ACTION_DOWN, new float[][]{start[0]});
+        send(MotionEvent.ACTION_DOWN, new float[][]{start[0]}, down);
         if (start.length == 2) {
             SystemClock.sleep(20);
-            send(MotionEvent.ACTION_POINTER_DOWN | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT), start);
+            send(MotionEvent.ACTION_POINTER_DOWN | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                    start, SystemClock.uptimeMillis());
         }
         long began = SystemClock.uptimeMillis();
         for (int step = 1; step <= 24; step++) {
@@ -52,12 +53,16 @@ public final class NativeRecentsTouch {
                     point[p][axis] = start[p][axis] + (end[p][axis] - start[p][axis]) * step / 24f;
                 }
             }
-            send(MotionEvent.ACTION_MOVE, point);
+            // Synchronous injection can overrun this deadline on a busy runner.
+            // Preserve the requested gesture's velocity in the native timestamps.
+            send(MotionEvent.ACTION_MOVE, point, at);
         }
+        long released = began + milliseconds;
         if (start.length == 2) {
-            send(MotionEvent.ACTION_POINTER_UP | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT), end);
+            send(MotionEvent.ACTION_POINTER_UP | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                    end, released);
         }
-        send(MotionEvent.ACTION_UP, new float[][]{end[0]});
+        send(MotionEvent.ACTION_UP, new float[][]{end[0]}, released);
     }
 
     public static void main(String[] args) throws Exception {
