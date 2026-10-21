@@ -134,6 +134,10 @@ class _BackendVersionCardState extends State<BackendVersionCard>
       final channel = controller.channel;
       final status = controller.status;
       final tokens = WingTokens.of(context);
+      final logStyle = tokens.typography.mono;
+      final logLineHeight =
+          MediaQuery.textScalerOf(context).scale(logStyle.fontSize!) *
+          logStyle.height!;
       final initialCheck =
           check == null && controller.phase == BackendUpdatePhase.idle;
       final checking =
@@ -370,7 +374,9 @@ class _BackendVersionCardState extends State<BackendVersionCard>
                           context,
                         ).colorScheme.surfaceContainerHighest,
                         child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 160),
+                          constraints: BoxConstraints(
+                            maxHeight: 16 * logLineHeight,
+                          ),
                           child: Scrollbar(
                             controller: _logScroll,
                             thumbVisibility: true,
@@ -383,7 +389,7 @@ class _BackendVersionCardState extends State<BackendVersionCard>
                                   lines.isEmpty
                                       ? 'No update output received.'
                                       : lines.reversed.join('\n'),
-                                  style: WingTokens.of(context).typography.mono,
+                                  style: logStyle,
                                 ),
                               ),
                             ),
@@ -399,18 +405,6 @@ class _BackendVersionCardState extends State<BackendVersionCard>
                     spacing: 8,
                     runSpacing: 4,
                     children: [
-                      StudioButtonPress(
-                        child: IconButton(
-                          tooltip: 'Check for updates',
-                          onPressed: busy || controller.requestOutstanding
-                              ? null
-                              : controller.checkForUpdate,
-                          icon: RotationTransition(
-                            turns: _refreshRotation,
-                            child: const Icon(Icons.sync, size: 18),
-                          ),
-                        ),
-                      ),
                       if (check?.updateAvailable == true)
                         StudioButtonPress(
                           child: IconButton(
@@ -442,18 +436,22 @@ class _BackendVersionCardState extends State<BackendVersionCard>
                             icon: const Icon(Icons.system_update_alt, size: 18),
                           ),
                         ),
-                      if (controller.requestOutstanding ||
-                          controller.status != null)
-                        StudioButtonPress(
-                          child: IconButton(
-                            tooltip: 'Check update progress',
-                            onPressed:
-                                controller.statusLoading || controller.starting
-                                ? null
-                                : controller.refreshStatus,
-                            icon: const Icon(Icons.refresh, size: 18),
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: controller.requestOutstanding
+                              ? 'Check update progress'
+                              : 'Check for updates',
+                          onPressed: busy
+                              ? null
+                              : controller.requestOutstanding
+                              ? controller.refreshStatus
+                              : controller.checkForUpdate,
+                          icon: RotationTransition(
+                            turns: _refreshRotation,
+                            child: const Icon(Icons.sync, size: 18),
                           ),
                         ),
+                      ),
                     ],
                   ),
                 ),

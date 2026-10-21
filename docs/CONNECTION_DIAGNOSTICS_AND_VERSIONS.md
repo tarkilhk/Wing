@@ -56,9 +56,12 @@ also blocks updating. Check again before proceeding.
 After confirmation, starting status and a collapsed **Update logs** viewer appear
 immediately. Wing follows progress automatically while this screen remains open.
 Expand the viewer to read output with the newest lines at the top. Long output
-scrolls inside a capped viewer so the server actions stay nearby. If progress
-cannot be read during a restart or disconnection, use **Check update progress**
-to retry; this does not repeat the update request.
+scrolls inside a viewer sized for 16 text rows, scaling with your text size.
+Short logs use only the space they need. The single sync button stays at the
+right of the action row. During an outstanding update it offers **Check update
+progress**, including retry after a restart or disconnection; this does not
+repeat the update request. Before an update and after it finishes, the same
+button offers **Check for updates**.
 
 Leaving the screen does not cancel an accepted server update. If acknowledgement is lost, the outcome stays uncertain; check its status and version before repeating the request. Request acceptance alone does not mean the update completed.
 

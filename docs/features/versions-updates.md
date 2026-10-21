@@ -8,7 +8,7 @@ Feature ID: `versions-updates`.
 
 - `versions-updates.check` — Read current and available versions.
 - `versions-updates.confirm` — Admit only the exact confirmed update target.
-- `versions-updates.follow` — Read progress and newest-first logs independently.
+- `versions-updates.follow` — Follow progress automatically and scroll newest-first logs in a viewer capped at 16 text rows. The single rightmost sync control checks progress while an update is outstanding and availability otherwise.
 
 ## How to get to it (user POV)
 
@@ -32,4 +32,4 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 
 ## Gotchas
 
-The fixture journey proves refusal of a changed target, not a real server upgrade. A deployed update requires separate operator authorization. Readable log scrolling must not move surrounding actions.
+The fixture journey proves refusal of a changed target, not a real server upgrade. A deployed update requires separate operator authorization. Readable log scrolling must not move surrounding actions. The sync control keeps its horizontal position before, during and after an update; explicit progress reads acknowledge the wait, while automatic snapshots remain quiet. The host card suite checks both themes and enlarged text, independent inner scrolling and the 16-row viewport.

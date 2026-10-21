@@ -345,6 +345,7 @@ void main() {
             await tester.tap(find.byTooltip('Check for updates'));
             await tester.pumpAndSettle();
             await tester.ensureVisible(find.byTooltip('Update backend'));
+            final refreshX = tester.getCenter(find.byIcon(Icons.sync)).dx;
             await tester.tap(find.byTooltip('Update backend'));
             await tester.pumpAndSettle();
             final startCheck = Completer<Map<String, dynamic>>();
@@ -374,6 +375,8 @@ void main() {
             await tester.pumpAndSettle();
             expect(find.byType(StudioLoading), findsNothing);
             expect(host.posts, hasLength(1));
+            expect(tester.getCenter(find.byIcon(Icons.sync)).dx, refreshX);
+            expect(find.byIcon(Icons.refresh), findsNothing);
             host.pendingCheck = null;
             host.statusResponse = {
               ...host.statusResponse,
@@ -434,6 +437,15 @@ void main() {
             await tester.ensureVisible(find.byTooltip('Check update progress'));
             await tester.pumpAndSettle();
             expect(logPosition.maxScrollExtent, greaterThan(0));
+            final logText = tester.widget<SelectableText>(
+              find.byType(SelectableText),
+            );
+            final lineHeight =
+                scale * logText.style!.fontSize! * logText.style!.height!;
+            expect(
+              tester.getSize(logViewport).height,
+              closeTo(16 * lineHeight, 0.1),
+            );
             expect(
               find.byTooltip('Check update progress').hitTestable(),
               findsOneWidget,
@@ -447,6 +459,62 @@ void main() {
               tester,
               '${brightness.name}-$scale-update-bounded-newest',
             );
+            final refresh = find.byTooltip('Check update progress');
+            final beforeRefresh = tester.getRect(refresh);
+            final heldStatus = Completer<Map<String, dynamic>>();
+            host.pendingStatus = heldStatus;
+            await tester.tap(refresh);
+            await tester.pump();
+            expect(tester.getRect(refresh), beforeRefresh);
+            expect(
+              tester
+                  .widget<IconButton>(
+                    find.ancestor(
+                      of: refresh,
+                      matching: find.byType(IconButton),
+                    ),
+                  )
+                  .onPressed,
+              isNull,
+            );
+            final refreshTurns = tester
+                .widget<RotationTransition>(
+                  find.descendant(
+                    of: refresh,
+                    matching: find.byType(RotationTransition),
+                  ),
+                )
+                .turns;
+            final refreshTurn = refreshTurns.value;
+            await tester.pump(const Duration(milliseconds: 200));
+            expect(find.byType(StudioLoading), findsOneWidget);
+            expect(
+              refreshTurns.value,
+              scale == 2 ? refreshTurn : isNot(refreshTurn),
+            );
+            await snapshot(
+              tester,
+              '${brightness.name}-$scale-progress-pending',
+            );
+            heldStatus.completeError(StateError('disconnected'));
+            await tester.pumpAndSettle();
+            expect(find.byType(StudioLoading), findsNothing);
+            expect(
+              find.text('Backend update status is unavailable. Check again.'),
+              findsOneWidget,
+            );
+            expect(find.byTooltip('Check update progress'), findsOneWidget);
+            expect(
+              tester.widget<SelectableText>(find.byType(SelectableText)).data,
+              longLines.reversed.join('\n'),
+            );
+            host.pendingStatus = null;
+            await tester.ensureVisible(refresh);
+            await tester.tap(refresh);
+            await tester.pumpAndSettle();
+            expect(find.byType(StudioError), findsNothing);
+            expect(find.byType(StudioLoading), findsNothing);
+            expect(host.posts, hasLength(1));
             final footer = tester.getRect(
               find.byTooltip('Check update progress'),
             );
@@ -480,6 +548,17 @@ void main() {
               tester,
               '${brightness.name}-$scale-update-bounded-oldest',
             );
+            host.statusResponse = {
+              ...host.statusResponse,
+              'running': false,
+              'exit_code': 0,
+              'action_id': 'action-1',
+            };
+            await tester.pump(const Duration(seconds: 2));
+            await tester.pumpAndSettle();
+            expect(find.byTooltip('Check update progress'), findsNothing);
+            expect(find.byTooltip('Check for updates'), findsOneWidget);
+            expect(tester.getCenter(find.byIcon(Icons.sync)).dx, refreshX);
           } finally {
             semantics.dispose();
           }
@@ -977,7 +1056,7 @@ void main() {
       final explicitRotation = tester
           .widget<RotationTransition>(
             find.descendant(
-              of: find.byTooltip('Check for updates'),
+              of: find.byTooltip('Check update progress'),
               matching: find.byType(RotationTransition),
             ),
           )
