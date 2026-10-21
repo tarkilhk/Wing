@@ -42,6 +42,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'profile_connection_identity_test.dart'
     show MemoryIdentityStore, identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
+import '../integration_test/notification_revamp_device.dart'
+    show prepareNotificationFixtureChats;
 
 typedef NotificationHarness = ({
   ConnectionManager manager,
@@ -521,6 +523,80 @@ void main() {
       },
     );
   }
+  testWidgets(
+    'native cold tap wins over the remembered workspace and profile',
+    (tester) async {
+      final otherHost = Host()..running = false;
+      final harness = await _harness(
+        makeGateway: (host, scope) =>
+            (scope.profileName == 'b' ? otherHost : host).gateway(scope),
+      );
+      harness.host.running = false;
+      final seeded = await prepareNotificationFixtureChats(
+        harness.controller,
+        restarting: false,
+      );
+      await harness.appPreferences
+          .admitWorkspaceEntry(harness.connection.id)
+          .settled;
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const plugin = MethodChannel('dexterous.com/flutter/local_notifications');
+      AndroidFlutterLocalNotificationsPlugin.registerWith();
+      messenger.setMockMethodCallHandler(
+        plugin,
+        (call) async => switch (call.method) {
+          'initialize' => true,
+          'getNotificationAppLaunchDetails' => {
+            'notificationLaunchedApp': false,
+          },
+          'areNotificationsEnabled' => true,
+          _ => null,
+        },
+      );
+      messenger.setMockMethodCallHandler(
+        _nativeNotifications,
+        (call) async => call.method == 'initialize'
+            ? [
+                {'payload': _payload(harness, 'a')},
+              ]
+            : null,
+      );
+      addTearDown(() {
+        messenger.setMockMethodCallHandler(plugin, null);
+        messenger.setMockMethodCallHandler(_nativeNotifications, null);
+      });
+      await _pumpApp(tester, harness);
+      final restored = await prepareNotificationFixtureChats(
+        harness.controller,
+        restarting: true,
+      );
+      await _pumpNavigation(tester);
+      await tester.settleMarkdown();
+      expect(harness.controller.current?.scope.profileName, 'a');
+      expect(harness.controller.current?.chat?.key.sessionId, 'same');
+      expect(restored.chat, same(seeded.chat));
+      expect(restored.other, same(seeded.other));
+      final destination = find.byWidgetPredicate(
+        (widget) =>
+            widget is ProfileWorkspaceScreen &&
+            ModalRoute.of(tester.element(find.byWidget(widget)))!.isCurrent,
+      );
+      expect(destination, findsOneWidget);
+      expect(
+        find.descendant(
+          of: destination,
+          matching: find.text('a completed', findRichText: true),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('b completed', findRichText: true), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pumpNavigation(tester);
+    },
+  );
+
   testWidgets('Bot Chat navigation and human send start Android monitoring', (
     tester,
   ) async {

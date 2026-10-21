@@ -33,6 +33,42 @@ import 'package:wing/core/widgets/app_drawer.dart';
 import '../test/profile_connection_identity_test.dart' show MemoryIdentityStore;
 import '../test/profile_workspace_controller_test.dart' show Host;
 
+Future<({ProfileChat chat, ProfileChat other})> prepareNotificationFixtureChats(
+  ProfileWorkspaceController controller, {
+  required bool restarting,
+}) async {
+  if (restarting) {
+    // The real native sink may already be opening its queued target. Reuse
+    // the saved chats and hydrate their runtimes without selecting a profile
+    // or creating replacement chats over that navigation.
+    final chat = controller.notificationChats.singleWhere(
+      (chat) =>
+          chat.key.workspace.profileName == 'a' && chat.key.sessionId == 'same',
+    );
+    final other = controller.notificationChats.singleWhere(
+      (chat) =>
+          chat.key.workspace.profileName == 'b' && chat.key.sessionId == 'same',
+    );
+    await controller.loadNotificationApproval(chat.key);
+    await controller.loadNotificationApproval(other.key);
+    return (chat: chat, other: other);
+  }
+  await controller.initialize();
+  await controller.switchProfile('a');
+  final chat = await controller.createChat(canDispatch: () => true);
+  emitChatEvent(controller, chat, 'session.title', {
+    'session_id': chat.key.sessionId,
+    'title': 'Website refresh',
+  });
+  await controller.switchProfile('b');
+  final other = await controller.createChat(canDispatch: () => true);
+  emitChatEvent(controller, other, 'session.title', {
+    'session_id': other.key.sessionId,
+    'title': 'Weekly report',
+  });
+  return (chat: chat, other: other);
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final prefs = await SharedPreferences.getInstance();
@@ -199,20 +235,11 @@ Future<void> main() async {
       ),
     ),
   );
-  await controller.initialize();
-  await controller.switchProfile('a');
-  final chat = await controller.createChat(canDispatch: () => true);
-  emitChatEvent(controller, chat, 'session.title', {
-    'session_id': chat.key.sessionId,
-    'title': 'Website refresh',
-  });
+  final (:chat, :other) = await prepareNotificationFixtureChats(
+    controller,
+    restarting: prefs.containsKey('notification_qa_sequence'),
+  );
   final chatGateway = host.gateways['a']!;
-  await controller.switchProfile('b');
-  final other = await controller.createChat(canDispatch: () => true);
-  emitChatEvent(controller, other, 'session.title', {
-    'session_id': other.key.sessionId,
-    'title': 'Weekly report',
-  });
   final otherGateway = otherHost.gateways['b']!;
   void event(ProfileChat target, String type, Map<String, dynamic> data) {
     (identical(target, chat) ? chatGateway : otherGateway).onEvent!(

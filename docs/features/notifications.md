@@ -21,8 +21,12 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
-  flutter test --no-pub test/notification_answer_visibility_test.dart test/group_notification_session_test.dart test/profile_notification_coverage_test.dart
+  flutter test --no-pub test/notification_answer_visibility_test.dart test/group_notification_session_test.dart test/profile_notification_coverage_test.dart test/app_notification_routing_test.dart
   ```
+
+  The queued native cold-tap case includes the notification device fixture's
+  restart setup. It must preserve the captured profile/chat, reuse both existing
+  chats and display the answer above the remembered workspace route.
 
 - **Android `notification-actions`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
 
