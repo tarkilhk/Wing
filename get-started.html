@@ -49,89 +49,80 @@
 <section class="guide-hero page-width" aria-labelledby="guide-title">
 <div>
 <h1 id="guide-title">Your first chat<br> with Hermes</h1>
-<p>Install Wing, connect your agent and get a reply on your phone. Start with a working Hermes Cloud instance or your own Hermes server.</p>
+<p>Connect Wing to your Hermes, then pick up the conversation on your phone.</p>
 <a class="button button-navy" href="https://github.com/tarkilhk/Wing/releases/latest">Download Wing for Android</a>
 </div>
 </section>
 <div class="guide-layout page-width" id="guide-content">
 <aside>
 <nav class="guide-toc" aria-label="On this page">
-<a href="#need">Before you start</a>
-<a href="#connect">Install and connect</a>
-<a href="#navigator">Get your first reply</a>
-<a href="#connection-help">Fix a failed connection check</a>
-<a href="#good-to-know">Offline use, notifications and backups</a>
-<a href="#privacy">Privacy</a>
+<a href="#need">1. Install Wing</a>
+<a href="#connect">2. Connect Hermes</a>
+<a href="#navigator">3. Start a chat</a>
+<a href="#connection-help">Need a hand?</a>
 </nav>
 </aside>
 <div class="guide-copy">
 <section id="need" aria-labelledby="need-title">
-<h2 id="need-title">Before you start</h2>
-<p>You need an Android phone running <strong>Android 7.0 or newer</strong>, plus one of these:</p>
-<ul>
-<li><strong>Hermes Cloud:</strong> a Nous Portal account with an instance you can open.</li>
-<li><strong>Your own server:</strong> a working Hermes installation with its dashboard and Desktop Gateway enabled, a configured model provider, and an address your phone can reach.</li>
-</ul>
-<p>Try a message in Hermes first. Wing connects to that agent; a model-provider API key alone is not enough. Wing is free, with every feature included. Your server and model provider may have their own costs.</p>
-<p>Setting up a server for the first time? Follow the <a href="https://github.com/tarkilhk/Wing/blob/main/docs/SELF_HOSTING.md">self-hosting guide</a>, then return here.</p>
+<h2 id="need-title">1. Install Wing</h2>
+<p>You need an Android 7.0+ phone and a working Hermes Cloud instance or your own Hermes server.</p>
+<p><a href="https://github.com/tarkilhk/Wing/releases/latest">Download the latest APK</a> and open it on your phone. Choose <strong>arm64-v8a</strong> for most phones. Allow installation when Android asks.</p>
+<p>Need a Hermes server first? Start with the <a href="https://github.com/tarkilhk/Wing/blob/main/docs/SELF_HOSTING.md">self-hosting guide</a>.</p>
 </section>
 <section id="connect" aria-labelledby="connect-title">
-<h2 id="connect-title">Install and connect</h2>
-<ol class="setup-steps">
-<li>
-<h3>Install the Android app</h3>
-<p>Download a signed APK from <a href="https://github.com/tarkilhk/Wing/releases/latest">the latest release</a>. Choose <strong>arm64-v8a</strong> for most current phones. Open the downloaded file; Android may ask you to allow installation from your browser or file manager.</p>
-</li>
-<li>
-<h3>Choose how to reach Hermes</h3>
-<p>Open Wing and tap <strong>Connect your agent</strong>.</p>
-<p><strong>Hermes Cloud:</strong> sign in through Nous Portal, then choose your organization and instance.</p>
-<p><strong>Use an address:</strong> enter the full dashboard address, including its port or path if it has one. For example, <code>http://hermes.home:9119</code> on your private network, or <code>https://hermes.example.com/hermes</code>. Use your dashboard username and password if sign-in is enabled.</p>
-<p>The address must work from your phone. <code>localhost</code> points to the phone itself. Do not add <code>/api</code> or <code>/ws</code>. For access away from home, use HTTPS or an encrypted private network.</p>
-<p>Most connections do not need <strong>Custom setup</strong>. Use it only when your server requires proxy headers, proxy-managed sign-in or a separate live-chat address.</p>
-</li>
-<li>
-<h3>Check, then save</h3>
-<p>Run <strong>Check connection</strong>. Wing checks profile access, live chat and history separately. When all three pass, name your connection and choose <strong>Save and open</strong>.</p>
-<p>If a check fails, <a href="#connection-help">find the matching fix below</a>, correct the setup and check again.</p>
-</li>
-</ol>
+<h2 id="connect-title">2. Connect Hermes</h2>
+<p>Open Wing and tap <strong>Connect your agent</strong>. Choose <strong>Hermes Cloud</strong> to sign in with Nous Portal and select your instance, or <strong>Use an address</strong> for your own server.</p>
+<div class="setup-gallery">
 <figure class="guide-shot guide-inline-shot">
 <div class="app-frame">
-<a class="screenshot-link" data-screenshot href="assets/screenshots/welcome-light.png" aria-label="Enlarge screenshot: Wing welcome screen with Connect your agent"><img src="assets/screenshots/welcome-light.png" width="360" height="800" alt="Wing welcome screen with Connect your agent" loading="lazy"></a>
+<a class="screenshot-link" data-screenshot href="assets/screenshots/connection-choose-dark.png" aria-label="Enlarge screenshot: Wing connection screen offering Hermes Cloud or Use an address"><img src="assets/screenshots/connection-choose-dark.png" width="780" height="1688" alt="Wing connection screen offering Hermes Cloud or Use an address" loading="lazy"></a>
 </div>
+<figcaption>Choose how to reach your Hermes.</figcaption>
 </figure>
+<figure class="guide-shot guide-inline-shot">
+<div class="app-frame">
+<a class="screenshot-link" data-screenshot href="assets/screenshots/connection-address-dark.png" aria-label="Enlarge screenshot: Wing address step with an example dashboard URL"><img src="assets/screenshots/connection-address-dark.png" width="780" height="1688" alt="Wing address step with an example dashboard URL" loading="lazy"></a>
+</div>
+<figcaption>Using your own server? Enter its dashboard address, then your login if required.</figcaption>
+</figure>
+<figure class="guide-shot guide-inline-shot">
+<div class="app-frame">
+<a class="screenshot-link" data-screenshot href="assets/screenshots/connection-verified-dark.png" aria-label="Enlarge screenshot: Wing successful connection check with Save and open"><img src="assets/screenshots/connection-verified-dark.png" width="780" height="1688" alt="Wing successful connection check with Save and open" loading="lazy"></a>
+</div>
+<figcaption>Run Check connection, name it, then tap the checkmark to Save and open.</figcaption>
+</figure>
+</div>
+<p>Use an address that opens in your phone’s browser. Most setups can leave <strong>Custom setup</strong> alone.</p>
 </section>
 <section id="navigator" aria-labelledby="navigator-title">
-<h2 id="navigator-title">Get your first reply</h2>
-<ol class="setup-steps">
-<li><h3>Choose a profile and open a chat</h3><p>In Chats, choose the Hermes profile you want to use, then create a chat. Each profile has its own instructions, tools and model settings.</p></li>
-<li><h3>Send a small request</h3><p>Try <strong>“Give me three ideas for a quick lunch.”</strong> Wait for the reply to finish. Connection checks verify access; this step confirms the selected profile can actually answer.</p></li>
-<li><h3>Find the conversation again</h3><p>Return to Chats and reopen the conversation. Your message and reply should still be there. You are ready to start real work.</p></li>
-</ol>
-<p>Next, <a href="workspaces.html">organize chats into projects</a>, <a href="bots.html">talk to your bots</a>, or <a href="recents.html">follow several conversations with Recents</a>. The side menu also opens Administration, Health and Analytics.</p>
+<h2 id="navigator-title">3. Start a chat</h2>
+<p>Choose a profile in Chats, create a conversation and send your first message. Try “Give me three ideas for a quick lunch.”</p>
+<figure class="guide-shot guide-inline-shot">
+<div class="app-frame">
+<a class="screenshot-link" data-screenshot href="assets/screenshots/conversation-dark.png" aria-label="Enlarge screenshot: A Wing conversation with an agent reply and message composer"><img src="assets/screenshots/conversation-dark.png" width="780" height="1688" alt="A Wing conversation with an agent reply and message composer" loading="lazy"></a>
+</div>
+<figcaption>You’re connected. Keep chatting, or come back to the conversation later.</figcaption>
+</figure>
+<p>Next, explore <a href="bots.html">bots and group discussions</a> or <a href="recents.html">switch between conversations with Recents</a>.</p>
 </section>
 <section id="connection-help" aria-labelledby="connection-help-title">
-<h2 id="connection-help-title">Fix the step that failed</h2>
-<h3>The dashboard cannot be reached</h3>
-<p>Open the same address in your phone's browser. Check the hostname, port and network or VPN connection. A dashboard listening only on <code>127.0.0.1</code> is reachable only on its own server. If the address redirects, use its final address in Wing.</p>
-<h3>Sign-in or profile access fails</h3>
-<p>Use your Hermes dashboard login, not your model-provider API key. If a proxy handles sign-in, check its requirements in Custom setup. For Cloud, confirm you selected the intended organization and instance.</p>
-<h3>Profiles load, but live chat or history fails</h3>
-<p>Make sure the Desktop Gateway is running on the same Hermes installation. Your proxy must pass live-chat WebSocket connections as well as dashboard requests. The <a href="https://github.com/tarkilhk/Wing/blob/main/docs/SELF_HOSTING.md">self-hosting guide</a> covers the routes and proxy setup.</p>
-<h3>Everything connects, but there is no reply</h3>
-<p>Try the same profile directly in Hermes. Check its model provider and credentials on the server. If the profile works there, open <a href="health.html">Health</a> in Wing to inspect the connection.</p>
-</section>
-<section id="good-to-know" aria-labelledby="good-to-know-title">
-<h2 id="good-to-know-title">Offline use, notifications and backups</h2>
-<p>Hermes can continue accepted work while your phone is disconnected. New messages and live controls need a connection. Some recently loaded chats can be read offline.</p>
-<p>For screen-off notifications, allow background battery use and reopen Wing after restarting the phone. Android restrictions, force-stop and network loss can interrupt delivery.</p>
-<p>Configuration backups include connections, credentials and preferences, with optional passphrase encryption. Conversations stay on Hermes; drafts and queues are excluded. Before upgrading, check the <a href="https://github.com/tarkilhk/Wing/blob/main/CHANGELOG.md">release notes</a> for changes that affect unsent work.</p>
-</section>
-<section id="privacy" aria-labelledby="privacy-title">
-<h2 id="privacy-title">Privacy</h2>
-<p>The Wing maintainer does not relay your conversations. Your chosen Hermes server and model providers process your content. Connection details and app preferences are stored on your device.</p>
-<a class="text-link" href="https://github.com/tarkilhk/Wing/blob/main/PRIVACY.md">Full privacy policy</a>
+<h2 id="connection-help-title">Need a hand?</h2>
+<details>
+<summary>The connection check failed</summary>
+<p>Open the dashboard address in your phone’s browser and check your network or VPN. Use your Hermes dashboard login, not a model-provider API key.</p>
+<p>If profiles load but chat or history fails, check that the Hermes Desktop Gateway is running. The <a href="https://github.com/tarkilhk/Wing/blob/main/docs/SELF_HOSTING.md">server setup guide</a> covers the details.</p>
+</details>
+<details id="good-to-know">
+<summary>Notifications, offline use and backups</summary>
+<p>Allow background battery use for screen-off notifications, and reopen Wing after restarting your phone. Android restrictions or network loss can interrupt delivery.</p>
+<p>Hermes can continue accepted work while you’re offline. New messages need a connection; some recently loaded chats remain readable.</p>
+<p>Configuration backups include connections and preferences, with optional encryption. Chats stay on Hermes; drafts and queues are excluded. Read the <a href="https://github.com/tarkilhk/Wing/blob/main/CHANGELOG.md">upgrade notes</a> before updating.</p>
+</details>
+<details id="privacy">
+<summary>Where does my data go?</summary>
+<p>Your chosen Hermes server and model providers process your content. The Wing maintainer does not relay your conversations. Connection details and preferences stay on your device.</p>
+<a class="text-link" href="https://github.com/tarkilhk/Wing/blob/main/PRIVACY.md">Privacy policy</a>
+</details>
 </section>
 </div>
 </div>
