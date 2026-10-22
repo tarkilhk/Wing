@@ -9,14 +9,35 @@ const paths = JSON.parse(readFileSync(config, 'utf8'));
 mkdirSync(output, { recursive: true });
 
 (async () => {
-  for (const engine of ['chromium', 'firefox', 'webkit']) {
+  for (const engine of (process.argv[6] || 'chromium,firefox,webkit').split(',')) {
     const browser = await playwright[engine].launch({ headless: true, executablePath: paths[engine] });
     try {
       const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
       page.setDefaultTimeout(10000);
+      const stillPage = await browser.newPage({ viewport: { width: 1200, height: 1000 }, reducedMotion: 'reduce' });
+      await stillPage.goto(new URL('recents.html', base).href);
+      const stillFrame = stillPage.locator('[data-ripple-demo] .app-frame');
+      await stillFrame.scrollIntoViewIfNeeded();
+      await stillFrame.locator('img').evaluate(img => { img.loading = 'eager'; });
+      await stillPage.waitForFunction(() => {
+        const img = document.querySelector('[data-ripple-demo] img');
+        return img.complete && img.naturalWidth > 0;
+      });
+      await stillFrame.locator('img').evaluate(img => img.decode());
+      const still = await stillFrame.screenshot();
+      await stillPage.close();
       let request;
       let count = 0;
-      await page.route('**/recents-arrival-dark.gif?*', route => { count++; request = route; });
+      const attempts = new Set();
+      await page.route('**/recents-arrival-dark.gif?*', route => {
+        // Routing disables the HTTP cache. Allow the displayed image to reuse
+        // an already released preload; hold each new user attempt only once.
+        const url = route.request().url();
+        if (attempts.has(url)) return route.continue();
+        attempts.add(url);
+        count++;
+        request = route;
+      });
       await page.goto(new URL('recents.html', base).href);
       const demo = page.locator('[data-ripple-demo]');
       const replay = page.locator('[data-ripple-replay]');
@@ -26,6 +47,7 @@ mkdirSync(output, { recursive: true });
       assert.equal(await replay.isDisabled(), true);
       // Capture actual visible feedback while the media request is held.
       await page.screenshot({ path: `${output}/${engine}-pending.png` });
+      assert.ok((await demo.locator('.app-frame').screenshot()).equals(still), 'The still image must remain visible while the animation is loading');
       assert.ok(request);
       await request.continue();
       await page.waitForFunction(() => document.querySelector('[data-ripple-demo] img').currentSrc.includes('.gif?'));
