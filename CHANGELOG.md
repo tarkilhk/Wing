@@ -14,7 +14,7 @@ long answers more comfortably on your phone.
 This release changes the local draft and outbox format. Earlier v2 records are
 not imported. Finish or copy out unsent messages and queued work before updating;
 configuration backups do not include them. Saved conversations remain on Hermes.
-See [drafts and outgoing messages](docs/DRAFTS_OUTBOX.md).
+See [drafts and outgoing messages](https://github.com/tarkilhk/Wing/blob/v1.3.0/docs/DRAFTS_OUTBOX.md).
 
 ### Bots, discussions and desktop control
 
