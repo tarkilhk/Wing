@@ -86,6 +86,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Runner proofs execute from the tooling checkout, which can differ from
+      # the immutable release source. Resolve its own locked dependencies too.
+      - name: Install release tooling dependencies
+        working-directory: release-tools
+        run: flutter pub get --enforce-lockfile
+
       - name: Make jni native build reproducible (deterministic build-id)
         run: |
           # GNU build-ids hash machine-local DWARF; drop them so the F-Droid
