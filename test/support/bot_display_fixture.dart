@@ -17,6 +17,7 @@ class DisplayPeer {
   final sent = <Uint8List>[];
   bool closed = false;
   int phase = 0, requests = 0;
+  bool requestClipboardOnPaste = true, clipboardOffered = false;
   late final client = BotDisplayClient(
     incoming: input.stream,
     send: accept,
@@ -89,10 +90,29 @@ class DisplayPeer {
         ..setUint32(8, 0x1f000001)
         ..setUint32(12, 256 * 1024);
       add(caps.buffer.asUint8List());
+    } else if (bytes[0] == 6) {
+      final data = ByteData.sublistView(bytes);
+      if (data.getInt32(4) < 0 && data.getUint32(8) == 0x08000001) {
+        clipboardOffered = true;
+      }
+    } else if (bytes[0] == 4 &&
+        bytes[1] == 1 &&
+        ByteData.sublistView(bytes).getUint32(4) == 0x76 &&
+        clipboardOffered &&
+        requestClipboardOnPaste) {
+      requestClipboard();
     } else if (bytes[0] == 3) {
       requests++;
       if (requests == 1 && width * height < 100000) raw();
     }
+  }
+
+  void requestClipboard() {
+    final request = ByteData(12)
+      ..setUint8(0, 3)
+      ..setInt32(4, -4)
+      ..setUint32(8, 0x02000001);
+    add(request.buffer.asUint8List());
   }
 
   void raw() {

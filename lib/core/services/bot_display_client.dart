@@ -74,11 +74,24 @@ class BotDisplayClient {
   bool _clipboardReady = false;
   bool get clipboardReady => _clipboardReady && _ready && !_closed;
 
-  /// Writes plain UTF-8 clipboard data. The session separately sends the paste
-  /// shortcut after admission. Never turn newlines into executable Enter keys.
-  void setClipboard(String text) {
+  Completer<void>? _clipboardTransfer;
+  Uint8List? _clipboardPayload;
+  bool Function()? _canProvideClipboard;
+
+  /// Announces phone text, invokes paste, then answers the application's request.
+  /// Never turn pasted newlines into executable Enter keys.
+  Future<void> pasteClipboard(
+    String text, {
+    required bool Function() canProvide,
+  }) async {
     if (!clipboardReady) {
       throw StateError('Clipboard is not ready. Reconnect and try again.');
+    }
+    if (_clipboardTransfer != null) {
+      throw StateError('A paste is already in progress.');
+    }
+    if (!canProvide()) {
+      throw StateError('Control changed. Take control before pasting.');
     }
     if (text.length > 256 * 1024) {
       throw StateError('Clipboard text is too large.');
@@ -100,7 +113,47 @@ class BotDisplayClient {
       ..setUint8(0, 6)
       ..setInt32(4, -(compressed.length + 4))
       ..setUint32(8, 0x10000001);
-    _write([...header.buffer.asUint8List(), ...compressed]);
+    final transfer = Completer<void>();
+    _clipboardTransfer = transfer;
+    _clipboardPayload = Uint8List.fromList([
+      ...header.buffer.asUint8List(),
+      ...compressed,
+    ]);
+    _canProvideClipboard = canProvide;
+    try {
+      // Passive-viewer capabilities are dropped by Hermes's input gate. Repeat
+      // them under the confirmed lease before offering this clipboard.
+      _clipboardCapabilities();
+      final notify = ByteData(12)
+        ..setUint8(0, 6)
+        ..setInt32(4, -4)
+        ..setUint32(8, 0x08000001);
+      _write(notify.buffer.asUint8List());
+      key(0xffe3, true);
+      key(0x76, true);
+      key(0x76, false);
+      key(0xffe3, false);
+      await transfer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => throw StateError(
+          'Paste was not accepted. Select a text field on the computer and try again.',
+        ),
+      );
+    } finally {
+      _clipboardTransfer = null;
+      _clipboardPayload = null;
+      _canProvideClipboard = null;
+    }
+  }
+
+  void _clipboardCapabilities() {
+    final reply = ByteData(16)
+      ..setUint8(0, 6)
+      ..setInt32(4, -8)
+      // Accept requests and notifications, never request remote clipboard data.
+      ..setUint32(8, 0x0b000001)
+      ..setUint32(12, 0);
+    _write(reply.buffer.asUint8List());
   }
 
   Future<void> _clipboard() async {
@@ -115,6 +168,19 @@ class BotDisplayClient {
     if (length >= 0 || size < 4) return;
     final data = ByteData.sublistView(payload);
     final flags = data.getUint32(0);
+    if (flags == 0x02000001 && size == 4) {
+      final transfer = _clipboardTransfer;
+      if (transfer == null || transfer.isCompleted) return;
+      if (_canProvideClipboard?.call() != true) {
+        transfer.completeError(
+          StateError('Control changed. Take control before pasting.'),
+        );
+        return;
+      }
+      _write(_clipboardPayload!);
+      transfer.complete();
+      return;
+    }
     if ((flags & 0x01000000) == 0) return;
     var formats = 0;
     for (var bit = 0; bit < 16; bit++) {
@@ -123,13 +189,8 @@ class BotDisplayClient {
     if (size != 4 + formats * 4) {
       throw const FormatException('Invalid clipboard capabilities');
     }
-    _clipboardReady = (flags & 0x10000001) == 0x10000001;
-    final reply = ByteData(16)
-      ..setUint8(0, 6)
-      ..setInt32(4, -8)
-      ..setUint32(8, 0x11000001)
-      ..setUint32(12, 0); // No unsolicited remote clipboard transfer.
-    _write(reply.buffer.asUint8List());
+    _clipboardReady = (flags & 0x18000001) == 0x18000001;
+    _clipboardCapabilities();
   }
 
   void start() {
@@ -331,6 +392,14 @@ class BotDisplayClient {
     _closed = true;
     _ready = false;
     _request?.cancel();
+    final transfer = _clipboardTransfer;
+    if (transfer != null && !transfer.isCompleted) {
+      transfer.completeError(
+        StateError('Screen disconnected before paste completed.'),
+      );
+    }
+    _clipboardPayload = null;
+    _canProvideClipboard = null;
     _disconnect();
     unawaited(_bytes.close());
     unawaited(_frames.close());

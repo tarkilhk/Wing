@@ -320,18 +320,19 @@ class BotScreenSession extends ChangeNotifier {
     _changed();
     try {
       final text = await readClipboard();
-      if (!canInput ||
-          generation != _generation ||
-          inputRevision != _inputRevision ||
-          !identical(client, _client) ||
-          _lease?.epoch != lease?.epoch) {
+      bool admitted() =>
+          canInput &&
+          generation == _generation &&
+          inputRevision == _inputRevision &&
+          identical(client, _client) &&
+          _lease?.epoch == lease?.epoch;
+      if (!admitted()) {
         throw StateError('Control changed. Take control before pasting.');
       }
       if (text == null || text.isEmpty) {
         throw StateError('The phone clipboard has no text.');
       }
-      client.setClipboard(text);
-      key(0x76, modifiers: {0xffe3});
+      await client.pasteClipboard(text, canProvide: admitted);
     } finally {
       _pasting = false;
       _changed();

@@ -42,12 +42,15 @@ void main() {
   );
 
   test(
-    'extended clipboard preserves Unicode and newlines without key events',
+    'requested clipboard preserves Unicode and newlines without Enter',
     () async {
       final (peer, _) = await startPeer(fragment: true);
       expect(peer.client.clipboardReady, true);
       final start = peer.sent.length;
-      peer.client.setClipboard('café 😀\nsecond line');
+      await peer.client.pasteClipboard(
+        'café 😀\nsecond line',
+        canProvide: () => true,
+      );
       final packet = peer.sent.last;
       expect(packet[0], 6);
       expect(ByteData.sublistView(packet).getInt32(4), -(packet.length - 8));
@@ -55,12 +58,77 @@ void main() {
       final payload = Uint8List.fromList(zlib.decode(packet.sublist(12)));
       expect(ByteData.sublistView(payload).getUint32(0), payload.length - 4);
       expect(utf8.decode(payload.sublist(4)), 'café 😀\r\nsecond line\x00');
-      expect(peer.sent.skip(start).where((p) => p[0] == 4), isEmpty);
       expect(
-        () => peer.client.setClipboard('x' * (256 * 1024)),
+        peer.sent
+            .skip(start)
+            .where((p) => p[0] == 4)
+            .map((p) => ByteData.sublistView(p).getUint32(4)),
+        [0xffe3, 0x76, 0x76, 0xffe3],
+      );
+      await expectLater(
+        peer.client.pasteClipboard('x' * (256 * 1024), canProvide: () => true),
         throwsStateError,
       );
-      expect(() => peer.client.setClipboard('bad\x00text'), throwsStateError);
+      await expectLater(
+        peer.client.pasteClipboard('bad\x00text', canProvide: () => true),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
+    'clipboard is announced before paste and supplied only on request',
+    () async {
+      final (peer, _) = await startPeer();
+      peer.requestClipboardOnPaste = false;
+      final start = peer.sent.length;
+      var settled = false;
+      final paste = peer.client
+          .pasteClipboard('phone text', canProvide: () => true)
+          .then((_) => settled = true);
+      await Future<void>.delayed(Duration.zero);
+      final packets = peer.sent.skip(start).toList();
+      expect(packets.map((p) => p[0]), [6, 6, 4, 4, 4, 4]);
+      expect(ByteData.sublistView(packets[0]).getUint32(8), 0x0b000001);
+      expect(ByteData.sublistView(packets[1]).getUint32(8), 0x08000001);
+      expect(settled, isFalse);
+      peer.requestClipboard();
+      await paste;
+      expect(ByteData.sublistView(peer.sent.last).getUint32(8), 0x10000001);
+      final count = peer.sent.length;
+      peer.requestClipboard();
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        peer.sent.length,
+        count,
+        reason: 'Completed paste retains no phone payload',
+      );
+    },
+  );
+
+  test(
+    'late clipboard request cannot publish after control loss or close',
+    () async {
+      final (peer, _) = await startPeer();
+      peer.requestClipboardOnPaste = false;
+      var admitted = true;
+      final paste = peer.client.pasteClipboard(
+        'private text',
+        canProvide: () => admitted,
+      );
+      final rejected = expectLater(paste, throwsStateError);
+      admitted = false;
+      final count = peer.sent.length;
+      peer.requestClipboard();
+      await rejected;
+      expect(peer.sent.length, count);
+      final closing = peer.client.pasteClipboard(
+        'private text',
+        canProvide: () => true,
+      );
+      final closed = expectLater(closing, throwsStateError);
+      peer.client.close();
+      await closed;
     },
   );
 

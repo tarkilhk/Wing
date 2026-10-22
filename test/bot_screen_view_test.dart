@@ -659,6 +659,7 @@ void main() {
     expect(find.text('Choose the work account.'), findsOneWidget);
     await tester.tap(find.byTooltip('Take control'));
     await tester.pump();
+    f.peers.single.requestClipboardOnPaste = false;
     final count = f.peers.single.sent.length;
     await tester.tap(find.byTooltip('Paste phone clipboard'));
     await tester.pump();
@@ -669,9 +670,14 @@ void main() {
     clipboard.complete({'text': 'phone 😀\nclipboard'});
     await tester.pump();
     await tester.pump();
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.text('Paste sent to the computer'), findsNothing);
+    f.peers.single.requestClipboard();
+    await tester.pump();
+    await tester.pump();
     expect(
       f.peers.single.sent.skip(count).where((p) => p[0] == 6),
-      hasLength(1),
+      hasLength(3),
     );
     expect(find.text('Paste sent to the computer'), findsOneWidget);
     await tester.pump();
@@ -685,6 +691,14 @@ void main() {
       f.peers.single.sent.where((p) => p[0] == 5 && p[1] == 16),
       isNotEmpty,
     );
+    await tester.tap(find.byTooltip('Paste phone clipboard'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pump();
+    expect(find.textContaining('Paste was not accepted'), findsOneWidget);
+    expect(find.byType(StudioLoading), findsNothing);
     await tester.tap(find.byTooltip('More screen controls'));
     await tester.pump();
     f.statusWait = Completer<void>();

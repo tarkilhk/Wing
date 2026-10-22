@@ -283,20 +283,41 @@ void main() {
     },
   );
 
-  test('paste sends one clipboard then Ctrl-V without Enter', () async {
-    final f = DisplayFixture();
-    final session = await open(f);
-    await session.takeOver();
-    final count = f.peers.single.sent.length;
-    await session.pasteClipboard(() async => 'first\nsecond');
-    final packets = f.peers.single.sent.skip(count).toList();
-    expect(packets.map((p) => p[0]), [6, 4, 4, 4, 4]);
-    expect(packets.skip(1).map((p) => (p[1], p[6] * 256 + p[7])), [
-      (1, 0xffe3),
-      (1, 0x76),
-      (0, 0x76),
-      (0, 0xffe3),
-    ]);
-    await session.close();
-  });
+  test(
+    'paste announces clipboard then Ctrl-V and serves the request without Enter',
+    () async {
+      final f = DisplayFixture();
+      final session = await open(f);
+      await session.takeOver();
+      final count = f.peers.single.sent.length;
+      await session.pasteClipboard(() async => 'first\nsecond');
+      final packets = f.peers.single.sent.skip(count).toList();
+      expect(packets.map((p) => p[0]), [6, 6, 4, 4, 4, 4, 6]);
+      expect(
+        packets.where((p) => p[0] == 4).map((p) => (p[1], p[6] * 256 + p[7])),
+        [(1, 0xffe3), (1, 0x76), (0, 0x76), (0, 0xffe3)],
+      );
+      await session.close();
+    },
+  );
+  test(
+    'paste rechecks lease after the remote application requests clipboard',
+    () async {
+      final f = DisplayFixture();
+      final session = await open(f);
+      await session.takeOver();
+      f.peers.single.requestClipboardOnPaste = false;
+      final paste = session.pasteClipboard(() async => 'private text');
+      final rejected = expectLater(paste, throwsStateError);
+      await Future<void>.delayed(Duration.zero);
+      expect(session.pasting, isTrue);
+      await session.handBack();
+      final count = f.peers.single.sent.length;
+      f.peers.single.requestClipboard();
+      await rejected;
+      expect(f.peers.single.sent.length, count);
+      expect(session.pasting, isFalse);
+      await session.close();
+    },
+  );
 }
