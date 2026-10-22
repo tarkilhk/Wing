@@ -207,6 +207,8 @@ for (const demo of document.querySelectorAll('[data-ripple-demo]')) {
     replay.title = 'Playing reply ripple animation';
     const url = new URL('assets/screenshots/recents-arrival-dark.gif', document.baseURI);
     url.searchParams.set('play', String(++sequence));
+    const preload = new Image();
+    const ready = () => { source.srcset = url.href; };
     const loaded = () => {
       if (image.currentSrc !== url.href) return;
       retireLoad();
@@ -216,12 +218,18 @@ for (const demo of document.querySelectorAll('[data-ripple-demo]')) {
     const failed = () => stop(true);
     image.addEventListener('load', loaded);
     image.addEventListener('error', failed);
+    preload.addEventListener('load', ready);
+    preload.addEventListener('error', failed);
     retireLoad = () => {
       image.removeEventListener('load', loaded);
       image.removeEventListener('error', failed);
+      preload.removeEventListener('load', ready);
+      preload.removeEventListener('error', failed);
+      preload.removeAttribute('src');
     };
     timer = setTimeout(() => stop(true), 15000);
-    source.srcset = url.href;
+    // Keep the still in place until the animation is ready to display.
+    preload.src = url.href;
   }
 
   replay.hidden = reducedMotion.matches;
