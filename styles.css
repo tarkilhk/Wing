@@ -241,12 +241,20 @@ summary:active { color: var(--teal); }
 .guide-shot { display: block; inline-size: min(100%, 20rem); margin-inline: auto; }
 .guide-shot .app-frame img { inline-size: 100%; }
 .guide-shot .app-frame { border-color: var(--rule); }
+.ripple-demo { position: relative; }
+.ripple-replay { display: grid; margin-inline-start: auto; margin-block-start: .5rem; color: var(--teal); }
+.ripple-error { font-size: 1rem; }
+@media (prefers-reduced-motion: no-preference) {
+  .ripple-demo[aria-busy="true"] .ripple-replay svg { animation: ripple-pending 1s linear infinite; }
+  @keyframes ripple-pending { to { transform: rotate(360deg); } }
+}
 .topic-nav { display: flex; flex-wrap: wrap; gap: .5rem 1.75rem; padding-block: 1.25rem; border-block-end: 1px solid var(--rule); }
 .topic-nav a { color: var(--muted); font-size: 1rem; text-decoration: none; padding-block: .5rem; min-block-size: 2.75rem; }
 .topic-nav a[aria-current="page"] { color: var(--teal); font-weight: 650; text-decoration: underline; }
 .guide-hero { padding-block: 4rem; }
 .guide-hero > div { max-inline-size: 55rem; }
 .guide-hero h1 { font-size: clamp(3rem, 1.5rem + 3.5vw, 5.5rem); }
+.guide-hero p { max-inline-size: 44rem; font-size: 1.25rem; line-height: 1.6; margin-block: 1.5rem; }
 .guide-layout { display: grid; grid-template-columns: minmax(0, .45fr) minmax(0, 1fr); gap: 4rem; border-block-start: 1px solid var(--rule); padding-block: 4rem 5rem; }
 .guide-toc { display: flex; flex-direction: column; align-items: start; gap: .4rem; position: sticky; inset-block-start: 2rem; max-inline-size: 15rem; }
 .guide-toc > a { font-size: 1rem; line-height: 1.45; padding-block: .6rem; text-decoration: none; }
@@ -257,11 +265,13 @@ summary:active { color: var(--teal); }
 .guide-copy section { scroll-margin-block-start: 2rem; }
 .guide-copy section + section { margin-block-start: 4rem; padding-block-start: 3rem; border-block-start: 1px solid var(--rule); }
 .guide-copy h2 { font-size: clamp(1.75rem, 1.25rem + 1vw, 2.5rem); margin-block-end: 1.5rem; }
+.guide-copy section > h3 { font-size: 1.375rem; margin-block: 2rem .75rem; }
 .guide-copy p + p { margin-block-start: 1.25rem; }
 .guide-copy p { color: var(--muted); }
 .guide-copy strong { color: var(--ink); }
 .guide-copy a { color: var(--teal); }
 .guide-inline-shot { margin-block: 2rem; inline-size: min(100%, 20rem); }
+.desktop-shot { inline-size: 100%; }
 .receipt-shot { inline-size: min(100%, 27rem); }
 .receipt-shot .app-frame { border-radius: .85rem; }
 .guide-next { border-block-start: 1px solid var(--rule); padding-block: 3rem 5rem; }
