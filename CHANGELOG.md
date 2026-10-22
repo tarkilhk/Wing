@@ -4,219 +4,147 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
-- Open the exact chat or group when tapping an Android notification, including
-  after a restart or an alert update. Keep conversation alerts individually
-  tappable in the shade. Watching chats opens its single conversation, or
-  Recents when monitoring multiple conversations. Approval notifications use
-  Android’s Once, Review and Deny actions; Review exposes broader choices in Wing.
+## [1.3.0] - 2026-10-23
 
-- Open a member’s Bot Chat by tapping its avatar or name in Edit group; Back preserves unsaved group edits.
+Work across bots and group discussions, take over an agent's desktop, and read
+long answers more comfortably on your phone.
 
-- Show a separate Wing pulse while Refresh group reads messages and activity,
-  including when it joins an automatic read. Keep automatic polling quiet,
-  action icons unchanged and the discussion usable.
+### Before updating
 
-- Keep action icons visible during pending work, including Health refresh,
-  downloads, previews, sharing, model refresh and group creation.
+This release changes the local draft and outbox format. Earlier v2 records are
+not imported. Finish or copy out unsent messages and queued work before updating;
+configuration backups do not include them. Saved conversations remain on Hermes.
+See [drafts and outgoing messages](docs/DRAFTS_OUTBOX.md).
 
-- Use the same Wing feather pulse for confirmed active work in chats, discussions,
-  Bots, Recents and Activity. Keep status text steady and replace the animated
-  Chats row border with a pulse in its existing status slot.
+### Bots, discussions and desktop control
 
-- Keep usable screens quiet during background refresh. Use one Wing feather
-  loading style for blocked actions, without shifting Recents, Bots or other
-  content when loading finishes.
+- Find bots across saved Hermes connections, pin favorites and filter by Working
+  or Needs input. Give each bot a name, shape, color or avatar; create or duplicate
+  bots and open their profile settings, including MCP connectors.
+- Open a profile's Bot Chat by holding its icon in Chats. Tap the Bot Chat header
+  to open its settings, or a member's name in Edit group to visit its chat without
+  losing unsaved group edits.
+- Bring 2–6 bots on one connection into a hosted discussion. Mention members,
+  dictate messages, review approvals, stop work or recover an interrupted task.
+  Hermes coordinates accepted work on the server, so it can continue after Wing closes.
+- Create and edit group names, colors and pictures, including transparent images.
+  Default icons combine member avatars. Group drafts survive navigation and restart;
+  shared replies have sender names, avatars and timestamps.
+- Watch a bot's desktop, take confirmed control and hand it back. Tap to click,
+  hold to right-click, double-tap and hold to drag, pinch to zoom, pan with one
+  finger and scroll with two fingers or the side strip.
+- Type with the phone keyboard, use special keys and one-shot modifiers, or paste
+  phone clipboard text without pressing Enter. Clipboard transfer waits for the
+  desktop's format negotiation before Wing reports success.
+- Keep the agent's latest reply or pending request beside the desktop in landscape
+  and below it in portrait. Open its conversation, queue a message or hand control
+  back with a note asking the agent to continue. Failed handback messages remain
+  available to retry after control has been returned.
 
-- Monitor shared group discussions across pauses between bot turns. Publish the
-  latest shared reply in one replaceable notification per group; tap it to open
-  the discussion. Keep unresolved input requests when newer replies arrive.
+### Recents, projects and reading
 
-- Return Android Back from Recents conversations to Chats, Bots or Groups instead of an earlier conversation.
-- Accept diagonal two-finger swipes for Recents switching, without an angle requirement or vertical movement limit.
-- Keep group messages in place when initial loading finishes during Recents switching.
+- Switch between chats and discussions with a two-finger sideways swipe from any
+  conversation, including diagonal swipes. Pinch into the circular card stack,
+  browse with momentum and tap a card to open it. Back closes the stack first,
+  then returns to Recents; direct chat entry retains its original list destination.
+- See recent messages, work/input status and unread replies in compact Recents
+  cards. Soft edge ripples announce replies in other conversations, including
+  while typing. Tool activity alone no longer creates a New answer cue.
+- Open cached conversations and swipe between cards while refreshes run. Keep
+  known chats, group messages and artwork available after a failed refresh.
+- Restore reading position by message within the current app session, separately
+  from read progress. Mark unread preserves that position; explicit Mark read
+  advances the read boundary. Opening a chat or tapping Latest alone does not
+  mark its messages read.
+- Read wide tables as stacked header/value rows on narrow screens, or switch to
+  a wrapped grid. A table's full-screen control enters conversation reading mode,
+  hiding the composer without losing its draft. Landscape combines title and
+  context into one header row to leave more room for the conversation.
+- Create or edit projects with a searchable icon tray, color and server folder.
+  Browse existing folders or create one before saving the project. Rename an
+  ordinary chat from its title and ask for an AI title suggestion before saving.
 
-- Reveal cached Recents chats without waiting for a profile browser load, allow
-  swipes during opening, and render group discussions from the bottom without
-  stepping through older messages. Reuse cached group messages on entry.
+### Live work and Activity
 
-- Use saved group member artwork in Recents cards, update it when avatars arrive,
-  and share the same appearance preparation and screenshot revisions with chats.
+- Follow readable reasoning between collapsed tool runs, with consistent
+  presentation across chats, groups and bot working histories. Expanding a run
+  retains its details as new work arrives; history refreshes no longer duplicate
+  reasoning or discard the active disclosure.
+- Show an increasing elapsed timer on the current streaming Activity run and a
+  fixed duration when the next Reasoning block arrives. Saved replies retain
+  approximate reply time, separately from measured tool durations when supplied.
+- Open current Tasks and Subagents from the bar above the composer. Expand either
+  drawer near full screen while its summary stays visible. Inspect a child's
+  conversation and use supported steering or interruption controls.
+- Move completed children into their parent answer's saved Activity when that
+  turn ends; keep unfinished background agents available. Historical results
+  remain readable without live controls.
+- Keep completed questions and approvals in Activity with their supplied answers
+  and outcomes. Requests answered on another client stop reopening as pending;
+  secret response values are not saved in request history.
+- Inspect tool requests, code, output, file changes, search matches, memory-review
+  notices and messages between agents in shared detail readers. Copy, wrap,
+  preview and full-view actions stay beside the relevant content.
 
-- Keep known chats and group discussions in Recents when a refresh fails. Share
-  the cached conversation list, screenshots and recent group messages across
-  visits, and reuse prepared cards while background refreshes run.
-- Start preparing nearby cards during opening, show saved bot identity while
-  loading, and keep usable screenshots visible until refreshed pixels are ready.
+### Composing, models and results
 
-- Group discussions now share their live and Recents rendering, with the icon
-  beside the title and consistent mention/composer styling. Two-finger swipes
-  switch conversations directly, without requiring a first pinch.
+- Choose server files and folders with `@`, including text-file line ranges.
+  Selected references stay with the draft or queued edit and are read when sent;
+  an unavailable reference pauses the message for correction.
+- Choose installed skills with `/` while composing, preview their instructions,
+  refresh suggestions and use full plugin skill names. Read formatted or raw
+  instructions and reference documents from chat or Administration.
+- Edit queued messages, steer text into active work or stop a run. An empty
+  composer shows Stop while work is running; typing restores Send and held actions.
+  Keep uncertain sends and commands paused for review without automatic retries.
+- Edit a saved prompt or restore its checkpoint after confirming replacement of
+  later history. Preserve the separate draft and pause queued follow-ups. Fork
+  from a saved answer even while the original chat continues working.
+- Choose models with provider filters, supplied prices and account usage. Tap or
+  hold the thinking control to select reasoning, toggle supported fast mode, and
+  inspect context composition while a turn is active.
+- Highlight supported source code in replies, Activity and file previews, with
+  exact copying, selection and line wrapping. Keep live code plain until complete.
+  Put download and preview controls beside output filenames; support formatted
+  and source views for Markdown files.
+- Preserve image attachments through sending and navigation, including Samsung
+  screenshots with large discarded metadata. Keep text-selection handles within
+  the visible reader without shortening the copied selection.
 
+### Health, schedules, usage and updates
 
-- Load groups independently of bot status and avatars, and prepare neighboring
-  swipe-card screenshots while the rest of Recents continues loading.
+- Set in-app alerts for host resource pressure and profile problems, with separate
+  warning/recovery thresholds and native Hermes critical-pressure alerts. Check
+  while Wing is open or its background task monitor is active; unavailable
+  readings stay marked as last known.
+- Acknowledge or snooze an issue for 30 minutes and retain that choice across
+  restarts. Open unresolved issues from the header and review acknowledged or
+  snoozed issues in Health alerts. Keep completed diagnostics visible during refresh.
+- Copy failed scheduled-task details or open a profile investigation chat from
+  the failure. Retain recent runs and clear recovered failure alerts.
+- View Analytics for all profiles on an instance or one selected profile, with
+  separate instance and profile pickers. Keep cached sections usable while fresh
+  totals arrive. Show token/model breakdowns and clearly labelled cost estimates,
+  including API-equivalent subscription usage.
+- Choose Stable releases or Main branch for Hermes updates, inspect the confirmed
+  target and explain unavailable comparisons. Show update progress immediately,
+  follow logs automatically with newest lines first, and scroll up to 16 visible
+  log rows without moving the surrounding controls.
 
-- Match Bots and Recents with the approved compact card family: prominent Bots names, right-hand artwork, freshness-ordered Recents without message previews or filters, and group discussions with persistent unread cues.
+### Notifications and recovery
 
-### Bots and discussions
-
-- Open a profile's Bot Chat by long pressing its icon in the Chats header.
-- Open Bot settings from the Bot Chat header avatar or name, with MCP
-  connectors available alongside the bot's configuration editors.
-
-- Preserve transparency in uploaded and generated group icons, including pictures
-  that need compression to fit the saved icon limit.
-
-- Show active discussion membership on bot cards and animate their saved shapes.
-
-- Prepare generated group pictures up to 8 MB before compressing the saved icon,
-  fixing failures when a provider returns an image larger than 2 MB.
-
-- Restore Running status and active avatar motion for bots doing background work.
-
-- Arrange overlapping group avatars as a triangle, square, pentagon or hexagon according to member count.
-
-- Dictate group messages with the same microphone, recording controls and
-  Local/Hermes voice-input settings as normal chats.
-- Default group icons show member bot avatars inside a square frame with a random Hermes palette color.
-- Pinch inward in group discussions to enter the shared Recents cards, preserving
-  the group draft, reading position and original Back destination.
-- Match group chat previews in the Recents switcher to bot chats, with the group
-  icon beside the title.
-
-- Fix generated group pictures and bot avatars with stock Hermes. Add detailed
-  device diagnostics while keeping the existing on-screen errors.
-
-- Edit existing group names, icon colors and pictures from the roster or discussion.
-- Use normal Wing activity animation and composer controls in groups, with
-  distinct user/bot alignment, a simpler header and a compact anchored member list.
-- Display recognized group mentions as bold, colored bot names and remove the
-  duplicate Members entry from the group menu.
-
-- Redesign group creation with picked bots above search, optional names,
-  palette-colored letter icons and room pictures saved on Hermes.
-- Format Discussion messages with sender avatars, names, timestamps and chat
-  bubbles; improve multiline drafting, mentions and reading-position retention.
-- Keep internal group workers out of Recents and chat alerts. Inspect their
-  read-only histories from the group overflow menu.
-- Align group Copy with speaker names, label user bubbles and simplify the
-  composer. Share the latest-message control and normal chat transcript for
-  read-only bot working histories.
-- Enable Android system scroll capture for the group transcript.
-- Add Bots in the side menu, with agents across saved Hermes connections,
-  Working and Needs input filters, pins and continuing bot conversations.
-- Edit bot names, shapes, colors and avatars with automatic saving. Create or
-  duplicate bots and open their existing instructions, models, accounts and tools.
-- Create hosted Discussion groups with 2–6 bots on one connection, mentions,
-  shared replies, approvals, stop and interrupted-task recovery. Accepted group
-  work runs on Hermes and can continue while Wing is backgrounded.
-- Add read-only bot screen previews and profile-scoped display start/stop controls.
-  Hide the preview while a person controls that screen.
-
-### Recents and composing
-
-- Switch between chats and group discussions with a two-finger sideways swipe,
-  without opening Recents first. Pinch inward to browse the circular card stack
-  with momentum and tap a card to open its conversation. Back closes the stack
-  first, then returns to Chats, Bots or Groups; drafts stay with their chats.
-- Keep slash-command invocations when a timeout or lost connection leaves the
-  outcome uncertain. Report the uncertainty without automatically retrying.
-- Show soft edge cues for replies and confirmed requests for input in other
-  recent conversations. Animate switching with retained conversation snapshots
-  and keep available Recents rows visible during background refresh.
-- Choose a skill by typing `/` after a space or on a new line within a message.
-  Highlight its name in the draft and load its instructions when sending.
-- Show Stop in an empty composer while work is running; restore Send and held
-  action choices when typing begins.
-
-### Health alerts and usage
-
-- Add in-app health alerts for host resource pressure and observed profile
-  problems. A bell on every screen opens issue details and the triggering reading;
-  optional brief notices leave unresolved issues available in the bell.
-- Configure warning and recovery percentages and durations independently for
-  memory, disk and CPU. Save valid edits automatically, with separate toggles
-  for immediate native Hermes critical memory and disk pressure alerts.
-- Check while Wing is open or its existing background task monitor is active.
-  Retain warning/recovery progress across short background pauses and confirm
-  with a fresh reading on return. Keep unavailable findings marked as last known.
-- Show connection notices only when automatic recovery has failed and needs
-  manual help. Keep Doctor and security-audit findings in Health without alerts.
-- Use Hermes' model catalog for subscription API-equivalent estimates and share
-  the models.dev API price catalog between Analytics and model selection.
-
-### Conversations, models and files
-
-- Place sent messages on the right with timestamps, Copy, Edit and Restore in a
-  compact footer. Restore confirms removal of later history and reruns the saved
-  prompt, preserving the separate draft and pausing queued follow-ups for review.
-- Keep Fork on selected saved answers, with Regenerate available in the current
-  chat; remove Fork from the held composer menu.
-- Show saved bot avatars in canonical chat rows, Recents and conversation titles.
-  Use the bot's saved name in its conversation and show the assigned project's
-  saved icon and color beside its name.
-- Color Python, shell commands and other identified source languages in replies,
-  Activity and file previews. Keep exact selection/copy, default line wrapping and
-  a wrap toggle, including in full Activity code viewers. Prepare coloring away
-  from the UI thread and lay out visible source lazily; live code stays plain
-  until completion, and unsupported source remains readable without coloring.
-- Put icon-only download and preview actions beside output filenames.
-- Use a compact provider-filtered model picker with model cards for supplied
-  prices and account usage. Open on the selected provider and model, retain each
-  account's reported usage windows, and apply choices explicitly.
-- Keep composer model controls compact. Tap the model name to choose a model,
-  toggle supported fast mode, or hold the thinking control and slide to a
-  reasoning level. Center the context percentage in its ring and show a compact
-  breakdown when tapped.
-- Accept Samsung screenshots whose discarded image metadata previously caused
-  preparation to fail.
-
-### Activity and skill reading
-
-- Rework Timeline, Tasks, Agents and Work into compact rows with shared detail
-  panels for requests, code, output, file changes, search matches and other
-  receipts. Keep copy, preview, share and full-view actions next to their content.
-- Interleave supplied reasoning with Timeline calls, retain saved task snapshots,
-  and show agent goals, lifecycle status and available output without repeating
-  status or offering empty disclosures.
-- Show approximate reply time from the original prompt and final saved answer's
-  timestamps, including thinking and tool work. Keep it separate from measured
-  tool durations and omit it when the required timestamps are unavailable.
-- Recover measured tool durations across reopened runtimes and locally retained
-  history. Recover missed completion timings while Hermes still retains their
-  events, without guessing measurements from message timestamps.
-- Open captured skill instructions in a shared reader with formatted/raw modes,
-  Contents, previous/next navigation and supplied reference files. Use the same
-  reader for installed skills in Administration, with instructions accessible
-  beside the skill toggle.
-- Fix blank skill-management results, read stock plugin skill envelopes, and
-  reserve activity-card space while instructions load.
-- Show "Summarizing conversation…" above the composer while Hermes compresses
-  history, and retain Activity tabs and expanded details during lazy loading.
-
-### Recovery and other fixes
-
-- Keep Chats interactive after confirmed chat and project changes. Refresh
-  quietly in the background, preserving totals, search results and scroll
-  position. Failed reads offer retry. Dismissing an action menu no longer
-  reloads the list.
-- Fix chat menus turning the screen pale when a live update replaces their row.
-- Scope Project filter choices to the selected profiles and retain project icons.
-- Keep saved-chat connection recovery alive when its chat-list screen is replaced.
-  Retry connections on foreground return before showing manual recovery notices.
-- Apply Once, Session and Deny directly from command notifications. Keep Always
-  behind review, require review for truncated or changed commands, and reload
-  cold or cached chats before deciding. Recover stopped/finished monitoring state
-  from refreshed history without duplicate alerts.
-- Preserve prepared attachments and Android shared-file offers through their
-  owning operations; retain configuration-export destinations and unique file
-  offers through navigation and cleanup.
-- Restore Fork by registering the new chat before observing its model controls.
-  Keep task status labels accessible and profile repair choices reachable with
-  enlarged text.
-- Outline the continuous selected analytics date span, including zero-usage days.
-- Retain completed Doctor and security-audit observations through refresh and
-  show diagnostic progress separately from completed findings.
+- Open the exact chat or discussion from Android notifications, including cold
+  starts. Keep conversation alerts individually tappable. Watching chats opens
+  its single conversation or Recents when monitoring several.
+- Use Once, Review and Deny for command approvals in Android; broader choices
+  require review in Wing. Keep unresolved input requests when newer replies arrive.
+- Follow shared discussions across pauses between bot turns and replace each
+  group's notification with its latest reply. Keep internal group workers out of
+  the ordinary chat list and reply alerts.
+- Use Wing's feather pulse for confirmed active work and explicit pending actions.
+  Keep action icons visible, screens usable and automatic background refreshes quiet.
+- Reuse dashboard sign-in across screens, retry connection recovery on return,
+  and retain drafts, file offers and known content through interrupted reads.
 
 ## [1.2.0] - 2026-10-02
 

@@ -173,3 +173,64 @@ document.addEventListener('keydown', event => {
   event.preventDefault();
   openScreenshot(thumbnail, false);
 });
+
+// The picture keeps its still-image link available while the GIF plays once.
+for (const demo of document.querySelectorAll('[data-ripple-demo]')) {
+  const source = demo.querySelector('[data-ripple-source]');
+  const image = demo.querySelector('img');
+  const replay = demo.querySelector('[data-ripple-replay]');
+  const error = demo.querySelector('.ripple-error');
+  let timer;
+  let retireLoad = () => {};
+  let sequence = 0;
+  let played = false;
+
+  function stop(failed = false) {
+    clearTimeout(timer);
+    retireLoad();
+    source.removeAttribute('srcset');
+    demo.setAttribute('aria-busy', 'false');
+    replay.disabled = false;
+    replay.hidden = reducedMotion.matches;
+    error.hidden = !failed;
+    replay.setAttribute('aria-label', failed ? 'Retry reply ripple animation' : 'Replay reply ripple animation');
+    replay.title = replay.getAttribute('aria-label');
+  }
+
+  function play() {
+    if (reducedMotion.matches || demo.getAttribute('aria-busy') === 'true') return;
+    played = true;
+    error.hidden = true;
+    demo.setAttribute('aria-busy', 'true');
+    replay.disabled = true;
+    replay.setAttribute('aria-label', 'Playing reply ripple animation');
+    replay.title = 'Playing reply ripple animation';
+    const url = new URL('assets/screenshots/recents-arrival-dark.gif', document.baseURI);
+    url.searchParams.set('play', String(++sequence));
+    const loaded = () => {
+      if (image.currentSrc !== url.href) return;
+      retireLoad();
+      clearTimeout(timer);
+      timer = setTimeout(() => stop(), 4550);
+    };
+    const failed = () => stop(true);
+    image.addEventListener('load', loaded);
+    image.addEventListener('error', failed);
+    retireLoad = () => {
+      image.removeEventListener('load', loaded);
+      image.removeEventListener('error', failed);
+    };
+    timer = setTimeout(() => stop(true), 15000);
+    source.srcset = url.href;
+  }
+
+  replay.hidden = reducedMotion.matches;
+  replay.addEventListener('click', play);
+  const observer = new IntersectionObserver(entries => {
+    if (!played && entries.some(entry => entry.isIntersecting) && !reducedMotion.matches) play();
+  }, { threshold: .35 });
+  observer.observe(demo);
+  reducedMotion.addEventListener('change', () => stop());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+  addEventListener('pagehide', () => { stop(); observer.disconnect(); });
+}

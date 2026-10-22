@@ -43,9 +43,15 @@ If a breakdown read fails, the panel keeps known values and offers Retry.
 
 Messages show a local date/time in the footer when available. Long-press it for the full value. Copy at the upper right copies only the message. Newly sent messages may use their local submission time until saved history arrives.
 
-A saved reply can show an approximate time beside **Used N tools**, measured from your saved sent message to the final saved reply. It includes thinking and tool work; missing timestamps leave it unavailable. See [Tool activity](TOOL_ACTIVITY.md#approximate-reply-time).
+A saved reply can show an approximate time beside **Used N tools**, measured from your saved sent message to the final saved reply. It includes thinking and tool work; missing timestamps leave it unavailable. See [Tool activity](TOOL_ACTIVITY.md#activity-timing).
 
-Markdown, code and tables support copying and horizontal scrolling where needed. Literal source and output have a wrap control. Long content can be read separately and returned to the latest conversation. [Execution and search](EXECUTION_FIND_AND_OUTPUTS.md) explains Find and Activity; [Output viewers](OPENING_OUTPUT_FILES.md) covers files.
+Wide tables use stacked header/value rows on narrow screens. Their icon controls
+switch between rows and a wrapped grid. Use a table's full-screen icon to enter
+conversation reading mode, hiding the composer and portrait context row without
+losing the draft. The same icon or Android Back restores it. Landscape combines
+the title and context into one header row. Code and literal output retain their
+own wrap and copy controls. Long content can be read separately and returned to
+the latest conversation. [Execution and search](EXECUTION_FIND_AND_OUTPUTS.md) explains Find and Activity; [Output viewers](OPENING_OUTPUT_FILES.md) covers files.
 
 ### Selecting text in scrolling previews
 

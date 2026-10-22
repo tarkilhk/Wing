@@ -26,7 +26,7 @@ Tap a profile to focus its chats, or combine profiles in one view. Choose projec
 
 ## Multitask with Recents
 
-Find running chats and conversations waiting for your input across profiles. In a chat opened from Recents, swipe sideways with two fingers to switch, or pinch into a card stack and tap another conversation.
+Find running chats and conversations waiting for your input across profiles. From any chat or group discussion, swipe sideways with two fingers to switch, or pinch into a card stack and tap another conversation. Unread cues help you spot new replies while working elsewhere.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/recents.html">
@@ -36,9 +36,9 @@ Find running chats and conversations waiting for your input across profiles. In 
 
 [Explore Recents and gestures](https://tarkilhk.github.io/Wing/recents.html)
 
-## Manage your bots
+## Bots and group discussions
 
-Find bots across your saved connections and return to each bot's continuing chat. Pin the bots you use most, filter by Working or Needs input, and give each one a distinct name and appearance.
+Find bots across your saved connections and return to each bot's continuing chat. Pin favorites and give each one a distinct name and appearance. Bring 2–6 bots into a shared discussion; Hermes coordinates their work on your server, so it can continue after Wing closes.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/bots.html">
@@ -48,9 +48,15 @@ Find bots across your saved connections and return to each bot's continuing chat
 
 [Explore Bots](https://tarkilhk.github.io/Wing/bots.html)
 
+## Take over your agent's desktop
+
+Open a bot's screen, take control and use your phone's keyboard, touch gestures or clipboard to finish a step yourself. Keep the conversation beside the desktop, then hand control back with a note asking the agent to continue. Requires a configured Hermes Bot Screen.
+
+[Explore desktop control](https://tarkilhk.github.io/Wing/bots.html#screen)
+
 ## Live work
 
-Inspect tool calls, reasoning, tasks and delegated agents, then steer or stop a run, queue a follow-up, or fork from a selected saved answer. Choose a skill while composing a message. Open skills in the chat to read their instructions.
+Follow reasoning and timed tool runs as an answer streams. Open Tasks or Subagents to inspect progress, read a child's conversation and use its supported controls. Steer or stop a run, queue a follow-up, or fork from a saved answer while the original chat keeps working. Add server files with @ and choose skills with / while composing.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/live-work.html">
@@ -62,7 +68,7 @@ Inspect tool calls, reasoning, tasks and delegated agents, then steer or stop a 
 
 ## Answers and files
 
-Read formatted Markdown, wide tables and highlighted source code. Copy code or whole replies, listen to answers, and preview, save or share output files. Edit an earlier sent message, or restore its checkpoint to remove later history and rerun that prompt.
+Read wide tables as stacked rows or a wrapped grid. Open reading mode or turn the phone sideways for more room. Copy highlighted code or whole replies, listen to answers, and preview, save or share files. Edit an earlier message, or restore its checkpoint after confirming removal of later history.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/results.html">
@@ -84,6 +90,12 @@ Manage models, instructions, skills, connectors and scheduled tasks for each pro
 
 [Explore Administration](https://tarkilhk.github.io/Wing/administration.html)
 
+## Scheduled work
+
+Schedule recurring or one-off work on Hermes, choose where results go and inspect recent runs. When a task fails, open an investigation chat with the responsible profile.
+
+[Explore scheduled tasks](https://tarkilhk.github.io/Wing/scheduled-tasks.html)
+
 ## Health
 
 Check host resources, backend diagnostics and profiles. Set alerts for resource pressure or profile problems, then inspect notifications from any screen. Checks run while Wing is open or monitoring ongoing work.
@@ -98,7 +110,7 @@ Check host resources, backend diagnostics and profiles. Set alerts for resource 
 
 ## Analytics
 
-Compare activity and token usage across profiles, models and time periods.
+Compare activity, token usage and estimated cost across all profiles on an instance, or focus on one profile, model or time period.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/usage.html">

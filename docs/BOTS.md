@@ -267,30 +267,34 @@ needs a supported Linux host with the Hermes Bot Screen components installed.
 Start/stop controls target the selected bot; stopping is unavailable while a
 human holds control.
 
-Use the control icon in the floating bar to take control. If another device has
-control, Wing asks before replacing it. Trackpad mode lets you move one finger
-to position the pointer, tap to click, and hold then move to drag. Pinch to zoom;
-move two fingers together to scroll. The controls tray also provides mouse
-buttons, zoom buttons and Fit screen. Direct touch taps the target itself;
-Move view pans without sending desktop input.
+Use the control icon to take control. If another device has control, Wing asks
+before replacing it. Tap where you want to click, double-tap to double-click,
+hold to right-click, or double-tap then hold and move to drag. One finger pans
+the magnified view; pinch to zoom and move two fingers together to scroll.
+The persistent side strip also scrolls the desktop at the last touched point.
 
-Turn the phone sideways to enter full screen automatically. Returning upright
-restores the normal viewer; the fullscreen icon works in either orientation.
-Exit fullscreen keeps your control. Use the bar's handle to dock it at the top
-or bottom when it covers something you need.
+Four main icons open the phone keyboard, paste the phone clipboard, reveal More
+controls and change ownership. Extra keyboard controls include Enter, Tab,
+Escape, Backspace, arrows and one-shot Ctrl/Alt/Shift modifiers. Paste transfers
+plain text and invokes Ctrl-V without pressing Enter. Its progress indicator
+stays visible until the remote application requests and receives the text;
+an unaccepted paste shows a retryable error. More contains screen refresh,
+start/stop, fullscreen, panel visibility and gesture help.
 
-Open the phone keyboard from the bar to type. The desktop keeps its magnification
-and brings the last clicked point into the uncovered area; use Move view if the
-caret has moved elsewhere. Text is cleared locally after sending. Extra controls
-include Enter, Tab, Escape, Backspace, arrows and Ctrl/Alt/Shift. Selected modifiers
-apply to each key and are released remotely after that key. Back closes the
-keyboard first, then the controls tray or fullscreen, before leaving the viewer.
+Turn the phone sideways to enter full screen automatically. The agent panel
+sits beside the desktop in landscape and below it in portrait. When opened from
+a chat, it shows the latest assistant message or pending request. Open
+**Conversation** to read or queue a message without replacing the main chat's
+draft. Answer formal approvals and private-input requests in the main chat.
 
-Hand control back when finished, then tell the bot to continue. Closing the
-screen hands back this phone’s control. If that cannot be confirmed, Wing keeps
-the screen open for recovery. Backgrounding or losing the connection leaves
-control held until you explicitly hand it back. If the controller belongs to
-another connection or device, force hand-back asks for confirmation.
+Hand control back with an optional note asking the agent to continue. Wing
+releases control before queuing the note. If sending fails, the note stays
+available and Wing explains that control was already returned. A screen opened
+directly from the roster has no selected conversation and simply returns control.
+Closing the screen also hands back this phone's control; if that cannot be
+confirmed, Wing keeps the screen open for recovery. Backgrounding or losing the
+connection leaves control held until you explicitly hand it back. Taking or
+releasing another device's control requires confirmation.
 
 Wing does not currently configure RoomLink peer groups, desktop Direct
 conversations, pet avatars or automatic screen opening. Hosted groups use bots

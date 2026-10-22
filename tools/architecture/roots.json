@@ -6593,6 +6593,23 @@
       "source": "test/question_activity_projection_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "website-release-media-capture",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/website/capture_release_media_test.dart",
+      "purpose": "Export production desktop takeover and scheduled-task screens with sample data.",
+      "source": "internal/docs/WEBSITE.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "website-ripple-browser-review",
+      "kind": "manual-or-ci-cli",
+      "path": "tools/website/review_ripple.cjs",
+      "purpose": "Verify ripple loading, replay and recovery, reduced motion and guide layouts.",
+      "source": "internal/docs/WEBSITE.md",
+      "status": "supported"
     }
   ],
   "files": [
@@ -15409,6 +15426,51 @@
     {
       "path": "test/phone_reading_test.dart",
       "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "tools/website/capture_release_media_test.dart",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/bot-chat-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/bot-screen-control-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/scheduled-tasks-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/scheduled-task-editor-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/scheduled-task-runs-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/recents-arrival-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/recents-arrival-dark.gif",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "tools/website/review_ripple.cjs",
+      "area": "website",
       "provenance": "tracked"
     }
   ],

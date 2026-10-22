@@ -13,9 +13,8 @@ You can open a visible chat while its profile or chat list is refreshing. Wing
 opens the conversation and loads its history independently of that refresh.
 Back returns to Chats while the conversation is still connecting.
 
-Ongoing chats keep the desktop app's moving border around their row and a steady
-status dot. With reduced motion, the border stays still. Opening the chat and its
-actions remain available while Hermes works.
+Confirmed ongoing work uses Wing's feather pulse in the row's status slot.
+Opening the chat and its actions remain available while Hermes works.
 
 Inside a chat, tap the project name below the chat title to open the project
 picker and move the chat. Tap the chat title to open **Rename chat**, or hold a
