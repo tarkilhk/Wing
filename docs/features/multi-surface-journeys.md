@@ -35,6 +35,8 @@ python3 scripts/test_vanilla_hermes.py --hermes-source "$WING_HERMES_SOURCE" --o
 
 `WING_HERMES_SOURCE` must point to the inspected stock checkout. The runner owns a temporary backend/profile dataset and exercises the profile/project production UI. It does not authorize a deployed-server upgrade or provider-charged generation.
 
+Phone reading is covered by the `transcript-expansion` family: enter table reading mode, rotate, return to the retained draft, reveal composer controls and use Back without leaving the chat.
+
 ## Gotchas
 
 Fixture native journeys, stock transport and deployed-provider acceptance prove different boundaries. Android owner recreation is not process death; require the separate process-recovery verdict. Keep each failed aggregate failed even when a focused recovery passes. Do not sum overlapping case counts. Run families serially on this workspace; retain artifacts after the owned emulator and backend are retired.

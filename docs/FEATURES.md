@@ -57,6 +57,7 @@ decisions use their operation icon and error color.
   and reported success.
   Live elapsed counters start only from a backend tool start; saved timing appears
   only when available. See [tool activity](TOOL_ACTIVITY.md).
+- **Read tables on your phone.** Wide tables stack their column labels and values in portrait. Choose a grid with the table toolbar when comparing columns. Its full-screen icon enters reading mode directly, hiding the composer; the same icon or Back restores it. Landscape uses a compact header and composer, with extra controls available from the expand icon.
 - **Stay oriented.** See the selected model, context percentage inside its ring and current work. While Hermes compresses the conversation, the status above the composer shows “Summarizing conversation…” until work resumes or compression finishes. Tap the ring for a compact breakdown of used/max tokens, estimated context categories and available compression count. Switch models with a clear confirmation when Hermes warns about the change.
 
 ## Keep work moving

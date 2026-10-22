@@ -1,4 +1,5 @@
 import 'selection_viewport.dart';
+import 'adaptive_markdown_table.dart';
 import 'package:flutter/foundation.dart' show mapEquals;
 import 'dart:convert';
 
@@ -214,7 +215,33 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
         sizedImageBuilder: widget.sizedImageBuilder,
         checkboxBuilder: widget.checkboxBuilder,
         bulletBuilder: widget.bulletBuilder,
-        builders: widget.builders,
+        builders: {
+          ...widget.builders,
+          _adaptiveTableTag: _AdaptiveTableBuilder((cell, heading) {
+            final align = switch (cell.attributes['align']) {
+              'right' => WrapAlignment.end,
+              'center' => WrapAlignment.center,
+              _ => WrapAlignment.start,
+            };
+            return BlockReusingMarkdownBody(
+              data: '',
+              parsedNodes: [md.Element('p', cell.children ?? [])],
+              selectable: widget.selectable,
+              styleSheet: style.copyWith(
+                p: heading
+                    ? style.p?.copyWith(fontWeight: FontWeight.w600)
+                    : style.p,
+                textAlign: align,
+              ),
+              onTapLink: widget.onTapLink,
+              onSelectionChanged: widget.onSelectionChanged,
+              onTapText: widget.onTapText,
+              sizedImageBuilder: widget.sizedImageBuilder,
+              builders: widget.builders,
+              fitContent: false,
+            );
+          }),
+        },
         paddingBuilders: widget.paddingBuilders,
         fitContent: widget.fitContent,
         listItemCrossAxisAlignment: widget.listItemCrossAxisAlignment,
@@ -228,7 +255,7 @@ class _BlockReusingMarkdownBodyState extends State<MarkdownWidget> {
       final builderStart = CompletionDiagnostics.enabled
           ? CompletionDiagnostics.start()
           : 0;
-      final built = builder.build([node]);
+      final built = builder.build([_adaptTables(node)]);
       final children =
           widget.selectable &&
               node is md.Element &&
@@ -334,4 +361,39 @@ class _BlockDelegate implements MarkdownBuilderDelegate {
     }
     _recognizers.clear();
   }
+}
+
+const _adaptiveTableTag = 'wing-adaptive-table';
+
+// Adapt a copy at the renderer boundary; worker snapshots and signatures retain
+// their original table semantics. Nested tables in lists/quotes use the same UI.
+md.Node _adaptTables(md.Node node) {
+  if (node is! md.Element) return node;
+  if (node.tag == 'table') return _TableElement(node);
+  return md.Element(node.tag, node.children?.map(_adaptTables).toList())
+    ..attributes.addAll(node.attributes);
+}
+
+class _TableElement extends md.Element {
+  _TableElement(this.table) : super(_adaptiveTableTag, []);
+  final md.Element table;
+}
+
+class _AdaptiveTableBuilder extends MarkdownElementBuilder {
+  _AdaptiveTableBuilder(this.cellBuilder);
+  final Widget Function(md.Element, bool) cellBuilder;
+
+  @override
+  bool isBlockElement() => true;
+
+  @override
+  Widget visitElementAfterWithContext(
+    BuildContext context,
+    md.Element element,
+    TextStyle? preferredStyle,
+    TextStyle? parentStyle,
+  ) => AdaptiveMarkdownTable(
+    table: (element as _TableElement).table,
+    cellBuilder: cellBuilder,
+  );
 }

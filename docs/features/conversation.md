@@ -7,6 +7,7 @@ Feature ID: `conversation`.
 ## Sub-features
 
 - `conversation.read` — Reconcile live and saved messages.
+- `conversation.reading-mode` — Use a table’s full-screen icon to hide the composer and portrait context row without leaving the conversation. The same icon or Android Back restores it; drafts remain intact. Landscape puts title and scope in one header row.
 - `conversation.search` — Find and open older content.
 - `conversation.position` — Page and return without losing reading position.
 
@@ -21,7 +22,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
-  flutter test --no-pub test/profile_history_search_test.dart test/conversation_routes_test.dart test/conversation_reading_position_test.dart
+  flutter test --no-pub test/profile_history_search_test.dart test/conversation_routes_test.dart test/conversation_reading_position_test.dart test/phone_reading_test.dart
   ```
 
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.

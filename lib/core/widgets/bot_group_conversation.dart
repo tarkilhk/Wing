@@ -1,3 +1,4 @@
+import 'conversation_reading_scope.dart';
 import 'selection_viewport.dart';
 import 'package:flutter/material.dart';
 
@@ -40,7 +41,13 @@ class BotGroupConversation extends StatelessWidget {
   final bool showMembers;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ConversationReadingScope(key: ValueKey(group.key), builder: _build);
+
+  Widget _build(BuildContext context) {
+    final reading = ConversationReadingScope.maybeOf(context)!;
+    final landscape = ConversationReadingScope.compact(context);
+    final hideContext = reading.active && !landscape;
     final bots = {for (final bot in appearances) bot.scope.profileName: bot};
     final palette = botBubblePalette({
       for (final member in group.members)
@@ -52,7 +59,10 @@ class BotGroupConversation extends StatelessWidget {
     return Scaffold(
       appBar: WingAppBar(
         context: context,
-        leading: StudioButtonPress(child: BackButton(onPressed: onBack)),
+        inlineContext: landscape || reading.active,
+        leading: StudioButtonPress(
+          child: BackButton(onPressed: reading.active ? reading.exit : onBack),
+        ),
         title: Builder(
           builder: (context) {
             final title = WingConversationTitle(
@@ -83,9 +93,9 @@ class BotGroupConversation extends StatelessWidget {
           },
         ),
         actions: actions,
-        contextRow: instanceHeader,
+        contextRow: hideContext ? null : instanceHeader,
         contextActions: [
-          if (showMembers)
+          if (showMembers && !hideContext)
             SizedBox(
               key: membersAnchor,
               child: StudioButtonPress(
@@ -117,7 +127,14 @@ class BotGroupConversation extends StatelessWidget {
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
-                      children: [...beforeComposer, composer],
+                      children: [
+                        ...beforeComposer,
+                        Visibility(
+                          visible: !reading.active,
+                          maintainState: true,
+                          child: composer,
+                        ),
+                      ],
                     ),
                   ),
                 ],

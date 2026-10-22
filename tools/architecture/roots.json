@@ -15390,6 +15390,26 @@
       "path": "test/question_activity_projection_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/adaptive_markdown_table.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/conversation_reading_scope.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/adaptive_conversation_composer.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/phone_reading_test.dart",
+      "area": "test",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {

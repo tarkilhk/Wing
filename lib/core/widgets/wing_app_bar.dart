@@ -38,6 +38,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.contextRow,
     this.contextActions = const [],
     this.contextHeight = 48,
+    this.inlineContext = false,
     this.bottom,
     this.backgroundColor,
     this.surfaceTintColor,
@@ -48,7 +49,9 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
     bool inlineActions = false,
   }) : assert(contextRow != null || contextActions.isEmpty) {
     var separateActions =
-        !inlineActions && MediaQuery.textScalerOf(context).scale(16) >= 24;
+        !inlineActions &&
+        !inlineContext &&
+        MediaQuery.textScalerOf(context).scale(16) >= 24;
     final style = titleStyle(context);
     final label = title is Text ? (title as Text).data : null;
     final actionsWidth = actions.fold<double>(
@@ -77,6 +80,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
         );
     if (!inlineActions &&
+        !inlineContext &&
         !separateActions &&
         actions.isNotEmpty &&
         painter.computeLineMetrics().length > 1) {
@@ -91,6 +95,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget> actions, contextActions;
   final PreferredSizeWidget? bottom;
   final double contextHeight, titleSpacing;
+  final bool inlineContext;
   final Color? backgroundColor, surfaceTintColor;
   final ShapeBorder? shape;
   final bool centerTitle, automaticallyImplyLeading;
@@ -115,7 +120,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   double get _bottomHeight =>
-      (contextRow == null ? 0 : contextHeight) +
+      (contextRow == null || inlineContext ? 0 : contextHeight) +
       (_large && actions.isNotEmpty ? 48 : 0) +
       (bottom?.preferredSize.height ?? 0);
   @override
@@ -142,12 +147,21 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
                     softWrap: (title as Text).softWrap,
                     overflow: (title as Text).overflow,
                   )
+                : inlineContext && contextRow != null
+                ? Row(
+                    children: [
+                      Flexible(flex: 2, child: title!),
+                      const SizedBox(width: 12),
+                      Flexible(flex: 3, child: contextRow!),
+                    ],
+                  )
                 : title!,
           ),
     actions: [
       const HealthAlertBell(),
+      if (inlineContext) ...contextActions,
       if (!_large) ...actions,
-      if (contextRow == null) const StudioLoadingSlot(),
+      if (contextRow == null || inlineContext) const StudioLoadingSlot(),
     ],
     bottom: _bottomHeight == 0
         ? null
@@ -156,7 +170,7 @@ class WingAppBar extends StatelessWidget implements PreferredSizeWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (contextRow != null)
+                if (contextRow != null && !inlineContext)
                   SizedBox(
                     height: contextHeight,
                     child: Padding(

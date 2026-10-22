@@ -7,6 +7,7 @@ Feature ID: `chat-inputs`.
 ## Sub-features
 
 - `chat-inputs.send` — Submit once and preserve newer unsent text.
+- `chat-inputs.landscape` — Read with a one-row composer on landscape phones. Send/Stop stays visible; expand the controls to reach attachments, context and model options. With the keyboard open, the field and Send/Stop stay on one row; expanding dismisses the keyboard.
 - `chat-inputs.queue` — Edit or cancel a queued follow-up.
 - `chat-inputs.revise` — Edit restore regenerate or fork saved work.
 
@@ -21,7 +22,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
-  flutter test --no-pub test/profile_composer_queue_test.dart test/profile_composer_actions_test.dart test/profile_prompt_reply_transport_test.dart test/profile_vault_server_request_test.dart
+  flutter test --no-pub test/phone_reading_test.dart test/profile_composer_queue_test.dart test/profile_composer_actions_test.dart test/profile_prompt_reply_transport_test.dart test/profile_vault_server_request_test.dart
   ```
 
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.

@@ -409,35 +409,21 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         continue;
       }
       Widget prose(String text, List<md.Node>? nodes) {
-        final options = widget.documentPath != null || widget.onHeadings != null
-            ? MarkdownBody(
-                data: text,
-                checkboxBuilder: _buildTaskMarker,
-                inlineSyntaxes: widget.deliverables
-                    ? _deliverableSyntaxes
-                    : null,
-                paddingBuilders: {
-                  for (var level = 1; level <= 6; level++) 'h$level': headings,
-                },
-                builders: builders,
-                selectable: true,
-                onTapLink: _tapLink,
-                sizedImageBuilder: _buildImage,
-                styleSheet: styleSheet,
-              )
-            : BlockReusingMarkdownBody(
-                data: text,
-                parsedNodes: nodes,
-                checkboxBuilder: _buildTaskMarker,
-                inlineSyntaxes: widget.deliverables
-                    ? _deliverableSyntaxes
-                    : null,
-                builders: builders,
-                selectable: true,
-                onTapLink: _tapLink,
-                sizedImageBuilder: _buildImage,
-                styleSheet: styleSheet,
-              );
+        final options = BlockReusingMarkdownBody(
+          data: text,
+          parsedNodes: nodes,
+          paddingBuilders:
+              widget.documentPath != null || widget.onHeadings != null
+              ? {for (var level = 1; level <= 6; level++) 'h$level': headings}
+              : const {},
+          checkboxBuilder: _buildTaskMarker,
+          inlineSyntaxes: widget.deliverables ? _deliverableSyntaxes : null,
+          builders: builders,
+          selectable: true,
+          onTapLink: _tapLink,
+          sizedImageBuilder: _buildImage,
+          styleSheet: styleSheet,
+        );
         return options;
       }
 

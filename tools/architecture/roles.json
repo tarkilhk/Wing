@@ -1886,6 +1886,16 @@
       "feature": "chat-activity",
       "library": "lib/core/widgets/activity_time.dart"
     },
+    "lib/core/widgets/adaptive_conversation_composer.dart": {
+      "role": "view",
+      "feature": "chat-inputs",
+      "library": "lib/core/widgets/adaptive_conversation_composer.dart"
+    },
+    "lib/core/widgets/adaptive_markdown_table.dart": {
+      "role": "view",
+      "feature": "markdown",
+      "library": "lib/core/widgets/adaptive_markdown_table.dart"
+    },
     "lib/core/widgets/admin_model_picker.dart": {
       "role": "view",
       "feature": "model-selection",
@@ -2070,6 +2080,11 @@
       "role": "view",
       "feature": "chat-activity",
       "library": "lib/core/widgets/conversation_activity_status.dart"
+    },
+    "lib/core/widgets/conversation_reading_scope.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/conversation_reading_scope.dart"
     },
     "lib/core/widgets/deleted_chat_recovery_notice.dart": {
       "role": "view",

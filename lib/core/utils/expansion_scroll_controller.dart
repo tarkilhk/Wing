@@ -16,6 +16,7 @@ class ExpansionScrollController extends ScrollController {
 
   ExpansionAnchorBox? _anchor;
   bool _allowBottomGap = true;
+  bool _reflow = false;
   double _pendingHeight = 0;
   TranscriptAnchorBox? _readerAnchor;
   TranscriptAnchorBox? Function()? _readerReplacement;
@@ -41,6 +42,17 @@ class ExpansionScrollController extends ScrollController {
     _readerReplacement = replacement;
     if (anchor == null) return;
     _readerTop = anchor.leadingOffset;
+  }
+
+  /// A width change invalidates space reserved for a previous row geometry.
+  /// Keep the captured reader anchor, but constrain it to the reflowed content.
+  void prepareForReflow() {
+    releaseExpansionAnchor();
+    _reflow = true;
+    for (final position in positions.cast<_ExpansionScrollPosition>()) {
+      position._expansionScrollExtent = 0;
+      position._expansionMinScrollExtent = 0;
+    }
   }
 
   void anchorExpansion(BuildContext context, {required bool allowBottomGap}) {
@@ -167,7 +179,8 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
   bool applyViewportDimension(double nextViewport) {
     final previous = hasViewportDimension ? viewportDimension : null;
     final accepted = super.applyViewportDimension(nextViewport);
-    if (previous != null &&
+    if (!controller._reflow &&
+        previous != null &&
         controller.preserveViewportPosition() &&
         hasPixels &&
         axisDirection == AxisDirection.up &&
@@ -194,7 +207,20 @@ class _ExpansionScrollPosition extends ScrollPositionWithSingleContext {
     controller._readerReplacement = null;
     final delta = controller._pendingHeight;
     controller._pendingHeight = 0;
-    if (axisDirection == AxisDirection.up && reader?.attached == true) {
+    if (controller._reflow) {
+      final movement = reader?.attached == true
+          ? reader!.leadingOffset - controller._readerTop
+          : 0.0;
+      final target = (pixels + movement).clamp(
+        minScrollExtent,
+        maxScrollExtent,
+      );
+      if ((target - pixels).abs() > .01) {
+        correctPixels(target);
+        return false;
+      }
+      controller._reflow = false;
+    } else if (axisDirection == AxisDirection.up && reader?.attached == true) {
       // Content coordinates exclude user movement. The anchor also includes
       // disclosure growth, so do not apply that height correction a second time.
       final movement = reader!.leadingOffset - controller._readerTop;

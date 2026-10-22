@@ -1,3 +1,5 @@
+import '../widgets/conversation_reading_scope.dart';
+import '../widgets/adaptive_conversation_composer.dart';
 import '../widgets/selection_viewport.dart';
 import '../theme/wing_icons.dart';
 import '../widgets/profile_subagent_panel.dart';
@@ -1379,7 +1381,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         bot != null &&
         _bots.repository(bot.scope.connectionIdentity).server != null;
     final parentSessionId = controller.parentSessionId(chat);
+    final landscape = ConversationReadingScope.compact(context);
+    final reading = ConversationReadingScope.maybeOf(context)?.active == true;
+    final compactReading = landscape || reading;
     final stackChatScope =
+        !compactReading &&
         bot == null &&
         MediaQuery.textScalerOf(context).scale(12) > 18 &&
         MediaQuery.sizeOf(context).width < 480;
@@ -1427,6 +1433,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       canOpenBotSettings,
       parentSessionId,
       stackChatScope,
+      compactReading,
+      reading,
+      landscape,
       canMoveProject,
       chat.runtime.opening,
       chat.runtime.offline,
@@ -1445,6 +1454,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     _conversationHeaderInputs = inputs;
     return _conversationHeader = WingAppBar(
       context: context,
+      inlineContext: compactReading,
 
       leading: StudioButtonPress(
         child: IconButton(
@@ -1485,101 +1495,105 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ),
             ),
       contextHeight: stackChatScope ? 96 : 48,
-      contextRow: LayoutBuilder(
-        builder: (context, constraints) {
-          final scopeStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-            fontWeight: FontWeight.w400,
-          );
-          final server = ServerConnectionLabel(
-            alignment: Alignment.centerLeft,
-            label: controller.connection.label,
-            icon: controller.connection.icon,
-            status: controller.connectionStatus,
-            style: scopeStyle,
-          );
-          if (bot != null) return server;
-          final projectLabel = chat.runtime.opening || chat.runtime.offline
-              ? chat.key.workspace.profileName
-              : controller.chatProjectLabel(chat);
-          final projectAppearance = chat.runtime.opening || chat.runtime.offline
-              ? null
-              : controller.chatProject(chat);
-          final project = Tooltip(
-            message: 'Move to project: $projectLabel',
-            child: Semantics(
-              button: true,
-              enabled: canMoveProject,
-              focusable: canMoveProject,
-              onTap: canMoveProject ? openProjectPicker : null,
-              label: '$projectLabel. Move to project',
-              excludeSemantics: true,
-              child: StudioButtonPress(
-                child: InkWell(
-                  key: const ValueKey('chat-project-picker'),
-                  borderRadius: WingRadius.control,
-                  onTap: canMoveProject ? openProjectPicker : null,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minHeight: 48,
-                      minWidth: 48,
-                    ),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: 1,
-                      heightFactor: 1,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (projectAppearance != null) ...[
-                            projectAvatar(context, projectAppearance, size: 20),
-                            const SizedBox(width: 6),
-                          ],
-                          Flexible(
-                            child: Text(
-                              projectLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: scopeStyle,
+      contextRow: reading && !landscape
+          ? null
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final scopeStyle = Theme.of(context).textTheme.labelMedium
+                    ?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w400,
+                    );
+                final server = ServerConnectionLabel(
+                  alignment: Alignment.centerLeft,
+                  label: controller.connection.label,
+                  icon: controller.connection.icon,
+                  status: controller.connectionStatus,
+                  style: scopeStyle,
+                );
+                if (bot != null) return server;
+                final projectLabel =
+                    chat.runtime.opening || chat.runtime.offline
+                    ? chat.key.workspace.profileName
+                    : controller.chatProjectLabel(chat);
+                final projectAppearance =
+                    chat.runtime.opening || chat.runtime.offline
+                    ? null
+                    : controller.chatProject(chat);
+                final project = Tooltip(
+                  message: 'Move to project: $projectLabel',
+                  child: Semantics(
+                    button: true,
+                    enabled: canMoveProject,
+                    focusable: canMoveProject,
+                    onTap: canMoveProject ? openProjectPicker : null,
+                    label: '$projectLabel. Move to project',
+                    excludeSemantics: true,
+                    child: StudioButtonPress(
+                      child: InkWell(
+                        key: const ValueKey('chat-project-picker'),
+                        borderRadius: WingRadius.control,
+                        onTap: canMoveProject ? openProjectPicker : null,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            minHeight: 48,
+                            minWidth: 48,
+                          ),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: 1,
+                            heightFactor: 1,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (projectAppearance != null) ...[
+                                  projectAvatar(
+                                    context,
+                                    projectAppearance,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
+                                Flexible(
+                                  child: Text(
+                                    projectLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: scopeStyle,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
+                );
+                if (stackChatScope) {
+                  return Column(
+                    key: const ValueKey('chat-scope-stacked'),
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [server, project],
+                  );
+                }
+                return Row(
+                  key: const ValueKey('chat-scope-inline'),
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(width: constraints.maxWidth * .5, child: server),
+                    ExcludeSemantics(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Text('·', style: scopeStyle),
+                      ),
+                    ),
+                    Expanded(child: project),
+                  ],
+                );
+              },
             ),
-          );
-          if (stackChatScope) {
-            return Column(
-              key: const ValueKey('chat-scope-stacked'),
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [server, project],
-            );
-          }
-          return Row(
-            key: const ValueKey('chat-scope-inline'),
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: constraints.maxWidth * .5,
-                ),
-                child: server,
-              ),
-              ExcludeSemantics(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Text('·', style: scopeStyle),
-                ),
-              ),
-              Expanded(child: project),
-            ],
-          );
-        },
-      ),
       actions: [
         StudioButtonPress(
           child: PopupMenuButton<String>(
@@ -1633,13 +1647,24 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     BuildContext context,
     ProfileChat chat,
     BotRecord? bot,
+  ) => ConversationReadingScope(
+    key: ValueKey(('reading', chat.key)),
+    builder: (context) => _readingConversationPage(context, chat, bot),
+  );
+
+  Widget _readingConversationPage(
+    BuildContext context,
+    ProfileChat chat,
+    BotRecord? bot,
   ) {
     _bots.setSelectedAvatar(bot?.scope);
     final conversation = PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
-          if (_scaffoldKey.currentState?.isDrawerOpen == true) {
+          if (ConversationReadingScope.maybeOf(context)?.active == true) {
+            ConversationReadingScope.maybeOf(context)!.exit();
+          } else if (_scaffoldKey.currentState?.isDrawerOpen == true) {
             _scaffoldKey.currentState?.closeDrawer();
           } else if (_liveWorkDock.currentState?.dismiss() == true) {
             return;
@@ -2456,7 +2481,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 ),
               ),
             ),
-            _composerPanel(chat, constraints),
+            Visibility(
+              visible:
+                  ConversationReadingScope.maybeOf(context)?.active != true,
+              maintainState: true,
+              child: _composerPanel(chat, constraints),
+            ),
           ],
         ),
       ),
@@ -2607,7 +2637,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget? _composerField;
 
   Widget _composerTextField(BuildContext context, ProfileChat chat) {
+    final compact = ConversationReadingScope.compact(context);
+    final keyboard = ConversationReadingScope.compactKeyboard(context);
     final inputs = (
+      compact,
+      keyboard,
       context,
       chat,
       !_voiceInput.active && chat.composer.actions().canEditText,
@@ -2627,7 +2661,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         focusNode: _composerFocus,
         enabled: !_voiceInput.active && chat.composer.actions().canEditText,
         minLines: 1,
-        maxLines: 5,
+        maxLines: compact ? 1 : 5,
         keyboardType: TextInputType.multiline,
         textInputAction: TextInputAction.newline,
         contentInsertionConfiguration: _canPasteImage(chat)
@@ -2695,9 +2729,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
           filled: false,
-          contentPadding: const EdgeInsets.symmetric(
+          contentPadding: EdgeInsets.symmetric(
             horizontal: 12,
-            vertical: 12,
+            vertical: keyboard ? 4 : 12,
           ),
         ),
       ),
@@ -2717,6 +2751,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           composerObservation.editingEntry?.attachments ??
           composerObservation.attachments;
       final attachmentPreparation = composerObservation.attachmentPreparation;
+      final keyboard = ConversationReadingScope.compactKeyboard(context);
       return ConstrainedBox(
         constraints: BoxConstraints(maxHeight: constraints.maxHeight),
         child: Column(
@@ -2792,7 +2827,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     null;
                 return ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxHeight: constraints.maxHeight * (querying ? .4 : .7),
+                    maxHeight:
+                        constraints.maxHeight *
+                        (keyboard
+                            ? 1
+                            : querying
+                            ? .4
+                            : .7),
                   ),
                   child: child,
                 );
@@ -2825,7 +2866,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       SafeArea(
                         top: false,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+                          padding: EdgeInsets.fromLTRB(
+                            16,
+                            keyboard ? 0 : 8,
+                            16,
+                            keyboard ? 0 : 10,
+                          ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -2852,7 +2898,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                   clipBehavior: Clip.none,
                                   children: [
                                     Padding(
-                                      padding: const EdgeInsets.all(8),
+                                      padding: EdgeInsets.all(keyboard ? 4 : 8),
                                       child: Column(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
@@ -2974,188 +3020,209 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                               ],
                                             ),
                                           _voiceActivity(),
-                                          _composerTextField(context, chat),
-                                          if (chat
-                                                  .composer
-                                                  .observation
-                                                  .editingEntry !=
-                                              null)
-                                            _queuedEditActions(chat)
-                                          else
-                                            Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.end,
-                                              children: [
-                                                StudioButtonPress(
-                                                  child: IconButton(
-                                                    tooltip: 'Attach file',
-                                                    style: IconButton.styleFrom(
-                                                      minimumSize: const Size(
-                                                        48,
-                                                        48,
-                                                      ),
-                                                    ),
-                                                    icon: const Icon(Icons.add),
-                                                    onPressed:
-                                                        !controller
-                                                                .canAddAttachment(
-                                                                  chat,
-                                                                ) ||
-                                                            _launchingCamera
-                                                        ? null
-                                                        : () => _run(() async {
-                                                            final target =
-                                                                chat.key;
-                                                            final choice = await showModalBottomSheet<_AttachmentChoice>(
-                                                              context: context,
-                                                              showDragHandle:
-                                                                  true,
-                                                              builder: (context) => SafeArea(
-                                                                child: Column(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  children: [
-                                                                    StudioButtonPress(
-                                                                      child: ListTile(
-                                                                        leading:
-                                                                            const Icon(
-                                                                              Icons.camera_alt_outlined,
-                                                                            ),
-                                                                        title: const Text(
-                                                                          'Camera',
-                                                                        ),
-                                                                        enabled:
-                                                                            widget.onCapturePhoto !=
-                                                                            null,
-                                                                        onTap:
-                                                                            widget.onCapturePhoto ==
-                                                                                null
-                                                                            ? null
-                                                                            : () => Navigator.pop(
-                                                                                context,
-                                                                                _AttachmentChoice.camera,
-                                                                              ),
-                                                                      ),
-                                                                    ),
-                                                                    StudioButtonPress(
-                                                                      child: ListTile(
-                                                                        leading:
-                                                                            const Icon(
-                                                                              Icons.photo_library_outlined,
-                                                                            ),
-                                                                        title: const Text(
-                                                                          'Photos',
-                                                                        ),
-                                                                        onTap: () => Navigator.pop(
-                                                                          context,
-                                                                          _AttachmentChoice
-                                                                              .photos,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                    StudioButtonPress(
-                                                                      child: ListTile(
-                                                                        leading:
-                                                                            const Icon(
-                                                                              Icons.insert_drive_file_outlined,
-                                                                            ),
-                                                                        title: const Text(
-                                                                          'Files',
-                                                                        ),
-                                                                        onTap: () => Navigator.pop(
-                                                                          context,
-                                                                          _AttachmentChoice
-                                                                              .files,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                            );
-                                                            if (choice ==
-                                                                null) {
-                                                              return;
-                                                            }
-                                                            if (choice ==
-                                                                _AttachmentChoice
-                                                                    .camera) {
-                                                              if (_launchingCamera) {
-                                                                return;
-                                                              }
-                                                              setState(
-                                                                () =>
-                                                                    _launchingCamera =
-                                                                        true,
-                                                              );
-                                                              try {
-                                                                await widget
-                                                                    .onCapturePhoto!(
-                                                                  target,
-                                                                );
-                                                              } finally {
-                                                                if (mounted) {
-                                                                  setState(
-                                                                    () => _launchingCamera =
-                                                                        false,
-                                                                  );
-                                                                }
-                                                              }
-                                                              return;
-                                                            }
-                                                            final type =
-                                                                choice ==
-                                                                    _AttachmentChoice
-                                                                        .photos
-                                                                ? FileType.image
-                                                                : FileType.any;
-                                                            final files =
-                                                                await FilePicker.pickFiles(
-                                                                  type: type,
-                                                                );
-                                                            if (files.isEmpty) {
-                                                              return;
-                                                            }
-                                                            if (files.any(
-                                                              (file) =>
-                                                                  file.path ==
-                                                                  null,
-                                                            )) {
-                                                              throw const AttachmentDraftException(
-                                                                'A selected file could not be opened. Select the files again.',
-                                                              );
-                                                            }
-                                                            await controller
-                                                                .addAttachments(chat, [
-                                                                  for (final file
-                                                                      in files)
-                                                                    (
-                                                                      path: file
-                                                                          .path!,
-                                                                      name: file
-                                                                          .name,
-                                                                    ),
-                                                                ]);
-                                                          }),
-                                                  ),
-                                                ),
-                                                _composerContextRing(chat),
-                                                Expanded(
-                                                  child: Align(
-                                                    alignment:
-                                                        Alignment.centerRight,
-                                                    child:
-                                                        _composerIntelligenceButton(
-                                                          context,
-                                                          chat,
-                                                        ),
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                _composerActionButton(chat),
-                                              ],
+                                          AdaptiveConversationComposer(
+                                            field: _composerTextField(
+                                              context,
+                                              chat,
                                             ),
+                                            focusNode: _composerFocus,
+                                            primaryAction:
+                                                _composerActionButton(chat),
+                                            editing:
+                                                chat
+                                                    .composer
+                                                    .observation
+                                                    .editingEntry !=
+                                                null,
+                                            controls:
+                                                chat
+                                                        .composer
+                                                        .observation
+                                                        .editingEntry !=
+                                                    null
+                                                ? _queuedEditActions(chat)
+                                                : Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.end,
+                                                    children: [
+                                                      StudioButtonPress(
+                                                        child: IconButton(
+                                                          tooltip:
+                                                              'Attach file',
+                                                          style:
+                                                              IconButton.styleFrom(
+                                                                minimumSize:
+                                                                    const Size(
+                                                                      48,
+                                                                      48,
+                                                                    ),
+                                                              ),
+                                                          icon: const Icon(
+                                                            Icons.add,
+                                                          ),
+                                                          onPressed:
+                                                              !controller
+                                                                      .canAddAttachment(
+                                                                        chat,
+                                                                      ) ||
+                                                                  _launchingCamera
+                                                              ? null
+                                                              : () => _run(() async {
+                                                                  final target =
+                                                                      chat.key;
+                                                                  final choice =
+                                                                      await showModalBottomSheet<
+                                                                        _AttachmentChoice
+                                                                      >(
+                                                                        context:
+                                                                            context,
+                                                                        showDragHandle:
+                                                                            true,
+                                                                        builder:
+                                                                            (
+                                                                              context,
+                                                                            ) => SafeArea(
+                                                                              child: Column(
+                                                                                mainAxisSize: MainAxisSize.min,
+                                                                                children: [
+                                                                                  StudioButtonPress(
+                                                                                    child: ListTile(
+                                                                                      leading: const Icon(
+                                                                                        Icons.camera_alt_outlined,
+                                                                                      ),
+                                                                                      title: const Text(
+                                                                                        'Camera',
+                                                                                      ),
+                                                                                      enabled:
+                                                                                          widget.onCapturePhoto !=
+                                                                                          null,
+                                                                                      onTap:
+                                                                                          widget.onCapturePhoto ==
+                                                                                              null
+                                                                                          ? null
+                                                                                          : () => Navigator.pop(
+                                                                                              context,
+                                                                                              _AttachmentChoice.camera,
+                                                                                            ),
+                                                                                    ),
+                                                                                  ),
+                                                                                  StudioButtonPress(
+                                                                                    child: ListTile(
+                                                                                      leading: const Icon(
+                                                                                        Icons.photo_library_outlined,
+                                                                                      ),
+                                                                                      title: const Text(
+                                                                                        'Photos',
+                                                                                      ),
+                                                                                      onTap: () => Navigator.pop(
+                                                                                        context,
+                                                                                        _AttachmentChoice.photos,
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                  StudioButtonPress(
+                                                                                    child: ListTile(
+                                                                                      leading: const Icon(
+                                                                                        Icons.insert_drive_file_outlined,
+                                                                                      ),
+                                                                                      title: const Text(
+                                                                                        'Files',
+                                                                                      ),
+                                                                                      onTap: () => Navigator.pop(
+                                                                                        context,
+                                                                                        _AttachmentChoice.files,
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                                ],
+                                                                              ),
+                                                                            ),
+                                                                      );
+                                                                  if (choice ==
+                                                                      null) {
+                                                                    return;
+                                                                  }
+                                                                  if (choice ==
+                                                                      _AttachmentChoice
+                                                                          .camera) {
+                                                                    if (_launchingCamera) {
+                                                                      return;
+                                                                    }
+                                                                    setState(
+                                                                      () => _launchingCamera =
+                                                                          true,
+                                                                    );
+                                                                    try {
+                                                                      await widget
+                                                                          .onCapturePhoto!(
+                                                                        target,
+                                                                      );
+                                                                    } finally {
+                                                                      if (mounted) {
+                                                                        setState(
+                                                                          () => _launchingCamera =
+                                                                              false,
+                                                                        );
+                                                                      }
+                                                                    }
+                                                                    return;
+                                                                  }
+                                                                  final type =
+                                                                      choice ==
+                                                                          _AttachmentChoice
+                                                                              .photos
+                                                                      ? FileType
+                                                                            .image
+                                                                      : FileType
+                                                                            .any;
+                                                                  final files =
+                                                                      await FilePicker.pickFiles(
+                                                                        type:
+                                                                            type,
+                                                                      );
+                                                                  if (files
+                                                                      .isEmpty) {
+                                                                    return;
+                                                                  }
+                                                                  if (files.any(
+                                                                    (file) =>
+                                                                        file.path ==
+                                                                        null,
+                                                                  )) {
+                                                                    throw const AttachmentDraftException(
+                                                                      'A selected file could not be opened. Select the files again.',
+                                                                    );
+                                                                  }
+                                                                  await controller.addAttachments(chat, [
+                                                                    for (final file
+                                                                        in files)
+                                                                      (
+                                                                        path: file
+                                                                            .path!,
+                                                                        name: file
+                                                                            .name,
+                                                                      ),
+                                                                  ]);
+                                                                }),
+                                                        ),
+                                                      ),
+                                                      _composerContextRing(
+                                                        chat,
+                                                      ),
+                                                      Expanded(
+                                                        child: Align(
+                                                          alignment: Alignment
+                                                              .centerRight,
+                                                          child:
+                                                              _composerIntelligenceButton(
+                                                                context,
+                                                                chat,
+                                                              ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                          ),
                                         ],
                                       ),
                                     ),

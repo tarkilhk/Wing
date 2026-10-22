@@ -5,7 +5,7 @@ import 'studio_selection_tile.dart';
 import 'studio_error.dart';
 import 'package:flutter/material.dart';
 import '../theme/wing_theme.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'block_reusing_markdown_body.dart';
 
 import '../models/gateway_clarify.dart';
 import '../theme/profile_markdown_style.dart';
@@ -138,7 +138,7 @@ class _GatewayClarifyDialogState extends State<GatewayClarifyDialog>
           children: [
             Theme(
               data: profileMarkdownTheme(theme),
-              child: MarkdownBody(
+              child: BlockReusingMarkdownBody(
                 checkboxBuilder: (checked) =>
                     StudioTaskMarker(completed: checked),
                 data: request.question,

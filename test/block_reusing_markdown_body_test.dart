@@ -178,16 +178,89 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('streamed tables retain formatted cells and reference links', (
+    tester,
+  ) async {
+    const prefix = 'Stable paragraph.\n\n';
+    const header = '| Name | |\n';
+    const body =
+        '| --- | --- |\n| **Quarterly planning** | `review` [Report][r] |';
+    final calls = <String?>[];
+    Widget content(String source) => _host(
+      BlockReusingMarkdownBody(
+        data: source,
+        selectable: true,
+        onTapLink: (_, href, _) => calls.add(href),
+      ),
+      width: 240,
+      scale: 2,
+    );
+    await tester.pumpMarkdownWidget(content('$prefix$header'));
+    final stable = tester.element(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is SelectableText &&
+            widget.textSpan?.toPlainText() == 'Stable paragraph.',
+      ),
+    );
+    await tester.pumpMarkdownWidget(
+      content('$prefix$header$body\n\n[r]: https://example.test/report'),
+    );
+    expect(
+      tester.element(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SelectableText &&
+              widget.textSpan?.toPlainText() == 'Stable paragraph.',
+        ),
+      ),
+      same(stable),
+    );
+    expect(find.byType(Table), findsNothing);
+    expect(find.text('Column 2'), findsOneWidget);
+    void verifyCells() {
+      final spans = <TextSpan>[];
+      for (final text in tester.widgetList<SelectableText>(
+        find.byType(SelectableText),
+      )) {
+        text.textSpan!.visitChildren((span) {
+          if (span is TextSpan) spans.add(span);
+          return true;
+        });
+      }
+      expect(
+        spans
+            .singleWhere((span) => span.text == 'Quarterly planning')
+            .style
+            ?.fontWeight,
+        FontWeight.bold,
+      );
+      expect(
+        spans.singleWhere((span) => span.text == 'review').style?.fontFamily,
+        isNotNull,
+      );
+      final link = spans
+          .singleWhere((span) => span.text == 'Report')
+          .recognizer;
+      expect(link, isA<TapGestureRecognizer>());
+      (link! as TapGestureRecognizer).onTap!();
+      expect(calls.last, 'https://example.test/report');
+    }
+
+    verifyCells();
+    await tester.tap(find.byTooltip('Read as table'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Table), findsOneWidget);
+    verifyCells();
+    expect(tester.takeException(), isNull);
+  });
+
   final fixtures = <String, List<String>>{
     'late references': [
       'Lead\n\nRead [report][r].',
       'Lead\n\nRead [report][r].\n\n[r]: https://example.test/report "Report"',
     ],
     'setext headings': ['Lead\n\nHeading', 'Lead\n\nHeading\n---'],
-    'tables': [
-      'Lead\n\n| A | B |',
-      'Lead\n\n| A | B |\n| --- | --- |\n| a | **b** |',
-    ],
     'nested lists': [
       'Lead\n\n3. one\n4. two',
       'Lead\n\n3. one\n4. two\n   - nested\n\n   followup',

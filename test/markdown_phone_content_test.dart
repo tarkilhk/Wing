@@ -53,97 +53,110 @@ void main() {
   );
 
   for (final scale in [1.0, 2.0]) {
-    testWidgets('wide tables scroll and code controls fit at text scale $scale', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(320, 760);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      await tester.pumpMarkdownWidget(
-        MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(
-              textScaler: TextScaler.linear(scale),
-              padding: const EdgeInsets.only(bottom: 34),
+    testWidgets(
+      'wide tables reflow and explicit grid scrolls at text scale $scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 760);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpMarkdownWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(scale),
+                padding: const EdgeInsets.only(bottom: 34),
+              ),
+              child: child!,
             ),
-            child: child!,
-          ),
-          home: Scaffold(
-            body: SingleChildScrollView(
-              padding: EdgeInsets.all(16),
-              child: ProfileMessage(
-                message: TranscriptMessage.fromRow({
-                  'role': 'assistant',
-                  'content':
-                      '| Project | Owner | Status | Next step |\n'
-                      '| --- | --- | --- | --- |\n'
-                      '| Quarterly planning | Product team | In review | Approve the proposal |\n\n'
-                      '```text\nA very long line that should scroll horizontally without forcing the conversation wider.\n```',
-                }),
+            home: Scaffold(
+              body: SingleChildScrollView(
+                padding: EdgeInsets.all(16),
+                child: ProfileMessage(
+                  message: TranscriptMessage.fromRow({
+                    'role': 'assistant',
+                    'content':
+                        '| Project | Owner | Status | Next step |\n'
+                        '| --- | --- | --- | --- |\n'
+                        '| Quarterly planning | Product team | In review | Approve the proposal |\n\n'
+                        '```text\nA very long line that should scroll horizontally without forcing the conversation wider.\n```',
+                  }),
+                ),
               ),
             ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
-      final horizontal = tester
-          .stateList<ScrollableState>(find.byType(Scrollable))
-          .where((state) => state.axisDirection == AxisDirection.right)
-          .toList();
-      expect(
-        horizontal.where((state) => state.position.maxScrollExtent > 0),
-        hasLength(1),
-      );
-      final markdown = find.bySubtype<MarkdownBody>();
-      final table = find.descendant(of: markdown, matching: find.byType(Table));
-      final tableScrollbar = find.descendant(
-        of: markdown,
-        matching: find.byType(Scrollbar),
-      );
-      final painters = tester
-          .widgetList<CustomPaint>(
-            find.descendant(
-              of: tableScrollbar,
-              matching: find.byType(CustomPaint),
-            ),
-          )
-          .map((widget) => widget.foregroundPainter)
-          .whereType<ScrollbarPainter>();
-      expect(painters, hasLength(1));
-      final painter = painters.single;
-      final gutter =
-          tester.getBottomLeft(tableScrollbar).dy -
-          tester.getBottomLeft(table).dy;
-      final thumbInset =
-          painter.padding.resolve(TextDirection.ltr).bottom +
-          painter.crossAxisMargin;
-      // Include a phone navigation inset above: the thumb must still fit
-      // entirely below the table, even at a large text size.
-      expect(thumbInset + painter.thickness, lessThan(gutter));
-      final tableScroll = horizontal.first;
-      await tester.drag(tableScrollbar, const Offset(-120, 0));
-      await tester.pumpAndSettle();
-      expect(tableScroll.position.pixels, greaterThan(0));
-      expect(tester.takeException(), isNull);
-      await tester.ensureVisible(find.byTooltip('Scroll horizontally'));
-      await tester.tap(find.byTooltip('Scroll horizontally'));
-      await tester.pumpAndSettle();
-      expect(find.byTooltip('Wrap lines'), findsOneWidget);
-      expect(
-        tester
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(Table), findsNothing);
+        expect(find.byTooltip('Read as stacked rows'), findsOneWidget);
+        await tester.tap(find.byTooltip('Read as table'));
+        await tester.pumpAndSettle();
+        final horizontal = tester
             .stateList<ScrollableState>(find.byType(Scrollable))
-            .where(
-              (state) =>
-                  state.axisDirection == AxisDirection.right &&
-                  state.position.maxScrollExtent > 0,
-            ),
-        hasLength(2),
-      );
-      expect(
-        tester.getSize(find.byTooltip('Copy code')).height,
-        greaterThanOrEqualTo(48),
-      );
-      expect(tester.takeException(), isNull);
-    });
+            .where((state) => state.axisDirection == AxisDirection.right)
+            .toList();
+        expect(
+          horizontal.where((state) => state.position.maxScrollExtent > 0),
+          hasLength(1),
+        );
+        final markdown = find.bySubtype<MarkdownBody>();
+        final table = find.descendant(
+          of: markdown,
+          matching: find.byType(Table),
+        );
+        final tableScrollbar = find.descendant(
+          of: markdown,
+          matching: find.byType(Scrollbar),
+        );
+        final painters = tester
+            .widgetList<CustomPaint>(
+              find.descendant(
+                of: tableScrollbar,
+                matching: find.byType(CustomPaint),
+              ),
+            )
+            .map((widget) => widget.foregroundPainter)
+            .whereType<ScrollbarPainter>();
+        expect(painters, hasLength(1));
+        final painter = painters.single;
+        final gutter =
+            tester.getBottomLeft(tableScrollbar).dy -
+            tester.getBottomLeft(table).dy;
+        final thumbInset =
+            painter.padding.resolve(TextDirection.ltr).bottom +
+            painter.crossAxisMargin;
+        // Include a phone navigation inset above: the thumb must still fit
+        // entirely below the table, even at a large text size.
+        expect(thumbInset + painter.thickness, lessThan(gutter));
+        final tableScroll = horizontal.firstWhere(
+          (state) => state.position.maxScrollExtent > 0,
+        );
+        await tester.dragFrom(
+          tester.getBottomLeft(tableScrollbar) + const Offset(180, -6),
+          const Offset(-120, 0),
+        );
+        await tester.pumpAndSettle();
+        expect(tableScroll.position.pixels, greaterThan(0));
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.byTooltip('Scroll horizontally'));
+        await tester.tap(find.byTooltip('Scroll horizontally'));
+        await tester.pumpAndSettle();
+        expect(find.byTooltip('Wrap lines'), findsOneWidget);
+        expect(
+          tester
+              .stateList<ScrollableState>(find.byType(Scrollable))
+              .where(
+                (state) =>
+                    state.axisDirection == AxisDirection.right &&
+                    state.position.maxScrollExtent > 0,
+              ),
+          hasLength(2),
+        );
+        expect(
+          tester.getSize(find.byTooltip('Copy code')).height,
+          greaterThanOrEqualTo(48),
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 }

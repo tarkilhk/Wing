@@ -205,6 +205,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   final _rows = <Object, GlobalKey>{};
   final _messageBodies = <Object, GlobalKey>{};
   final _rowHeights = <Key, double>{};
+  double? _viewportWidth;
 
   Widget _messageBody(timeline_facts.TranscriptTimelineEntry entry) =>
       KeyedSubtree(
@@ -972,6 +973,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
           },
           child: LayoutBuilder(
             builder: (_, constraints) {
+              if (_viewportWidth != null &&
+                  _viewportWidth != constraints.maxWidth) {
+                _preserveReaderAnchor(null);
+                _scroll.prepareForReflow();
+              }
+              _viewportWidth = constraints.maxWidth;
               Widget itemBuilder(BuildContext context, int index) {
                 if (index < tail.length) return tail[index];
                 final contentIndex = index - tail.length;

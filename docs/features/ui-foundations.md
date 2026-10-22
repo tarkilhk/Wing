@@ -8,6 +8,7 @@ Feature ID: `ui-foundations`.
 
 - `ui-foundations.feedback` — Show immediate visible action progress through settlement.
 - `ui-foundations.access` — Keep selection focus and controls usable.
+- `ui-foundations.phone-reading` — Reflow wide tables by available width and text size; compact conversation controls on landscape phones. Table full screen enters reading mode directly, with no duplicate header action.
 - `ui-foundations.retain` — Preserve reader and recovery state.
 
 ## How to get to it (user POV)
@@ -21,7 +22,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
-  flutter test --no-pub test/studio_loading_test.dart test/studio_selection_test.dart test/profile_focus_recovery_test.dart
+  flutter test --no-pub test/phone_reading_test.dart test/studio_loading_test.dart test/studio_selection_test.dart test/profile_focus_recovery_test.dart
   ```
 
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
