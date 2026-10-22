@@ -7,9 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/bots/bot_screen_view.dart';
 import 'package:wing/core/services/bot_screen_session.dart';
+import 'package:wing/core/models/transcript_message.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/bot_screen_window.dart';
 import 'package:wing/core/widgets/bot_display_surface.dart';
-import 'package:wing/core/widgets/bot_display_viewport.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'support/bot_display_fixture.dart';
 
@@ -106,7 +107,14 @@ void main() {
                 ).copyWith(textScaler: TextScaler.linear(scale)),
                 child: RepaintBoundary(key: key, child: child!),
               ),
-              home: BotScreenView(createSession: () => session),
+              home: BotScreenView(
+                createSession: () => session,
+                conversation: session,
+                readConversation: () => [],
+                readRequest: () =>
+                    'Please finish signing in, then hand control back.',
+                sendMessage: (_) async {},
+              ),
             ),
           );
           await ready(tester, session);
@@ -119,7 +127,7 @@ void main() {
           final raw = find.byType(RawImage);
           expect(raw, findsOneWidget);
           await tester.tap(raw);
-          await tester.pump(const Duration(milliseconds: 350));
+          await tester.pump(const Duration(milliseconds: 100));
           expect(
             f.peers.single.sent.where((p) => p.length == 6 && p[1] == 1),
             isNotEmpty,
@@ -168,7 +176,9 @@ void main() {
           expect(focused, true);
           expect(field, findsOneWidget);
           await tester.tap(find.byTooltip('Hand control back'));
-          await tester.pump();
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Hand back'));
+          await tester.pumpAndSettle();
           expect(find.byTooltip('Bot has control'), findsOneWidget);
           expect(find.byType(TextField), findsNothing);
           expect(f.holder, 'agent');
@@ -194,7 +204,14 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: wingTheme(Brightness.dark),
-          home: BotScreenView(createSession: () => session),
+          home: BotScreenView(
+            createSession: () => session,
+            conversation: session,
+            readConversation: () => [],
+            readRequest: () =>
+                'Please finish signing in, then hand control back.',
+            sendMessage: (_) async {},
+          ),
         ),
       );
       await ready(tester, session);
@@ -204,7 +221,6 @@ void main() {
         find.byType(BotDisplaySurface),
       );
       final viewport = surface.viewport;
-      viewport.setMode(BotPointerMode.direct);
       viewport.zoom(2);
       await tester.pump();
       final surfaceBox = tester.renderObject<RenderBox>(
@@ -254,7 +270,14 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: wingTheme(Brightness.dark),
-        home: BotScreenView(createSession: () => session),
+        home: BotScreenView(
+          createSession: () => session,
+          conversation: session,
+          readConversation: () => [],
+          readRequest: () =>
+              'Please finish signing in, then hand control back.',
+          sendMessage: (_) async {},
+        ),
       ),
     );
     await ready(tester, session);
@@ -295,7 +318,14 @@ void main() {
           theme: wingTheme(Brightness.dark),
           home: RepaintBoundary(
             key: key,
-            child: BotScreenView(createSession: () => session),
+            child: BotScreenView(
+              createSession: () => session,
+              conversation: session,
+              readConversation: () => [],
+              readRequest: () =>
+                  'Please finish signing in, then hand control back.',
+              sendMessage: (_) async {},
+            ),
           ),
         ),
       );
@@ -307,10 +337,11 @@ void main() {
           .viewport;
       v.zoom(2);
       final pointers = f.peers.single.sent.where((p) => p[0] == 5).length;
-      await tester.tap(find.byTooltip('Move controls'));
+      await tester.tap(find.byTooltip('More screen controls'));
+      await tester.pump();
       await tester.tap(find.byTooltip('Enter fullscreen'));
       await tester.pump();
-      expect(find.byTooltip('Exit fullscreen'), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
       expect(f.peers, hasLength(1));
       expect(f.peers.single.sent.where((p) => p[0] == 5).length, pointers);
       await tester.tap(find.byTooltip('Show keyboard'));
@@ -335,10 +366,11 @@ void main() {
         true,
       );
 
-      await tester.tap(find.byTooltip('More screen controls'));
+      await tester.drag(find.byTooltip('Tab'), const Offset(-300, 0));
+      await tester.pump();
+      await tester.tap(find.byTooltip('More keyboard keys'));
       await tester.pump();
       await tester.tap(find.byTooltip('Control modifier'));
-      await tester.tap(find.byTooltip('More screen controls'));
       await tester.pump();
       await tester.enterText(find.byType(TextField), '');
       await tester.pump();
@@ -353,14 +385,17 @@ void main() {
       await tester.binding.handlePopRoute();
       await tester.pump();
       expect(find.byType(TextField), findsNothing);
-      expect(find.byTooltip('Exit fullscreen'), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
       tester.view.viewInsets = FakeViewPadding.zero;
       await tester.pump();
       await tester.binding.handlePopRoute();
       await tester.pump();
-      expect(find.byTooltip('Enter fullscreen'), findsOneWidget);
+      expect(find.byType(AppBar), findsOneWidget);
       expect(session.controlling, true);
+      await tester.tap(find.byTooltip('More screen controls'));
+      await tester.pump();
       await tester.tap(find.byTooltip('Enter fullscreen'));
+      await tester.pump();
       await tester.tap(find.byTooltip('Show keyboard'));
       await tester.pump();
       tester.view.viewInsets = const FakeViewPadding(bottom: 280);
@@ -370,14 +405,14 @@ void main() {
       await tester.pump();
       await tester.binding.handlePopRoute();
       await tester.pump();
-      expect(find.byTooltip('Exit fullscreen'), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
       await tester.pump(const Duration(milliseconds: 400));
       await tester.binding.handlePopRoute();
       await tester.pump();
-      expect(find.byTooltip('Enter fullscreen'), findsOneWidget);
+      expect(find.byType(AppBar), findsOneWidget);
       tester.view.physicalSize = const Size(844, 390);
       await tester.pump();
-      expect(find.byTooltip('Exit fullscreen'), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
       expect(f.peers, hasLength(1));
       expect(session.controlling, true);
       await capture(tester, key, 'fullscreen-landscape');
@@ -406,7 +441,16 @@ void main() {
       (await f.roster.repository.bots()).first,
     );
     await tester.pumpWidget(
-      MaterialApp(home: BotScreenView(createSession: () => session)),
+      MaterialApp(
+        home: BotScreenView(
+          createSession: () => session,
+          conversation: session,
+          readConversation: () => [],
+          readRequest: () =>
+              'Please finish signing in, then hand control back.',
+          sendMessage: (_) async {},
+        ),
+      ),
     );
     await ready(tester, session);
     expect(windows, [true]);
@@ -421,7 +465,7 @@ void main() {
     expect(windows.last, false);
   });
   testWidgets(
-    'trackpad pinch zoom and two-finger wheel scrolling never produce both actions',
+    'direct touch pinch zoom and two-finger wheel scrolling never produce both actions',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -433,7 +477,16 @@ void main() {
         (await f.roster.repository.bots()).first,
       );
       await tester.pumpWidget(
-        MaterialApp(home: BotScreenView(createSession: () => session)),
+        MaterialApp(
+          home: BotScreenView(
+            createSession: () => session,
+            conversation: session,
+            readConversation: () => [],
+            readRequest: () =>
+                'Please finish signing in, then hand control back.',
+            sendMessage: (_) async {},
+          ),
+        ),
       );
       await ready(tester, session);
       await tester.tap(find.byTooltip('Take control'));
@@ -492,7 +545,7 @@ void main() {
     },
   );
   testWidgets(
-    'trackpad hold-drag keeps mouse down through movement and releases on lift',
+    'double-tap hold-drag keeps mouse down through movement and releases on lift',
     (tester) async {
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
@@ -504,12 +557,23 @@ void main() {
         (await f.roster.repository.bots()).first,
       );
       await tester.pumpWidget(
-        MaterialApp(home: BotScreenView(createSession: () => session)),
+        MaterialApp(
+          home: BotScreenView(
+            createSession: () => session,
+            conversation: session,
+            readConversation: () => [],
+            readRequest: () =>
+                'Please finish signing in, then hand control back.',
+            sendMessage: (_) async {},
+          ),
+        ),
       );
       await ready(tester, session);
       await tester.tap(find.byTooltip('Take control'));
       await tester.pump();
       final point = tester.getCenter(find.byType(BotDisplaySurface));
+      await tester.tapAt(point);
+      await tester.pump(const Duration(milliseconds: 100));
       final g = await tester.startGesture(point);
       await tester.pump(const Duration(milliseconds: 600));
       await g.moveBy(const Offset(80, 0));
@@ -525,4 +589,296 @@ void main() {
       await tester.pump();
     },
   );
+  testWidgets('live agent context, direct paste progress and thumb scrolling', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(844, 390);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final f = DisplayFixture();
+    final session = BotScreenSession(
+      f.repository,
+      (await f.roster.repository.bots()).first,
+    );
+    final message = ValueNotifier('Please sign in.');
+    final clipboard = Completer<Object?>();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          SystemChannels.platform,
+          (call) async =>
+              call.method == 'Clipboard.getData' ? clipboard.future : null,
+        );
+    addTearDown(
+      () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.light),
+        home: BotScreenView(
+          createSession: () => session,
+          conversation: message,
+          readConversation: () => [
+            TranscriptMessage.fromRow({
+              'role': 'assistant',
+              'content': message.value,
+            }),
+          ],
+          readRequest: () => null,
+          sendMessage: (_) async {},
+        ),
+      ),
+    );
+    await ready(tester, session);
+    expect(find.text('Please sign in.'), findsOneWidget);
+    message.value = 'Choose the work account.';
+    await tester.pump();
+    expect(find.text('Choose the work account.'), findsOneWidget);
+    await tester.tap(find.byTooltip('Take control'));
+    await tester.pump();
+    final count = f.peers.single.sent.length;
+    await tester.tap(find.byTooltip('Paste phone clipboard'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsOneWidget);
+    expect(find.byType(RawImage), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+    clipboard.complete({'text': 'phone 😀\nclipboard'});
+    await tester.pump();
+    await tester.pump();
+    expect(
+      f.peers.single.sent.skip(count).where((p) => p[0] == 6),
+      hasLength(1),
+    );
+    expect(find.text('Paste sent to the computer'), findsOneWidget);
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsNothing);
+    await tester.drag(
+      find.bySemanticsLabel('Scroll computer'),
+      const Offset(0, 60),
+    );
+    await tester.pump();
+    expect(
+      f.peers.single.sent.where((p) => p[0] == 5 && p[1] == 16),
+      isNotEmpty,
+    );
+    await tester.tap(find.byTooltip('More screen controls'));
+    await tester.pump();
+    f.statusWait = Completer<void>();
+    await tester.tap(find.byTooltip('Refresh screen'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsOneWidget);
+    f.failStatus = true;
+    f.statusWait!.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(
+      find.textContaining('Screen connection could not be confirmed'),
+      findsOneWidget,
+    );
+    await tester.pump();
+    expect(find.byType(StudioLoading), findsNothing);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    message.dispose();
+  });
+
+  testWidgets(
+    'handoff returns control before queueing and retains a failed note',
+    (tester) async {
+      final f = DisplayFixture();
+      final session = BotScreenSession(
+        f.repository,
+        (await f.roster.repository.bots()).first,
+      );
+      final message = Completer<void>();
+      var attempts = 0;
+      final frame = GlobalKey();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: wingTheme(Brightness.light),
+          home: RepaintBoundary(
+            key: frame,
+            child: BotScreenView(
+              createSession: () => session,
+              conversation: session,
+              readConversation: () => [],
+              readRequest: () => 'Sign in to continue.',
+              sendMessage: (text) async {
+                expect(f.holder, 'agent');
+                expect(text, contains('Signed in'));
+                attempts++;
+                await message.future;
+              },
+            ),
+          ),
+        ),
+      );
+      await ready(tester, session);
+      await tester.tap(find.byTooltip('Take control'));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Hand control back'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Signed in');
+      await capture(tester, frame, 'handoff-note');
+      await tester.tap(find.byTooltip('Hand back'));
+      await tester.pump();
+      expect(f.holder, 'agent');
+      expect(attempts, 1);
+      await tester.pump();
+      expect(find.byType(StudioLoading), findsOneWidget);
+      message.completeError(StateError('offline'));
+      await tester.pump();
+      expect(
+        find.textContaining('Control returned, but the message'),
+        findsOneWidget,
+      );
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        'Signed in',
+      );
+      expect(find.byTooltip('Retry message'), findsOneWidget);
+      await tester.pump();
+      expect(find.byType(StudioLoading), findsNothing);
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    },
+  );
+  for (final brightness in Brightness.values) {
+    for (final landscape in [false, true]) {
+      testWidgets(
+        'small phone keyboard and overlays ${brightness.name} $landscape',
+        (tester) async {
+          tester.view.physicalSize = landscape
+              ? const Size(844, 390)
+              : const Size(320, 640);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.resetPhysicalSize);
+          addTearDown(tester.view.resetDevicePixelRatio);
+          addTearDown(tester.view.resetViewInsets);
+          final f = DisplayFixture();
+          final session = BotScreenSession(
+            f.repository,
+            (await f.roster.repository.bots()).first,
+          );
+          final frame = GlobalKey();
+          final notes = <String>[];
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: const TextScaler.linear(2)),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: BotScreenView(
+                createSession: () => session,
+                conversation: session,
+                readConversation: () => [
+                  TranscriptMessage.fromRow({
+                    'role': 'assistant',
+                    'content': 'Please finish signing in, then hand back.',
+                  }),
+                ],
+                readRequest: () => null,
+                sendMessage: (text) async => notes.add(text),
+              ),
+            ),
+          );
+          await ready(tester, session);
+          await tester.tap(find.byTooltip('Take control'));
+          await tester.pump();
+          await tester.tap(find.byTooltip('Show keyboard'));
+          await tester.pump();
+          tester.view.viewInsets = FakeViewPadding(
+            bottom: landscape ? 170 : 300,
+          );
+          await tester.pump();
+          await tester.tap(find.byTooltip('More keyboard keys'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(tester.takeException(), isNull);
+          await capture(
+            tester,
+            frame,
+            'small-keyboard-${brightness.name}-$landscape',
+          );
+          await tester.tap(find.byTooltip('Hide keyboard'));
+          tester.view.viewInsets = FakeViewPadding.zero;
+          await tester.pump();
+          await tester.tap(find.byTooltip('Open conversation'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), 'Signed in');
+          tester.view.viewInsets = FakeViewPadding(
+            bottom: landscape ? 170 : 300,
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(tester.takeException(), isNull);
+          await capture(
+            tester,
+            frame,
+            'conversation-${brightness.name}-$landscape',
+          );
+          await tester.tap(find.byTooltip('Send message to agent'));
+          await tester.pump();
+          expect(notes, ['Signed in']);
+          expect(session.controlling, true);
+          await tester.tap(find.byTooltip('Close conversation'));
+          tester.view.viewInsets = FakeViewPadding.zero;
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Hand control back'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), 'All done');
+          tester.view.viewInsets = FakeViewPadding(
+            bottom: landscape ? 170 : 300,
+          );
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(tester.takeException(), isNull);
+          await capture(tester, frame, 'handoff-${brightness.name}-$landscape');
+          await tester.tap(find.byTooltip('Cancel'));
+          tester.view.viewInsets = FakeViewPadding.zero;
+          await tester.pumpAndSettle();
+          await tester.pumpWidget(const SizedBox());
+          await tester.pump();
+        },
+      );
+    }
+  }
+  testWidgets('uninstalled screen retains the stock setup command', (
+    tester,
+  ) async {
+    final f = DisplayFixture()
+      ..running = false
+      ..installed = false;
+    final session = BotScreenSession(
+      f.repository,
+      (await f.roster.repository.bots()).first,
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BotScreenView(
+          createSession: () => session,
+          conversation: session,
+          readConversation: () => [],
+          readRequest: () => null,
+          sendMessage: null,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      find.text('sudo apt install tigervnc-standalone-server'),
+      findsOneWidget,
+    );
+    expect(session.canStart, false);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+  });
 }

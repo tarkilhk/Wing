@@ -27,10 +27,145 @@ class _BotDisplaySurfaceState extends State<BotDisplaySurface> {
   BotDisplayFrame? _pending;
   bool _decoding = false;
   bool _decodeFailed = false;
-  bool _drag = false;
-  Offset? _lastFocal;
-  double _lastScale = 1, _wheel = 0;
-  String? _twoFingerAction;
+  final _touches = <int, Offset>{};
+  Timer? _hold;
+  Offset _start = Offset.zero, _last = Offset.zero;
+  Offset? _tapPosition;
+  Duration? _tapTime;
+  bool _moved = false, _multi = false, _secondTap = false;
+  bool _drag = false, _rightClick = false, _pairScheduled = false;
+  Offset _pairStart = Offset.zero, _pairLast = Offset.zero;
+  double _distanceStart = 0, _distanceLast = 0, _wheel = 0;
+  String? _pairAction;
+
+  void _cancel() {
+    _hold?.cancel();
+    widget.viewport.release();
+    _touches.clear();
+    _drag = false;
+    _tapTime = null;
+  }
+
+  void _down(PointerDownEvent e) {
+    final v = widget.viewport;
+    _touches[e.pointer] = e.localPosition;
+    if (_touches.length == 1) {
+      _start = _last = e.localPosition;
+      _moved = _multi = _drag = _rightClick = false;
+      _secondTap =
+          _tapTime != null &&
+          e.timeStamp - _tapTime! < const Duration(milliseconds: 330) &&
+          (_tapPosition! - _start).distance < 24;
+      _hold = Timer(Duration(milliseconds: _secondTap ? 280 : 550), () {
+        if (_touches.length != 1 || _moved || !widget.canInput) return;
+        if (v.pointAt(_start)) {
+          if (_secondTap) {
+            _drag = true;
+            v.drag(true);
+          } else {
+            _rightClick = true;
+            v.click(4);
+          }
+        }
+      });
+    } else {
+      _hold?.cancel();
+      v.release();
+      _drag = false;
+      _multi = true;
+      _tapTime = null;
+      if (_touches.length == 2) {
+        final points = _touches.values.toList();
+        _pairStart = _pairLast = (points[0] + points[1]) / 2;
+        _distanceStart = _distanceLast = (points[0] - points[1]).distance;
+        _pairAction = null;
+        _wheel = 0;
+        v.pointAt(_pairStart);
+      }
+    }
+  }
+
+  void _pairUpdate() {
+    if (_touches.length != 2) return;
+    final points = _touches.values.toList();
+    final center = (points[0] + points[1]) / 2;
+    final distance = (points[0] - points[1]).distance;
+    final v = widget.viewport;
+    // Accumulate from the gesture start: slow swipes must classify too. Both
+    // touch updates in a frame are sampled together to avoid false pinch starts.
+    _pairAction ??= (distance - _distanceStart).abs() > 10
+        ? 'zoom'
+        : (center - _pairStart).distance > 9
+        ? 'scroll'
+        : null;
+    if (_pairAction == 'zoom') {
+      if (_distanceLast > 0) v.zoom(distance / _distanceLast, focal: _pairLast);
+      v.pan(center - _pairLast);
+    } else if (_pairAction == 'scroll') {
+      _wheel += center.dy - _pairLast.dy;
+      while (_wheel.abs() >= 18) {
+        v.click(_wheel > 0 ? 8 : 16);
+        _wheel -= _wheel > 0 ? 18 : -18;
+      }
+    } else {
+      return;
+    }
+    _pairLast = center;
+    _distanceLast = distance;
+  }
+
+  void _move(PointerMoveEvent e) {
+    if (!_touches.containsKey(e.pointer)) return;
+    _touches[e.pointer] = e.localPosition;
+    final v = widget.viewport;
+    if (_multi) {
+      if (!_pairScheduled) {
+        _pairScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _pairScheduled = false;
+          if (mounted) _pairUpdate();
+        });
+        WidgetsBinding.instance.scheduleFrame();
+      }
+      return;
+    }
+    if (!_moved && (e.localPosition - _start).distance > 7) {
+      _moved = true;
+      _hold?.cancel();
+      if (_secondTap && !_rightClick && widget.canInput && v.pointAt(_start)) {
+        _drag = true;
+        v.drag(true);
+      }
+    }
+    if (_drag) {
+      if (v.pointAt(e.localPosition)) v.send(1);
+    } else if (_moved && !_rightClick) {
+      v.pan(e.localPosition - _last);
+    }
+    _last = e.localPosition;
+  }
+
+  void _up(PointerUpEvent e) {
+    _hold?.cancel();
+    if (_multi) _pairUpdate();
+    _touches.remove(e.pointer);
+    final v = widget.viewport;
+    if (_multi) return;
+    if (_drag) {
+      v.release();
+    } else if (!_moved &&
+        !_rightClick &&
+        widget.canInput &&
+        v.pointAt(e.localPosition)) {
+      v.click(1);
+      _tapTime = _secondTap ? null : e.timeStamp;
+      _tapPosition = e.localPosition;
+    } else {
+      _tapTime = null;
+    }
+    _drag = false;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -42,7 +177,7 @@ class _BotDisplaySurfaceState extends State<BotDisplaySurface> {
     super.didUpdateWidget(oldWidget);
     if (!identical(widget.frame, oldWidget.frame)) _queue();
     widget.viewport.setInput(widget.canInput);
-    if (!widget.canInput) _drag = false;
+    if (oldWidget.canInput && !widget.canInput) _cancel();
   }
 
   void _queue() {
@@ -104,6 +239,7 @@ class _BotDisplaySurfaceState extends State<BotDisplaySurface> {
 
   @override
   void dispose() {
+    _cancel();
     _pending = null;
     _image?.dispose();
     widget.viewport.release();
@@ -138,99 +274,14 @@ class _BotDisplaySurfaceState extends State<BotDisplaySurface> {
             child: AnimatedBuilder(
               animation: v,
               builder: (context, _) => Semantics(
-                label: !widget.canInput || v.mode == BotPointerMode.pan
-                    ? 'Bot desktop. Drag to move the view; pinch to zoom.'
-                    : v.mode == BotPointerMode.trackpad
-                    ? 'Bot desktop trackpad. Move one finger to move the pointer; tap to click; hold and move to drag. Pinch to zoom; move two fingers to scroll.'
-                    : 'Bot desktop. Tap to click; hold and move to drag. Use two fingers to move the view and pinch to zoom.',
-                child: GestureDetector(
+                label:
+                    'Bot desktop. Tap to click. One finger moves the view; two fingers scroll the computer. Pinch to zoom. Hold to right-click; double-tap and hold to drag.',
+                child: Listener(
                   behavior: HitTestBehavior.opaque,
-                  onTapUp: widget.canInput && v.mode != BotPointerMode.pan
-                      ? (e) {
-                          if (v.mode == BotPointerMode.trackpad ||
-                              v.pointAt(e.localPosition)) {
-                            v.click(1);
-                          }
-                        }
-                      : null,
-                  onLongPressStart:
-                      widget.canInput && v.mode != BotPointerMode.pan
-                      ? (e) {
-                          if (v.mode == BotPointerMode.trackpad ||
-                              v.pointAt(e.localPosition)) {
-                            _drag = true;
-                            v.drag(true);
-                            _lastFocal = e.localPosition;
-                          }
-                        }
-                      : null,
-                  onLongPressMoveUpdate: widget.canInput
-                      ? (e) {
-                          if (!_drag) return;
-                          if (v.mode == BotPointerMode.trackpad) {
-                            v.movePointer(e.localPosition - _lastFocal!);
-                          } else if (v.pointAt(e.localPosition)) {
-                            v.send(1);
-                          }
-                          _lastFocal = e.localPosition;
-                        }
-                      : null,
-                  onLongPressEnd: (_) {
-                    if (_drag) v.drag(false);
-                    _drag = false;
-                  },
-                  onLongPressCancel: () {
-                    v.release();
-                    _drag = false;
-                  },
-                  onScaleStart: (e) {
-                    _lastFocal = e.localFocalPoint;
-                    _lastScale = 1;
-                    _twoFingerAction = null;
-                    _wheel = 0;
-                  },
-                  onScaleUpdate: (e) {
-                    final delta = e.localFocalPoint - _lastFocal!;
-                    final navigating =
-                        !widget.canInput ||
-                        v.mode == BotPointerMode.pan ||
-                        v.mode == BotPointerMode.direct;
-                    if (e.pointerCount > 1) {
-                      if (navigating) {
-                        v.zoom(e.scale / _lastScale, focal: _lastFocal);
-                        v.pan(delta);
-                      } else {
-                        _twoFingerAction ??= (e.scale - 1).abs() > .08
-                            ? 'zoom'
-                            : delta.distance > 3
-                            ? 'scroll'
-                            : null;
-                        if (_twoFingerAction == 'zoom') {
-                          v.zoom(
-                            e.scale / _lastScale,
-                            focal: e.localFocalPoint,
-                          );
-                        }
-                        if (_twoFingerAction == 'scroll') {
-                          _wheel += delta.dy;
-                          while (_wheel.abs() >= 18) {
-                            v.click(_wheel > 0 ? 8 : 16);
-                            _wheel -= _wheel > 0 ? 18 : -18;
-                          }
-                        }
-                      }
-                    } else if (navigating) {
-                      v.pan(delta);
-                    } else {
-                      v.movePointer(delta);
-                    }
-                    _lastFocal = e.localFocalPoint;
-                    _lastScale = e.scale;
-                  },
-                  onScaleEnd: (_) {
-                    _lastFocal = null;
-                    _twoFingerAction = null;
-                  },
+                  onPointerDown: _down,
+                  onPointerMove: _move,
+                  onPointerUp: _up,
+                  onPointerCancel: (_) => _cancel(),
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
@@ -262,21 +313,6 @@ class _BotDisplaySurfaceState extends State<BotDisplaySurface> {
                                 fit: BoxFit.fill,
                                 filterQuality: FilterQuality.medium,
                               ),
-                            ),
-                          ),
-                        ),
-                      if (widget.canInput && v.mode == BotPointerMode.trackpad)
-                        Positioned(
-                          left: v.toLocal(v.pointer).dx - 10,
-                          top: v.toLocal(v.pointer).dy - 10,
-                          child: const IgnorePointer(
-                            child: Icon(
-                              Icons.add,
-                              color: Colors.white,
-                              size: 20,
-                              shadows: [
-                                Shadow(color: Colors.black, blurRadius: 3),
-                              ],
                             ),
                           ),
                         ),

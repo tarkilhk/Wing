@@ -64,25 +64,21 @@ void main() {
       expect(v.pointAt(const Offset(-3000, 0)), false);
     },
   );
-  test(
-    'trackpad follows pointer into zoomed corners and releases held drag on input loss',
-    () {
-      v.zoom(3);
-      v.setInput(true);
-      v.drag(true);
-      v.movePointer(const Offset(5000, 5000));
-      final position = v.toLocal(v.pointer);
-      expect(position.dx, inInclusiveRange(0, v.size.width));
-      expect(position.dy, inInclusiveRange(0, v.size.height));
-      expect(input.last, (1439, 899, 1));
-      v.setInput(false);
-      expect(input.last, (1439, 899, 0));
-      final count = input.length;
-      v.movePointer(const Offset(-20, 0));
-      v.click(1);
-      expect(input.length, count);
-    },
-  );
+  test('direct pointer releases held drag on input loss', () {
+    v.zoom(3);
+    v.setInput(true);
+    v.drag(true);
+    v.pointAt(v.toLocal(const Offset(1439, 899)));
+    v.send(1);
+    expect(input.last, (1439, 899, 1));
+    v.setInput(false);
+    expect(input.last, (1439, 899, 0));
+    final count = input.length;
+    v.pointAt(const Offset(20, 20));
+    v.send(1);
+    v.click(1);
+    expect(input.length, count);
+  });
   test(
     'rotation retains magnification and selected desktop point without emitting input',
     () {

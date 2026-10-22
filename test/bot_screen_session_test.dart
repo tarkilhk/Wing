@@ -257,4 +257,46 @@ void main() {
       await session.close();
     },
   );
+  test(
+    'phone clipboard reads only under ownership and rechecks after await',
+    () async {
+      final f = DisplayFixture();
+      final session = await open(f);
+      var reads = 0;
+      await session.pasteClipboard(() async {
+        reads++;
+        return 'secret';
+      });
+      expect(reads, 0);
+      await session.takeOver();
+      final read = Completer<String?>();
+      final paste = session.pasteClipboard(() => read.future);
+      expect(session.pasting, true);
+      await session.handBack();
+      final count = f.peers.single.sent.length;
+      final rejected = expectLater(paste, throwsStateError);
+      read.complete('secret');
+      await rejected;
+      expect(f.peers.single.sent.length, count);
+      expect(session.pasting, false);
+      await session.close();
+    },
+  );
+
+  test('paste sends one clipboard then Ctrl-V without Enter', () async {
+    final f = DisplayFixture();
+    final session = await open(f);
+    await session.takeOver();
+    final count = f.peers.single.sent.length;
+    await session.pasteClipboard(() async => 'first\nsecond');
+    final packets = f.peers.single.sent.skip(count).toList();
+    expect(packets.map((p) => p[0]), [6, 4, 4, 4, 4]);
+    expect(packets.skip(1).map((p) => (p[1], p[6] * 256 + p[7])), [
+      (1, 0xffe3),
+      (1, 0x76),
+      (0, 0x76),
+      (0, 0xffe3),
+    ]);
+    await session.close();
+  });
 }

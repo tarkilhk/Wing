@@ -142,6 +142,28 @@ void main() {
   }
 
   test(
+    'screen handoff queues identical text without consuming the chat draft or attachments',
+    () async {
+      await controller.updateDraft(chat, 'Finished signing in');
+      final file = await attachment('screen-draft.txt');
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        text: 'Finished signing in',
+        appendAttachments: [file],
+      );
+      await controller.queueScreenMessage(chat, 'Finished signing in');
+      expect(chat.composer.observation.text, 'Finished signing in');
+      expect(chat.composer.observation.attachments.map((v) => v.id), [file.id]);
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Finished signing in',
+      );
+      expect(chat.composer.observation.queue.single.attachments, isEmpty);
+    },
+  );
+
+  test(
     'selected identities survive queue edits, restart and failed dispatch',
     () async {
       const file = ComposerReference(

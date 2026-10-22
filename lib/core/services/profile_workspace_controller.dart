@@ -7453,6 +7453,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
   }
 
+  Future<void> queueScreenMessage(ProfileChat chat, String text) async {
+    _commandOwner(chat);
+    await chat.composer.enqueueExternal(text);
+    unawaited(_drainQueuedPrompts(chat));
+  }
+
   Future<void> queuePrompt(ProfileChat chat, String rawText) =>
       _enqueuePrompt(chat, rawText);
 

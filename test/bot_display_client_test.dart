@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/bot_display_client.dart';
@@ -28,6 +29,29 @@ void main() {
     expect((frames.current.width, frames.current.height), (4, 3));
     expect(frames.current.pixels.take(8), [0, 90, 130, 255, 17, 90, 130, 255]);
   });
+
+  test(
+    'extended clipboard preserves Unicode and newlines without key events',
+    () async {
+      final (peer, _) = await startPeer(fragment: true);
+      expect(peer.client.clipboardReady, true);
+      final start = peer.sent.length;
+      peer.client.setClipboard('café 😀\nsecond line');
+      final packet = peer.sent.last;
+      expect(packet[0], 6);
+      expect(ByteData.sublistView(packet).getInt32(4), -(packet.length - 8));
+      expect(ByteData.sublistView(packet).getUint32(8), 0x10000001);
+      final payload = Uint8List.fromList(zlib.decode(packet.sublist(12)));
+      expect(ByteData.sublistView(payload).getUint32(0), payload.length - 4);
+      expect(utf8.decode(payload.sublist(4)), 'café 😀\r\nsecond line\x00');
+      expect(peer.sent.skip(start).where((p) => p[0] == 4), isEmpty);
+      expect(
+        () => peer.client.setClipboard('x' * (256 * 1024)),
+        throwsStateError,
+      );
+      expect(() => peer.client.setClipboard('bad\x00text'), throwsStateError);
+    },
+  );
 
   test('pointer input is clamped to the remote framebuffer', () async {
     final (peer, _) = await startPeer();

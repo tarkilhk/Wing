@@ -28,7 +28,7 @@ class BotScreenSession extends ChangeNotifier {
   bool _requestedVisible = false;
   bool _focused = true;
   bool _connected = false, _changingControl = false;
-  int _generation = 0;
+  int _generation = 0, _inputRevision = 0;
   int _pointerX = 0, _pointerY = 0;
   bool get busy => _operation != null || _closing;
   bool get connected => _connected;
@@ -82,6 +82,7 @@ class BotScreenSession extends ChangeNotifier {
   void setFocused(bool focused) {
     if (_focused == focused) return;
     if (!focused && canInput) _client?.pointer(_pointerX, _pointerY, 0);
+    if (!focused) _inputRevision++;
     _focused = focused;
     _changed();
   }
@@ -117,6 +118,12 @@ class BotScreenSession extends ChangeNotifier {
       done.complete();
       _changed();
     }
+  }
+
+  /// An explicit refresh waits for a quiet poll instead of silently doing nothing.
+  Future<void> refreshScreen() async {
+    await _operation;
+    if (!_closed && !_closing) await refresh();
   }
 
   Future<void> refresh() => _run(() async {
@@ -297,6 +304,37 @@ class BotScreenSession extends ChangeNotifier {
             : 0x01000000 | rune,
         modifiers: modifiers,
       );
+    }
+  }
+
+  bool _pasting = false;
+  bool get pasting => _pasting;
+
+  Future<void> pasteClipboard(Future<String?> Function() readClipboard) async {
+    if (!canInput || _pasting) return;
+    final client = _client!,
+        generation = _generation,
+        lease = _lease,
+        inputRevision = _inputRevision;
+    _pasting = true;
+    _changed();
+    try {
+      final text = await readClipboard();
+      if (!canInput ||
+          generation != _generation ||
+          inputRevision != _inputRevision ||
+          !identical(client, _client) ||
+          _lease?.epoch != lease?.epoch) {
+        throw StateError('Control changed. Take control before pasting.');
+      }
+      if (text == null || text.isEmpty) {
+        throw StateError('The phone clipboard has no text.');
+      }
+      client.setClipboard(text);
+      key(0x76, modifiers: {0xffe3});
+    } finally {
+      _pasting = false;
+      _changed();
     }
   }
 

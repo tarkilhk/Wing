@@ -8,7 +8,7 @@ Feature ID: `chat-inputs`.
 
 - `chat-inputs.send` — Submit once and preserve newer unsent text.
 - `chat-inputs.landscape` — Read with a one-row composer on landscape phones. Send/Stop stays visible; expand the controls to reach attachments, context and model options. With the keyboard open, the field and Send/Stop stay on one row; expanding dismisses the keyboard.
-- `chat-inputs.queue` — Edit or cancel a queued follow-up.
+- `chat-inputs.queue` — Edit or cancel a queued follow-up. Notes and continuation requests from the remote screen are queued independently and preserve the main draft, references and attachments, even when the text matches.
 - `chat-inputs.revise` — Edit restore regenerate or fork saved work.
 
 ## How to get to it (user POV)

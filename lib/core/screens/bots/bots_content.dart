@@ -134,7 +134,14 @@ class _BotsContentState extends State<BotsContent> {
         await widget.session.setHidden(bot, canUse: _canUse);
       case 'screen':
         await _push(
-          BotScreenView(createSession: () => BotScreenSession(repository, bot)),
+          BotScreenView(
+            createSession: () => BotScreenSession(repository, bot),
+            conversation: widget.session,
+            readConversation: () => [],
+            readRequest: () =>
+                'Open the screen from a bot chat to see its conversation here.',
+            sendMessage: null,
+          ),
         );
       case 'settings':
         if (server != null) {

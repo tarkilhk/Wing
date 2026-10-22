@@ -1,8 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-enum BotPointerMode { trackpad, direct, pan }
-
 /// Presentation coordinates only; commands remain gated by the screen session.
 class BotDisplayViewport extends ChangeNotifier {
   BotDisplayViewport({required this.onPointer});
@@ -14,7 +12,6 @@ class BotDisplayViewport extends ChangeNotifier {
   bool _keyboard = false, _fit = true, _anchor = false, canInput = false;
   bool _keyboardNavigated = false;
   int buttons = 0;
-  BotPointerMode mode = BotPointerMode.trackpad;
   Offset get offset => _offset + _keyboardShift;
   Offset toRemote(Offset local) => (local - offset) / scale;
   Offset toLocal(Offset remote) => offset + remote * scale;
@@ -77,12 +74,6 @@ class BotDisplayViewport extends ChangeNotifier {
     canInput = enabled;
   }
 
-  void setMode(BotPointerMode value) {
-    release();
-    mode = value;
-    notifyListeners();
-  }
-
   void fit() {
     if (desktop.isEmpty) return;
     _keyboardNavigated = _keyboard;
@@ -126,28 +117,6 @@ class BotDisplayViewport extends ChangeNotifier {
     pointer = remote;
     _anchor = true;
     return true;
-  }
-
-  void movePointer(Offset delta) {
-    if (!canInput) return;
-    pointer = Offset(
-      (pointer.dx + delta.dx / scale).clamp(0, desktop.width - 1),
-      (pointer.dy + delta.dy / scale).clamp(0, desktop.height - 1),
-    );
-    _anchor = true;
-    final local = toLocal(pointer),
-        margin = math.min(28.0, size.shortestSide / 4);
-    _offset =
-        _bounded(
-          offset +
-              Offset(
-                local.dx.clamp(margin, size.width - margin) - local.dx,
-                local.dy.clamp(margin, size.height - margin) - local.dy,
-              ),
-        ) -
-        _keyboardShift;
-    send(buttons);
-    notifyListeners();
   }
 
   void send(int mask) {

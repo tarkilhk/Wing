@@ -1770,8 +1770,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   Future<void> _openScreen(ProfileChat chat) async {
+    final workspace = controller;
     bool current() =>
         mounted &&
+        identical(controller, workspace) &&
         !controller.switching &&
         identical(controller.current?.chat, chat) &&
         _destination == AppDestination.chats;
@@ -1783,7 +1785,37 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => BotScreenView(createSession: () => session),
+        builder: (_) => BotScreenView(
+          createSession: () => session,
+          conversation: workspace,
+          readConversation: () =>
+              [
+                    for (final row in [
+                      ...chat.reading.messages,
+                      ?chat.reading.streamingMessage,
+                    ])
+                      TranscriptMessage.fromRow(row),
+                  ]
+                  .where(
+                    (message) =>
+                        message.kind == TranscriptMessageKind.dialogue &&
+                        message.text.isNotEmpty,
+                  )
+                  .toList(),
+          readRequest: () =>
+              chat.runtime.pendingQuestion?.question ??
+              (chat.runtime.secureInput != null
+                  ? 'The agent needs private input. Return to chat to answer securely.'
+                  : chat.runtime.approvals.isNotEmpty
+                  ? 'The agent needs your approval. Open the conversation to review it.'
+                  : null),
+          sendMessage: (text) async {
+            if (!current()) {
+              throw StateError('This conversation is no longer active.');
+            }
+            await workspace.queueScreenMessage(chat, text);
+          },
+        ),
       ),
     );
   }

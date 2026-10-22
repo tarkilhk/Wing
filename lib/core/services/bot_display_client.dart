@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import '../models/bot_display.dart';
 import 'authenticated_web_socket.dart';
 
 /// RFB 3.8 over the stock authenticated display bridge. Requests only raw pixels,
-/// CopyRect and DesktopSize; Xvnc paints its cursor into the requested framebuffer.
+/// CopyRect, DesktopSize and UTF-8 clipboard; Xvnc paints its cursor into the requested framebuffer.
 /// No password, clipboard read, secondary origin or legacy handshake is admitted.
 class BotDisplayClient {
   // Named injectable transport seam.
@@ -70,6 +71,66 @@ class BotDisplayClient {
   int _width = 0, _height = 0;
   Uint8List _pixels = Uint8List(0);
   Timer? _request;
+  bool _clipboardReady = false;
+  bool get clipboardReady => _clipboardReady && _ready && !_closed;
+
+  /// Writes plain UTF-8 clipboard data. The session separately sends the paste
+  /// shortcut after admission. Never turn newlines into executable Enter keys.
+  void setClipboard(String text) {
+    if (!clipboardReady) {
+      throw StateError('Clipboard is not ready. Reconnect and try again.');
+    }
+    if (text.length > 256 * 1024) {
+      throw StateError('Clipboard text is too large.');
+    }
+    final bytes = utf8.encode(
+      '${text.replaceAll('\r\n', '\n').replaceAll('\r', '\n').replaceAll('\n', '\r\n')}\x00',
+    );
+    if (bytes.length > 256 * 1024 - 16 || text.contains('\x00')) {
+      throw StateError(
+        'Clipboard text is too large or contains unsupported characters.',
+      );
+    }
+    final data = ByteData(4)..setUint32(0, bytes.length);
+    final compressed = zlib.encode([...data.buffer.asUint8List(), ...bytes]);
+    if (compressed.length + 4 > 256 * 1024) {
+      throw StateError('Clipboard text is too large.');
+    }
+    final header = ByteData(12)
+      ..setUint8(0, 6)
+      ..setInt32(4, -(compressed.length + 4))
+      ..setUint32(8, 0x10000001);
+    _write([...header.buffer.asUint8List(), ...compressed]);
+  }
+
+  Future<void> _clipboard() async {
+    final header = await _bytes.read(7);
+    final length = ByteData.sublistView(header).getInt32(3);
+    final size = length.abs();
+    if (size > 1024 * 1024) {
+      throw const FormatException('Screen clipboard too large');
+    }
+    final payload = await _bytes.read(size);
+    // Never request, decompress or publish clipboard contents from the desktop.
+    if (length >= 0 || size < 4) return;
+    final data = ByteData.sublistView(payload);
+    final flags = data.getUint32(0);
+    if ((flags & 0x01000000) == 0) return;
+    var formats = 0;
+    for (var bit = 0; bit < 16; bit++) {
+      if ((flags & (1 << bit)) != 0) formats++;
+    }
+    if (size != 4 + formats * 4) {
+      throw const FormatException('Invalid clipboard capabilities');
+    }
+    _clipboardReady = (flags & 0x10000001) == 0x10000001;
+    final reply = ByteData(16)
+      ..setUint8(0, 6)
+      ..setInt32(4, -8)
+      ..setUint32(8, 0x11000001)
+      ..setUint32(12, 0); // No unsolicited remote clipboard transfer.
+    _write(reply.buffer.asUint8List());
+  }
 
   void start() {
     if (_started || _closed) return;
@@ -88,12 +149,7 @@ class BotDisplayClient {
           case 2:
             break; // Bell has no payload.
           case 3:
-            final header = await _bytes.read(7);
-            final size = ByteData.sublistView(header).getUint32(3);
-            if (size > 1024 * 1024) {
-              throw const FormatException('Screen clipboard too large');
-            }
-            await _bytes.read(size); // Never publish the remote clipboard.
+            await _clipboard();
           default:
             throw const FormatException('Unexpected screen message');
         }
@@ -151,12 +207,13 @@ class BotDisplayClient {
       0,
       0,
     ]);
-    final encodings = ByteData(16)
+    final encodings = ByteData(20)
       ..setUint8(0, 2)
-      ..setUint16(2, 3)
+      ..setUint16(2, 4)
       ..setInt32(4, 0)
       ..setInt32(8, 1)
-      ..setInt32(12, -223);
+      ..setInt32(12, -223)
+      ..setInt32(16, -308);
     _write(encodings.buffer.asUint8List());
     _ready = true;
     _requestFrame(false);

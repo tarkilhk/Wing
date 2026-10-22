@@ -137,8 +137,13 @@ void main() {
                   icon: const Icon(Icons.desktop_windows),
                   onPressed: () => Navigator.of(context).push<void>(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          BotScreenView(createSession: () => session!),
+                      builder: (_) => BotScreenView(
+                        createSession: () => session!,
+                        conversation: session!,
+                        readConversation: () => [],
+                        readRequest: () => null,
+                        sendMessage: null,
+                      ),
                     ),
                   ),
                 ),
@@ -182,7 +187,7 @@ void main() {
           () => session!.canInput,
           'Rotation preserves our input authority',
         );
-        expect(find.byTooltip('Exit fullscreen'), findsOneWidget);
+        expect(find.byType(AppBar), findsNothing);
         await until(
           () => tester.view.padding.top == 0 && tester.view.padding.bottom == 0,
           'Native immersive bars hidden',
@@ -198,9 +203,9 @@ void main() {
           () => session!.canInput,
           'Portrait preserves our input authority',
         );
-        expect(find.byTooltip('Enter fullscreen'), findsOneWidget);
+        expect(find.byType(AppBar), findsOneWidget);
         expect((await repository.displayStatus(bot)).lease.epoch, owned.epoch);
-        await tester.tap(find.byTooltip('Enter fullscreen'));
+        await command('Enter fullscreen');
         await tester.pump();
         await native('prepare-input-window', action: 'prepare');
         await native(
@@ -209,11 +214,10 @@ void main() {
           point: phonePoint(surface().viewport.size.center(Offset.zero)),
         );
         await native(
-          'trackpad-move-click',
+          'pan-and-tap',
           action: 'move-click',
           point: phonePoint(surface().viewport.size.center(Offset.zero)),
         );
-        await command('Use direct touch');
         await command('Zoom in');
         await command('Zoom in');
         await command('Zoom in');
@@ -263,8 +267,6 @@ void main() {
         await command('Tab');
         await command('Enter');
         await command('Scroll down');
-        await tester.tap(find.byTooltip('More screen controls'));
-        await tester.pump();
         await native('remote-input-confirmed', action: 'verify-input');
         await native('close-keyboard', action: 'back');
         await until(
@@ -274,7 +276,7 @@ void main() {
         expect(v.scale, closeTo(typingScale, .0001));
         await native('exit-fullscreen', action: 'back');
         await until(
-          () => find.byTooltip('Enter fullscreen').evaluate().isNotEmpty,
+          () => find.byType(AppBar).evaluate().isNotEmpty,
           'Second Back exits fullscreen',
         );
         expect(session.canInput, true);

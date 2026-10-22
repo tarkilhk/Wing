@@ -63,6 +63,13 @@ class DisplayPeer {
         ..setUint16(0, width)
         ..setUint16(2, height);
       add(init.buffer.asUint8List());
+    } else if (bytes[0] == 2) {
+      final caps = ByteData(16)
+        ..setUint8(0, 3)
+        ..setInt32(4, -8)
+        ..setUint32(8, 0x1f000001)
+        ..setUint32(12, 256 * 1024);
+      add(caps.buffer.asUint8List());
     } else if (bytes[0] == 3) {
       requests++;
       if (requests == 1 && width * height < 100000) raw();
@@ -89,7 +96,10 @@ class DisplayFixture {
   String holder = 'agent';
   String? held;
   int epoch = 0, retains = 0, releases = 0;
-  bool running = true, failRelease = false, failStatus = false;
+  bool running = true,
+      installed = true,
+      failRelease = false,
+      failStatus = false;
   Completer<void>? acquireWait, beforeAcquire, statusWait, connectWait;
   Map<String, dynamic> get lease => {
     'holder': holder,
@@ -100,7 +110,9 @@ class DisplayFixture {
   };
   Map<String, dynamic> get status => {
     'supported': true,
-    'installed': true,
+    'installed': installed,
+    if (!installed)
+      'install_command': 'sudo apt install tigervnc-standalone-server',
     'running': running,
     'lease': lease,
   };

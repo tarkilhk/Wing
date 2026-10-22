@@ -1017,7 +1017,18 @@ class ComposerSession {
   bool _same<T>(List<T> a, List<T> b) =>
       a.length == b.length && a.indexed.every((v) => identical(v.$2, b[v.$1]));
 
-  Future<void> enqueue(String rawText, {bool fromSend = false}) async {
+  Future<void> enqueue(String rawText, {bool fromSend = false}) =>
+      _enqueue(rawText, fromSend: fromSend, consumeMatchingDraft: true);
+
+  /// Independent surfaces cannot consume the chat draft, even for identical text.
+  Future<void> enqueueExternal(String text) =>
+      _enqueue(text, fromSend: false, consumeMatchingDraft: false);
+
+  Future<void> _enqueue(
+    String rawText, {
+    required bool fromSend,
+    required bool consumeMatchingDraft,
+  }) async {
     _ensure();
     if (_preparing != 0) {
       throw StateError('Wait for the attachment to finish preparing.');
@@ -1036,7 +1047,7 @@ class ComposerSession {
     }
     final original = _text, uncertain = _uncertain;
     final originalReferences = _references;
-    final moved = _text.trim() == text;
+    final moved = consumeMatchingDraft && _text.trim() == text;
     final outgoing = _submissions.values.where((v) => v.consume).firstOrNull;
     final files = moved
         ? _files
@@ -1049,7 +1060,10 @@ class ComposerSession {
     final item = _QueueEntry(
       QueuedPromptDraft(
         text: fromSend ? rawText : text,
-        references: retainComposerReferences(rawText, originalReferences),
+        references: retainComposerReferences(
+          rawText,
+          consumeMatchingDraft ? originalReferences : const [],
+        ),
         attachments: files,
         submissionUncertain: moved && uncertain,
       ),
