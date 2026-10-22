@@ -36,6 +36,7 @@ import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
 import 'package:wing/core/services/workspace_snapshot_store.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -594,6 +595,80 @@ void main() {
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       await _pumpNavigation(tester);
+    },
+  );
+
+  test(
+    'cold fixture restores send admission without changing selection',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final preferences = AppPreferences(prefs);
+      addTearDown(preferences.dispose);
+      await WorkspaceSnapshotStore(prefs, 'fixture-owner').write({
+        'selected': 'b',
+        'profiles': [
+          for (final name in ['a', 'b'])
+            {
+              'name': name,
+              'sessions': [
+                {'id': 'same', 'title': '$name chat', 'profile': name},
+              ],
+              'chats': [
+                {'id': 'same', 'title': '$name chat', 'messages': []},
+              ],
+            },
+        ],
+      });
+      final primary = Host()..running = false;
+      final other = Host()..running = false;
+      final notices = <ProfileNotification>[];
+      final noticeReady = Completer<ProfileNotification>();
+      final owner = ProfileWorkspaceController(
+        access: ConnectionAccess(
+          connection: identityTestConnection(),
+          dashboardOAuth: null,
+        ),
+        connectionIdentity: 'fixture-owner',
+        preferences: prefs,
+        appPreferences: preferences,
+        onAttention: (notice) async {
+          notices.add(notice);
+          noticeReady.complete(notice);
+        },
+        gatewayFactory: (scope) =>
+            (scope.profileName == 'b' ? other : primary).gateway(scope),
+      );
+      addTearDown(owner.dispose);
+      final restored = await prepareNotificationFixtureChats(
+        owner,
+        restarting: true,
+      );
+      for (final (chat, host) in [
+        (restored.chat, primary),
+        (restored.other, other),
+      ]) {
+        chat.composer.editText('Produce a new reply after restart');
+        await owner.send(chat);
+        expect(
+          host.calls.where((call) => call.$2 == 'prompt.submit'),
+          hasLength(1),
+        );
+      }
+      primary.gateways['a']!.onEvent!(
+        StreamEvent(
+          type: 'message.complete',
+          sessionId: restored.chat.runtime.runtimeId,
+          data: {'text': 'A new completed reply'},
+        ),
+      );
+      final notice = await noticeReady.future.timeout(
+        const Duration(seconds: 1),
+      );
+      expect(notices, hasLength(1));
+      expect(notice.key, restored.chat.key);
+      expect(owner.current!.scope.profileName, 'b');
+      expect(owner.current!.offlineSnapshot, isFalse);
     },
   );
 

@@ -132,6 +132,10 @@ def main():
             assert target is not None, 'Exact restored answer is not exposed on the owning card'
             return list(map(int, re.findall(r'\d+', target.get('bounds'))))
 
+        # Shade inspection backgrounds the idle fixture, which Android may
+        # freeze. Reenter it before this explicit list command. The subsequent
+        # body tap must still establish its own exact destination unaided.
+        command('shell', 'am', 'start', '-n', ACTIVITY)
         ready()
         request('list', {})
         assert identifier in notices(), 'Opening only the list marked the answer read'

@@ -649,21 +649,27 @@ def check_direct_actions(output):
 
 
 
-def check_cold_action(output):
-    def saved_decisions():
-        # A settled action releases the fake HTTP server with its engine.
-        # Read the fake server's acknowledgement persisted before its RPC reply.
-        try:
-            raw = adb('shell', 'run-as', PACKAGE, 'cat',
-                      'shared_prefs/FlutterSharedPreferences.xml')
-        except subprocess.CalledProcessError:
-            # SharedPreferences atomically replaces this file while persisting.
-            # The bounded poll must still observe the exact acknowledgement.
-            return []
+def saved_notification_decisions():
+    # A settled action releases the fake HTTP server with its engine.
+    # Read the fake server's acknowledgement persisted before its RPC reply.
+    try:
+        raw = adb('shell', 'run-as', PACKAGE, 'cat',
+                  'shared_prefs/FlutterSharedPreferences.xml')
+    except subprocess.CalledProcessError:
+        # SharedPreferences atomically replaces this file while persisting.
+        # The bounded poll must still observe the exact acknowledgement.
+        return []
+    try:
         root = ET.fromstring(raw)
-        value = next(n.text for n in root if n.get('name') == 'flutter.notification_qa_decisions')
-        return json.loads(value)
+    except ET.ParseError:
+        # A successful cat can still race the atomic preferences replacement.
+        # Retry the observation; only a complete exact receipt counts as an ACK.
+        return []
+    value = next(n.text for n in root if n.get('name') == 'flutter.notification_qa_decisions')
+    return json.loads(value)
 
+
+def check_cold_action(output):
     state('/approval', {'command': 'echo ok'})
     before = len(state()['decisions'])
     cold_request = state()['pending'][0]['request_id']
@@ -673,8 +679,11 @@ def check_cold_action(output):
     until(lambda: not adb('shell', f'pidof {PACKAGE} || true').strip(), 'Fixture did not stop')
     shade()
     tap(text='Once')
-    until(lambda: len(saved_decisions()) == before + 1, 'Cold Once did not submit')
-    assert saved_decisions()[-1]['params']['request_id'] == cold_request
+    def acknowledged():
+        decisions = saved_notification_decisions()
+        return decisions if len(decisions) == before + 1 else None
+    decisions = until(acknowledged, 'Cold Once did not submit')
+    assert decisions[-1]['params']['request_id'] == cold_request
     until(lambda: not any(PACKAGE in line for line in adb('shell', 'dumpsys', 'activity', 'activities').splitlines()
                           if 'topResumedActivity=' in line), 'Cold action left Wing in front')
     assert not any('Review command' in (n.get('text'), n.get('content-desc')) for n in nodes())

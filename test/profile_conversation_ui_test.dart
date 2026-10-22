@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/adaptive_markdown_table.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -73,14 +74,29 @@ void main() {
     tester.view.physicalSize = const Size(320, 760);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await message(
-      tester,
-      '# Result\n\n**Ready** and `inline`.\n\n- First\n- Second\n\n'
-      '| Name | Status |\n| --- | --- |\n| A long project name | Ready |',
+    const content =
+        '# Result\n\n**Ready** and `inline`.\n\n- First\n- Second\n\n'
+        '| Name | Status |\n| --- | --- |\n| A long project name | Ready |';
+    await message(tester, content);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is MarkdownBody && widget.data == content,
+      ),
+      findsOneWidget,
     );
-    expect(find.bySubtype<MarkdownBody>(), findsOneWidget);
     expect(find.text('Result'), findsOneWidget);
-    expect(find.byType(Table), findsOneWidget);
+    final table = find.byType(AdaptiveMarkdownTable);
+    expect(table, findsOneWidget);
+    expect(find.byType(Table), findsNothing);
+    for (final text in ['Name', 'Status', 'A long project name', 'Ready']) {
+      expect(
+        find.descendant(
+          of: table,
+          matching: find.text(text, findRichText: true),
+        ),
+        findsOneWidget,
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 

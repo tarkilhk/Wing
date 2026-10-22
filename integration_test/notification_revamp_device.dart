@@ -51,6 +51,10 @@ Future<({ProfileChat chat, ProfileChat other})> prepareNotificationFixtureChats(
     );
     await controller.loadNotificationApproval(chat.key);
     await controller.loadNotificationApproval(other.key);
+    // Loading a runtime does not clear the profile's offline reading snapshot.
+    // Recover both owners before later fixture sends, without selecting either.
+    await controller.reconnect(chat.key.workspace);
+    await controller.reconnect(other.key.workspace);
     return (chat: chat, other: other);
   }
   await controller.initialize();

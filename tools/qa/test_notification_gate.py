@@ -217,8 +217,9 @@ class ColdActionReceiptTest(unittest.TestCase):
 
         def until(check, message, **kwargs):
             for _ in range(3):
-                if check():
-                    return
+                observed = check()
+                if observed:
+                    return observed
             raise AssertionError(message)
 
         with patch.object(driver, 'adb', side_effect=adb), \
@@ -444,6 +445,99 @@ class GroupApprovalControlsTest(unittest.TestCase):
         for names, review in [(('once',), False), (('once', 'deny'), True)]:
             with self.subTest(names=names, review=review), self.assertRaisesRegex(AssertionError, 'NATIVE_GROUP_APPROVAL_RENDER'):
                 driver.assert_group_approval_controls(self.controls(*names), review)
+
+
+class ColdActionPreferenceReadTest(unittest.TestCase):
+    def test_cold_action_verdict_uses_the_receipt_returned_by_its_poll(self):
+        receipt = [{'params': {'request_id': 'captured-request'}}]
+        with patch.object(driver, 'state', return_value={
+                'decisions': [], 'pending': [{'request_id': 'captured-request'}],
+        }), patch.object(driver, 'adb', side_effect=lambda *args:
+                '123' if args == ('shell', 'pidof', driver.PACKAGE) else ''), \
+             patch.object(driver, 'shade'), patch.object(driver, 'tap'), \
+             patch.object(driver, 'nodes', return_value=[]), \
+             patch.object(driver, 'screenshot'), \
+             patch.object(driver, 'saved_notification_decisions',
+                          side_effect=[receipt, []]) as observations:
+            driver.check_cold_action(Path('unused'))
+        self.assertEqual(observations.call_count, 1)
+
+    def test_atomic_replacement_retries_empty_and_partial_xml_until_exact_receipt(self):
+        receipt = [{'params': {'request_id': 'captured-request'}}]
+        complete = ET.Element('map')
+        ET.SubElement(complete, 'string', {
+            'name': 'flutter.notification_qa_decisions',
+        }).text = json.dumps(receipt)
+        with patch.object(driver, 'adb', side_effect=[
+                '', '<map><string', ET.tostring(complete, encoding='unicode'),
+        ]), patch.object(driver.time, 'sleep'):
+            observed = driver.until(driver.saved_notification_decisions,
+                                    'Cold action acknowledgement missing')
+        self.assertEqual(observed, receipt)
+
+    def test_complete_snapshot_without_acknowledgement_key_is_not_accepted(self):
+        with patch.object(driver, 'adb', return_value='<map/>'):
+            with self.assertRaises(StopIteration):
+                driver.saved_notification_decisions()
+
+
+class RestoredFixtureLifecycleTest(unittest.TestCase):
+    def test_list_preparation_foregrounds_a_fixture_frozen_by_the_shade(self):
+        path = Path(__file__).resolve().parents[2] / 'scripts/test_native_notification_restore.py'
+        spec = importlib.util.spec_from_file_location('restore_driver_lifecycle', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        frozen = False
+        stopped = False
+        answer = None
+
+        def command(argv, **kwargs):
+            nonlocal frozen, stopped
+            args = argv[3:]
+            if args == ['forward', '--no-rebind', 'tcp:0', 'tcp:18766']:
+                return '34819\n'
+            if args[:3] == ['shell', 'am', 'force-stop']:
+                stopped = True
+            if args[:3] == ['shell', 'am', 'start']:
+                frozen = stopped = False
+            if args == ['shell', 'dumpsys', 'notification', '--noredact']:
+                return '' if stopped else (
+                    f'NotificationRecord(x: pkg={module.PACKAGE} id=42 '
+                    'Notification(channel=wing_turn_notifications ONLY_ALERT_ONCE SILENT))\n'
+                    f'android.text=String ({answer})\n')
+            return ''
+
+        def shown(*args, **kwargs):
+            nonlocal frozen
+            frozen = True
+
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+            def read(self):
+                return b'{}'
+
+        def request(value, **kwargs):
+            nonlocal answer
+            if frozen:
+                raise TimeoutError('Android froze the background QA server')
+            if value.full_url.endswith('/reply'):
+                answer = json.loads(value.data)['text']
+            if value.full_url.endswith('/list'):
+                raise RuntimeError('Foreground list preparation reached')
+            return Response()
+
+        with patch.object(sys, 'argv', [str(path), '--serial', 'emulator-5562']), \
+             patch.object(module.subprocess, 'check_output', side_effect=command), \
+             patch.object(module.urllib.request, 'urlopen', side_effect=request), \
+             patch.object(module.native, 'shown_notification', side_effect=shown), \
+             patch.object(module.time, 'sleep'):
+            with self.assertRaisesRegex(RuntimeError, 'Foreground list preparation reached'):
+                module.main()
 
 
 class NotificationForwardOwnershipTest(unittest.TestCase):

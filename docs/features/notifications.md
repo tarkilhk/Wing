@@ -27,6 +27,8 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   The queued native cold-tap case includes the notification device fixture's
   restart setup. It must preserve the captured profile/chat, reuse both existing
   chats and display the answer above the remembered workspace route.
+  Restored profiles must also admit a later message and publish its reply
+  without changing the selected chat during recovery.
 
 - **Android `notification-actions`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
 

@@ -370,6 +370,22 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     }
   }
 
+  Iterable<Widget> _segmentWidgets(Element element) sync* {
+    final widget = element.widget;
+    if (widget is Offstage && widget.offstage) return;
+    if (widget is BlockReusingMarkdownBody || widget is MarkdownCodeBlock) {
+      // A logical segment owns its rendering. Adaptive table cells inside a
+      // prose segment are descendants, not additional document segments.
+      yield widget;
+      return;
+    }
+    final children = <Element>[];
+    element.visitChildren(children.add);
+    for (final child in children) {
+      yield* _segmentWidgets(child);
+    }
+  }
+
   // Called only before measurement or after the completion tail.
   Map<String, Object> renderedReadiness(String source) {
     final bodies = _walk(context as Element)
@@ -392,7 +408,7 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
         : 'Synthetic5_44';
     final segmentsMatch = workspaceReplayMatchesSegments(
       source,
-      elements.map((element) => element.widget),
+      bodies.length == 1 ? _segmentWidgets(bodies.single) : const [],
       streaming: _chat!.runtime.blocksTurnAdmission,
     );
     var editableMarkers = 0;

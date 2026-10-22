@@ -322,56 +322,69 @@ void main() {
     'table': ('| A | B |', '| A | B |\n| --- | --- |\n| a | **b** |'),
   };
   for (final fixture in transformations.entries) {
-    testWidgets('selected paragraph becoming ${fixture.key} matches stock', (
-      tester,
-    ) async {
-      final key = GlobalKey();
-      await tester.pumpMarkdownWidget(
-        _host(
-          BlockReusingMarkdownBody(
-            key: key,
-            data: fixture.value.$1,
-            selectable: true,
+    final reference = fixture.key == 'table' ? 'fresh adaptive table' : 'stock';
+    testWidgets(
+      'selected paragraph becoming ${fixture.key} matches $reference',
+      (tester) async {
+        final key = GlobalKey();
+        await tester.pumpMarkdownWidget(
+          _host(
+            BlockReusingMarkdownBody(
+              key: key,
+              data: fixture.value.$1,
+              selectable: true,
+            ),
           ),
-        ),
-      );
-      final before = _texts(tester).single;
-      final oldState = tester.state(find.byWidget(before));
-      await _select(
-        tester,
-        _editable(tester, before),
-        TextSelection(
-          baseOffset: 0,
-          extentOffset: before.textSpan!.toPlainText().length,
-        ),
-      );
-      await tester.pumpMarkdownWidget(
-        _host(
-          BlockReusingMarkdownBody(
-            key: key,
-            data: fixture.value.$2,
-            selectable: true,
+        );
+        final before = _texts(tester).single;
+        final oldState = tester.state(find.byWidget(before));
+        await _select(
+          tester,
+          _editable(tester, before),
+          TextSelection(
+            baseOffset: 0,
+            extentOffset: before.textSpan!.toPlainText().length,
           ),
-        ),
-      );
-      expect(oldState.mounted, isFalse);
-      if (fixture.key == 'table') {
-        expect(find.byType(Table), findsOneWidget);
-      }
-      for (final text in _texts(tester)) {
-        final value = _editable(tester, text).widget.controller.value;
-        if (value.selection.isValid) {
-          expect(value.selection.start, greaterThanOrEqualTo(0));
-          expect(value.selection.end, lessThanOrEqualTo(value.text.length));
+        );
+        await tester.pumpMarkdownWidget(
+          _host(
+            BlockReusingMarkdownBody(
+              key: key,
+              data: fixture.value.$2,
+              selectable: true,
+            ),
+          ),
+        );
+        expect(oldState.mounted, isFalse);
+        if (fixture.key == 'table') {
+          expect(find.byType(Table), findsOneWidget);
+          expect(
+            _texts(tester).map((text) => text.textSpan!.toPlainText()).toList(),
+            ['A', 'B', 'a', 'b'],
+          );
         }
-      }
-      final rendered = _rendered(tester);
-      await tester.pumpMarkdownWidget(
-        _host(MarkdownBody(data: fixture.value.$2, selectable: true)),
-      );
-      expect(_rendered(tester), rendered);
-      expect(tester.takeException(), isNull);
-    });
+        for (final text in _texts(tester)) {
+          final value = _editable(tester, text).widget.controller.value;
+          if (value.selection.isValid) {
+            expect(value.selection.start, greaterThanOrEqualTo(0));
+            expect(value.selection.end, lessThanOrEqualTo(value.text.length));
+          }
+        }
+        final rendered = _rendered(tester);
+        await tester.pumpMarkdownWidget(
+          _host(
+            fixture.key == 'table'
+                ? BlockReusingMarkdownBody(
+                    data: fixture.value.$2,
+                    selectable: true,
+                  )
+                : MarkdownBody(data: fixture.value.$2, selectable: true),
+          ),
+        );
+        expect(_rendered(tester), rendered);
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('growing prose honors refreshed theme and enlarged text', (
