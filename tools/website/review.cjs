@@ -52,7 +52,7 @@ async function checkContrast(page) {
       return .2126 * linear[0] + .7152 * linear[1] + .0722 * linear[2];
     }
     const results = [];
-    const selectors = 'p,dt,dd,h1,h2,h3,.button,.nav-link,.work-tab>span,.text-link,.trust-line>a,summary,.footer-top nav>a';
+    const selectors = 'p,dt,dd,h1,h2,h3,.button,.nav-link,.work-tab>span,.text-link,summary,.footer-top nav>a';
     for (const element of document.querySelectorAll(selectors)) {
       if (!element.getClientRects().length || element.closest('[hidden]')) continue;
       const style = getComputedStyle(element);

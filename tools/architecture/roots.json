@@ -7134,12 +7134,12 @@
       "provenance": "tracked"
     },
     {
-      "path": "assets/fonts/TABLER-LICENSE",
+      "path": "assets/fonts/README.md",
       "area": "assets",
       "provenance": "tracked"
     },
     {
-      "path": "assets/fonts/README.md",
+      "path": "assets/fonts/TABLER-LICENSE",
       "area": "assets",
       "provenance": "tracked"
     },
@@ -9989,6 +9989,16 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/adaptive_conversation_composer.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/adaptive_markdown_table.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/widgets/admin_model_picker.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -10170,6 +10180,11 @@
     },
     {
       "path": "lib/core/widgets/conversation_activity_status.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/conversation_reading_scope.dart",
       "area": "lib",
       "provenance": "tracked"
     },
@@ -12219,6 +12234,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/phone_reading_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
       "path": "test/plugin_turn_notification_sink_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -12907,6 +12927,16 @@
       "path": "test/public_owner_state_guard_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/question_activity_projection_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/question_activity_test.dart",
+      "area": "test",
+      "provenance": "tracked"
     },
     {
       "path": "test/read_recovery_test.dart",
@@ -15069,8 +15099,18 @@
       "provenance": "tracked"
     },
     {
+      "path": "tools/website/capture_release_media_test.dart",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "tools/website/review.cjs",
       "area": "tools",
+      "provenance": "tracked"
+    },
+    {
+      "path": "tools/website/review_ripple.cjs",
+      "area": "website",
       "provenance": "tracked"
     },
     {
@@ -15154,7 +15194,17 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/assets/screenshots/bot-chat-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/assets/screenshots/bot-discussion-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/bot-screen-control-dark.png",
       "area": "website",
       "provenance": "tracked"
     },
@@ -15180,6 +15230,21 @@
     },
     {
       "path": "website/assets/screenshots/code-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/connection-address-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/connection-choose-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/connection-verified-dark.png",
       "area": "website",
       "provenance": "tracked"
     },
@@ -15269,6 +15334,16 @@
       "provenance": "tracked"
     },
     {
+      "path": "website/assets/screenshots/recents-arrival-dark.gif",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/recents-arrival-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
       "path": "website/assets/screenshots/recents-dark.png",
       "area": "website",
       "provenance": "tracked"
@@ -15290,6 +15365,31 @@
     },
     {
       "path": "website/assets/screenshots/results-light.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/scheduled-task-editor-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/scheduled-task-runs-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/scheduled-tasks-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/skill-editor-dark.png",
+      "area": "website",
+      "provenance": "tracked"
+    },
+    {
+      "path": "website/assets/screenshots/skill-reader-dark.png",
       "area": "website",
       "provenance": "tracked"
     },
@@ -15395,81 +15495,6 @@
     },
     {
       "path": "website/workspaces.html",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "test/question_activity_test.dart",
-      "area": "test",
-      "provenance": "tracked"
-    },
-    {
-      "path": "test/question_activity_projection_test.dart",
-      "area": "test",
-      "provenance": "tracked"
-    },
-    {
-      "path": "lib/core/widgets/adaptive_markdown_table.dart",
-      "area": "lib",
-      "provenance": "tracked"
-    },
-    {
-      "path": "lib/core/widgets/conversation_reading_scope.dart",
-      "area": "lib",
-      "provenance": "tracked"
-    },
-    {
-      "path": "lib/core/widgets/adaptive_conversation_composer.dart",
-      "area": "lib",
-      "provenance": "tracked"
-    },
-    {
-      "path": "test/phone_reading_test.dart",
-      "area": "test",
-      "provenance": "tracked"
-    },
-    {
-      "path": "tools/website/capture_release_media_test.dart",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/bot-chat-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/bot-screen-control-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/scheduled-tasks-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/scheduled-task-editor-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/scheduled-task-runs-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/recents-arrival-dark.png",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "website/assets/screenshots/recents-arrival-dark.gif",
-      "area": "website",
-      "provenance": "tracked"
-    },
-    {
-      "path": "tools/website/review_ripple.cjs",
       "area": "website",
       "provenance": "tracked"
     }

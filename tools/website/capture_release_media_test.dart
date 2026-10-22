@@ -19,6 +19,14 @@ import 'package:wing/core/services/bot_screen_window.dart';
 import 'package:wing/core/services/scheduled_tasks_controller.dart';
 import 'package:wing/core/services/scheduled_tasks_repository.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/screens/connection_setup_screen.dart';
+import 'package:wing/core/screens/administration/admin_skills_page.dart';
+import 'package:wing/core/services/connection_setup_session.dart';
+import 'package:wing/core/services/hermes_cloud.dart';
+import 'package:wing/core/services/profile_skills_session.dart';
+import '../../test/helpers/pump_markdown_widget.dart';
+import '../../test/support/administration_fixture.dart';
+import '../../test/support/connection_probe_fixture.dart';
 import '../../test/support/bot_display_fixture.dart';
 import '../../test/support/scheduled_tasks_fixture.dart';
 
@@ -49,10 +57,13 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(
-        debugShowCheckedModeBanner: false,
-        theme: wingTheme(Brightness.dark),
-        home: RepaintBoundary(key: boundary, child: child),
+      RepaintBoundary(
+        key: boundary,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: wingTheme(Brightness.dark),
+          home: child,
+        ),
       ),
     );
     await tester.pump();
@@ -73,6 +84,167 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets('export connection setup workflow', (tester) async {
+    final probe = ConnectionProbeFixture();
+    await show(
+      tester,
+      ConnectionSetupScreen(
+        createSession: () => ConnectionSetupSession(
+          initialAccess: null,
+          onSaveIcon: null,
+          savedConnections: () => const [],
+          cloud: HermesCloud(),
+          createProbe: (_) => probe,
+          onSave: (connection) async => connection,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.runAsync(() async {
+      final context = tester.element(find.byType(ConnectionSetupScreen));
+      for (final image in tester.widgetList<Image>(find.byType(Image))) {
+        await precacheImage(image.image, context);
+      }
+    });
+    await tester.pumpAndSettle();
+    await export(tester, 'connection-choose-dark');
+    await tester.tap(find.text('Use an address'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('connection-address')),
+      'https://hermes.example.com',
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await export(tester, 'connection-address-dark');
+    await tester.ensureVisible(find.text('Continue'));
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('connection-username')),
+      'alex',
+    );
+    await tester.enterText(
+      find.byKey(const Key('connection-password')),
+      'demo-password',
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.ensureVisible(find.text('Check connection'));
+    await tester.tap(find.text('Check connection'));
+    await tester.pumpAndSettle();
+    expect(find.text('Connection verified'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const Key('connection-name')),
+      'My Hermes',
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await export(tester, 'connection-verified-dark');
+  });
+
+  testWidgets('export skill reader and editor', (tester) async {
+    const instructions = '''---
+name: research
+description: Turn a question into a sourced briefing.
+---
+# Research
+
+Start with the question the reader needs answered.
+
+## Gather evidence
+
+- Read original sources before summaries.
+- Check when each source was published.
+- Keep a link beside each useful finding.
+
+## Write the briefing
+
+Lead with the answer. Explain the evidence and call out anything still uncertain.
+
+End with a short list of next steps.
+''';
+    final fixture = AdministrationFixture();
+    fixture.override = (_, path, query, _) async => switch (path) {
+      'skills' => {
+        'data': [
+          {
+            'name': 'research',
+            'description': 'Turn a question into a sourced briefing.',
+            'provenance': 'agent',
+            'usage': 12,
+            'enabled': true,
+          },
+        ],
+      },
+      'profiles' => {
+        'profiles': [
+          {'name': 'personal', 'path': '/workspace'},
+        ],
+      },
+      'fs/list' => {
+        'entries': switch (query['path']) {
+          '/workspace' => [
+            {
+              'name': 'skills',
+              'path': '/workspace/skills',
+              'isDirectory': true,
+            },
+          ],
+          '/workspace/skills' => [
+            {
+              'name': '.usage.json',
+              'path': '/workspace/skills/.usage.json',
+              'isDirectory': false,
+            },
+          ],
+          _ => [],
+        },
+      },
+      'fs/read-text' => {
+        'binary': false,
+        'truncated': false,
+        'text': '{"research":{"use_count":12,"patch_count":2}}',
+      },
+      'analytics/usage' => {
+        'skills': {
+          'top_skills': [
+            {'skill': 'research', 'view_count': 12},
+          ],
+        },
+      },
+      'skills/content' => {
+        'name': 'research',
+        'content': instructions,
+        'path': '/workspace/skills/research/SKILL.md',
+      },
+      _ => throw StateError('Unexpected request $path'),
+    };
+    final session = ProfileSkillsSession.library(
+      fixture.server.profile('personal'),
+    );
+    addTearDown(session.dispose);
+    await session.refresh();
+    final route = session.openSkill(session.state.installed.single);
+    await show(tester, AdminSkillDetail(session: session, route: route));
+    await tester.pumpAndSettle();
+    await tester.settleMarkdown();
+    await export(tester, 'skill-reader-dark');
+    await tester.tap(find.byTooltip('Skill actions'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit instructions'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField),
+      '$instructions\nUse plain language and keep the briefing under 500 words.\n',
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(TextField), const Offset(0, 600));
+    await tester.pumpAndSettle();
+    await export(tester, 'skill-editor-dark');
+    expect(fixture.requests.every((request) => request.$1 == 'GET'), true);
+  });
 
   testWidgets('export schedule list, filled editor and recent runs', (
     tester,

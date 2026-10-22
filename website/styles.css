@@ -142,6 +142,13 @@ summary:active { color: var(--teal); }
 .footer-top nav { display: flex; flex-wrap: wrap; gap: 1.25rem; font-size: .9375rem; }
 .footer-bottom { display: flex; justify-content: space-between; gap: 1rem; border-block-start: 1px solid var(--dark-rule); padding-block-start: 1.5rem; margin-block-start: 2rem; font-size: .8125rem; color: var(--on-navy-muted); }
 
+.setup-gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 1.5rem; align-items: start; margin-block: 2rem; }
+.setup-gallery .guide-shot { inline-size: 100%; max-inline-size: 19rem; margin: 0 auto; }
+.guide-copy figcaption { margin-block-start: 1rem; font-size: 1rem; line-height: 1.5; }
+
+.guide-copy details { border-block-end: 1px solid var(--rule); }
+.guide-copy summary { padding-block: 1rem; cursor: pointer; font-weight: 600; }
+
 @media (hover: hover) and (pointer: fine) {
   a:hover { text-decoration-color: var(--teal); }
   .opening a:hover, .site-footer a:hover { text-decoration-color: var(--mint); }
@@ -275,10 +282,6 @@ summary:active { color: var(--teal); }
 .guide-next nav { display: flex; flex-wrap: wrap; gap: .5rem 2rem; margin-block: 1rem 2rem; }
 .guide-next .text-link { color: var(--teal); }
 .guide-next > p { font-size: .9375rem; color: var(--muted); margin-block-start: 1rem; }
-.setup-steps { padding-inline-start: 1.75rem; margin: 0; }
-.setup-steps > li { padding-inline-start: .5rem; }
-.setup-steps > li + li { margin-block-start: 2.5rem; }
-.setup-steps h3 { font-size: 1.375rem; margin-block-end: 1rem; }
 
 @media (width < 65rem) {
   .guide-layout { gap: 2.5rem; }
