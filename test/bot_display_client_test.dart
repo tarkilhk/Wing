@@ -31,6 +31,17 @@ void main() {
   });
 
   test(
+    'stock clipboard negotiation delivers pixels without desktop-layout messages',
+    () async {
+      final (peer, frames) = await startPeer();
+      final packet = peer.sent.singleWhere((p) => p[0] == 2);
+      expect(packet.sublist(16), [0xc0, 0xa1, 0xe5, 0xce]);
+      expect(peer.client.clipboardReady, isTrue);
+      expect((frames.current.width, frames.current.height), (4, 3));
+    },
+  );
+
+  test(
     'extended clipboard preserves Unicode and newlines without key events',
     () async {
       final (peer, _) = await startPeer(fragment: true);

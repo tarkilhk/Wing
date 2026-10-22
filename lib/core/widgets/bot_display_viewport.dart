@@ -74,16 +74,6 @@ class BotDisplayViewport extends ChangeNotifier {
     canInput = enabled;
   }
 
-  void fit() {
-    if (desktop.isEmpty) return;
-    _keyboardNavigated = _keyboard;
-    scale = _fitScale(size);
-    _keyboardShift = Offset.zero;
-    _offset = _bounded(Offset.zero);
-    _fit = true;
-    notifyListeners();
-  }
-
   void zoom(double factor, {Offset? focal}) {
     if (desktop.isEmpty) return;
     _keyboardNavigated = _keyboard;

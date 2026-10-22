@@ -64,6 +64,25 @@ class DisplayPeer {
         ..setUint16(2, height);
       add(init.buffer.asUint8List());
     } else if (bytes[0] == 2) {
+      final data = ByteData.sublistView(bytes);
+      final encodings = [
+        for (var i = 0; i < data.getUint16(2); i++) data.getUint32(4 + i * 4),
+      ];
+      // TigerVNC encodings.h: -308 is ExtendedDesktopSize, not clipboard.
+      // A real peer answers that request before delivering framebuffer pixels.
+      if (encodings.contains(0xfffffecc)) {
+        final desktop = ByteData(36)
+          ..setUint16(2, 1)
+          ..setUint16(8, width)
+          ..setUint16(10, height)
+          ..setInt32(12, -308)
+          ..setUint8(16, 1)
+          ..setUint16(28, width)
+          ..setUint16(30, height);
+        add(desktop.buffer.asUint8List());
+      }
+      // Only advertise the extension the client actually negotiated.
+      if (!encodings.contains(0xc0a1e5ce)) return;
       final caps = ByteData(16)
         ..setUint8(0, 3)
         ..setInt32(4, -8)

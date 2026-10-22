@@ -121,6 +121,22 @@ void main() {
           expect(find.byTooltip('Bot has control'), findsOneWidget);
           expect(f.calls.where((c) => c.$2.contains('lease.')), isEmpty);
           await capture(tester, key, 'watch-${brightness.name}-$scale');
+          await tester.tap(find.byTooltip('More screen controls'));
+          await tester.pump();
+          for (final label in [
+            'Zoom in',
+            'Zoom out',
+            'Fit screen',
+            'Right click',
+            'Double click',
+          ]) {
+            expect(find.byTooltip(label), findsNothing);
+          }
+          expect(find.byTooltip('Open conversation'), findsOneWidget);
+          expect(find.byTooltip('Close screen'), findsOneWidget);
+          await capture(tester, key, 'more-${brightness.name}-$scale');
+          await tester.tap(find.byTooltip('More screen controls'));
+          await tester.pump();
           await tester.tap(find.byTooltip('Take control'));
           await tester.pump();
           expect(find.byTooltip('You have control'), findsOneWidget);
@@ -416,6 +432,12 @@ void main() {
       expect(f.peers, hasLength(1));
       expect(session.controlling, true);
       await capture(tester, key, 'fullscreen-landscape');
+      await tester.tap(find.byTooltip('More screen controls'));
+      await tester.pump();
+      expect(find.byTooltip('Double click'), findsNothing);
+      expect(find.byTooltip('Zoom in'), findsNothing);
+      expect(find.byTooltip('Close screen'), findsOneWidget);
+      await capture(tester, key, 'more-landscape');
       await tester.pumpWidget(const SizedBox());
       await tester.pump();
       expect(f.holder, 'agent');

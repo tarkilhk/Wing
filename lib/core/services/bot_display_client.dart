@@ -213,7 +213,7 @@ class BotDisplayClient {
       ..setInt32(4, 0)
       ..setInt32(8, 1)
       ..setInt32(12, -223)
-      ..setInt32(16, -308);
+      ..setUint32(16, 0xc0a1e5ce); // RFB ExtendedClipboard (TigerVNC).
     _write(encodings.buffer.asUint8List());
     _ready = true;
     _requestFrame(false);

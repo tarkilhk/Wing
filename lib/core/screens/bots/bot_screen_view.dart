@@ -652,9 +652,6 @@ class _BotScreenViewState extends State<BotScreenView>
   Widget _commands() => SingleChildScrollView(
     child: Wrap(
       children: [
-        _action('Zoom in', Icons.zoom_in, () => _viewport.zoom(1.3)),
-        _action('Zoom out', Icons.zoom_out, () => _viewport.zoom(1 / 1.3)),
-        _action('Fit screen', Icons.fit_screen, _viewport.fit),
         _action(
           _panel ? 'Hide agent panel' : 'Show agent panel',
           Icons.chat_bubble_outline,
@@ -667,21 +664,6 @@ class _BotScreenViewState extends State<BotScreenView>
           _fullscreen ? 'Exit fullscreen' : 'Enter fullscreen',
           _fullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
           _toggleFullscreen,
-        ),
-        _action(
-          'Right click',
-          Icons.more_horiz,
-          _session.canInput ? () => _viewport.click(4) : null,
-        ),
-        _action(
-          'Double click',
-          Icons.ads_click,
-          _session.canInput
-              ? () {
-                  _viewport.click(1);
-                  _viewport.click(1);
-                }
-              : null,
         ),
         _action(
           'Refresh screen',
@@ -734,13 +716,8 @@ class _BotScreenViewState extends State<BotScreenView>
             ),
           ),
         ),
-        if (widget.sendMessage != null)
-          _action(
-            'Open conversation',
-            Icons.chat_bubble_outline,
-            _conversation,
-          ),
-        _action('Close screen', Icons.arrow_back, _leave),
+        if (_fullscreen || _keyboard)
+          _action('Close screen', Icons.arrow_back, _leave),
       ],
     ),
   );
@@ -1182,7 +1159,7 @@ class _BotScreenViewState extends State<BotScreenView>
                       Positioned(
                         right: 8,
                         bottom: inset + keysHeight + 56,
-                        width: (bounds.maxWidth - 16).clamp(1.0, 320.0),
+                        width: (bounds.maxWidth - 16).clamp(1.0, 192.0),
                         child: Material(
                           elevation: 4,
                           borderRadius: WingRadius.card,
