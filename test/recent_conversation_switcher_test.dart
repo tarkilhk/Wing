@@ -4786,6 +4786,7 @@ void main() {
             await _finishFrames(tester);
             expect(reads, ['answer:3']);
             expect(acknowledgedSessions, [first.key]);
+            expect(first.markReadFailed, isFalse);
           }
           await _chatGesture(tester);
           await tester.binding.handlePopRoute();

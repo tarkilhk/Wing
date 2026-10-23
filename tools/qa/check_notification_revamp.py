@@ -594,6 +594,7 @@ def check_reply_read(output):
     scroll_through_answer(answer)
     until(lambda: all(v['result'] is None for k, v in json.loads(state()['notices']).items() if json.loads(k)['profile'] == 'a'), 'Reading the latest answer did not clear its notification')
     assert state()['read_acks'][reads_before:] == [{'profile': 'a', 'session': 'same'}]
+    assert not state()['mark_read_failed']
     print('PASS: opening preserves unread reply; user scrolling acknowledges its exact owner and clears the result', flush=True)
 
 

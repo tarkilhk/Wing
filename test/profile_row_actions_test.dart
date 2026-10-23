@@ -643,6 +643,7 @@ void main() {
       chat.reading.recordReading(null, readThrough: 4);
       await controller.acknowledgeVisibleReading(chat, 4);
       expect(host.updates, hasLength(1));
+      expect(chat.markReadFailed, isFalse);
       expect(host.updates.single.$1, 'personal');
       expect(host.updates.single.$2, 'sessions/newest');
       expect(host.updates.single.$3, containsPair('unread', false));
@@ -851,6 +852,7 @@ void main() {
             isTrue,
           );
           expect(chat.runtime.error, isNull);
+          expect(chat.markReadFailed, isTrue);
           expect(find.text('Viewed reply'), findsOneWidget);
           expect(
             find.textContaining('could not be marked as read'),
@@ -879,6 +881,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(host.updates, hasLength(2));
+          expect(chat.markReadFailed, isFalse);
           expect(
             controller.current!.sessions.firstWhere(
               (row) => row['id'] == 'newest',
@@ -916,6 +919,7 @@ void main() {
       );
       expect(controller.current!.mutatingSessions, isEmpty);
       expect(chat.runtime.error, isNull);
+      expect(chat.markReadFailed, isTrue);
 
       host.failMutation = false;
       host.titleHistory = chat.reading.messages;
@@ -924,6 +928,7 @@ void main() {
         changes: {'unread': false},
         canDispatch: () => true,
       );
+      expect(chat.markReadFailed, isFalse);
       expect(chat.reading.readingPosition.readThrough, 2);
       expect(
         controller.current!.sessions.firstWhere(

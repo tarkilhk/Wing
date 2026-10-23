@@ -527,9 +527,16 @@ void main() {
             expect(chat.context?.used, 42000);
             expect(controller.modelObservation(chat), isNotNull);
             expect(controller.modelObservation(chat)!.model, chat.model);
+            expect(chat.markReadFailed, isFalse);
             expect(chat.projectLookupFailed, isFalse);
             expect(controller.chatProjectLabel(chat), 'Mobile app');
             expect(find.text('Project unavailable'), findsNothing);
+            expect(
+              find.textContaining(
+                'This chat opened, but it could not be marked',
+              ),
+              findsNothing,
+            );
             expect(find.text('A quieter workspace'), findsOneWidget);
             expect(
               find.textContaining('A little more room', findRichText: true),

@@ -12,6 +12,7 @@ const observations = {
     'intelligenceRuntime',
     'key',
     'lastActive',
+    'markReadFailed',
     'model',
     'parentSessionId',
     'processes',

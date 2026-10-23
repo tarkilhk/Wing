@@ -2988,6 +2988,7 @@ void main() {
               profile,
             );
             expect(controller.current!.chat!.key.sessionId, 'canonical-root');
+            expect(controller.current!.chat!.markReadFailed, isFalse);
             expect(
               find.text(profile == 'personal' ? 'Personal Bot' : 'Work Bot'),
               findsNWidgets(2),
