@@ -2,18 +2,36 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/gateway_approval.dart';
-import '../models/hermes_question.dart';
 import '../theme/wing_theme.dart';
-import 'profile_tool_call.dart';
-import '../presentation/tool_call_presentation.dart';
+import 'selection_viewport.dart';
 
-/// Live decisions retain their exact server-owned scopes. Details use the same
-/// collapsed disclosure and code viewer as the eventual history entry.
+/// Exact command review shared by chat, bot, group and notification approvals.
+/// Completed request receipts belong to Activity; live review stays visible.
+class ApprovalCommandDetails extends StatelessWidget {
+  const ApprovalCommandDetails({super.key, required this.request});
+
+  final GatewayApprovalRequest request;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      viewportSelection(SelectableText(request.command)),
+      if (request.description.isNotEmpty)
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Hermes request details'),
+          children: [Text(request.description)],
+        ),
+    ],
+  );
+}
+
+/// Live decisions retain their exact server-owned scopes and shared reviewer.
 class GatewayApprovalPanel extends StatelessWidget {
   const GatewayApprovalPanel({
     super.key,
     required this.request,
-    required this.question,
     required this.onRespond,
     this.position = 1,
     this.total = 1,
@@ -21,7 +39,6 @@ class GatewayApprovalPanel extends StatelessWidget {
   });
 
   final GatewayApprovalRequest request;
-  final HermesQuestion question;
   final ValueChanged<GatewayApprovalChoice> onRespond;
   final int position;
   final int total;
@@ -52,8 +69,19 @@ class GatewayApprovalPanel extends StatelessWidget {
           ConstrainedBox(
             constraints: BoxConstraints(maxHeight: detailsHeight),
             child: SingleChildScrollView(
-              child: ProfileToolCall(
-                call: ToolCallPresentation.question(question),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'Review command',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  ApprovalCommandDetails(request: request),
+                ],
               ),
             ),
           ),

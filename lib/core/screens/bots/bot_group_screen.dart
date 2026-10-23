@@ -301,29 +301,26 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     if (mounted) _acknowledgeReading();
   }
 
-  Widget _approvalCard(BotGroupAction action, {required int pendingCount}) =>
+  Widget _approvalPanel(BotGroupAction action, {required int pendingCount}) =>
       Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Flexible(
-            child: GatewayApprovalPanel(
-              request: GatewayApprovalRequest.fromEventData({
-                'command': action.command,
-                'description': action.description,
-                'choices': action.choices,
-                'allow_session': false,
-                'allow_permanent': false,
-              }),
-              question: _session.questionHistory.question(action.key)!,
-              total: pendingCount,
-              enabled: !_session.acting && !_session.sending,
-              onRespond: (choice) =>
-                  _session.resolve(action, choice: choice.wireValue),
-            ),
+          GatewayApprovalPanel(
+            request: GatewayApprovalRequest.fromEventData({
+              'command': action.command,
+              'description': action.description,
+              'choices': action.choices,
+              'allow_session': false,
+              'allow_permanent': false,
+            }),
+            total: pendingCount,
+            enabled: !_session.acting && !_session.sending,
+            onRespond: (choice) =>
+                _session.resolve(action, choice: choice.wireValue),
           ),
           if (_session.approvalError(action) case final error?)
-            Flexible(child: SingleChildScrollView(child: StudioError(error))),
+            StudioError(error),
         ],
       );
 
@@ -345,8 +342,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       active = false;
       icon = Icons.error_outline;
     } else if (needsApproval) {
-      // The fixed approval panel already explains the required decision.
-      label = null;
+      label = 'Waiting for your approval';
       active = false;
       icon = Icons.help_rounded;
     } else if (interrupted) {
@@ -752,6 +748,11 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   child: StudioError(_session.error!),
                 ),
+              if (_session.pendingApprovals.firstOrNull case final action?)
+                _approvalPanel(
+                  action,
+                  pendingCount: _session.pendingApprovals.length,
+                ),
               if (_session.runtime case final runtime?) ...[
                 if (runtime.blocked && runtime.actions.isEmpty)
                   const Text(
@@ -801,16 +802,6 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 _composer.observeReferences(_session.composerReferences);
                 _changed();
               },
-            ),
-          ),
-        if (_session.pendingApprovals.firstOrNull case final action?)
-          Flexible(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: _approvalCard(
-                action,
-                pendingCount: _session.pendingApprovals.length,
-              ),
             ),
           ),
         _activityStatus(context),

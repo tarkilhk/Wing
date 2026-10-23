@@ -1,4 +1,9 @@
-import 'package:wing/core/widgets/source_code_text.dart';
+import 'support/bots_fixture.dart';
+import 'package:wing/core/services/bots_repository.dart';
+import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/widgets/gateway_approval_panel.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/services/profile_gateway.dart';
@@ -69,6 +74,21 @@ class _ApprovalHost extends Host {
   }
 }
 
+class _ApprovalBots extends BotsSession {
+  _ApprovalBots(this.bot) : super((_) async => const []);
+  final BotRecord? bot;
+  final _fixture = BotsFixture();
+
+  @override
+  BotsRepository repository(String identity) => _fixture.repository;
+
+  @override
+  BotRecord? cachedAppearance(ProfileSessionKey key) => bot;
+
+  @override
+  Future<BotRecord?> botForConversation(ProfileSessionKey key) async => bot;
+}
+
 Finder _decisionButton(String label) => find.byWidgetPredicate(
   (widget) => widget is IconButton && widget.tooltip == label,
 );
@@ -78,7 +98,7 @@ void main() {
     if (!_capture) return;
     const directory = String.fromEnvironment('CAPTURE_FONT_DIR');
     for (final entry in {
-      'Roboto': 'Roboto-Regular.ttf',
+      WingTypography.sans: 'Roboto-Regular.ttf',
       'monospace': 'RobotoMono-Regular.ttf',
       'MaterialIcons': 'MaterialIcons-Regular.otf',
     }.entries) {
@@ -91,11 +111,14 @@ void main() {
     }
   });
 
-  for (final brightness in Brightness.values) {
+  for (final (botChat, brightness) in [
+    for (final botChat in [false, true])
+      for (final brightness in Brightness.values) (botChat, brightness),
+  ]) {
     for (final scale in [1.0, 2.0]) {
       for (final fails in [false, true]) {
         testWidgets(
-          'approval decision ${fails ? 'failure and retry' : 'success'} retains feedback: $brightness/$scale',
+          '${botChat ? 'bot' : 'normal'} approval decision ${fails ? 'failure and retry' : 'success'} retains feedback: $brightness/$scale',
           (tester) async {
             tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
             tester.view.devicePixelRatio = 1;
@@ -146,6 +169,26 @@ void main() {
               }
             });
             addTearDown(controller.dispose);
+            final chat = controller.current!.chat!;
+            final bot = botChat
+                ? BotRecord(
+                    scope: chat.key.workspace,
+                    instance: 'Home',
+                    profile: HermesProfile(
+                      name: chat.key.workspace.profileName,
+                    ),
+                    title: 'Pace',
+                    shape: 'hexagon',
+                    color: '#f6b26b',
+                    pinned: false,
+                    hidden: false,
+                    hasAvatar: false,
+                    revision: 1,
+                    metadata: const {},
+                    chat: chat.key,
+                    resolvedChat: chat.key,
+                  )
+                : null;
             final frame = GlobalKey();
             await tester.pumpWidget(
               MaterialApp(
@@ -161,21 +204,28 @@ void main() {
                   key: frame,
                   child: ProfileWorkspaceScreen(
                     controller: controller,
-                    createBotsSession: () => BotsSession((_) async => const []),
+                    createBotsSession: () => _ApprovalBots(bot),
                   ),
                 ),
               ),
             );
             await tester.pumpAndSettle();
-            expect(find.text('Asking a question'), findsOneWidget);
-            expect(find.byType(SourceCodeText), findsNothing);
-            await tester.tap(find.text('Asking a question'));
-            await tester.pumpAndSettle();
-            final command = find.byType(SourceCodeText);
+            expect(
+              find.byType(BotConversationScope),
+              botChat ? findsOneWidget : findsNothing,
+            );
+            expect(find.text('Review command'), findsOneWidget);
+            expect(find.byType(ApprovalCommandDetails), findsOneWidget);
+            expect(find.text('Asking a question'), findsNothing);
+            final command = find.byWidgetPredicate(
+              (widget) =>
+                  widget is SelectableText &&
+                  widget.data?.contains('records.append') == true,
+            );
             expect(command, findsOneWidget);
             expect(
-              tester.widget<SourceCodeText>(command).text,
-              contains('records.append'),
+              tester.widget<SelectableText>(command).data,
+              chat.runtime.approval!.request.command,
             );
             for (final label in [
               'Approve once',
@@ -237,7 +287,7 @@ void main() {
                   format: ui.ImageByteFormat.png,
                 );
                 final file = File(
-                  'build/approval-review/${brightness.name}-$scale-held.png',
+                  'build/design-previews/approval-review/${botChat ? 'bot' : 'normal'}-${brightness.name}-$scale-held.png',
                 );
                 await file.parent.create(recursive: true);
                 await file.writeAsBytes(data!.buffer.asUint8List());

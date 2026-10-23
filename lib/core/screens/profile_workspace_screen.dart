@@ -2427,9 +2427,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                             GatewayApprovalPanel(
                               key: ValueKey((chat.key, request.requestId)),
                               request: request.request,
-                              question: chat.reading.questionHistory!.question(
-                                'approval/${request.requestId}',
-                              )!,
                               position: chat.runtime.approvalPosition,
                               total: chat.runtime.approvalTotal,
                               enabled:

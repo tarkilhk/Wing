@@ -235,6 +235,13 @@ available and sends no message. If the message cannot be confirmed, Continue
 resends that same message without stopping again. Your draft and conversation
 history are kept.
 Stop group work in the menu also cancels paused work without sending a message.
+Approvals use the same command review as normal chats and notification review.
+The exact command appears in the transcript; expand Hermes request details for the
+explanation. The icon actions offer only the scopes Hermes allows for that
+request. While reading older messages, Waiting for your approval stays above the
+composer; tap Latest to review it. A pending decision keeps progress visible
+until it succeeds or fails.
+
 Refresh rereads messages, activity and approval state; it does not restart the bots.
 The header Wing pulse appears while your refresh is running, without changing
 action icons or moving the messages. Wing also refreshes this state automatically. Recognized bot mentions display as bold,

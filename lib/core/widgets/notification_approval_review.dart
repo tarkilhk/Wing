@@ -1,4 +1,4 @@
-import 'selection_viewport.dart';
+import 'gateway_approval_panel.dart';
 import 'studio_form_actions.dart';
 import 'package:flutter/material.dart';
 
@@ -96,20 +96,7 @@ class _ReviewState extends State<NotificationApprovalReview> {
                 const SizedBox(height: 12),
                 Flexible(
                   child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        viewportSelection(
-                          SelectableText(widget.request.command),
-                        ),
-                        if (widget.request.description.isNotEmpty)
-                          ExpansionTile(
-                            tilePadding: EdgeInsets.zero,
-                            title: const Text('Hermes request details'),
-                            children: [Text(widget.request.description)],
-                          ),
-                      ],
-                    ),
+                    child: ApprovalCommandDetails(request: widget.request),
                   ),
                 ),
               ],

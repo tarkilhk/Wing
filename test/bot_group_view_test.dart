@@ -1,4 +1,5 @@
 import 'package:wing/core/widgets/bot_group_conversation.dart';
+import 'package:wing/core/widgets/gateway_approval_panel.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
@@ -195,17 +196,34 @@ void main() {
           );
           await tester.pumpWidget(route());
           await _settleGroupMarkdown(tester);
-          expect(find.text('Asking a question'), findsOneWidget);
-          expect(find.byType(SourceCodeText), findsNothing);
+          expect(find.text('Review command'), findsOneWidget);
+          expect(
+            find.descendant(
+              of: find.byType(ProfileTranscript),
+              matching: find.byType(GatewayApprovalPanel),
+            ),
+            findsOneWidget,
+          );
+          expect(find.text('Asking a question'), findsNothing);
+          expect(find.text('Waiting for your approval'), findsOneWidget);
+          expect(_decisionButton('Approve for session'), findsNothing);
+          expect(_decisionButton('Always approve'), findsNothing);
+          expect(find.text(command), findsOneWidget);
           await _render(
             tester,
             frame,
             'question-pending-${brightness.name}-$scale',
           );
-          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           expect(
-            tester.widget<SourceCodeText>(find.byType(SourceCodeText)).text,
+            tester
+                .widget<SelectableText>(
+                  find.byWidgetPredicate(
+                    (widget) =>
+                        widget is SelectableText && widget.data == command,
+                  ),
+                )
+                .data,
             command,
           );
           await _render(
@@ -213,11 +231,9 @@ void main() {
             frame,
             'question-expanded-${brightness.name}-$scale',
           );
-          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           tester.view.viewInsets = const FakeViewPadding(bottom: 260);
           await tester.pump();
-          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           final approve = _decisionButton('Approve once');
           final keyboardTop =
@@ -239,7 +255,6 @@ void main() {
             'question-keyboard-${brightness.name}-$scale',
           );
           expect(tester.takeException(), isNull);
-          await tester.tap(find.text('Asking a question'));
           await _settleGroupMarkdown(tester);
           tester.view.viewInsets = FakeViewPadding.zero;
           final held = Completer<void>();
@@ -3011,9 +3026,13 @@ void main() {
         await session.refresh();
         await tester.pump(const Duration(milliseconds: 300));
         expect(tester.getRect(readingAnchor).top, closeTo(readingTop, 1));
-        expect(find.text('Asking a question'), findsOneWidget);
+        expect(find.text('Waiting for your approval'), findsOneWidget);
         expect(find.byType(ShaderMask), findsNothing);
         expect(find.byType(StudioLoading), findsNothing);
+        await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
+        await tester.pump();
+        await _settleGroupMarkdown(tester);
+        expect(find.text('Review command'), findsOneWidget);
         await _render(tester, frame, 'approval-${brightness.name}-$scale');
         approval = false;
         await session.refresh();
