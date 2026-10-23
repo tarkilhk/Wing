@@ -20,6 +20,8 @@ import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/screens/analytics_content.dart';
 import 'package:wing/core/screens/administration/administration_content.dart';
 import 'package:wing/core/screens/bots/bots_content.dart';
+import 'package:wing/core/screens/bots/bot_group_screen.dart';
+import 'package:wing/core/widgets/bot_group_conversation.dart';
 import 'package:wing/core/screens/administration/admin_health_page.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -426,6 +428,18 @@ void main() {
   }
 
   testWidgets('export bots and a group discussion', (tester) async {
+    // Working bots animate continuously; let route/content reads finish without
+    // waiting for the app to stop scheduling frames.
+    Future<void> settleView() async {
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 40));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+      }
+      await tester.settleMarkdown();
+    }
+
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(tester.view.reset);
@@ -461,18 +475,12 @@ void main() {
       (
         'member',
         'atlas',
-        'The small pilot covers all three required integrations. I saved the source notes with the comparison.',
+        '**Start with a small pilot.** It covers the required integrations and keeps the first rollout manageable.',
       ),
       (
         'member',
         'mira',
-        'Keep the pilot to one team first. Confirm the rollback steps before expanding access.',
-      ),
-      ('user', 'you', 'Agreed. Turn that into a launch checklist.'),
-      (
-        'member',
-        'atlas',
-        'The checklist is ready: verify access, test the integrations, then invite the pilot team.',
+        'Test the **rollback steps** first. Then invite one team and review their feedback before expanding.',
       ),
     ];
     fixture.events.addAll([
@@ -482,7 +490,12 @@ void main() {
           'seq': i + 1,
           'event_id': 'message-$i',
           'kind': 'message.${messages[i].$1}',
-          'actor': {'kind': messages[i].$1, 'profile': messages[i].$2},
+          'actor': {
+            'kind': messages[i].$1,
+            'id': messages[i].$2,
+            'profile': messages[i].$2,
+          },
+          'created_at': 1792724400.0 + i * 60,
           'payload': {'text': messages[i].$3},
         },
     ]);
@@ -496,7 +509,7 @@ void main() {
         theme: wingTheme(Brightness.dark),
         builder: (_, child) => RepaintBoundary(key: frame, child: child!),
         home: StatefulBuilder(
-          builder: (_, setState) => BotsContent(
+          builder: (context, setState) => BotsContent(
             session: session,
             instanceHeader: const Align(
               alignment: Alignment.centerLeft,
@@ -507,23 +520,45 @@ void main() {
             onOpenMenu: () {},
             onOpenChat: (_) async {},
             onOpenGroupMemberChat: (_, _) async {},
-            onOpenGroup: (_) async {},
+            onOpenGroup: (group) => Navigator.of(context).push<void>(
+              MaterialPageRoute(
+                builder: (_) => BotGroupScreen(
+                  createSession: () => session.openGroup(group),
+                  voiceInputSettings: () => null,
+                  stopVoicePlayback: () async {},
+                ),
+              ),
+            ),
           ),
         ),
       ),
     );
-    await tester.pumpAndSettle();
-    await capture(tester, 'bots-dark');
+    await settleView();
+    await capture(
+      tester,
+      'bots-dark',
+      directory: 'build/website-release-media',
+    );
     await tester.tap(find.byTooltip('Edit name & appearance for Atlas'));
-    await tester.pumpAndSettle();
-    await capture(tester, 'bot-appearance-dark');
+    await settleView();
+    await capture(
+      tester,
+      'bot-appearance-dark',
+      directory: 'build/website-release-media',
+    );
     await tester.pageBack();
-    await tester.pumpAndSettle();
+    await settleView();
     await tester.tap(find.widgetWithText(Tab, 'Groups'));
-    await tester.pumpAndSettle();
+    await settleView();
     await tester.tap(find.text('Research team'));
-    await tester.pumpAndSettle();
-    await capture(tester, 'bot-discussion-dark');
+    await settleView();
+    expect(find.byType(BotGroupScreen), findsOneWidget);
+    expect(find.byType(BotGroupConversation), findsOneWidget);
+    await capture(
+      tester,
+      'bot-discussion-dark',
+      directory: 'build/website-release-media',
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
