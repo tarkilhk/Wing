@@ -532,7 +532,6 @@ void main() {
           await Future<void>.delayed(Duration.zero);
         }
         expect(fixture.readWrites, failed ? 0 : 1);
-        expect(chat.markReadFailed, failed);
         if (failed) {
           expect(
             recents.items().singleWhere((item) => item.chat?.key == key).unread,
@@ -543,7 +542,6 @@ void main() {
           await controller.acknowledgeVisibleReading(chat, 2);
           await Future<void>.delayed(Duration.zero);
           expect(fixture.readWrites, 1);
-          expect(chat.markReadFailed, isFalse);
         }
         expect(
           recents.items().singleWhere((item) => item.chat?.key == key).unread,

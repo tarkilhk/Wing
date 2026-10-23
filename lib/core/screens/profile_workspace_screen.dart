@@ -2464,17 +2464,6 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   );
                 },
               ),
-            if (chat.markReadFailed)
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: viewportSelection(
-                  SelectionArea(
-                    child: StudioError(
-                      ProfileWorkspaceController.markReadFailureNotice,
-                    ),
-                  ),
-                ),
-              ),
             for (final delivery in chat.sideQuestionDeliveries)
               _notificationAnchor(
                 chat,

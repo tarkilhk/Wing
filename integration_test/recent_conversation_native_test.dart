@@ -424,7 +424,6 @@ Future<void> _incomingJourney(
       'patches': host.patched.map((key) => key.workspace.profileName).toList(),
       'loading': ordinary.reading.historyLoading,
       'error': ordinary.reading.historyError,
-      'markReadFailed': ordinary.markReadFailed,
       'target': ordinary.reading.notificationReadTarget?.identity,
       'times': ordinary.reading.messages
           .map((row) => row['timestamp'])
@@ -492,7 +491,6 @@ Future<void> _incomingJourney(
       'patches': host.patched.map((key) => key.workspace.profileName).toList(),
       'loading': ordinary.reading.historyLoading,
       'error': ordinary.reading.historyError,
-      'markReadFailed': ordinary.markReadFailed,
       'target': ordinary.reading.notificationReadTarget?.identity,
       'times': ordinary.reading.messages
           .map((row) => row['timestamp'])
@@ -1606,7 +1604,6 @@ void main() {
           await _readNewest(tester, '$prefix-read-restored-answer');
           expect(readReceipts, ['answer:1000']);
           expect(host.patched.skip(readsBeforeStackReturn), [first.key]);
-          expect(first.markReadFailed, isFalse);
           // The neighbor was already opened above and needs no resume RPC.
           // Move to it, then reject admission of the next unopened chat.
           await swipe('prepare-unopened-selection');

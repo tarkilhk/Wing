@@ -496,6 +496,49 @@ void main() {
     },
   );
 
+  test(
+    'failed HTTP writes log status without response or authentication content',
+    () async {
+      await HttpOverrides.runWithHttpOverrides(() async {
+        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+        server.listen((request) async {
+          if (request.uri.path == '/') {
+            request.response.write(
+              'window.__HERMES_SESSION_TOKEN__="SECRET_NEVER_LOG";',
+            );
+          } else {
+            await request.drain<void>();
+            request.response.statusCode = 403;
+            request.response.write('{"detail":"SECRET_NEVER_LOG"}');
+          }
+          await request.response.close();
+        });
+        final client = DashboardClient(host: '127.0.0.1', port: server.port);
+        addTearDown(() async {
+          client.close();
+          await server.close(force: true);
+        });
+        await expectLater(
+          client.apiWriteOwned(
+            'PATCH',
+            'sessions/SECRET_NEVER_LOG',
+            body: {'unread': false, 'password': 'SECRET_NEVER_LOG'},
+            canDispatch: () => true,
+            onDispatched: () {},
+          ),
+          throwsException,
+        );
+        final failure = events().singleWhere(
+          (event) => event['event'] == 'http.write_failed',
+        );
+        expect(failure['http_status'], 403);
+        expect(failure['method'], 'PATCH');
+        expect(failure['endpoint'], 'sessions/…');
+        expect(lines.join(), isNot(contains('SECRET_NEVER_LOG')));
+      }, _RealHttpOverrides());
+    },
+  );
+
   test('release stack offsets survive without copying arbitrary trace text', () {
     logConnectionDiagnostic(
       'test.release',

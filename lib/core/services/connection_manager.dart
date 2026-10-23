@@ -1478,6 +1478,14 @@ class DashboardClient {
       );
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      logConnectionDiagnostic(
+        'http.write_failed',
+        details: {
+          'method': method,
+          'endpoint': connectionDiagnosticEndpoint(endpoint),
+          'http_status': res.statusCode,
+        },
+      );
       throw Exception('HTTP ${res.statusCode}');
     }
     return _decodeMapResponse(res);

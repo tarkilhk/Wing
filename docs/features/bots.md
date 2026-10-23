@@ -37,4 +37,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 
 Bot Chat and group discussions have different return destinations. Live desktop control needs a running stock desktop and a confirmed lease; fixture lease checks do not establish a real desktop session.
 
+Bot Chats share the [conversation read-acknowledgement behavior](conversation.md#gotchas):
+automatic failures go to phone diagnostics without adding a conversation warning.
+
 Clipboard, gesture and handoff tests use the production RFB parser and lease owner. Negotiation uses the stock RFB ExtendedClipboard identifier (0xC0A1E5CE), with a fixture that distinguishes it from ExtendedDesktopSize. They cover Unicode/multiline data, no automatic Enter, loss of control during clipboard read or the remote request, delayed/absent remote requests, visible pending operations and retained notes on failure. The native Bots family verifies Android entry paths; it does not exercise a deployed desktop. `integration_test/bot_screen_live_test.dart` remains opt-in with an explicitly approved live bot and owned emulator.

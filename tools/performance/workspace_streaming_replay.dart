@@ -211,7 +211,6 @@ class WorkspaceStreamingReplayState extends State<WorkspaceStreamingReplay>
     'runtimeId': _chat?.runtime.runtimeId,
     'nativeDraftStorage': false,
     'readReceiptWrites': _fixture?.readReceiptWrites ?? 0,
-    'markReadFailed': _chat?.markReadFailed ?? false,
   };
 
   @override

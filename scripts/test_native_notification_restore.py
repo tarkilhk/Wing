@@ -151,8 +151,7 @@ def main():
         def read_completed():
             current = ready()
             return (all(value['result'] is None for value in json.loads(current['notices']).values())
-                    and current['read_acks'] == [{'profile': 'a', 'session': 'same'}]
-                    and not current['mark_read_failed'])
+                    and current['read_acks'] == [{'profile': 'a', 'session': 'same'}])
         native.until(read_completed, 'Scrolling did not acknowledge the restored answer')
         assert identifier not in notices(only_answer=False), 'Read notification is still posted'
         print('PASS: tap preserves unread answer; scrolling acknowledges its exact owner and clears the result', flush=True)

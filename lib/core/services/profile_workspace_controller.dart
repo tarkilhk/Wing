@@ -151,7 +151,6 @@ class ProfileChat {
   int _sessionControlGeneration = 0;
   int _sessionControlEventRevision = 0;
   bool _sessionControlReadAttempted = false;
-  bool _markReadFailed = false;
   String? _commandNotification;
 
   final List<SideQuestionDelivery> _sideQuestionDeliveries = [];
@@ -258,7 +257,6 @@ class ProfileChat {
   bool get sessionControlWorking => _sessionControlWorking;
   String? get sessionControlError => _sessionControlError;
   String? get sessionControlNotice => _sessionControlNotice;
-  bool get markReadFailed => _markReadFailed;
   List<SideQuestionDelivery> get sideQuestionDeliveries =>
       List.unmodifiable(_sideQuestionDeliveries);
   bool get archived => _archived;
@@ -488,11 +486,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   static const _maxReviewNotices = 20;
-
-  /// App-owned failure; distinguish it from opaque command output in the UI.
-  static const markReadFailureNotice =
-      'The viewed answer could not be marked as read. '
-      'Return to Chats and choose Mark as read.';
 
   final ConnectionAccess access;
   SavedConnection get connection => access.connection;
@@ -1234,11 +1227,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
             chat.reading.historyGeneration == generation,
       );
       if (!_closed) _readAcknowledgements[chat] = messageId;
-    } catch (_) {
-      if (admitted() && chat.reading.historyGeneration == generation) {
-        chat._markReadFailed = true;
-        _changed();
-      }
+    } catch (failure, stack) {
+      logConnectionDiagnostic(
+        'reading.acknowledgement_failed',
+        details: {
+          'connection': key.workspace.connectionId,
+          'profile': key.workspace.profileName,
+          ...workspaceFailureDiagnostic(failure),
+        },
+        error: failure,
+        stackTrace: stack,
+      );
     } finally {
       _readingAcknowledgementsPending.remove(chat);
       final newer = chat.reading.readingPosition.readThrough;
@@ -4954,7 +4953,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat._archived = updated['archived'] as bool;
         }
         if (updated['unread'] == false) {
-          chat._markReadFailed = false;
           // The successful explicit read acknowledges the delivered history.
           // Keep that boundary with the existing Recents message observation so
           // the same retained answer cannot reassert unread on the next frame.

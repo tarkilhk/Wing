@@ -518,7 +518,6 @@ Future<void> main() async {
               controller.current?.chat?.key.workspace.profileName,
           'read_target': chat.reading.notificationReadTarget?.toJson(),
           'read_acks': readAcknowledgements,
-          'mark_read_failed': chat.markReadFailed,
           'read_guards': {
             'opening': chat.runtime.opening,
             'offline_snapshot': chat.runtime.offline,

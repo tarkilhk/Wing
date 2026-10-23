@@ -1,5 +1,6 @@
 import 'package:wing/core/services/bots_session.dart';
 import 'support/form_family_capture.dart';
+import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/transcript_position.dart';
 import 'package:wing/core/services/conversation_reading_memory.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -13,6 +14,7 @@ import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'support/chat_browser_interactions.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
@@ -641,7 +643,6 @@ void main() {
       chat.reading.recordReading(null, readThrough: 4);
       await controller.acknowledgeVisibleReading(chat, 4);
       expect(host.updates, hasLength(1));
-      expect(chat.markReadFailed, isFalse);
       expect(host.updates.single.$1, 'personal');
       expect(host.updates.single.$2, 'sessions/newest');
       expect(host.updates.single.$3, containsPair('unread', false));
@@ -776,6 +777,121 @@ void main() {
     },
   );
 
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'automatic read failure logs without a conversation warning ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.runAsync(loadNewestUnread);
+          host.failMutation = true;
+          host.titleHistory = [
+            {'id': 2, 'role': 'assistant', 'content': 'Viewed reply'},
+          ];
+          host.mutationStarted = Completer<void>();
+          final chat = (await tester.runAsync(
+            () => controller.openSession(key()),
+          ))!;
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: formFamilyCapture,
+              child: MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: ProfileWorkspaceScreen(
+                  controller: controller,
+                  createBotsSession: () => BotsSession((_) async => const []),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          expect(find.text('Viewed reply'), findsOneWidget);
+          expect(host.updates, isEmpty);
+          final previousPrint = debugPrint;
+          final logs = <String>[];
+          debugPrint = (message, {wrapWidth}) {
+            if (message != null) logs.add(message);
+          };
+          try {
+            await tester.drag(
+              find.byKey(const ValueKey('profile-transcript')),
+              const Offset(0, -120),
+            );
+            await tester.pumpAndSettle();
+            expect(chat.reading.readingPosition.readThrough, 2);
+            await tester.runAsync(
+              () => host.mutationStarted!.future.timeout(
+                const Duration(seconds: 3),
+              ),
+            );
+            host.mutationStarted = null;
+            await tester.pumpAndSettle();
+          } finally {
+            debugPrint = previousPrint;
+          }
+          await captureFormFamily(
+            tester,
+            'read-status-${brightness.name}-$scale',
+          );
+          expect(host.updates, hasLength(1));
+          expect(host.updates.single.$3['unread'], isFalse);
+          expect(
+            controller.current!.sessions.firstWhere(
+              (row) => row['id'] == 'newest',
+            )['unread'],
+            isTrue,
+          );
+          expect(chat.runtime.error, isNull);
+          expect(find.text('Viewed reply'), findsOneWidget);
+          expect(
+            find.textContaining('could not be marked as read'),
+            findsNothing,
+          );
+          expect(find.text('Write rejected'), findsNothing);
+          final diagnostic = logs
+              .where((line) => line.startsWith('[WingConnection] '))
+              .map(
+                (line) =>
+                    jsonDecode(line.substring('[WingConnection] '.length)),
+              )
+              .singleWhere(
+                (event) => event['event'] == 'reading.acknowledgement_failed',
+              );
+          expect(diagnostic['connection'], chat.key.workspace.connectionId);
+          expect(diagnostic['profile'], 'personal');
+          expect(diagnostic['causes'], [
+            {'type': 'StateError'},
+          ]);
+          expect(logs.join(), isNot(contains('Write rejected')));
+          expect(logs.join(), isNot(contains('Viewed reply')));
+          host.failMutation = false;
+          await tester.runAsync(
+            () => controller.acknowledgeVisibleReading(chat, 2),
+          );
+          await tester.pumpAndSettle();
+          expect(host.updates, hasLength(2));
+          expect(
+            controller.current!.sessions.firstWhere(
+              (row) => row['id'] == 'newest',
+            )['unread'],
+            isFalse,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
+
   test(
     'failed automatic mark-read keeps unread and allows manual retry',
     () async {
@@ -800,7 +916,6 @@ void main() {
       );
       expect(controller.current!.mutatingSessions, isEmpty);
       expect(chat.runtime.error, isNull);
-      expect(chat.markReadFailed, isTrue);
 
       host.failMutation = false;
       host.titleHistory = chat.reading.messages;
@@ -809,7 +924,6 @@ void main() {
         changes: {'unread': false},
         canDispatch: () => true,
       );
-      expect(chat.markReadFailed, isFalse);
       expect(chat.reading.readingPosition.readThrough, 2);
       expect(
         controller.current!.sessions.firstWhere(
