@@ -6610,6 +6610,14 @@
       "purpose": "Verify ripple loading, replay and recovery, reduced motion and guide layouts.",
       "source": "internal/docs/WEBSITE.md",
       "status": "supported"
+    },
+    {
+      "id": "tool-install-android-sdk",
+      "kind": "tool-cli",
+      "path": "scripts/install_android_sdk.py",
+      "purpose": "Bounded CI SDK installation retries and per-attempt archive diagnostics",
+      "source": ".github/workflows/pr-quality.yml; .github/workflows/nightly-tests.yml; .github/workflows/release.yml",
+      "status": "supported"
     }
   ],
   "files": [
@@ -10689,6 +10697,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "scripts/install_android_sdk.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "scripts/install_git_hooks.py",
       "area": "scripts",
       "provenance": "intentional-untracked"
@@ -10785,6 +10798,11 @@
     },
     {
       "path": "scripts/tests/test_check_commit_linters.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "scripts/tests/test_install_android_sdk.py",
       "area": "scripts",
       "provenance": "intentional-untracked"
     },
