@@ -1134,6 +1134,10 @@ void main() {
           savedPosition.messageId,
         );
         expect(
+          session.reader.readingPosition.resume?.fraction,
+          closeTo(savedPosition.fraction, .01),
+        );
+        expect(
           find.textContaining(
             'Atlas saved ${savedPosition.messageId}',
             findRichText: true,

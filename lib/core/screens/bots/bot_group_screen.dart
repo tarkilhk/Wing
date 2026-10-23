@@ -1,3 +1,4 @@
+import '../../widgets/conversation_composer.dart';
 import '../../widgets/gateway_approval_panel.dart';
 import '../../models/gateway_approval.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
@@ -5,7 +6,6 @@ import '../profile_transcript.dart';
 import '../../models/transcript_timeline.dart';
 import '../../widgets/studio_loading.dart';
 import '../../widgets/bot_group_conversation.dart';
-import '../../widgets/recent_conversations/conversation_gestures.dart';
 import '../../widgets/recent_conversations/conversation_route_scope.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -721,78 +721,75 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       transcript: StudioPageLoading(
         active: _refreshingGroup,
         label: 'Refreshing group',
-        child: ConversationGestureBoundary(
-          child: ProfileTranscript(
-            key: ValueKey(('discussion', _session.group.id)),
-            controller: _transcript,
-            presentation: TranscriptPresentation.capture(
-              identity: _session.group.key,
-              reader: reading,
-              timeline: timeline,
-              needsInput: false,
-              turnAdmissionBlocked: _session.runtime?.working == true,
-            ),
-            onRefreshHistory: _refreshGroup,
-            messageBuilder: _message,
-            onCaptureChanged: _captureChanged,
-            onReadThrough: _acknowledgeReading,
-            emptyContent: const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
-              ),
-            ),
-            tail: [
-              if (_session.error != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: StudioError(_session.error!),
-                ),
-              if (_session.pendingApprovals.firstOrNull case final action?)
-                _approvalPanel(
-                  action,
-                  pendingCount: _session.pendingApprovals.length,
-                ),
-              if (_session.runtime case final runtime?) ...[
-                if (runtime.blocked && runtime.actions.isEmpty)
-                  const Text(
-                    'Group work is interrupted. Refresh to check its recovery options.',
-                  ),
-                for (final action in runtime.actions.where(
-                  (action) => action.kind == 'retry',
-                ))
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _session.awaitingContinuation
-                              ? 'Work was stopped; Continue resends the same continuation message.'
-                              : 'Work paused; Continue stops this attempt and asks the bots to resume.',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                        StudioButtonPress(
-                          child: IconButton(
-                            tooltip: 'Continue group work',
-                            onPressed: _session.acting || _session.sending
-                                ? null
-                                : () => _session.resolve(action),
-                            icon: const Icon(Icons.play_arrow),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ],
+        child: ProfileTranscript(
+          key: ValueKey(('discussion', _session.group.id)),
+          controller: _transcript,
+          presentation: TranscriptPresentation.capture(
+            identity: _session.group.key,
+            reader: reading,
+            timeline: timeline,
+            needsInput: false,
+            turnAdmissionBlocked: _session.runtime?.working == true,
           ),
+          onRefreshHistory: _refreshGroup,
+          messageBuilder: _message,
+          onCaptureChanged: _captureChanged,
+          onReadThrough: _acknowledgeReading,
+          emptyContent: const Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Start a discussion. Mention a bot to focus the reply, or ask the whole group.',
+            ),
+          ),
+          tail: [
+            if (_session.error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: StudioError(_session.error!),
+              ),
+            if (_session.pendingApprovals.firstOrNull case final action?)
+              _approvalPanel(
+                action,
+                pendingCount: _session.pendingApprovals.length,
+              ),
+            if (_session.runtime case final runtime?) ...[
+              if (runtime.blocked && runtime.actions.isEmpty)
+                const Text(
+                  'Group work is interrupted. Refresh to check its recovery options.',
+                ),
+              for (final action in runtime.actions.where(
+                (action) => action.kind == 'retry',
+              ))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _session.awaitingContinuation
+                            ? 'Work was stopped; Continue resends the same continuation message.'
+                            : 'Work paused; Continue stops this attempt and asks the bots to resume.',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      StudioButtonPress(
+                        child: IconButton(
+                          tooltip: 'Continue group work',
+                          onPressed: _session.acting || _session.sending
+                              ? null
+                              : () => _session.resolve(action),
+                          icon: const Icon(Icons.play_arrow),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ],
         ),
       ),
-      beforeComposer: [
-        if (_showReferences)
-          Flexible(
-            child: MentionSuggestions(
+      composerController: _composer,
+      suggestions: _showReferences
+          ? MentionSuggestions(
               composer: _composer,
               composerFocus: _focus,
               load: (query, directory, canRead) async =>
@@ -802,31 +799,34 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 _composer.observeReferences(_session.composerReferences);
                 _changed();
               },
-            ),
-          ),
-        _activityStatus(context),
-        VoiceInputActivity(context: context, controller: _voiceInput),
-      ],
+            )
+          : null,
+      beforeComposer: [_activityStatus(context)],
       composer: ValueListenableBuilder<TextEditingValue>(
         valueListenable: _composer,
-        builder: (context, _, _) => BotGroupComposer(
-          controller: _composer,
+        builder: (context, _, _) => ConversationComposer(
+          beforeField: [
+            VoiceInputActivity(context: this.context, controller: _voiceInput),
+          ],
           focusNode: _focus,
-          readOnly: locked,
-          maxLines: (_voiceInput.active || keyboardOpen) && enlargedText
-              ? 2
-              : 5,
-          microphone: VoiceInputButton(
-            enabled: _voiceInput.canDictate(_session.canDictate),
-            onPressed: () => unawaited(
-              _dictate().catchError((Object failure) {
-                if (mounted && _visible) {
-                  showStudioError(this.context, voiceFailureMessage(failure));
-                }
-              }),
+          field: ConversationComposerField(
+            fieldKey: const ValueKey('group-message-composer'),
+            controller: _composer,
+            focusNode: _focus,
+            readOnly: locked,
+            hintText: 'Message the group',
+            microphone: VoiceInputButton(
+              enabled: _voiceInput.canDictate(_session.canDictate),
+              onPressed: () => unawaited(
+                _dictate().catchError((Object failure) {
+                  if (mounted && _visible) {
+                    showStudioError(this.context, voiceFailureMessage(failure));
+                  }
+                }),
+              ),
             ),
           ),
-          action: ComposerIconButton(
+          primaryAction: ComposerIconButton(
             focused: false,
             label: stopping
                 ? 'Stop group work'

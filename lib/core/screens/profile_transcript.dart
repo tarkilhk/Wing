@@ -325,6 +325,24 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _placingResume = false;
+      final viewport = _viewport.currentContext?.findRenderObject();
+      if (viewport is RenderBox && viewport.hasSize) {
+        final top = viewport.localToGlobal(Offset.zero).dy;
+        final bottom = top + viewport.size.height;
+        // The jump materializes neighboring lazy rows. Keep the bookmark in
+        // charge until their visible Markdown settles; anchoring a growing
+        // neighbor here can move the restored message before the user scrolls.
+        if (_mountedAnchors.any((box) {
+          if (!box.attached || !box.hasSize || !box.contentPending) {
+            return false;
+          }
+          final y = box.localToGlobal(Offset.zero).dy;
+          return y < bottom && y + box.size.height > top;
+        })) {
+          return;
+        }
+      }
       _cancelMarkdownRestoration();
       _updateJump();
     });

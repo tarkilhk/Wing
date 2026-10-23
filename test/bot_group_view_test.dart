@@ -1,4 +1,5 @@
 import 'package:wing/core/widgets/bot_group_conversation.dart';
+import 'package:wing/core/widgets/conversation_page.dart';
 import 'package:wing/core/widgets/gateway_approval_panel.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
@@ -480,7 +481,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           final input = find.byKey(const ValueKey('group-message-composer'));
-          final composer = find.byKey(const ValueKey('group-composer'));
+          final composer = find.byKey(const ValueKey('conversation-composer'));
           const draft =
               'Keep working until done.\nAfter these steps we work on:\n'
               '1. Daily ingestion\n@Atlas + ';
@@ -824,7 +825,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'group microphone stays beside bottom action ${brightness.name} $scale',
+        'group microphone shares the normal composer field ${brightness.name} $scale',
         (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           tester.view.devicePixelRatio = 1;
@@ -866,31 +867,34 @@ void main() {
           await tester.pumpAndSettle();
           final input = find.byKey(const ValueKey('group-message-composer'));
           final microphone = find.byTooltip('Dictate message');
-          void expectBottomActions(String label) {
+          void expectComposerActions(String label) {
             final mic = tester.getRect(microphone);
             final action = tester.getRect(find.byTooltip(label));
-            expect(mic.center.dy, closeTo(action.center.dy, 1));
-            expect(mic.right, lessThanOrEqualTo(action.left));
+            final field = tester.getRect(input);
+            expect(field.contains(mic.center), isTrue);
+            expect(mic.bottom, lessThanOrEqualTo(action.top));
+            expect(microphone.hitTestable(), findsOneWidget);
+            expect(find.byTooltip(label).hitTestable(), findsOneWidget);
             expect(mic.width, greaterThanOrEqualTo(48));
             expect(mic.height, greaterThanOrEqualTo(48));
             expect(tester.takeException(), isNull);
           }
 
-          expectBottomActions('Send group message');
+          expectComposerActions('Send group message');
           await tester.enterText(input, 'One line');
           await tester.pumpAndSettle();
-          expectBottomActions('Send group message');
+          expectComposerActions('Send group message');
           await tester.enterText(
             input,
             'Anything else is wrong and you must stop it immediately.\n\n'
             'I need you guys to refocus your plans on achieving this!!!!!',
           );
           await tester.pumpAndSettle();
-          expectBottomActions('Send group message');
+          expectComposerActions('Send group message');
           await _render(tester, frame, 'microphone-${brightness.name}-$scale');
           tester.view.viewInsets = const FakeViewPadding(bottom: 260);
           await tester.pumpAndSettle();
-          expectBottomActions('Send group message');
+          expectComposerActions('Send group message');
           await _render(
             tester,
             frame,
@@ -899,7 +903,7 @@ void main() {
           fixture.sendLost = true;
           await tester.tap(find.byTooltip('Send group message'));
           await tester.pumpAndSettle();
-          expectBottomActions('Retry same message');
+          expectComposerActions('Retry same message');
           await tester.pumpWidget(const SizedBox());
         },
       );
@@ -1708,6 +1712,12 @@ void main() {
           final errorPosition = tester
               .state<ScrollableState>(errorScroll)
               .position;
+          expect(
+            tester.getTopLeft(find.byType(VoiceInputActivity)).dy,
+            greaterThanOrEqualTo(
+              tester.getTopLeft(find.byType(ConversationFooter)).dy,
+            ),
+          );
           expect(errorPosition.maxScrollExtent, greaterThan(0));
           await tester.drag(
             find.descendant(

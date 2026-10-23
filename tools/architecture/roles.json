@@ -2081,6 +2081,16 @@
       "feature": "chat-activity",
       "library": "lib/core/widgets/conversation_activity_status.dart"
     },
+    "lib/core/widgets/conversation_composer.dart": {
+      "role": "view",
+      "feature": "chat-inputs",
+      "library": "lib/core/widgets/conversation_composer.dart"
+    },
+    "lib/core/widgets/conversation_page.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/conversation_page.dart"
+    },
     "lib/core/widgets/conversation_reading_scope.dart": {
       "role": "view",
       "feature": "conversation",

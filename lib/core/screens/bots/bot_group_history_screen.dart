@@ -1,3 +1,5 @@
+import '../../widgets/conversation_page.dart';
+import '../../widgets/conversation_reading_scope.dart';
 import '../../widgets/profile_subagent_panel.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import '../../widgets/conversation_activity.dart';
@@ -111,7 +113,13 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ConversationReadingScope(
+    key: ValueKey(_session.group.key),
+    builder: _buildConversation,
+  );
+
+  Widget _buildConversation(BuildContext context) {
+    final reading = ConversationReadingScope.maybeOf(context)!;
     final reader = _session.reader;
     final runtime = _session.runtime;
     final projection = ChatTranscriptProjection(
@@ -145,10 +153,26 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
           setState(() {});
         }
       },
-      child: Scaffold(
-        appBar: WingAppBar(
+      child: ConversationPage(
+        header: WingAppBar(
           context: context,
-          title: const Text('Working history', maxLines: 2),
+          title: const WingConversationTitle(title: 'Working history'),
+          inlineContext:
+              reading.active || ConversationReadingScope.compact(context),
+          leading: StudioButtonPress(
+            child: BackButton(
+              onPressed: reading.active
+                  ? reading.exit
+                  : () => Navigator.of(context).maybePop(),
+            ),
+          ),
+          contextRow: reading.active
+              ? null
+              : Text(
+                  _session.group.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
           actions: [
             StudioButtonPress(
               child: IconButton(
@@ -159,26 +183,18 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
             ),
           ],
         ),
-        body: SafeArea(
-          child: StudioPageLoading(
-            active:
-                !reader.historyPaging &&
-                (reader.historyLoading || identical(_hydratingReading, reader)),
-            label: _session.historyAvailable
-                ? 'Refreshing working history'
-                : 'Loading working history',
-            child: Column(
+        body: StudioPageLoading(
+          active:
+              !reader.historyPaging &&
+              (reader.historyLoading || identical(_hydratingReading, reader)),
+          label: _session.historyAvailable
+              ? 'Refreshing working history'
+              : 'Loading working history',
+          child: ConversationLayout(
+            contextHeader: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    _session.group.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -211,54 +227,60 @@ class _BotGroupHistoryScreenState extends State<BotGroupHistoryScreen>
                     ),
                   ),
                 ),
-                Expanded(
-                  child: BotConversationScope(
-                    bot: _session.member == null
-                        ? null
-                        : widget.appearanceForMember(_session.member!.profile),
-                    name: _session.member?.name,
-                    child: ProfileTranscript(
-                      key: ValueKey(('worker-history', _session.member?.id)),
-                      presentation: TranscriptPresentation.capture(
-                        identity: (
-                          'worker-history',
-                          _session.group.key,
-                          _session.member?.id,
-                        ),
-                        reader: reader,
-                        timeline: timeline,
-                        needsInput: runtime.needsInput,
-                        turnAdmissionBlocked: _session.liveAnswering,
-                      ),
-                      onRefreshHistory: _session.refresh,
-                      onLoadOlder: _session.loadOlder,
-                      activity: activity,
-                      emptyContent: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'No working history is available for ${_session.member?.name ?? 'this bot'}.',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      tail: const [],
-                      messageBuilder: (entry) =>
-                          ProfileMessage(message: entry.message),
-                    ),
-                  ),
-                ),
-                if (_session.liveError case final error?)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: StudioError(error),
-                  ),
-                activity.status(saving: false),
-                activity.dock(
-                  key: _dock,
-                  onOpenChanged: () {
-                    if (mounted) setState(() {});
-                  },
-                ),
               ],
+            ),
+            transcript: BotConversationScope(
+              bot: _session.member == null
+                  ? null
+                  : widget.appearanceForMember(_session.member!.profile),
+              name: _session.member?.name,
+              child: ProfileTranscript(
+                key: ValueKey(('worker-history', _session.member?.id)),
+                presentation: TranscriptPresentation.capture(
+                  identity: (
+                    'worker-history',
+                    _session.group.key,
+                    _session.member?.id,
+                  ),
+                  reader: reader,
+                  timeline: timeline,
+                  needsInput: runtime.needsInput,
+                  turnAdmissionBlocked: _session.liveAnswering,
+                ),
+                onRefreshHistory: _session.refresh,
+                onLoadOlder: _session.loadOlder,
+                activity: activity,
+                emptyContent: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'No working history is available for ${_session.member?.name ?? 'this bot'}.',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                tail: const [],
+                messageBuilder: (entry) =>
+                    ProfileMessage(message: entry.message),
+              ),
+            ),
+            footerBuilder: (context, constraints) => ConversationFooter(
+              constraints: constraints,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_session.liveError case final error?)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: StudioError(error),
+                    ),
+                  activity.status(saving: false),
+                  activity.dock(
+                    key: _dock,
+                    onOpenChanged: () {
+                      if (mounted) setState(() {});
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ),

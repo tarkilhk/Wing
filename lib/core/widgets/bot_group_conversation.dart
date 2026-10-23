@@ -1,5 +1,5 @@
 import 'conversation_reading_scope.dart';
-import 'selection_viewport.dart';
+import 'conversation_page.dart';
 import 'package:flutter/material.dart';
 
 import '../models/bots.dart';
@@ -25,6 +25,8 @@ class BotGroupConversation extends StatelessWidget {
     required this.actions,
     required this.onBack,
     this.beforeComposer = const [],
+    this.suggestions,
+    this.composerController,
     this.membersAnchor,
     this.onMembers,
     this.onEdit,
@@ -35,6 +37,8 @@ class BotGroupConversation extends StatelessWidget {
   final Widget instanceHeader;
   final Widget transcript, composer;
   final List<Widget> actions, beforeComposer;
+  final Widget? suggestions;
+  final TextEditingController? composerController;
   final GlobalKey? membersAnchor;
   final VoidCallback? onMembers, onEdit;
   final VoidCallback onBack;
@@ -56,8 +60,8 @@ class BotGroupConversation extends StatelessWidget {
           bots[member.profile]?.title ?? member.name,
         ),
     }, Theme.of(context));
-    return Scaffold(
-      appBar: WingAppBar(
+    return ConversationPage(
+      header: WingAppBar(
         context: context,
         inlineContext: landscape || reading.active,
         leading: StudioButtonPress(
@@ -114,30 +118,15 @@ class BotGroupConversation extends StatelessWidget {
         name: null,
         child: _GroupBubblePalette(
           colors: palette,
-          child: SafeArea(
-            child: LayoutBuilder(
-              builder: (context, constraints) => Column(
-                children: [
-                  Expanded(child: transcript),
-                  // Loose picker space belongs inside the content-fitting footer
-                  // so opening or closing suggestions cannot lift the composer.
-                  ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxHeight: constraints.maxHeight,
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ...beforeComposer,
-                        Visibility(
-                          visible: !reading.active,
-                          maintainState: true,
-                          child: composer,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+          child: ConversationLayout(
+            transcript: transcript,
+            footerBuilder: (context, constraints) => ConversationFooter(
+              constraints: constraints,
+              controller: composerController,
+              suggestions: suggestions,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [...beforeComposer, composer],
               ),
             ),
           ),
@@ -191,75 +180,4 @@ class BotGroupMessage extends StatelessWidget {
       loadImages: loadImages,
     ),
   );
-}
-
-/// Identical one-row composer framing in the live page and saved-page renderer.
-class BotGroupComposer extends StatelessWidget {
-  const BotGroupComposer({
-    super.key,
-    required this.controller,
-    required this.microphone,
-    required this.action,
-    required this.maxLines,
-    this.focusNode,
-    this.readOnly = false,
-  });
-  final TextEditingController controller;
-  final FocusNode? focusNode;
-  final Widget microphone, action;
-  final int maxLines;
-  final bool readOnly;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-      child: DecoratedBox(
-        key: const ValueKey('group-composer'),
-        decoration: BoxDecoration(
-          color: colors.surfaceContainerLow,
-          borderRadius: WingRadius.card,
-          border: Border.all(color: colors.outlineVariant),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: viewportSelection(
-                  TextField(
-                    key: const ValueKey('group-message-composer'),
-                    controller: controller,
-                    focusNode: focusNode,
-                    readOnly: readOnly,
-                    minLines: 1,
-                    maxLines: maxLines,
-                    keyboardType: TextInputType.multiline,
-                    textInputAction: TextInputAction.newline,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintMaxLines: 1,
-                      hintText: controller.text.isEmpty
-                          ? 'Message the group'
-                          : null,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      filled: false,
-                      contentPadding: const EdgeInsets.all(12),
-                    ),
-                  ),
-                ),
-              ),
-              microphone,
-              action,
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

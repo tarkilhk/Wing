@@ -10192,6 +10192,16 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/widgets/conversation_composer.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/conversation_page.dart",
+      "area": "lib",
+      "provenance": "tracked"
+    },
+    {
       "path": "lib/core/widgets/conversation_reading_scope.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -11688,6 +11698,11 @@
     },
     {
       "path": "test/context_ring_test.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/conversation_assembly_test.dart",
       "area": "test",
       "provenance": "tracked"
     },

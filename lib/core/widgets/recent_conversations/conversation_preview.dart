@@ -1,3 +1,6 @@
+import '../conversation_page.dart';
+import '../conversation_reading_scope.dart';
+import '../conversation_composer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
@@ -32,7 +35,10 @@ class ConversationPreview extends StatelessWidget {
   final ServerConnectionStatus? connectionStatus;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ConversationReadingScope(key: ValueKey(card.entry.key), builder: _build);
+
+  Widget _build(BuildContext context) {
     if (card.entry.group != null) {
       return IgnorePointer(
         child: _SavedGroupPage(
@@ -55,6 +61,8 @@ class ConversationPreview extends StatelessWidget {
         .toList();
     final colors = Theme.of(context).colorScheme;
     final stackedScope =
+        card.bot == null &&
+        !ConversationReadingScope.compact(context) &&
         MediaQuery.textScalerOf(context).scale(12) > 18 &&
         MediaQuery.sizeOf(context).width < 480;
     final scopeStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -76,8 +84,8 @@ class ConversationPreview extends StatelessWidget {
       style: scopeStyle,
     );
     return IgnorePointer(
-      child: Scaffold(
-        appBar: WingAppBar(
+      child: ConversationPage(
+        header: WingAppBar(
           context: context,
           leading: const StudioButtonPress(
             child: IconButton(
@@ -91,8 +99,11 @@ class ConversationPreview extends StatelessWidget {
             bot: card.bot,
             mood: null,
           ),
+          inlineContext: ConversationReadingScope.compact(context),
           contextHeight: stackedScope ? 96 : 48,
-          contextRow: stackedScope
+          contextRow: card.bot != null
+              ? server
+              : stackedScope
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -133,110 +144,105 @@ class ConversationPreview extends StatelessWidget {
             ),
           ],
         ),
-        body: Column(
-          children: [
-            Expanded(
-              child: ListView.builder(
-                reverse: true,
-                scrollCacheExtent: const ScrollCacheExtent.pixels(0),
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(vertical: WingSpacing.sm),
-                itemCount: messages.length,
-                itemBuilder: (_, index) {
-                  final message = messages[index];
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      left: WingSpacing.lg,
-                      right: WingSpacing.xs,
-                    ),
-                    child: ProfileMessage(
-                      message: message,
-                      loadImages: false,
-                      showEditAction: message.role == 'user',
-                      showRestoreAction: message.role == 'user',
-                    ),
-                  );
-                },
-              ),
-            ),
-            SafeArea(
-              top: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: colors.surfaceContainerLow,
-                    borderRadius: WingRadius.card,
-                    border: Border.all(color: colors.outlineVariant),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 14,
-                                ),
-                                child: Text(
-                                  preview?.draft.isNotEmpty == true
-                                      ? preview!.draft
-                                      : 'Message Hermes or type /',
-                                  maxLines: 3,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: Theme.of(context).textTheme.bodyLarge
-                                      ?.copyWith(
-                                        color: colors.onSurfaceVariant,
-                                      ),
-                                ),
-                              ),
-                            ),
-                            const StudioButtonPress(
-                              child: IconButton(
-                                onPressed: null,
-                                icon: Icon(Icons.mic_none, size: 18),
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            const StudioButtonPress(
-                              child: IconButton(
-                                onPressed: null,
-                                icon: Icon(Icons.add),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                preview?.modelLabel ?? '',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: Theme.of(context).textTheme.labelSmall,
-                              ),
-                            ),
-                            const StudioButtonPress(
-                              child: IconButton(
-                                onPressed: null,
-                                icon: Icon(Icons.arrow_upward),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
+        body: ConversationLayout(
+          transcript: ListView.builder(
+            reverse: true,
+            scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(vertical: WingSpacing.sm),
+            itemCount: messages.length,
+            itemBuilder: (_, index) {
+              final message = messages[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  left: WingSpacing.lg,
+                  right: WingSpacing.xs,
                 ),
-              ),
+                child: ProfileMessage(
+                  message: message,
+                  loadImages: false,
+                  showEditAction: message.role == 'user',
+                  showRestoreAction: message.role == 'user',
+                ),
+              );
+            },
+          ),
+          footerBuilder: (context, constraints) => ConversationFooter(
+            constraints: constraints,
+            child: _SavedChatComposer(
+              draft: preview?.draft ?? '',
+              modelLabel: preview?.modelLabel ?? '',
             ),
-          ],
+          ),
         ),
       ),
     );
   }
+}
+
+/// Passive native field state only; never creates an execution owner.
+class _SavedChatComposer extends StatefulWidget {
+  const _SavedChatComposer({required this.draft, required this.modelLabel});
+  final String draft, modelLabel;
+  @override
+  State<_SavedChatComposer> createState() => _SavedChatComposerState();
+}
+
+class _SavedChatComposerState extends State<_SavedChatComposer> {
+  final _focus = FocusNode();
+  late final _draft = TextEditingController(text: widget.draft);
+  @override
+  void didUpdateWidget(_SavedChatComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.draft != oldWidget.draft) _draft.text = widget.draft;
+  }
+
+  @override
+  void dispose() {
+    _focus.dispose();
+    _draft.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ConversationComposer(
+    focusNode: _focus,
+    field: ConversationComposerField(
+      controller: _draft,
+      focusNode: _focus,
+      readOnly: true,
+      hintText: 'Message Hermes or type /',
+      microphone: VoiceInputButton(enabled: true, onPressed: () {}),
+    ),
+    controls: Row(
+      children: [
+        const StudioButtonPress(
+          child: IconButton(
+            onPressed: null,
+            tooltip: 'Attach file',
+            icon: Icon(Icons.add),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            widget.modelLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.labelSmall,
+          ),
+        ),
+      ],
+    ),
+    primaryAction: ComposerIconButton(
+      focused: false,
+      label: 'Send message',
+      onPressed: null,
+      icon: const ComposerActionGlyph(
+        icon: Icons.arrow_upward,
+        identity: 'send',
+      ),
+    ),
+  );
 }
 
 /// Lightweight saved identity while transcript pixels are unavailable.
@@ -245,8 +251,8 @@ class ConversationCardPlaceholder extends StatelessWidget {
   final RecentConversationCard card;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: WingAppBar(
+  Widget build(BuildContext context) => ConversationPage(
+    header: WingAppBar(
       context: context,
       automaticallyImplyLeading: false,
       titleSpacing: WingSpacing.lg,
@@ -286,11 +292,13 @@ class _SavedGroupPage extends StatefulWidget {
 }
 
 class _SavedGroupPageState extends State<_SavedGroupPage> {
+  final _focus = FocusNode();
   late final _draft = TextEditingController(
     text: widget.card.preview?.draft ?? '',
   );
   @override
   void dispose() {
+    _focus.dispose();
     _draft.dispose();
     super.dispose();
   }
@@ -340,12 +348,17 @@ class _SavedGroupPageState extends State<_SavedGroupPage> {
                 loadImages: false,
               ),
       ),
-      composer: BotGroupComposer(
-        controller: _draft,
-        readOnly: true,
-        maxLines: 5,
-        microphone: VoiceInputButton(enabled: true, onPressed: () {}),
-        action: ComposerIconButton(
+      composer: ConversationComposer(
+        focusNode: _focus,
+        field: ConversationComposerField(
+          fieldKey: const ValueKey('group-message-composer'),
+          controller: _draft,
+          focusNode: _focus,
+          hintText: 'Message the group',
+          readOnly: true,
+          microphone: VoiceInputButton(enabled: true, onPressed: () {}),
+        ),
+        primaryAction: ComposerIconButton(
           focused: false,
           label: 'Send group message',
           onPressed: _draft.text.trim().isEmpty ? null : () async {},

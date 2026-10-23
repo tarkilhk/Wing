@@ -351,3 +351,11 @@ Working history uses the shared conversation renderer. If a refresh fails,
 received text stays visible while Wing retries reading the saved answer.
 Image previews use the same renderer as the other conversation screens,
 including inside Activity details.
+
+### Shared conversation presentation
+
+Normal chats, Bot Chats and groups share page framing, transcript layout, reading
+mode and the responsive composer. Groups retain their room-specific execution,
+member mentions and available actions. Bot working histories use that same page
+layout for read-only internal conversations, with a member selector and Activity.
+Reading mode hides context and footer; Back restores them before leaving.

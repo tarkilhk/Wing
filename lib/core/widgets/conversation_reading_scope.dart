@@ -15,8 +15,11 @@ class ConversationReadingScope extends StatefulWidget {
     return size.width > size.height && size.shortestSide < 600;
   }
 
-  static bool compactKeyboard(BuildContext context) =>
+  static bool keyboardOpen(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_ReadingMode>()!.keyboard;
+
+  static bool compactKeyboard(BuildContext context) =>
+      compact(context) && keyboardOpen(context);
 
   @override
   State<ConversationReadingScope> createState() => _ReadingState();
@@ -41,9 +44,7 @@ class _ReadingState extends State<ConversationReadingScope> {
   Widget build(BuildContext context) => _ReadingMode(
     // Scaffold consumes keyboard insets before building its body. Observe them
     // here so the composer sees the actual IME state without subtracting twice.
-    keyboard:
-        ConversationReadingScope.compact(context) &&
-        MediaQuery.viewInsetsOf(context).bottom > 0,
+    keyboard: MediaQuery.viewInsetsOf(context).bottom > 0,
     mode: ConversationReadingMode(
       _active,
       () => _set(false),

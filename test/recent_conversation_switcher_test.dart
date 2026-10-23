@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/conversation_composer.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/administration_repository.dart';
@@ -932,7 +933,7 @@ void main() {
           find.byKey(const ValueKey('server-connection-led')),
           findsOneWidget,
         );
-        expect(find.byType(BotGroupComposer), findsOneWidget);
+        expect(find.byType(ConversationComposer), findsOneWidget);
         expect(find.byType(BotGroupMessage), findsOneWidget);
         expect(find.byIcon(Icons.add), findsNothing);
         final prose = [

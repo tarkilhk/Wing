@@ -35,6 +35,8 @@ python3 scripts/test_vanilla_hermes.py --hermes-source "$WING_HERMES_SOURCE" --o
 
 `WING_HERMES_SOURCE` must point to the inspected stock checkout. The runner owns a temporary backend/profile dataset and exercises the profile/project production UI. It does not authorize a deployed-server upgrade or provider-charged generation.
 
+The host `flutter test --no-pub test/conversation_assembly_test.dart` recipe also exercises group discussions and read-only working histories in both themes and text sizes, including reading-mode return and retained group drafts above the landscape keyboard.
+
 Phone reading is covered by the `transcript-expansion` family: enter table reading mode, rotate, return to the retained draft, reveal composer controls and use Back without leaving the chat.
 
 ## Gotchas
