@@ -968,6 +968,60 @@ void main() {
     expect(chat.todos.single.status, GatewayTodoStatus.inProgress);
   });
 
+  test('task batches retire only after completion and parent settlement', () {
+    host.event('a', 'message.start');
+    expect(chat.currentTodos.single.status, GatewayTodoStatus.inProgress);
+    final done = {
+      'revision': 3,
+      'todos': [
+        {'id': 'one', 'content': 'Inspect contract', 'status': 'completed'},
+        {'id': 'two', 'content': 'Unused approach', 'status': 'cancelled'},
+      ],
+    };
+    host.event('a', 'todo.updated', done);
+    expect(chat.currentTodos, hasLength(2));
+    host.event('a', 'message.complete', {'text': 'Done'});
+    expect(chat.currentTodos, isEmpty);
+    expect(chat.todos, hasLength(2));
+    host.event('a', 'message.start');
+    host.event('a', 'todo.updated', done);
+    expect(chat.currentTodos, isEmpty);
+    host.event('a', 'todo.updated', {
+      'revision': 4,
+      'todos': [
+        {'id': 'three', 'content': 'Next task', 'status': 'pending'},
+      ],
+    });
+    expect(chat.currentTodos.single.content, 'Next task');
+    host.event('a', 'message.complete', {'text': 'Paused'});
+    expect(chat.currentTodos.single.content, 'Next task');
+    host.event('a', 'todo.updated', {
+      'revision': 5,
+      'todos': [
+        {'id': 'three', 'content': 'Next task', 'status': 'completed'},
+      ],
+    });
+    expect(chat.currentTodos, isEmpty);
+  });
+
+  test(
+    'hydrated completed tasks cannot attach to a later active turn',
+    () async {
+      host.todoState = {
+        'revision': 4,
+        'todos': [
+          {'id': 'old', 'content': 'Earlier task', 'status': 'completed'},
+        ],
+      };
+      chat = await controller.createChat(canDispatch: () => true);
+      expect(chat.currentTodos, isEmpty);
+      host.event('a', 'message.start');
+      host.event('a', 'todo.updated', host.todoState!);
+      expect(chat.currentTodos, isEmpty);
+      expect(chat.todos.single.content, 'Earlier task');
+    },
+  );
+
   test('newer todo revision replaces the received task statuses', () {
     host.event('a', 'todo.updated', {
       'revision': 3,

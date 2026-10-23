@@ -2549,12 +2549,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     runtime: chat.runtime,
     entries: entries ?? chat.runtime.activityEntries,
     beforeMessagePresentationId: beforeMessagePresentationId,
-    todos: chat.todos,
+    todos: chat.currentTodos,
     inspection: _supervisionFor(chat),
     agentsBuilder: () =>
         ProfileSubagentPanel(session: _supervisionFor(chat), embedded: true),
     live: _liveAnswering(chat),
-    taskCount: chat.todoRevision == null ? null : chat.todos.length,
+    taskCount: chat.todoRevision == null ? null : chat.currentTodos.length,
     agentCount: chat.subagentsAvailable ? chat.currentSubagents.length : null,
   );
 

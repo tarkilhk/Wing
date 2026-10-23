@@ -1,6 +1,7 @@
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -70,6 +71,184 @@ class _LiveWorkHost extends Host {
 }
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'completed tasks leave the composer and stay in their Activity ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          SharedPreferences.setMockInitialValues({});
+          final prefs = await SharedPreferences.getInstance();
+          final app = AppPreferences(prefs);
+          final host = Host()
+            ..historyMessages = [
+              {'id': 1, 'role': 'user', 'content': 'Finish four tasks'},
+            ];
+          final controller = ProfileWorkspaceController(
+            connectionIdentity: 'completed-task-handoff',
+            access: ConnectionAccess(
+              connection: identityTestConnection(),
+              dashboardOAuth: null,
+            ),
+            preferences: prefs,
+            appPreferences: app,
+            gatewayFactory: host.gateway,
+          );
+          addTearDown(() {
+            controller.dispose();
+            app.dispose();
+          });
+          await controller.initialize();
+          final chat = await controller.createChat(canDispatch: () => true);
+          host.event('a', 'message.start');
+          final snapshot = {
+            'revision': 4,
+            'todos': [
+              for (var i = 0; i < 4; i++)
+                {
+                  'id': 'task-$i',
+                  'content': 'Finished task $i',
+                  'status': 'completed',
+                },
+            ],
+          };
+          host.event('a', 'todo.updated', snapshot);
+          final frame = GlobalKey();
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: RepaintBoundary(key: frame, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(
+                createBotsSession: () => BotsSession((_) async => const []),
+                controller: controller,
+              ),
+            ),
+          );
+          Future<void> settle() async {
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.settleMarkdown();
+          }
+
+          await settle();
+          expect(find.text('Tasks 4/4'), findsOneWidget);
+          await tester.tap(find.text('Tasks 4/4'));
+          await settle();
+          expect(find.byType(ProfileTodoPanel), findsOneWidget);
+          await tester.binding.handlePopRoute();
+          await settle();
+          await tester.enterText(
+            find.byKey(const Key('profile-message-composer')),
+            'Keep draft',
+          );
+          host.historyMessages!.addAll([
+            {
+              'id': 2,
+              'role': 'tool',
+              'tool_call_id': 'tasks',
+              'tool_name': 'todo_list',
+              'content': jsonEncode(snapshot),
+            },
+            {'id': 3, 'role': 'assistant', 'content': 'All done'},
+          ]);
+          final held = Completer<void>();
+          host.heldHistoryDelay = held;
+          host.heldHistoryStarted = Completer<void>();
+          addTearDown(() {
+            if (!held.isCompleted) held.complete();
+          });
+          await tester.tap(find.text('Tasks 4/4'));
+          await settle();
+          expect(find.byType(ProfileTodoPanel), findsOneWidget);
+          host.event('a', 'message.complete', {'text': 'All done'});
+          await settle();
+          expect(host.heldHistoryStarted!.isCompleted, isTrue);
+          expect(chat.runtime.executionActive, isFalse);
+          expect(find.byType(ProfileLiveWorkDock), findsNothing);
+          expect(find.byType(ProfileTodoPanel), findsNothing);
+          expect(find.text('Keep draft'), findsOneWidget);
+          held.complete();
+          host.heldHistoryDelay = null;
+          await settle();
+          await controller.refreshHistory(chat);
+          await settle();
+          expect(chat.reading.historyError, isNull);
+          final activity = find.byType(ProfileToolActivitySection);
+          await tester.scrollUntilVisible(
+            activity,
+            120,
+            scrollable: find
+                .descendant(
+                  of: find.byType(ProfileTranscript),
+                  matching: find.byType(Scrollable),
+                )
+                .first,
+          );
+          await tester.pump();
+          await tester.tap(
+            find
+                .descendant(
+                  of: activity,
+                  matching: find.byIcon(Icons.keyboard_arrow_right_rounded),
+                )
+                .first,
+          );
+          await settle();
+          expect(find.text('Tasks 4'), findsOneWidget);
+          await Scrollable.ensureVisible(
+            tester.element(find.text('Tasks 4')),
+            alignment: .5,
+          );
+          await settle();
+          await tester.tap(find.text('Tasks 4'));
+          await settle();
+          await Scrollable.ensureVisible(
+            tester.element(find.text('Finished task 0')),
+            alignment: .3,
+          );
+          await settle();
+          expect(find.text('Finished task 0'), findsOneWidget);
+          if (const bool.fromEnvironment('CAPTURE_LIVE_WORK_DOCK')) {
+            await tester.runAsync(() async {
+              final bitmap =
+                  await (frame.currentContext!.findRenderObject()!
+                          as RenderRepaintBoundary)
+                      .toImage();
+              final bytes = await bitmap.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final dir = Directory('build/design-previews/completed-tasks')
+                ..createSync(recursive: true);
+              await File(
+                '${dir.path}/${brightness.name}-$scale.png',
+              ).writeAsBytes(bytes!.buffer.asUint8List());
+              bitmap.dispose();
+            });
+          }
+          for (var round = 0; round < 3; round++) {
+            host.event('a', 'message.start');
+            host.event('a', 'todo.updated', snapshot);
+            await settle();
+            expect(find.byType(ProfileLiveWorkDock), findsNothing);
+            host.event('a', 'message.complete', {
+              'text': 'Later answer $round',
+            });
+            await settle();
+          }
+          expect(find.text('Keep draft'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
   const capture = bool.fromEnvironment('CAPTURE_LIVE_WORK_DOCK');
   setUpAll(() async {
     if (!capture) return;

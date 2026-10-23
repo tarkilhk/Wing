@@ -129,8 +129,7 @@ class ProfileChat {
   bool get refreshingConversation => _readingRefresh != null;
 
   final List<({GatewayNotice notice, String identity})> _reviewNotices = [];
-  List<GatewayTodo> _todos = [];
-  int? _todoRevision;
+  GatewayTodoState _taskState = GatewayTodoState();
   List<GatewaySubagentActivity> _subagents = [];
   final Map<String, int> _subagentCompletionTurns = {};
   final Set<String> _unconfirmedSubagentIds = {};
@@ -189,8 +188,12 @@ class ProfileChat {
   String? get intelligenceRuntime => _intelligenceRuntime;
   List<GatewayNotice> get reviewNotices =>
       List.unmodifiable(_reviewNotices.map((receipt) => receipt.notice));
-  List<GatewayTodo> get todos => List.unmodifiable(_todos);
-  int? get todoRevision => _todoRevision;
+  List<GatewayTodo> get todos => _taskState.todos;
+  int? get todoRevision => _taskState.revision;
+  List<GatewayTodo> get currentTodos => _taskState.current(
+    active: runtime.executionActive,
+    turn: _runtime.turnRevision,
+  );
   Object? _workInputs;
   Object _workRevision = Object();
 
@@ -202,8 +205,8 @@ class ProfileChat {
       runtime.runtimeId,
       _runtime.turnRevision,
       runtime.executionActive,
-      _todos,
-      _todoRevision,
+      _taskState.todos,
+      _taskState.revision,
       _subagentsRevision,
       _subagentsLoadGeneration,
       _subagentsLoading,
@@ -7894,17 +7897,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  void _applyTodoSnapshot(ProfileChat chat, dynamic value) {
+  void _applyTodoSnapshot(
+    ProfileChat chat,
+    dynamic value, {
+    bool live = false,
+  }) {
     final snapshot = GatewayTodoSnapshot.parse(value);
     if (snapshot == null) return;
-    final currentRevision = chat._todoRevision;
-    if (snapshot.revision != null &&
-        currentRevision != null &&
-        snapshot.revision! < currentRevision) {
-      return;
-    }
-    chat._todos = snapshot.todos;
-    if (snapshot.revision != null) chat._todoRevision = snapshot.revision;
+    chat._taskState.observe(
+      snapshot,
+      liveTurn: live && chat.runtime.executionActive
+          ? chat._runtime.turnRevision
+          : null,
+    );
   }
 
   void _upsertSubagent(
@@ -8016,7 +8021,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           data: event.data,
         );
       case 'todo.updated':
-        _applyTodoSnapshot(chat, event.data);
+        _applyTodoSnapshot(chat, event.data, live: true);
       case 'subagent.spawn_requested':
       case 'subagent.start':
       case 'subagent.thinking':
@@ -9116,8 +9121,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._contextLoading = false;
       chat._contextError = null;
       chat._runtime.finishActivity();
-      chat._todos = [];
-      chat._todoRevision = null;
+      chat._taskState = GatewayTodoState();
       chat._subagents = [];
       chat._subagentCompletionTurns.clear();
       chat._unconfirmedSubagentIds.clear();

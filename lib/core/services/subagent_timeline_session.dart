@@ -37,8 +37,7 @@ final class SubagentTimelineSession extends ChangeNotifier
   final ChatRuntime _runtime;
   final _rows = <int, Map<String, dynamic>>{};
   final _agents = <String, GatewaySubagentActivity>{};
-  List<GatewayTodo> _todos = const [];
-  int? _todoRevision;
+  GatewayTodoState _taskState = GatewayTodoState();
   String? _watch, _epoch, _error;
   int _sequence = 0;
   int? _older;
@@ -59,7 +58,10 @@ final class SubagentTimelineSession extends ChangeNotifier
   @override
   Map<String, dynamic>? get streamingMessage => _reading.streamingMessage;
   @override
-  List<GatewayTodo> get todos => _todos;
+  List<GatewayTodo> get todos => _taskState.current(
+    active: runtime.executionActive,
+    turn: _runtime.turnRevision,
+  );
   @override
   // Completion is reported by runtime; presentation waits for saved history.
   bool get liveAnswering =>
@@ -222,8 +224,7 @@ final class SubagentTimelineSession extends ChangeNotifier
       _watch = null;
       _partial = true;
       _agents.clear();
-      _todos = const [];
-      _todoRevision = null;
+      _taskState = GatewayTodoState();
       await _mount();
       if (!_current) return;
       _reading.updateStreaming('');
@@ -324,12 +325,11 @@ final class SubagentTimelineSession extends ChangeNotifier
     }
     if (type == 'todo.updated') {
       final next = GatewayTodoSnapshot.parse(data);
-      if (next != null &&
-          (_todoRevision == null ||
-              next.revision == null ||
-              next.revision! >= _todoRevision!)) {
-        _todos = List.unmodifiable(next.todos);
-        _todoRevision = next.revision;
+      if (next != null) {
+        _taskState.observe(
+          next,
+          liveTurn: runtime.executionActive ? _runtime.turnRevision : null,
+        );
       }
     }
   }

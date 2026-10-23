@@ -674,6 +674,15 @@ void main() {
       expect(detail.state.canControl, isFalse);
       expect(detail.supportsTail, isFalse);
       detail.dispose();
+      final done = {
+        'revision': 2,
+        'todos': [
+          {'id': '1', 'content': 'Inspect transcript', 'status': 'completed'},
+        ],
+      };
+      event('todo.updated', done);
+      await session.refreshLive();
+      expect(session.todos.single.content, 'Inspect transcript');
       fixture.workerMessages['atlas'] = [_message(1, 'Live answer')];
       event('message.complete', {'text': 'Live answer'});
       working = false;
@@ -681,14 +690,17 @@ void main() {
       expect(session.reader.streaming, isEmpty);
       expect(session.reader.messages.single['content'], 'Live answer');
       expect(session.liveAnswering, isFalse);
+      expect(session.todos, isEmpty);
       // Restarted replay sequences must not strand an old watermark.
       events.clear();
       epoch = 'second';
       working = true;
       event('message.start', {});
+      event('todo.updated', done);
       event('message.delta', {'text': 'After restart'});
       await session.refreshLive();
       expect(session.reader.streaming, 'After restart');
+      expect(session.todos, isEmpty);
       expect(fixture.commands, isEmpty);
     },
   );

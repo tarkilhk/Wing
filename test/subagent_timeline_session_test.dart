@@ -79,6 +79,32 @@ void main() {
   tearDown(() => session.dispose());
 
   test(
+    'completed tasks retire through child completion and later turns',
+    () async {
+      void emit(String type, Map<String, dynamic> payload) =>
+          events.add(event(type, payload));
+      final done = {
+        'revision': 1,
+        'todos': [
+          {'id': 'task', 'content': 'Inspect child', 'status': 'completed'},
+        ],
+      };
+      emit('message.start', {});
+      emit('todo.updated', done);
+      await session.refresh();
+      expect(session.todos.single.content, 'Inspect child');
+      emit('message.complete', {'text': 'Finished'});
+      failHistory = true;
+      await session.refresh();
+      expect(session.todos, isEmpty);
+      emit('message.start', {});
+      emit('todo.updated', done);
+      await session.refresh();
+      expect(session.todos, isEmpty);
+    },
+  );
+
+  test(
     'child identity survives events, snapshots and detached observations',
     () {
       final child = GatewaySubagentActivity.fromGatewayEvent('subagent.start', {

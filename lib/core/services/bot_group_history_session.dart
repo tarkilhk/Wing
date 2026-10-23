@@ -45,7 +45,10 @@ class BotGroupHistorySession extends ChangeNotifier
   ChatRuntimeObservation get runtime => _reading._runtime.observation;
   Map<String, dynamic>? get streamingMessage =>
       _reading._reading.streamingMessage;
-  List<GatewayTodo> get todos => _reading._todos;
+  List<GatewayTodo> get todos => _reading._taskState.current(
+    active: runtime.executionActive,
+    turn: _reading._runtime.turnRevision,
+  );
   List<GatewaySubagentActivity> get subagents =>
       List.unmodifiable(_reading._agents.values);
   String? get liveError => _reading._liveError;
@@ -557,20 +560,20 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   String? _runtimeId, _epoch, _liveError;
   int _sequence = 0;
   bool _partialLive = false;
-  int? _todoRevision;
+  final _taskState = GatewayTodoState();
   bool _receivedLiveTodos = false;
-  List<GatewayTodo> _todos = const [];
   final _agents = <String, GatewaySubagentActivity>{};
 
   void observeWork(String type, Map<String, dynamic> data) {
     if (type == 'todo.updated') {
       final next = GatewayTodoSnapshot.parse(data);
       if (next != null &&
-          (next.revision == null ||
-              _todoRevision == null ||
-              next.revision! >= _todoRevision!)) {
-        _todos = List.unmodifiable(next.todos);
-        _todoRevision = next.revision;
+          _taskState.observe(
+            next,
+            liveTurn: _runtime.observation.executionActive
+                ? _runtime.turnRevision
+                : null,
+          )) {
         _receivedLiveTodos = true;
       }
     }
@@ -622,13 +625,7 @@ final class _BotGroupHistoryReading implements TranscriptReader {
           (todoCalls.contains(row['tool_call_id']) ||
               row['tool_name'] == 'todo_list')) {
         final snapshot = GatewayTodoSnapshot.parse(row['content']);
-        if (snapshot != null &&
-            (_todoRevision == null ||
-                snapshot.revision == null ||
-                snapshot.revision! >= _todoRevision!)) {
-          _todos = List.unmodifiable(snapshot.todos);
-          _todoRevision = snapshot.revision;
-        }
+        if (snapshot != null) _taskState.observe(snapshot);
       }
     }
   }
