@@ -4,6 +4,10 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+## [1.3.1] - 2026-10-23
+
+- Bugfixes.
+
 ## [1.3.0] - 2026-10-23
 
 Work across bots and group discussions, take over an agent's desktop, and read
