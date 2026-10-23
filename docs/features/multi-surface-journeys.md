@@ -26,6 +26,8 @@ python3 scripts/test_nightly_native.py voice --output build/feature-verification
 ```
 
 The first command requires all four critical journeys, all nine roadmap journeys and actual outbox process-death recovery. Its named outcomes cover uncertain Send beside a newer draft; profile/project navigation; model/reference/find/output controls; approval/queue ownership; child/parent work; saved-answer edit/regenerate/fork; and scoped administration/update refusal. Read those outcomes rather than inferring coverage from the suite title.
+The approval journey checks the immediately visible Review command panel and
+exact selectable command before using its icon-only Approve once action.
 
 For the real stock-backend boundary, prepare a clean checkout of current [official Hermes main](https://github.com/NousResearch/hermes-agent), with no project `.env` or untracked files. Create its `.venv` and install its web dependencies using `.venv/bin/python -m pip install -e ".[web]"` from that checkout, matching the preparation in [nightly CI](../../.github/workflows/nightly-tests.yml). Set `WING_HERMES_SOURCE` to that checkout, then run from the Wing root:
 

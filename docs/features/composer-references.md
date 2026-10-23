@@ -19,6 +19,9 @@ Type @ for server references or bot mentions. Type / while writing for skills, o
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.
 
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
+  The workspace matrix checks that bot and file suggestions can be tapped above
+  the composer at 320 dp/200% text with the portrait keyboard open, retaining
+  the selected reference, authored draft and cleared IME composition.
 
   ```sh
   flutter test --no-pub test/composer_references_test.dart test/profile_references_test.dart

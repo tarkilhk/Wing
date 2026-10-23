@@ -93,7 +93,9 @@ class ConversationFooter extends StatelessWidget {
               collapsed: value.selection.isValid && value.selection.isCollapsed,
             ) !=
             null;
-    final keyboard = ConversationReadingScope.keyboardOpen(context);
+    final fullHeightComposer =
+        ConversationReadingScope.keyboardOpen(context) &&
+        (!querying || ConversationReadingScope.compact(context));
     return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: constraints.maxHeight),
       child: Column(
@@ -104,7 +106,7 @@ class ConversationFooter extends StatelessWidget {
             constraints: BoxConstraints(
               maxHeight:
                   constraints.maxHeight *
-                  (keyboard
+                  (fullHeightComposer
                       ? 1
                       : querying
                       ? .4

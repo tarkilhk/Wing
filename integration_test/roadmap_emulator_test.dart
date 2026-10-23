@@ -3,7 +3,6 @@ import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/widgets/profile_goal_panel.dart';
 import 'package:wing/core/widgets/profile_activity_tabs.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
-import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/gateway_approval_panel.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import '../test/support/composer_fixture.dart';
@@ -406,23 +405,22 @@ void main() {
     await tester.pump();
     final approval = find.byType(GatewayApprovalPanel);
     expect(approval, findsOneWidget);
-    final question = find.descendant(
-      of: approval,
-      matching: find.byType(ProfileToolCall),
-    );
     expect(
-      tester.widget<GatewayApprovalPanel>(approval).question.command,
+      tester.widget<GatewayApprovalPanel>(approval).request.command,
       'echo isolated-roadmap-check',
     );
-    await tester.tap(
-      find.descendant(of: question, matching: find.text('Asking a question')),
-    );
-    await _settle(tester);
     expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is SourceCodeText &&
-            widget.text == 'echo isolated-roadmap-check',
+      find.descendant(of: approval, matching: find.text('Review command')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: approval,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is SelectableText &&
+              widget.data == 'echo isolated-roadmap-check',
+        ),
       ),
       findsOneWidget,
     );

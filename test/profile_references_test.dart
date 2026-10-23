@@ -647,6 +647,7 @@ void main() {
         );
         await captureFrame('workspace-avatars');
         await tester.ensureVisible(find.text('Hermes'));
+        expect(find.text('Hermes').hitTestable(), findsOneWidget);
         await tester.tap(find.text('Hermes'));
         await tester.pumpAndSettle();
         expect(chat.composer.observation.references.single.target, 'hermes');
