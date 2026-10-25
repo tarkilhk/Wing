@@ -27,7 +27,10 @@ public final class NativeRecentsTouch {
                 positions.length, properties, coordinates, 0, 0, 1, 1, 0, 0,
                 InputDevice.SOURCE_TOUCHSCREEN, 0);
         try {
-            if (!((Boolean) inject.invoke(input, event, 2))) {
+            // Queue events in order without waiting for the app to finish each
+            // one. Per-event processing waits stretch a 100 ms flick on busy
+            // emulators even when its MotionEvent timestamps stay correct.
+            if (!((Boolean) inject.invoke(input, event, 0))) {
                 throw new IllegalStateException("Android refused the touch event");
             }
         } finally {
@@ -53,8 +56,6 @@ public final class NativeRecentsTouch {
                     point[p][axis] = start[p][axis] + (end[p][axis] - start[p][axis]) * step / 24f;
                 }
             }
-            // Synchronous injection can overrun this deadline on a busy runner.
-            // Preserve the requested gesture's velocity in the native timestamps.
             send(MotionEvent.ACTION_MOVE, point, at);
         }
         long released = began + milliseconds;

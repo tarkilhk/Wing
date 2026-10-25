@@ -149,8 +149,9 @@ jobs:
         if: matrix.family == 'stock-hermes'
         run: |
           git -c credential.helper= clone --depth 1 --branch main https://github.com/NousResearch/hermes-agent.git "$RUNNER_TEMP/hermes"
-          python3 -m venv "$RUNNER_TEMP/hermes/.venv"
-          "$RUNNER_TEMP/hermes/.venv/bin/python" -m pip install -e "$RUNNER_TEMP/hermes[web]"
+          cd "$RUNNER_TEMP/hermes"
+          HERMES_HOME="$RUNNER_TEMP/hermes-home" HERMES_RUNTIME_DIR="$RUNNER_TEMP/hermes-runtime" \
+            python3 -m pm.build_env --source . --out .venv --extra web
       - name: Run the complete selected native family
         env:
           NIGHTLY_FAMILY: ${{ matrix.family }}

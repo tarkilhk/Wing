@@ -29,7 +29,7 @@ The first command requires all four critical journeys, all nine roadmap journeys
 The approval journey checks the immediately visible Review command panel and
 exact selectable command before using its icon-only Approve once action.
 
-For the real stock-backend boundary, prepare a clean checkout of current [official Hermes main](https://github.com/NousResearch/hermes-agent), with no project `.env` or untracked files. Create its `.venv` and install its web dependencies using `.venv/bin/python -m pip install -e ".[web]"` from that checkout, matching the preparation in [nightly CI](../../.github/workflows/nightly-tests.yml). Set `WING_HERMES_SOURCE` to that checkout, then run from the Wing root:
+For the real stock-backend boundary, prepare a clean checkout of current [official Hermes main](https://github.com/NousResearch/hermes-agent), with no project `.env` or untracked files. From that checkout, build a fresh `.venv` using `python3 -m pm.build_env --source . --out .venv --extra web`. Give preparation disposable `HERMES_HOME` and `HERMES_RUNTIME_DIR` directories, as in [nightly CI](../../.github/workflows/nightly-tests.yml). Upstream PM owns the supported interpreter, committed dependency lock and dependency overrides. Set `WING_HERMES_SOURCE` to that checkout, then run from the Wing root:
 
 ```sh
 python3 scripts/test_vanilla_hermes.py --hermes-source "$WING_HERMES_SOURCE" --output build/feature-verification/stock

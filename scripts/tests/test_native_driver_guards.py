@@ -535,7 +535,7 @@ public class InputManagerGlobal {
  public boolean injectInputEvent(InputEvent event, int mode) {
   MotionEvent e = (MotionEvent) event;
   System.out.println("event=" + e.action + "," + e.time + "," + e.x);
-  SystemClock.sleep(Long.getLong("touch.delayMs", 0)); // Synchronous Android processing on a loaded runner.
+  if (mode == 2) SystemClock.sleep(Long.getLong("touch.delayMs", 0)); // Waiting for the app can stall injection.
   return true;
  }
 }""",
@@ -576,6 +576,16 @@ public class InputManagerGlobal {
                     self.assertEqual(events[-1][0], '1')
                     self.assertEqual(int(events[-1][1]), int(moves[-1][1]),
                                      'Injection latency introduced a pause before release')
+
+    def test_fast_flick_does_not_wait_for_app_processing_between_events(self):
+        result = subprocess.run([
+            'java', '-Dtouch.delayMs=80', '-cp', self.directory.name,
+            'NativeRecentsTouch', 'one', '900', '500', '100', '500', '100',
+        ], check=True, capture_output=True, text=True)
+        elapsed = next(int(line.split('=')[1]) for line in result.stdout.splitlines()
+                       if line.startswith('nativeTouchElapsedMs='))
+        self.assertLessEqual(elapsed, 120,
+                             'A busy app stretched the 100 ms flick into a paused drag')
 
 
 class NativeRecentsCompletion(unittest.TestCase):

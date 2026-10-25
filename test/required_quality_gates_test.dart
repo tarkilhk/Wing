@@ -551,6 +551,11 @@ void main() {
         (r'NIGHTLY_FAMILY: ${{ matrix.family }}', 'NIGHTLY_FAMILY: backup'),
         ("python-version: '3.14'", "python-version: '3.12'"),
         ('actions/setup-python@', 'actions/unused@'),
+        (
+          'python3 -m pm.build_env --source . --out .venv --extra web',
+          'python3 -m pip install -e ".[web]"',
+        ),
+        ('--out .venv --extra web', '--out .venv --extra web || true'),
         ("if: matrix.family == 'stock-hermes'", 'if: false'),
         ('  platform:', '  platform:\n    if: false'),
         ('  renderer:', '  renderer:\n    continue-on-error: true'),
@@ -833,7 +838,7 @@ ${fixtureCommands.map((command) => '      - name: Proof fixtures\n        run: $
         if: matrix.family == 'stock-hermes'
         with:
           python-version: '3.14'
-      - run: python3 -m venv "\$RUNNER_TEMP/hermes/.venv"
+      - run: python3 -m pm.build_env --source . --out .venv --extra web
       - env:
           NIGHTLY_FAMILY: \${{ matrix.family }}
         run: python3 scripts/test_nightly_native.py "\$NIGHTLY_FAMILY" --hermes-source "\$RUNNER_TEMP/hermes"

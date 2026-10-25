@@ -307,13 +307,13 @@ List<String> _checkNightly(Directory root) {
     final bootstrapIndex = stockSteps.indexWhere(
       (step) =>
           runsForStock(step) &&
-          step['run'].toString().contains(
-            r'python3 -m venv "$RUNNER_TEMP/hermes/.venv"',
-          ),
+          step['run'] is String &&
+          (step['run'] as String).trim().split('\n').last.trim() ==
+              'python3 -m pm.build_env --source . --out .venv --extra web',
     );
     if (pythonIndex < 0 || bootstrapIndex <= pythonIndex) {
       failures.add(
-        '$path:native REQUIRED_QUALITY_GATE: Provision supported Python 3.14 before creating the current stock Hermes environment.',
+        '$path:native REQUIRED_QUALITY_GATE: Provision supported Python 3.14 before building the current stock Hermes environment through upstream PM.',
       );
     }
     if (!hardCommand('catalog', matrixCommand) ||

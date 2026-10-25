@@ -14,6 +14,7 @@ import 'package:image/image.dart' as image;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 import 'package:wing/core/models/composer_action.dart';
+import 'package:wing/core/models/attachment_draft.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
 import 'package:wing/core/widgets/profile_queued_messages.dart';
 import 'package:wing/core/theme/wing_theme.dart';
@@ -25,6 +26,23 @@ import 'package:wing/core/services/profile_workspace_controller.dart';
 
 import 'profile_workspace_controller_test.dart' show Host;
 
+class _PasteAttachments extends AttachmentDraftService {
+  _PasteAttachments(Directory cache)
+    : super(cacheDirectoryProvider: () async => cache);
+
+  Future<void>? beforeRemoval;
+  final removalStarted = Completer<void>();
+  final removalFinished = Completer<void>();
+
+  @override
+  Future<void> removeAll(Iterable<AttachmentDraft> drafts) async {
+    removalStarted.complete();
+    await beforeRemoval;
+    await super.removeAll(drafts);
+    removalFinished.complete();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late Directory cache;
@@ -33,6 +51,7 @@ void main() {
   late AppPreferences appPreferences;
   late ProfileChat chat;
   late SharedPreferences preferences;
+  late _PasteAttachments attachments;
   final png = image.encodePng(
     image.Image(width: 3, height: 2)..clear(image.ColorRgb8(39, 127, 137)),
   );
@@ -81,6 +100,16 @@ void main() {
     }
   }
 
+  Future<void> pumpUntil(WidgetTester tester, bool Function() complete) async {
+    for (var attempt = 0; attempt < 200 && !complete(); attempt++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+      await tester.pump();
+    }
+    expect(complete(), isTrue, reason: 'Attachment cleanup must settle.');
+  }
+
   Future<void> snapshot(WidgetTester tester, String name) async {
     if (!capture) return;
     final context = tester.element(find.byKey(frameKey));
@@ -121,6 +150,7 @@ void main() {
     preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
     cache = await Directory.systemTemp.createTemp('hermes-paste-test-');
+    attachments = _PasteAttachments(cache);
     host = Host()..running = false;
     controller = ProfileWorkspaceController(
       access: ConnectionAccess(
@@ -137,9 +167,7 @@ void main() {
       preferences: preferences,
       appPreferences: appPreferences,
       gatewayFactory: host.gateway,
-      attachmentService: AttachmentDraftService(
-        cacheDirectoryProvider: () async => cache,
-      ),
+      attachmentService: attachments,
     );
     await controller.initialize();
     chat = await controller.createChat(canDispatch: () => true);
@@ -291,6 +319,19 @@ void main() {
         tester,
       ) async {
         final running = configuration.running;
+        final cleanup = Completer<void>();
+        if (!running) {
+          attachments.beforeRemoval = cleanup.future;
+          addTearDown(() async {
+            if (!cleanup.isCompleted) cleanup.complete();
+            if (attachments.removalStarted.isCompleted) {
+              await pumpUntil(
+                tester,
+                () => attachments.removalFinished.isCompleted,
+              );
+            }
+          });
+        }
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = Size(
           configuration.scale == 1 ? 390 : 320,
@@ -368,6 +409,16 @@ void main() {
           );
         });
         await pumpFrames(tester);
+        if (!running) {
+          await pumpUntil(tester, () => attachments.removalStarted.isCompleted);
+          expect(await tester.runAsync(() => cache.list().length), 1);
+          cleanup.complete();
+          await pumpUntil(
+            tester,
+            () => attachments.removalFinished.isCompleted,
+          );
+          expect(await tester.runAsync(() => cache.list().toList()), isEmpty);
+        }
         expect(chat.composer.observation.text, isEmpty);
         expect(chat.composer.observation.attachments, isEmpty);
         if (running) {
@@ -401,6 +452,11 @@ void main() {
           expect(
             host.calls.where((call) => call.$2 == 'prompt.submit'),
             hasLength(1),
+          );
+          expect(
+            attachments.removalFinished.isCompleted,
+            isTrue,
+            reason: 'Sending must finish cache cleanup before test teardown.',
           );
         }
         expect(tester.takeException(), isNull);
