@@ -11,6 +11,10 @@ public final class NativeRecentsTouch {
     private static long down;
 
     private static void send(int action, float[][] positions, long at) throws Exception {
+        send(action, positions, at, 2);
+    }
+
+    private static void send(int action, float[][] positions, long at, int mode) throws Exception {
         MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[positions.length];
         MotionEvent.PointerCoords[] coordinates = new MotionEvent.PointerCoords[positions.length];
         for (int i = 0; i < positions.length; i++) {
@@ -27,10 +31,7 @@ public final class NativeRecentsTouch {
                 positions.length, properties, coordinates, 0, 0, 1, 1, 0, 0,
                 InputDevice.SOURCE_TOUCHSCREEN, 0);
         try {
-            // Queue events in order without waiting for the app to finish each
-            // one. Per-event processing waits stretch a 100 ms flick on busy
-            // emulators even when its MotionEvent timestamps stay correct.
-            if (!((Boolean) inject.invoke(input, event, 0))) {
+            if (!((Boolean) inject.invoke(input, event, mode))) {
                 throw new IllegalStateException("Android refused the touch event");
             }
         } finally {
@@ -56,14 +57,18 @@ public final class NativeRecentsTouch {
                     point[p][axis] = start[p][axis] + (end[p][axis] - start[p][axis]) * step / 24f;
                 }
             }
-            send(MotionEvent.ACTION_MOVE, point, at);
+            // Deliver intermediate samples separately; Android can coalesce a
+            // fully queued flick into one move, losing its velocity history.
+            // Queue the final move and release together so processing that last
+            // move cannot introduce a pause before finger release.
+            send(MotionEvent.ACTION_MOVE, point, at, step == 24 ? 0 : 2);
         }
         long released = began + milliseconds;
         if (start.length == 2) {
             send(MotionEvent.ACTION_POINTER_UP | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
-                    end, released);
+                    end, released, 0);
         }
-        send(MotionEvent.ACTION_UP, new float[][]{end[0]}, released);
+        send(MotionEvent.ACTION_UP, new float[][]{end[0]}, released, 0);
     }
 
     public static void main(String[] args) throws Exception {

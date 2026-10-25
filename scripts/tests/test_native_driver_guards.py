@@ -531,10 +531,16 @@ import android.os.SystemClock;
 import android.view.InputEvent;
 import android.view.MotionEvent;
 public class InputManagerGlobal {
+ private static MotionEvent pending;
  public static InputManagerGlobal getInstance() { return new InputManagerGlobal(); }
+ private static void deliver(MotionEvent e) {
+  System.out.println("event=" + e.action + "," + e.time + "," + e.x + "," + SystemClock.uptimeMillis());
+ }
  public boolean injectInputEvent(InputEvent event, int mode) {
   MotionEvent e = (MotionEvent) event;
-  System.out.println("event=" + e.action + "," + e.time + "," + e.x);
+  if (mode == 0 && e.action == MotionEvent.ACTION_MOVE) { pending = e; return true; }
+  if (pending != null) { deliver(pending); pending = null; }
+  deliver(e);
   if (mode == 2) SystemClock.sleep(Long.getLong("touch.delayMs", 0)); // Waiting for the app can stall injection.
   return true;
  }
@@ -577,15 +583,18 @@ public class InputManagerGlobal {
                     self.assertEqual(int(events[-1][1]), int(moves[-1][1]),
                                      'Injection latency introduced a pause before release')
 
-    def test_fast_flick_does_not_wait_for_app_processing_between_events(self):
+    def test_flick_delivers_multiple_samples_without_a_pause_before_release(self):
         result = subprocess.run([
             'java', '-Dtouch.delayMs=80', '-cp', self.directory.name,
             'NativeRecentsTouch', 'one', '900', '500', '100', '500', '100',
         ], check=True, capture_output=True, text=True)
-        elapsed = next(int(line.split('=')[1]) for line in result.stdout.splitlines()
-                       if line.startswith('nativeTouchElapsedMs='))
-        self.assertLessEqual(elapsed, 120,
-                             'A busy app stretched the 100 ms flick into a paused drag')
+        events = [line.split('=')[1].split(',') for line in result.stdout.splitlines()
+                  if line.startswith('event=')]
+        moves = [event for event in events if event[0] == '2']
+        self.assertGreaterEqual(len(moves), 3,
+                                'Android coalesced the flick into too few velocity samples')
+        self.assertEqual(int(events[-1][3]), int(moves[-1][3]),
+                         'Waiting for app processing introduced a stop before finger release')
 
 
 class NativeRecentsCompletion(unittest.TestCase):
