@@ -3,9 +3,9 @@
 While Hermes works, tap **Subagents** above your draft to inspect known children.
 Only populated categories appear; swipe between Subagents and Tasks when both
 are available. The drawer keeps its summary visible while longer lists scroll.
-Swipe its top handle up to expand near full screen and down to return to compact
-height; tapping the handle also toggles its height. Tap the selected tab, outside
-or Back to close it without leaving the conversation.
+Swipe its top handle up to expand near full screen and down to close from either
+height; tapping the handle toggles its height. Reopening starts compact. Tap the
+selected tab, outside or Back to close it without leaving the conversation.
 
 The header shows completed out of total, then running and queued counts. Failed,
 interrupted and unconfirmed agents are counted separately when present. Zero

@@ -45,6 +45,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   bool _instantHeight = false;
   bool _expanded = false;
   double? _dragHeight;
+  double _dragDistance = 0;
   static const _handleHeight = 48.0;
   int _selected = 0, _generation = 0;
 
@@ -211,7 +212,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
     if (mounted && generation == _generation && !_open) _portal.hide();
   }
 
-  Widget _handle(double fitted, double compact, double maximum) {
+  Widget _handle(double fitted, double maximum) {
     final label = _expanded ? 'Collapse drawer' : 'Expand drawer';
     void toggle({bool keyboard = false}) => setState(() {
       _instantHeight = keyboard;
@@ -225,57 +226,71 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
       onDecrease: _expanded ? toggle : null,
       child: Tooltip(
         message: label,
-        child: GestureDetector(
-          onVerticalDragStart: (_) => setState(() {
-            _instantHeight = false;
-            _dragHeight = fitted;
-          }),
-          onVerticalDragUpdate: (details) => setState(() {
-            _dragHeight = ((_dragHeight ?? fitted) - details.delta.dy).clamp(
-              compact,
-              maximum,
-            );
-          }),
-          onVerticalDragEnd: (details) => setState(() {
-            final velocity = details.primaryVelocity ?? 0;
-            _expanded = velocity.abs() > 250
-                ? velocity < 0
-                : (_dragHeight ?? fitted) > (compact + maximum) / 2;
-            _dragHeight = null;
-          }),
-          onVerticalDragCancel: () => setState(() => _dragHeight = null),
-          child: Focus(
-            canRequestFocus: false,
-            onKeyEvent: (_, event) {
-              if (event is KeyDownEvent &&
-                  event.logicalKey == LogicalKeyboardKey.escape) {
-                _close(keyboard: true);
-                return KeyEventResult.handled;
+        // Flutter ends an accepted drag on pointer cancellation too. Clear the
+        // resize first so an interrupted system gesture cannot dismiss work.
+        child: Listener(
+          onPointerCancel: (_) => setState(() => _dragHeight = null),
+          child: GestureDetector(
+            onVerticalDragStart: (_) => setState(() {
+              _instantHeight = false;
+              _dragHeight = fitted;
+              _dragDistance = 0;
+            }),
+            onVerticalDragUpdate: (details) => setState(() {
+              _dragDistance += details.delta.dy;
+              _dragHeight = ((_dragHeight ?? fitted) - details.delta.dy).clamp(
+                _handleHeight,
+                maximum,
+              );
+            }),
+            onVerticalDragEnd: (details) {
+              if (_dragHeight == null) return;
+              final velocity = details.primaryVelocity ?? 0;
+              final movement = velocity.abs() > 250 ? velocity : _dragDistance;
+              final settle = velocity.abs() > 250 || _dragDistance.abs() >= 56;
+              if (settle && movement > 0) {
+                _close();
+              } else {
+                setState(() {
+                  if (settle) _expanded = true;
+                  _dragHeight = null;
+                });
               }
-              if (event is KeyDownEvent &&
-                  (event.logicalKey == LogicalKeyboardKey.enter ||
-                      event.logicalKey == LogicalKeyboardKey.space)) {
-                toggle(keyboard: true);
-                return KeyEventResult.handled;
-              }
-              return KeyEventResult.ignored;
             },
-            child: StudioButtonPress(
-              child: TextButton(
-                key: const ValueKey('live-work-handle'),
-                onPressed: toggle,
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(double.infinity, _handleHeight),
-                  padding: EdgeInsets.zero,
-                  shape: const RoundedRectangleBorder(),
-                ),
-                child: ExcludeSemantics(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      borderRadius: BorderRadius.circular(2),
+            onVerticalDragCancel: () => setState(() => _dragHeight = null),
+            child: Focus(
+              canRequestFocus: false,
+              onKeyEvent: (_, event) {
+                if (event is KeyDownEvent &&
+                    event.logicalKey == LogicalKeyboardKey.escape) {
+                  _close(keyboard: true);
+                  return KeyEventResult.handled;
+                }
+                if (event is KeyDownEvent &&
+                    (event.logicalKey == LogicalKeyboardKey.enter ||
+                        event.logicalKey == LogicalKeyboardKey.space)) {
+                  toggle(keyboard: true);
+                  return KeyEventResult.handled;
+                }
+                return KeyEventResult.ignored;
+              },
+              child: StudioButtonPress(
+                child: TextButton(
+                  key: const ValueKey('live-work-handle'),
+                  onPressed: toggle,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(double.infinity, _handleHeight),
+                    padding: EdgeInsets.zero,
+                    shape: const RoundedRectangleBorder(),
+                  ),
+                  child: ExcludeSemantics(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                 ),
@@ -583,7 +598,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                               final fitted =
                                   (_dragHeight ??
                                           (_expanded ? available : compact))
-                                      .clamp(compact, available);
+                                      .clamp(_handleHeight, available);
                               final scrolling =
                                   _pages.hasClients &&
                                   _pages.position.isScrollingNotifier.value;
@@ -626,11 +641,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                                           borderRadius: WingRadius.sheet,
                                           child: Column(
                                             children: [
-                                              _handle(
-                                                fitted,
-                                                compact,
-                                                available,
-                                              ),
+                                              _handle(fitted, available),
                                               Expanded(
                                                 child: PageView(
                                                   controller: _pages,

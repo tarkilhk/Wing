@@ -247,8 +247,95 @@ void main() {
         expect(tester.getRect(panel), expanded);
         await tester.fling(handle, const Offset(0, 500), 1000);
         await tester.pumpAndSettle();
-        expect(tester.getSize(panel).height, compact.height);
+        expect(find.byType(PageView), findsNothing);
         expect(tester.getRect(find.byKey(const ValueKey('draft'))), composer);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('vertical grip gestures ${brightness.name} $scale', (
+        tester,
+      ) async {
+        await show(
+          tester,
+          brightness: brightness,
+          scale: scale,
+          reduced: scale == 2,
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('draft')),
+          'Keep draft',
+        );
+        final composer = tester.getRect(find.byKey(const ValueKey('draft')));
+        final panel = find.byKey(const ValueKey('live-work-panel'));
+        final handle = find.byKey(const ValueKey('live-work-handle'));
+        for (final category in [0, 1]) {
+          await tester.tap(tab(category, overlay: false));
+          await tester.pumpAndSettle();
+          final compact = tester.getRect(panel);
+
+          // Slow downward movement follows the finger below compact height.
+          final drag = await tester.startGesture(tester.getCenter(handle));
+          await drag.moveBy(const Offset(0, 20));
+          await tester.pump(const Duration(milliseconds: 100));
+          await drag.moveBy(const Offset(0, 80));
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(tester.getSize(panel).height, lessThan(compact.height));
+          expect(tester.getRect(panel).bottom, compact.bottom);
+          await drag.up();
+          await tester.pumpAndSettle();
+          expect(dock.currentState!.isOpen, isFalse);
+          expect(find.byType(PageView), findsNothing);
+          await picture(
+            tester,
+            '${brightness.name}-$scale-$category-swipe-closed',
+          );
+
+          await tester.tap(tab(category, overlay: false));
+          await tester.pumpAndSettle();
+          expect(tester.getRect(panel), compact);
+          // A short flick expands even without crossing half the screen.
+          await tester.fling(handle, const Offset(0, -70), 1000);
+          await tester.pumpAndSettle();
+          expect(tester.getRect(panel).top, closeTo(8, 1));
+          await picture(
+            tester,
+            '${brightness.name}-$scale-$category-swipe-expanded',
+          );
+          await tester.fling(handle, const Offset(0, 70), 1000);
+          await tester.pumpAndSettle();
+          expect(find.byType(PageView), findsNothing);
+
+          await tester.tap(tab(category, overlay: false));
+          await tester.pumpAndSettle();
+          expect(tester.getRect(panel), compact);
+          // A cancelled drag restores the previous size instead of dismissing.
+          final cancelled = await tester.startGesture(tester.getCenter(handle));
+          await cancelled.moveBy(const Offset(0, 20));
+          await tester.pump();
+          await cancelled.moveBy(const Offset(0, 80));
+          await tester.pump();
+          await cancelled.cancel();
+          await tester.pumpAndSettle();
+          expect(tester.getRect(panel), compact);
+          expect(dock.currentState!.isOpen, isTrue);
+          final short = await tester.startGesture(tester.getCenter(handle));
+          await short.moveBy(const Offset(0, 20));
+          await tester.pump(const Duration(milliseconds: 150));
+          await short.moveBy(const Offset(0, 12));
+          await tester.pump(const Duration(milliseconds: 300));
+          await short.up();
+          await tester.pumpAndSettle();
+          expect(tester.getRect(panel), compact);
+          expect(dock.currentState!.isOpen, isTrue);
+          await tester.tap(tab(category));
+          await tester.pumpAndSettle();
+          expect(tester.getRect(find.byKey(const ValueKey('draft'))), composer);
+          expect(find.text('Keep draft'), findsOneWidget);
+        }
         expect(tester.takeException(), isNull);
       });
     }

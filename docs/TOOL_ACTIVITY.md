@@ -20,8 +20,9 @@ Their saved results remain in that turn's Activity → Agents tab. Running and
 queued background agents remain available until they finish.
 
 The summary stays fixed while the rows scroll. Swipe the top handle up to expand
-near full screen, or down to return to compact height; tapping it also toggles
-the height. Both Tasks and Subagents use this behavior.
+near full screen, or down to close from either compact or expanded height.
+Tapping it toggles the height. Reopening starts compact. Both Tasks and Subagents
+use this behavior.
 
 Past answers retain their received Activity and Work details. Tools and agent
 results share the Timeline and Agents tabs within the same Activity. Activity shows the

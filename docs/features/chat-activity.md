@@ -15,6 +15,11 @@ Feature ID: `chat-activity`.
 
 Open Activity from a conversation. Inspect tools, requests and saved results. During active work open the Agents or Tasks tab, inspect a child, and return while the parent continues.
 
+In the Subagents/Tasks drawer above the composer, swipe the top handle upward to
+maximize or downward to close from either height. Tapping the handle toggles
+compact/expanded height. Rows scroll independently; closing keeps the draft and
+reopening starts compact.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.
@@ -29,6 +34,16 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 
   ```sh
   flutter test --no-pub test/profile_live_work_route_test.dart test/profile_execution_activity_test.dart test/bot_group_history_test.dart test/subagent_timeline_session_test.dart test/saved_activity_test.dart
+  ```
+
+- **Drawer gestures:** the shared dock and production conversation route exercise
+  upward expansion and downward dismissal for both categories, fixed composer
+  geometry and compact reopening. The dock suite also checks slow dragging,
+  short flicks, cancellation and independent row scrolling in both themes at
+  ordinary and enlarged text.
+
+  ```sh
+  flutter test --no-pub test/profile_live_work_dock_test.dart test/profile_live_work_route_test.dart
   ```
 
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
