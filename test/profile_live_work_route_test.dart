@@ -728,6 +728,20 @@ void main() {
         final rect = tester.getRect(composer);
         await picture('agents-only-folded');
         expect(tab(1, overlay: false), findsNothing);
+        await tester.fling(
+          tab(0, overlay: false),
+          const Offset(40, -100),
+          1000,
+        );
+        await settle();
+        expect(
+          tester.getRect(find.byKey(const ValueKey('live-work-panel'))).top,
+          closeTo(8, 1),
+        );
+        expect(tester.getRect(composer), rect);
+        await picture('agents-zone-expanded');
+        await tester.tap(tab(0));
+        await settle();
         await tester.tap(tab(0, overlay: false));
         await settle();
         await picture('agents-only-open');
@@ -749,6 +763,20 @@ void main() {
         await tester.tap(tab(0));
         await settle();
         await picture('folded');
+        await tester.fling(
+          tab(1, overlay: false),
+          const Offset(-40, -100),
+          1000,
+        );
+        await settle();
+        expect(
+          tester.getRect(find.byKey(const ValueKey('live-work-panel'))).top,
+          closeTo(8, 1),
+        );
+        expect(tester.getRect(composer), rect);
+        await picture('tasks-zone-expanded');
+        await tester.tap(tab(1));
+        await settle();
         await tester.tap(tab(1, overlay: false));
         await settle();
         expect(tester.getRect(composer), rect);
@@ -768,15 +796,15 @@ void main() {
         await tester.tap(tab(1, overlay: false));
         await settle();
         expect(tester.getRect(drawer), compact);
-        final taskSummary = tester.getRect(find.byType(ProfileTodoSummary));
-        await tester.drag(find.byType(PageView), const Offset(0, -100));
-        await settle();
-        expect(tester.getRect(find.byType(ProfileTodoSummary)), taskSummary);
-        await tester.fling(handle, const Offset(0, -500), 1000);
+        await tester.fling(find.byType(PageView), const Offset(50, -100), 1000);
         await settle();
         expect(tester.getRect(drawer).top, closeTo(8, 1));
         expect(tester.getRect(drawer).bottom, compact.bottom);
         expect(tester.getRect(composer), rect);
+        final taskSummary = tester.getRect(find.byType(ProfileTodoSummary));
+        await tester.drag(find.byType(PageView), const Offset(25, -100));
+        await settle();
+        expect(tester.getRect(find.byType(ProfileTodoSummary)), taskSummary);
         await picture('tasks-expanded');
         await tester.tap(tab(0));
         await settle();
@@ -785,7 +813,11 @@ void main() {
         expect(tester.getRect(drawer).top, closeTo(8, 1));
         expect(find.text('0 of 2 completed · 2 running'), findsOneWidget);
         await picture('subagents-expanded');
-        await tester.fling(handle, const Offset(0, 500), 1000);
+        await tester.fling(
+          find.text('0 of 2 completed · 2 running'),
+          const Offset(50, 100),
+          1000,
+        );
         await settle();
         expect(find.byType(PageView), findsNothing);
         expect(tester.getRect(composer), rect);

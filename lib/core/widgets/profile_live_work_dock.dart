@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -45,8 +46,17 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   bool _instantHeight = false;
   bool _expanded = false;
   double? _dragHeight;
-  double _dragDistance = 0;
-  static const _handleHeight = 48.0;
+  final _rowScroll = {0: ScrollController(), 1: ScrollController()};
+  Offset? _barDistance;
+  _WorkPanelPan? _panelPan;
+  DragStartDetails? _panStart;
+  Offset _panDistance = Offset.zero;
+  Axis? _panAxis;
+  Drag? _scrollDrag;
+  bool _resizing = false;
+  double _readerDragDistance = 0;
+  double? _readerStartHeight;
+  static const _handleHeight = 24.0;
   int _selected = 0, _generation = 0;
 
   List<int> get _tabs => [
@@ -98,6 +108,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
     ];
     final tabs = _tabs;
     if (oldTabs.length == tabs.length && oldTabs.every(tabs.contains)) return;
+    _cancelPan();
     if (tabs.length == 2) {
       _singleTab = oldTabs.firstOrNull ?? _selected;
       if (_reduced) {
@@ -212,7 +223,234 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
     if (mounted && generation == _generation && !_open) _portal.hide();
   }
 
-  Widget _handle(double fitted, double maximum) {
+  // Both the bar and the panel use the same distance/flick admission.
+  int _swipeDirection(double distance, double velocity) {
+    if (velocity.abs() > 250) return velocity.sign.toInt();
+    return distance.abs() >= 56 ? distance.sign.toInt() : 0;
+  }
+
+  void _expandTab(int index) {
+    if (!_open || _selected != index) _select(index);
+    setState(() {
+      _instantHeight = false;
+      _expanded = true;
+      _dragHeight = null;
+    });
+  }
+
+  Widget _tabGesture(int index, Widget child) => Listener(
+    onPointerCancel: (_) => _barDistance = null,
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      dragStartBehavior: DragStartBehavior.down,
+      onPanStart: (_) => _barDistance = Offset.zero,
+      onPanUpdate: (details) {
+        final distance = _barDistance;
+        if (distance != null) _barDistance = distance + details.delta;
+      },
+      onPanEnd: (details) {
+        final distance = _barDistance;
+        _barDistance = null;
+        if (distance == null || distance.dy.abs() <= distance.dx.abs()) return;
+        if (_swipeDirection(distance.dy, details.velocity.pixelsPerSecond.dy) <
+            0) {
+          _expandTab(index);
+        }
+      },
+      onPanCancel: () => _barDistance = null,
+      child: child,
+    ),
+  );
+
+  void _cancelPan() {
+    _panStart = null;
+    _readerDragDistance = 0;
+    _readerStartHeight = null;
+    _scrollDrag?.cancel();
+    _scrollDrag = null;
+    if (mounted && _dragHeight != null) setState(() => _dragHeight = null);
+  }
+
+  Widget _panelGesture(double fitted, double maximum, Widget child) => Listener(
+    // Flutter also ends accepted drags on a raw pointer cancellation.
+    onPointerCancel: (_) => _cancelPan(),
+    onPointerMove: (event) {
+      _panelPan?.admit(event, vertical: !_expanded);
+    },
+    child: RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: {
+        _WorkPanelPan: GestureRecognizerFactoryWithHandlers<_WorkPanelPan>(
+          () => _WorkPanelPan(debugOwner: this),
+          (instance) {
+            _panelPan = instance;
+            instance
+              ..gestureSettings = MediaQuery.gestureSettingsOf(context)
+              ..dragStartBehavior = DragStartBehavior.down
+              ..onStart = (details) {
+                _panStart = details;
+                _panDistance = Offset.zero;
+                _panAxis = null;
+                _resizing = false;
+              }
+              ..onUpdate = (details) {
+                if (_panStart == null) return;
+                _panDistance += details.delta;
+                if (_panAxis == null && _panDistance == Offset.zero) return;
+                if (_panAxis == null) {
+                  _panAxis = _panDistance.dx.abs() > _panDistance.dy.abs()
+                      ? Axis.horizontal
+                      : Axis.vertical;
+                  final rows = _rowScroll[_selected]!;
+                  _resizing =
+                      _panAxis == Axis.vertical &&
+                      (!_expanded ||
+                          (details.delta.dy > 0 && rows.position.pixels <= 0));
+                  if (!_resizing) {
+                    final position = _panAxis == Axis.horizontal
+                        ? _pages.position
+                        : rows.position;
+                    _scrollDrag = position.drag(
+                      _panStart!,
+                      () => _scrollDrag = null,
+                    );
+                  }
+                }
+                // A downward row drag hands back to the sheet when it reaches the top.
+                if (_panAxis == Axis.vertical &&
+                    !_resizing &&
+                    details.delta.dy > 0 &&
+                    _rowScroll[_selected]!.position.pixels <= 0) {
+                  _scrollDrag?.cancel();
+                  _scrollDrag = null;
+                  _resizing = true;
+                  _panDistance = Offset(0, details.delta.dy);
+                }
+                if (_resizing) {
+                  setState(() {
+                    _instantHeight = false;
+                    _dragHeight = ((_dragHeight ?? fitted) - details.delta.dy)
+                        .clamp(_handleHeight, maximum);
+                  });
+                } else {
+                  final horizontal = _panAxis == Axis.horizontal;
+                  _scrollDrag?.update(
+                    DragUpdateDetails(
+                      sourceTimeStamp: details.sourceTimeStamp,
+                      delta: horizontal
+                          ? Offset(details.delta.dx, 0)
+                          : Offset(0, details.delta.dy),
+                      primaryDelta: horizontal
+                          ? details.delta.dx
+                          : details.delta.dy,
+                      globalPosition: details.globalPosition,
+                      localPosition: details.localPosition,
+                    ),
+                  );
+                }
+              }
+              ..onEnd = (details) {
+                if (_panStart == null) return;
+                _panStart = null;
+                if (!_resizing) {
+                  final horizontal = _panAxis == Axis.horizontal;
+                  final velocity = horizontal
+                      ? details.velocity.pixelsPerSecond.dx
+                      : details.velocity.pixelsPerSecond.dy;
+                  _scrollDrag?.end(
+                    DragEndDetails(
+                      velocity: Velocity(
+                        pixelsPerSecond: horizontal
+                            ? Offset(velocity, 0)
+                            : Offset(0, velocity),
+                      ),
+                      primaryVelocity: velocity,
+                    ),
+                  );
+                  _scrollDrag = null;
+                  return;
+                }
+                _settleResize(
+                  _panDistance.dy,
+                  details.velocity.pixelsPerSecond.dy,
+                );
+              }
+              ..onCancel = _cancelPan;
+          },
+        ),
+      },
+      // This coordinator admits the dominant axis once; the inner viewports
+      // retain scrolling/semantics/physics without racing pointer recognizers.
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(
+          context,
+        ).copyWith(dragDevices: const {}),
+        child: child,
+      ),
+    ),
+  );
+
+  void _settleResize(double distance, double velocity) {
+    final direction = _swipeDirection(distance, velocity);
+    if (direction > 0) {
+      _close();
+    } else {
+      setState(() {
+        if (direction < 0) _expanded = true;
+        _dragHeight = null;
+      });
+    }
+  }
+
+  bool _readerScroll(
+    ScrollNotification notification,
+    double fitted,
+    double maximum,
+  ) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _readerDragDistance = 0;
+      _readerStartHeight = null;
+    } else if (notification is OverscrollNotification &&
+        notification.dragDetails != null &&
+        notification.overscroll < 0) {
+      _readerStartHeight ??= fitted;
+      _readerDragDistance -= notification.overscroll;
+      setState(() {
+        _instantHeight = false;
+        _dragHeight = (_readerStartHeight! - _readerDragDistance).clamp(
+          _handleHeight,
+          maximum,
+        );
+      });
+    } else if (notification is ScrollUpdateNotification &&
+        notification.dragDetails != null &&
+        _readerDragDistance > 0 &&
+        (notification.scrollDelta ?? 0) > 0) {
+      _readerDragDistance = math.max(
+        0,
+        _readerDragDistance - notification.scrollDelta!,
+      );
+      setState(
+        () => _dragHeight = _readerDragDistance == 0
+            ? null
+            : (_readerStartHeight! - _readerDragDistance).clamp(
+                _handleHeight,
+                maximum,
+              ),
+      );
+    } else if (notification is ScrollEndNotification &&
+        _readerDragDistance > 0) {
+      final distance = _readerDragDistance;
+      _readerDragDistance = 0;
+      _readerStartHeight = null;
+      _settleResize(distance, notification.dragDetails?.primaryVelocity ?? 0);
+    }
+    return false;
+  }
+
+  Widget _handle() {
     final label = _expanded ? 'Collapse drawer' : 'Expand drawer';
     void toggle({bool keyboard = false}) => setState(() {
       _instantHeight = keyboard;
@@ -226,72 +464,39 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
       onDecrease: _expanded ? toggle : null,
       child: Tooltip(
         message: label,
-        // Flutter ends an accepted drag on pointer cancellation too. Clear the
-        // resize first so an interrupted system gesture cannot dismiss work.
-        child: Listener(
-          onPointerCancel: (_) => setState(() => _dragHeight = null),
-          child: GestureDetector(
-            onVerticalDragStart: (_) => setState(() {
-              _instantHeight = false;
-              _dragHeight = fitted;
-              _dragDistance = 0;
-            }),
-            onVerticalDragUpdate: (details) => setState(() {
-              _dragDistance += details.delta.dy;
-              _dragHeight = ((_dragHeight ?? fitted) - details.delta.dy).clamp(
-                _handleHeight,
-                maximum,
-              );
-            }),
-            onVerticalDragEnd: (details) {
-              if (_dragHeight == null) return;
-              final velocity = details.primaryVelocity ?? 0;
-              final movement = velocity.abs() > 250 ? velocity : _dragDistance;
-              final settle = velocity.abs() > 250 || _dragDistance.abs() >= 56;
-              if (settle && movement > 0) {
-                _close();
-              } else {
-                setState(() {
-                  if (settle) _expanded = true;
-                  _dragHeight = null;
-                });
-              }
-            },
-            onVerticalDragCancel: () => setState(() => _dragHeight = null),
-            child: Focus(
-              canRequestFocus: false,
-              onKeyEvent: (_, event) {
-                if (event is KeyDownEvent &&
-                    event.logicalKey == LogicalKeyboardKey.escape) {
-                  _close(keyboard: true);
-                  return KeyEventResult.handled;
-                }
-                if (event is KeyDownEvent &&
-                    (event.logicalKey == LogicalKeyboardKey.enter ||
-                        event.logicalKey == LogicalKeyboardKey.space)) {
-                  toggle(keyboard: true);
-                  return KeyEventResult.handled;
-                }
-                return KeyEventResult.ignored;
-              },
-              child: StudioButtonPress(
-                child: TextButton(
-                  key: const ValueKey('live-work-handle'),
-                  onPressed: toggle,
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(double.infinity, _handleHeight),
-                    padding: EdgeInsets.zero,
-                    shape: const RoundedRectangleBorder(),
-                  ),
-                  child: ExcludeSemantics(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
+        child: Focus(
+          canRequestFocus: false,
+          onKeyEvent: (_, event) {
+            if (event is KeyDownEvent &&
+                event.logicalKey == LogicalKeyboardKey.escape) {
+              _close(keyboard: true);
+              return KeyEventResult.handled;
+            }
+            if (event is KeyDownEvent &&
+                (event.logicalKey == LogicalKeyboardKey.enter ||
+                    event.logicalKey == LogicalKeyboardKey.space)) {
+              toggle(keyboard: true);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: StudioButtonPress(
+            child: TextButton(
+              key: const ValueKey('live-work-handle'),
+              onPressed: toggle,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(double.infinity, _handleHeight),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: EdgeInsets.zero,
+                shape: const RoundedRectangleBorder(),
+              ),
+              child: ExcludeSemantics(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
@@ -305,6 +510,12 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   @override
   void dispose() {
     ++_generation;
+    _panStart = null;
+    _barDistance = null;
+    _scrollDrag?.cancel();
+    for (final controller in _rowScroll.values) {
+      controller.dispose();
+    }
     _pages.dispose();
     _reveal.dispose();
     _split.dispose();
@@ -421,98 +632,104 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                     SizedBox(
                       key: ValueKey(('live-work-tab-slot', index, overlay)),
                       width: widths[index],
-                      child: ClipRect(
-                        child: OverflowBox(
-                          alignment: index == 0
-                              ? Alignment.centerLeft
-                              : Alignment.centerRight,
-                          minHeight: height + 12,
-                          maxHeight: height + 12,
-                          minWidth: math.min(width / 2, widths[index]),
-                          maxWidth: math.max(width / 2, widths[index]),
-                          child: Opacity(
-                            opacity: tabs.length == 2 && index != _singleTab
-                                ? split
-                                : 1,
-                            child: Semantics(
-                              button: true,
-                              expanded: _open && _selected == index,
-                              label: labels[index],
-                              child: StudioButtonPress(
-                                child: TextButton(
-                                  key: ValueKey((
-                                    'live-work-tab',
-                                    index,
-                                    overlay,
-                                  )),
-                                  onPressed: () => _select(index),
-                                  style: TextButton.styleFrom(
-                                    minimumSize: Size.zero,
-                                    padding: const EdgeInsets.fromLTRB(
-                                      8,
-                                      12,
-                                      8,
-                                      0,
-                                    ),
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    foregroundColor: _open && _selected == index
-                                        ? tokens.accent
-                                        : tokens.muted,
-                                    shape: const RoundedRectangleBorder(),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      if (!large) ...[
-                                        SizedBox.square(
-                                          dimension: 16,
-                                          child: index == 0 && _refreshingAgents
-                                              ? const CircularProgressIndicator(
-                                                  strokeWidth: 1.5,
-                                                  semanticsLabel:
-                                                      'Refreshing subagents',
-                                                )
-                                              : Icon(
-                                                  index == 0
-                                                      ? Icons.people_outline
-                                                      : Icons.checklist,
-                                                  size: 16,
-                                                ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                      ],
-                                      Expanded(
-                                        child: Text(
-                                          labels[index],
-                                          maxLines: 2,
-                                          style: TextStyle(
-                                            fontSize: large ? 11 : 12,
-                                            height: 1.1,
-                                            fontWeight: FontWeight.w400,
-                                          ),
-                                        ),
+                      child: _tabGesture(
+                        index,
+                        ClipRect(
+                          child: OverflowBox(
+                            alignment: index == 0
+                                ? Alignment.centerLeft
+                                : Alignment.centerRight,
+                            minHeight: height + 12,
+                            maxHeight: height + 12,
+                            minWidth: math.min(width / 2, widths[index]),
+                            maxWidth: math.max(width / 2, widths[index]),
+                            child: Opacity(
+                              opacity: tabs.length == 2 && index != _singleTab
+                                  ? split
+                                  : 1,
+                              child: Semantics(
+                                button: true,
+                                expanded: _open && _selected == index,
+                                label: labels[index],
+                                child: StudioButtonPress(
+                                  child: TextButton(
+                                    key: ValueKey((
+                                      'live-work-tab',
+                                      index,
+                                      overlay,
+                                    )),
+                                    onPressed: () => _select(index),
+                                    style: TextButton.styleFrom(
+                                      minimumSize: Size.zero,
+                                      padding: const EdgeInsets.fromLTRB(
+                                        8,
+                                        12,
+                                        8,
+                                        0,
                                       ),
-                                      const SizedBox(width: 4),
-                                      if (large &&
-                                          index == 0 &&
-                                          _refreshingAgents)
-                                        const SizedBox.square(
-                                          dimension: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 1.5,
-                                            semanticsLabel:
-                                                'Refreshing subagents',
-                                          ),
-                                        )
-                                      else
-                                        Icon(
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      foregroundColor:
                                           _open && _selected == index
-                                              ? Icons
-                                                    .keyboard_arrow_down_rounded
-                                              : Icons.keyboard_arrow_up_rounded,
-                                          size: 16,
+                                          ? tokens.accent
+                                          : tokens.muted,
+                                      shape: const RoundedRectangleBorder(),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        if (!large) ...[
+                                          SizedBox.square(
+                                            dimension: 16,
+                                            child:
+                                                index == 0 && _refreshingAgents
+                                                ? const CircularProgressIndicator(
+                                                    strokeWidth: 1.5,
+                                                    semanticsLabel:
+                                                        'Refreshing subagents',
+                                                  )
+                                                : Icon(
+                                                    index == 0
+                                                        ? Icons.people_outline
+                                                        : Icons.checklist,
+                                                    size: 16,
+                                                  ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                        ],
+                                        Expanded(
+                                          child: Text(
+                                            labels[index],
+                                            maxLines: 2,
+                                            style: TextStyle(
+                                              fontSize: large ? 11 : 12,
+                                              height: 1.1,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                          ),
                                         ),
-                                    ],
+                                        const SizedBox(width: 4),
+                                        if (large &&
+                                            index == 0 &&
+                                            _refreshingAgents)
+                                          const SizedBox.square(
+                                            dimension: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 1.5,
+                                              semanticsLabel:
+                                                  'Refreshing subagents',
+                                            ),
+                                          )
+                                        else
+                                          Icon(
+                                            _open && _selected == index
+                                                ? Icons
+                                                      .keyboard_arrow_down_rounded
+                                                : Icons
+                                                      .keyboard_arrow_up_rounded,
+                                            size: 16,
+                                          ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -625,68 +842,102 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                                     height: fitted,
                                     child: Opacity(
                                       opacity: ready ? 1 : 0,
-                                      child: Material(
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.surfaceContainerLow,
-                                        shape: RoundedRectangleBorder(
-                                          side: BorderSide(
-                                            color: WingTokens.of(
-                                              context,
-                                            ).border,
+                                      child: _panelGesture(
+                                        fitted,
+                                        available,
+                                        Material(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.surfaceContainerLow,
+                                          shape: RoundedRectangleBorder(
+                                            side: BorderSide(
+                                              color: WingTokens.of(
+                                                context,
+                                              ).border,
+                                            ),
+                                            borderRadius: WingRadius.sheet,
                                           ),
-                                          borderRadius: WingRadius.sheet,
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: WingRadius.sheet,
-                                          child: Column(
-                                            children: [
-                                              _handle(fitted, available),
-                                              Expanded(
-                                                child: PageView(
-                                                  controller: _pages,
-                                                  pageSnapping: false,
-                                                  allowImplicitScrolling: true,
-                                                  physics: _WorkPagePhysics(
-                                                    reducedMotion: _reduced,
-                                                  ),
-                                                  onPageChanged: (page) {
-                                                    final id = _tabs[page];
-                                                    if (!_openingPages &&
-                                                        _selected != id) {
-                                                      setState(
-                                                        () => _selected = id,
-                                                      );
-                                                      if (id == 0) {
-                                                        _refreshAgents();
+                                          child: ClipRRect(
+                                            borderRadius: WingRadius.sheet,
+                                            child: Column(
+                                              children: [
+                                                _handle(),
+                                                Expanded(
+                                                  child: PageView(
+                                                    controller: _pages,
+                                                    pageSnapping: false,
+                                                    allowImplicitScrolling:
+                                                        true,
+                                                    physics: _WorkPagePhysics(
+                                                      reducedMotion: _reduced,
+                                                    ),
+                                                    onPageChanged: (page) {
+                                                      final id = _tabs[page];
+                                                      if (!_openingPages &&
+                                                          _selected != id) {
+                                                        setState(
+                                                          () => _selected = id,
+                                                        );
+                                                        if (id == 0) {
+                                                          _refreshAgents();
+                                                        }
                                                       }
-                                                    }
-                                                  },
-                                                  children: [
-                                                    for (final id in tabs)
-                                                      _WorkPage(
-                                                        key: PageStorageKey((
-                                                          'live-work-page',
-                                                          id,
-                                                        )),
-                                                        onHeight: (value) =>
-                                                            _measureContent(
-                                                              id,
-                                                              value,
+                                                    },
+                                                    children: [
+                                                      for (final id in tabs)
+                                                        _WorkPage(
+                                                          key: PageStorageKey((
+                                                            'live-work-page',
+                                                            id,
+                                                          )),
+                                                          scrollController:
+                                                              _rowScroll[id]!,
+                                                          onHeight: (value) =>
+                                                              _measureContent(
+                                                                id,
+                                                                value,
+                                                              ),
+                                                          summary: id == 0
+                                                              ? widget
+                                                                    .subagentSummary
+                                                              : widget
+                                                                    .taskSummary,
+                                                          child: NotificationListener<ScrollNotification>(
+                                                            onNotification:
+                                                                (
+                                                                  notification,
+                                                                ) => _readerScroll(
+                                                                  notification,
+                                                                  fitted,
+                                                                  available,
+                                                                ),
+                                                            child: ScrollConfiguration(
+                                                              // Nested source readers keep their own scrolling
+                                                              // once the panel has reached full height.
+                                                              behavior:
+                                                                  _expanded
+                                                                  ? ScrollConfiguration.of(
+                                                                      context,
+                                                                    )
+                                                                  : ScrollConfiguration.of(
+                                                                      context,
+                                                                    ).copyWith(
+                                                                      dragDevices:
+                                                                          const {},
+                                                                    ),
+                                                              child: id == 0
+                                                                  ? widget
+                                                                        .subagents
+                                                                  : widget
+                                                                        .tasks,
                                                             ),
-                                                        summary: id == 0
-                                                            ? widget
-                                                                  .subagentSummary
-                                                            : widget
-                                                                  .taskSummary,
-                                                        child: id == 0
-                                                            ? widget.subagents
-                                                            : widget.tasks,
-                                                      ),
-                                                  ],
+                                                          ),
+                                                        ),
+                                                    ],
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
                                       ),
@@ -729,13 +980,60 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
   );
 }
 
+/// Admit compact-sheet drags before text's tap-and-pan selection recognizer
+/// claims movement. A settled long press has already rejected this recognizer,
+/// and expanded nested readers retain their native scrolling gestures.
+class _WorkPanelPan extends PanGestureRecognizer {
+  _WorkPanelPan({super.debugOwner});
+  int? _pointer;
+  Offset? _origin;
+  bool _canAdmit = false;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    if (_pointer != null) return;
+    _pointer = event.pointer;
+    _origin = event.position;
+    _canAdmit = true;
+    super.addAllowedPointer(event);
+  }
+
+  void admit(PointerMoveEvent event, {required bool vertical}) {
+    if (!_canAdmit || event.pointer != _pointer || _origin == null) return;
+    final distance = event.position - _origin!;
+    final slop = gestureSettings?.touchSlop ?? kTouchSlop;
+    if (distance.distance <= slop ||
+        (!vertical && distance.dy.abs() >= distance.dx.abs())) {
+      return;
+    }
+    _canAdmit = false;
+    resolve(GestureDisposition.accepted);
+  }
+
+  @override
+  void rejectGesture(int pointer) {
+    if (pointer == _pointer) _canAdmit = false;
+    super.rejectGesture(pointer);
+  }
+
+  @override
+  void didStopTrackingLastPointer(int pointer) {
+    _pointer = null;
+    _origin = null;
+    _canAdmit = false;
+    super.didStopTrackingLastPointer(pointer);
+  }
+}
+
 class _WorkPage extends StatefulWidget {
   const _WorkPage({
     super.key,
     required this.child,
     required this.summary,
     required this.onHeight,
+    required this.scrollController,
   });
+  final ScrollController scrollController;
   final Widget child;
   final Widget summary;
   final ValueChanged<double> onHeight;
@@ -780,6 +1078,7 @@ class _WorkPageState extends State<_WorkPage>
         LayoutId(
           id: 1,
           child: SingleChildScrollView(
+            controller: widget.scrollController,
             child: _WorkContentSize(
               onHeight: (height) => _measure(body: height),
               child: Padding(

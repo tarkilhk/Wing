@@ -15,10 +15,13 @@ Feature ID: `chat-activity`.
 
 Open Activity from a conversation. Inspect tools, requests and saved results. During active work open the Agents or Tasks tab, inspect a child, and return while the parent continues.
 
-In the Subagents/Tasks drawer above the composer, swipe the top handle upward to
-maximize or downward to close from either height. Tapping the handle toggles
-compact/expanded height. Rows scroll independently; closing keeps the draft and
-reopening starts compact.
+Swipe up on either Subagents/Tasks bar zone above the composer to open that
+category maximized. In the drawer, swipe anywhere upward to maximize or downward
+to close. Diagonal swipes follow their larger component: sideways switches pages,
+vertical movement resizes or scrolls. At full height, rows scroll upward and back
+down; continuing downward from their top closes the drawer. The small top handle
+also toggles compact/expanded height on tap. Closing keeps the draft; reopening
+by tap starts compact.
 
 ## Driving it with Wing harnesses
 
@@ -39,8 +42,8 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Drawer gestures:** the shared dock and production conversation route exercise
   upward expansion and downward dismissal for both categories, fixed composer
   geometry and compact reopening. The dock suite also checks slow dragging,
-  short flicks, cancellation and independent row scrolling in both themes at
-  ordinary and enlarged text.
+  short flicks, cancellation, both bar zones, dominant diagonal direction and
+  row scrolling/dismissal handoff in both themes at ordinary and enlarged text.
 
   ```sh
   flutter test --no-pub test/profile_live_work_dock_test.dart test/profile_live_work_route_test.dart

@@ -199,20 +199,6 @@ void main() {
         await tester.tap(tab(1, overlay: false));
         await tester.pumpAndSettle();
         final compact = tester.getRect(panel);
-        final summary = tester.getRect(find.text('Task summary'));
-        final first = tester.getTopLeft(
-          find.text('Task 0: research metric definitions'),
-        );
-        await tester.drag(find.byType(PageView), const Offset(0, -140));
-        await tester.pumpAndSettle();
-        expect(tester.getRect(find.text('Task summary')), summary);
-        expect(tester.getRect(panel), compact);
-        expect(
-          tester
-              .getTopLeft(find.text('Task 0: research metric definitions'))
-              .dy,
-          lessThan(first.dy),
-        );
         final gesture = await tester.startGesture(tester.getCenter(handle));
         await gesture.moveBy(const Offset(0, -20));
         await tester.pump();
@@ -229,6 +215,20 @@ void main() {
         expect(expanded.bottom, compact.bottom);
         expect(find.byTooltip('Collapse drawer'), findsOneWidget);
         expect(tester.getRect(find.byKey(const ValueKey('draft'))), composer);
+        final summary = tester.getRect(find.text('Task summary'));
+        final first = tester.getTopLeft(
+          find.text('Task 0: research metric definitions'),
+        );
+        await tester.drag(find.byType(PageView), const Offset(0, -140));
+        await tester.pumpAndSettle();
+        expect(tester.getRect(find.text('Task summary')), summary);
+        expect(tester.getRect(panel), expanded);
+        expect(
+          tester
+              .getTopLeft(find.text('Task 0: research metric definitions'))
+              .dy,
+          lessThan(first.dy),
+        );
         await picture(tester, '${brightness.name}-$scale-tasks-expanded');
         await tester.tap(tab(0));
         await tester.pumpAndSettle();
@@ -340,6 +340,190 @@ void main() {
       });
     }
   }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('swipe up either dock zone ${brightness.name} $scale', (
+        tester,
+      ) async {
+        await show(
+          tester,
+          brightness: brightness,
+          scale: scale,
+          reduced: scale == 2,
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('draft')),
+          'Keep draft',
+        );
+        final composer = tester.getRect(find.byKey(const ValueKey('draft')));
+        final panel = find.byKey(const ValueKey('live-work-panel'));
+        final handle = find.byKey(const ValueKey('live-work-handle'));
+        for (final category in [0, 1]) {
+          await tester.fling(
+            tab(category, overlay: false),
+            const Offset(35, -70),
+            1000,
+          );
+          await tester.pumpAndSettle();
+          expect(dock.currentState!.isOpen, isTrue);
+          expect(
+            tester.widget<PageView>(find.byType(PageView)).controller!.page,
+            category,
+          );
+          expect(tester.getRect(panel).top, closeTo(8, 1));
+          expect(tester.getRect(find.byKey(const ValueKey('draft'))), composer);
+          await picture(
+            tester,
+            '${brightness.name}-$scale-$category-zone-expanded',
+          );
+
+          await tester.tap(handle);
+          await tester.pumpAndSettle();
+          expect(tester.getSize(panel).height, lessThanOrEqualTo(320));
+          await tester.drag(tab(category), const Offset(0, -100));
+          await tester.pumpAndSettle();
+          expect(tester.getRect(panel).top, closeTo(8, 1));
+          // Swiping the other zone selects its content as well as maximizing.
+          await tester.fling(tab(1 - category), const Offset(0, -70), 1000);
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<PageView>(find.byType(PageView)).controller!.page,
+            1 - category,
+          );
+          expect(tester.getRect(panel).top, closeTo(8, 1));
+          await tester.tap(tab(1 - category));
+          await tester.pumpAndSettle();
+          expect(find.byType(PageView), findsNothing);
+          expect(find.text('Keep draft'), findsOneWidget);
+        }
+        // An interrupted or downward swipe cannot open a folded drawer.
+        final cancelled = await tester.startGesture(
+          tester.getCenter(tab(0, overlay: false)),
+        );
+        await cancelled.moveBy(const Offset(0, -20));
+        await cancelled.moveBy(const Offset(0, -100));
+        await cancelled.cancel();
+        await tester.pumpAndSettle();
+        expect(find.byType(PageView), findsNothing);
+        await tester.fling(tab(1, overlay: false), const Offset(0, 70), 1000);
+        await tester.pumpAndSettle();
+        expect(find.byType(PageView), findsNothing);
+        await tester.fling(
+          tab(0, overlay: false),
+          const Offset(100, -70),
+          1000,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(PageView), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('panel uses dominant swipe axis ${brightness.name} $scale', (
+        tester,
+      ) async {
+        await show(
+          tester,
+          brightness: brightness,
+          scale: scale,
+          reduced: scale == 2,
+        );
+        final panel = find.byKey(const ValueKey('live-work-panel'));
+        final handle = find.byKey(const ValueKey('live-work-handle'));
+        final composer = tester.getRect(find.byKey(const ValueKey('draft')));
+        for (final category in [0, 1]) {
+          await tester.tap(tab(category, overlay: false));
+          await tester.pumpAndSettle();
+          expect(tester.getSize(handle).height, 24);
+          // A diagonal starting in the rows primarily moves vertically.
+          await tester.fling(
+            find.byType(PageView),
+            const Offset(60, -100),
+            1000,
+          );
+          await tester.pumpAndSettle();
+          expect(tester.getRect(panel).top, closeTo(8, 1));
+          expect(
+            tester.widget<PageView>(find.byType(PageView)).controller!.page,
+            category,
+          );
+          // The larger horizontal component switches categories, without resize.
+          await tester.fling(
+            find.byType(PageView),
+            Offset(category == 0 ? -180 : 180, 100),
+            1000,
+          );
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<PageView>(find.byType(PageView)).controller!.page,
+            1 - category,
+          );
+          expect(tester.getRect(panel).top, closeTo(8, 1));
+          final summary = find.text(
+            category == 0 ? 'Task summary' : 'Agent summary',
+          );
+          await tester.fling(summary, const Offset(60, 100), 1000);
+          await tester.pumpAndSettle();
+          expect(find.byType(PageView), findsNothing);
+          expect(tester.getRect(find.byKey(const ValueKey('draft'))), composer);
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('expanded rows scroll then hand downward motion to the panel', (
+    tester,
+  ) async {
+    await show(tester);
+    await tester.fling(tab(1, overlay: false), const Offset(30, -100), 1000);
+    await tester.pumpAndSettle();
+    final panel = find.byKey(const ValueKey('live-work-panel'));
+    final expanded = tester.getRect(panel);
+    final scroll = find
+        .descendant(
+          of: find.byType(PageView),
+          matching: find.byType(SingleChildScrollView),
+        )
+        .last;
+    final position = tester
+        .widget<SingleChildScrollView>(scroll)
+        .controller!
+        .position;
+    await tester.drag(scroll, const Offset(30, -180));
+    await tester.pumpAndSettle();
+    expect(position.pixels, greaterThan(30));
+    final before = position.pixels;
+    await tester.drag(scroll, const Offset(10, 30));
+    await tester.pumpAndSettle();
+    expect(position.pixels, lessThan(before));
+    expect(position.pixels, greaterThan(0));
+    expect(tester.getRect(panel), expanded);
+    await tester.drag(scroll, const Offset(60, 400));
+    await tester.pumpAndSettle();
+    expect(find.byType(PageView), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('swiped subagents show held read feedback on the first frame', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    await show(tester, refresh: () => gate.future);
+    await tester.fling(tab(0, overlay: false), const Offset(35, -100), 1000);
+    await tester.pump();
+    expect(dock.currentState!.isOpen, isTrue);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
 
   testWidgets('keyboard grip resizes immediately and reopening resets height', (
     tester,
@@ -656,14 +840,18 @@ void main() {
           matching: find.byType(SingleChildScrollView),
         )
         .last;
-    final contentBefore = tester.getTopLeft(find.text('Task content')).dy;
+    await tester.tap(find.byKey(const ValueKey('live-work-handle')));
+    await tester.pumpAndSettle();
+    final expandedContent = tester.getTopLeft(find.text('Task content')).dy;
     await tester.drag(scroll, const Offset(0, -100));
     await tester.pumpAndSettle();
     expect(
       tester.getTopLeft(find.text('Task content')).dy,
-      lessThan(contentBefore),
+      lessThan(expandedContent),
     );
     expect(pages.page, 1);
+    await tester.tap(find.byKey(const ValueKey('live-work-handle')));
+    await tester.pumpAndSettle();
     update(() => taskHeight = 120);
     await tester.pumpAndSettle();
     expect(tester.getSize(panel).height, greaterThan(agentHeight));

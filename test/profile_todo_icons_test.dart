@@ -500,6 +500,30 @@ void main() {
       await tester.tap(expand);
       await tester.pumpAndSettle();
       expect(find.byType(SelectableText), findsOneWidget);
+      final contentScroll = find.descendant(
+        of: running,
+        matching: find.byKey(const ValueKey('activity-content-scroll')),
+      );
+      await tester.drag(contentScroll, const Offset(25, -140));
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byKey(const ValueKey('live-work-panel'))).top,
+        closeTo(8, 1),
+      );
+      await tester.drag(contentScroll, const Offset(25, -140));
+      await tester.pumpAndSettle();
+      final reader = tester.state<ScrollableState>(
+        find
+            .descendant(of: contentScroll, matching: find.byType(Scrollable))
+            .first,
+      );
+      expect(reader.position.pixels, greaterThan(0));
+      await tester.longPressAt(tester.getRect(contentScroll).center);
+      await tester.pumpAndSettle();
+      final selected = tester.widget<EditableText>(
+        find.descendant(of: running, matching: find.byType(EditableText)),
+      );
+      expect(selected.controller.selection.isCollapsed, isFalse);
       expect(
         tester.getTopLeft(find.byKey(const ValueKey('composer'))),
         composerTop,
@@ -512,8 +536,11 @@ void main() {
         find.descendant(of: running, matching: find.byTooltip('Collapse task')),
         findsOneWidget,
       );
-      await tester.tap(find.byKey(const ValueKey(('live-work-tab', 1, true))));
+      // A downward swipe inside the nested reader returns to its start, then
+      // closes the same drawer rather than trapping movement in the text.
+      await tester.drag(contentScroll, const Offset(50, 1800));
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('live-work-panel')), findsNothing);
       await tester.tap(find.byKey(const ValueKey(('live-work-tab', 1, false))));
       await tester.pumpAndSettle();
       expect(

@@ -19,10 +19,12 @@ When their parent turn ends, completed subagents leave this drawer immediately.
 Their saved results remain in that turn's Activity → Agents tab. Running and
 queued background agents remain available until they finish.
 
-The summary stays fixed while the rows scroll. Swipe the top handle up to expand
-near full screen, or down to close from either compact or expanded height.
-Tapping it toggles the height. Reopening starts compact. Both Tasks and Subagents
-use this behavior.
+Swipe up on either bar zone to open that category near full screen. Swipe anywhere
+in an open drawer upward to expand or downward to close. Diagonal swipes follow
+the larger horizontal or vertical movement. At full height, rows scroll while the
+summary stays fixed; scroll back to the top and continue down to close. Tapping
+the smaller top handle toggles height. Reopening by tap starts compact. Both Tasks
+and Subagents use this behavior.
 
 Past answers retain their received Activity and Work details. Tools and agent
 results share the Timeline and Agents tabs within the same Activity. Activity shows the
