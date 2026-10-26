@@ -887,9 +887,10 @@ void main() {
         keyboard.value = 260;
         await settle();
         expect(tester.getRect(composer).bottom, lessThanOrEqualTo(844 - 260));
+        expect(tester.getRect(drawer).top, greaterThanOrEqualTo(8));
         expect(
           tester.getRect(find.byType(PageView)).top,
-          greaterThanOrEqualTo(56),
+          closeTo(tester.getRect(handle).bottom, .1),
         );
         await picture('keyboard');
         await tester.tap(handle);
