@@ -4,9 +4,128 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/markdown_code_block.dart';
+import 'package:wing/core/widgets/adaptive_markdown_table.dart';
+import 'package:wing/core/widgets/markdown_message_content.dart';
 import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 
 void main() {
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final grid in [true, false]) {
+        testWidgets(
+          'table keeps explicit ${grid ? 'grid' : 'rows'} during message updates '
+          '${brightness.name} $scale',
+          (tester) async {
+            tester.view.physicalSize = const Size(390, 844);
+            tester.view.devicePixelRatio = 1;
+            addTearDown(tester.view.reset);
+            const small = '| A | B |\n| --- | --- |\n| a | b |';
+            const wide =
+                '$small\n'
+                '| A longer value arriving in the chat | Another long value |';
+            var source = grid ? small : wide;
+            var streaming = true;
+            var nextMessage = false;
+            late StateSetter update;
+            await tester.pumpMarkdownWidget(
+              MaterialApp(
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: SingleChildScrollView(
+                    child: StatefulBuilder(
+                      builder: (context, setState) {
+                        update = setState;
+                        return Column(
+                          children: [
+                            MarkdownMessageContent(
+                              data: source,
+                              streaming: streaming,
+                            ),
+                            if (nextMessage)
+                              const MarkdownMessageContent(data: 'Next reply.'),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            );
+            final label = grid ? 'Read as table' : 'Read as stacked rows';
+            await tester.tap(find.byTooltip(label));
+            await tester.pump();
+            final tableState = tester.state(find.byType(AdaptiveMarkdownTable));
+            void expectSelection() {
+              expect(
+                tester.state(find.byType(AdaptiveMarkdownTable)),
+                same(tableState),
+              );
+              expect(
+                tester
+                    .widget<IconButton>(
+                      find.widgetWithIcon(
+                        IconButton,
+                        grid
+                            ? Icons.table_chart_outlined
+                            : Icons.view_agenda_outlined,
+                      ),
+                    )
+                    .isSelected,
+                isTrue,
+              );
+              expect(find.byType(Table), grid ? findsOneWidget : findsNothing);
+              expect(tester.takeException(), isNull);
+            }
+
+            expectSelection();
+            // New content crosses the automatic grid/rows threshold. It must
+            // not override an explicit selection in either direction.
+            update(() => source = grid ? wide : small);
+            await tester.pump();
+            await tester.settleMarkdown();
+            expectSelection();
+            update(() {
+              streaming = false;
+              nextMessage = true;
+            });
+            await tester.pump();
+            await tester.settleMarkdown();
+            expectSelection();
+            // The most recent explicit choice also survives later updates.
+            final otherLabel = grid ? 'Read as stacked rows' : 'Read as table';
+            await tester.tap(find.byTooltip(otherLabel));
+            await tester.pump();
+            update(() => source = grid ? small : wide);
+            await tester.pump();
+            await tester.settleMarkdown();
+            expect(
+              tester
+                  .widget<IconButton>(
+                    find.widgetWithIcon(
+                      IconButton,
+                      grid
+                          ? Icons.view_agenda_outlined
+                          : Icons.table_chart_outlined,
+                    ),
+                  )
+                  .isSelected,
+              isTrue,
+            );
+            expect(find.byType(Table), grid ? findsNothing : findsOneWidget);
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
   testWidgets(
     'saved user attachments display the prompt without expanded context',
     (tester) async {

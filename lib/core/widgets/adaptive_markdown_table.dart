@@ -25,7 +25,9 @@ class AdaptiveMarkdownTable extends StatefulWidget {
 
 class _TableState extends State<AdaptiveMarkdownTable> {
   final _scroll = ScrollController();
-  final _preferences = <bool, bool>{};
+  // Fit supplies the default; later content or layout changes must not replace
+  // the reader's explicit choice for this mounted table.
+  bool? _gridPreference;
 
   @override
   void dispose() {
@@ -42,9 +44,9 @@ class _TableState extends State<AdaptiveMarkdownTable> {
           ..._rows(child),
   ];
 
-  void _select(bool fits, bool grid) {
+  void _select(bool grid) {
     MarkdownContentWillChange(context).dispatch(context);
-    setState(() => _preferences[fits] = grid);
+    setState(() => _gridPreference = grid);
   }
 
   Widget _action(
@@ -107,7 +109,7 @@ class _TableState extends State<AdaptiveMarkdownTable> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final fits = naturalWidth <= constraints.maxWidth;
-        final grid = _preferences[fits] ?? fits;
+        final grid = _gridPreference ?? fits;
         final extra =
             math.max(0.0, constraints.maxWidth - naturalWidth) / columns;
         return Column(
@@ -126,13 +128,13 @@ class _TableState extends State<AdaptiveMarkdownTable> {
                   'Read as stacked rows',
                   Icons.view_agenda_outlined,
                   !grid,
-                  () => _select(fits, false),
+                  () => _select(false),
                 ),
                 _action(
                   'Read as table',
                   Icons.table_chart_outlined,
                   grid,
-                  () => _select(fits, true),
+                  () => _select(true),
                 ),
                 if (reading != null)
                   _action(

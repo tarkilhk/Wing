@@ -27,9 +27,11 @@ const phoneReadingTable = '''
 ''';
 
 class _ReadingFixture extends ProfileActionsFixture {
+  String content = phoneReadingTable;
+
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) => [
-    {'id': 1, 'role': 'assistant', 'content': phoneReadingTable},
+    {'id': 1, 'role': 'assistant', 'content': content},
   ];
 }
 
@@ -112,6 +114,34 @@ void main({
             findsNothing,
           );
           await capture?.call(tester, 'phone-table-${brightness.name}-$scale');
+          await tester.tap(find.byTooltip('Read as table'));
+          await tester.pump();
+          expect(
+            find.descendant(of: table, matching: find.byType(Table)),
+            findsOneWidget,
+          );
+          fixture.content = phoneReadingTable.replaceFirst(
+            'Today says',
+            'Today said',
+          );
+          await controller.refreshHistory(chat);
+          await tester.pump();
+          await tester.settleMarkdown();
+          expect(tester.state(table), same(tableState));
+          expect(
+            find.descendant(of: table, matching: find.byType(Table)),
+            findsOneWidget,
+          );
+          await capture?.call(
+            tester,
+            'phone-table-updated-${brightness.name}-$scale',
+          );
+          await tester.ensureVisible(find.byTooltip('Read as stacked rows'));
+          await tester.pump();
+          await tester.tap(find.byTooltip('Read as stacked rows'));
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(enter);
+          await tester.pump(const Duration(milliseconds: 300));
           await tester.tap(enter);
           await tester.pump();
           expect(field, findsNothing);
@@ -140,12 +170,11 @@ void main({
           await tester.pump();
           await tester.pumpAndSettle();
           expect(find.byTooltip('Exit reading mode'), findsOneWidget);
-          if (scale == 1) {
-            expect(
-              find.descendant(of: table, matching: find.byType(Table)),
-              findsOneWidget,
-            );
-          }
+          expect(
+            find.descendant(of: table, matching: find.byType(Table)),
+            findsNothing,
+            reason: 'Rotation must retain the most recent explicit choice.',
+          );
           await capture?.call(
             tester,
             'phone-reading-landscape-${brightness.name}-$scale',
@@ -218,6 +247,11 @@ void main({
           expect(find.byTooltip('Attach file'), findsOneWidget);
           await tester.tap(find.byTooltip('Collapse composer controls'));
           await tester.pumpAndSettle();
+          if (find.byTooltip('Enter reading mode').evaluate().isEmpty) {
+            await tester.tap(find.byTooltip('Latest'));
+            await tester.pumpAndSettle();
+            await tester.settleMarkdown();
+          }
           await tester.ensureVisible(find.byTooltip('Enter reading mode'));
           await tester.pump(const Duration(milliseconds: 300));
           await tester.tap(find.byTooltip('Enter reading mode'));

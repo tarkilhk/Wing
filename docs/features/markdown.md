@@ -7,7 +7,7 @@ Feature ID: `markdown`.
 ## Sub-features
 
 - `markdown.render` — Read partial and completed formatted content.
-- `markdown.tables` — Read wide tables as stacked header/value rows on narrow screens; use the icon controls to choose rows or a wrapped grid. Full screen enters the containing conversation’s reading mode.
+- `markdown.tables` — Read wide tables as stacked header/value rows on narrow screens; use the icon controls to choose rows or a wrapped grid. The latest explicit choice stays with the table through message updates, completion and rotation. Full screen enters the containing conversation’s reading mode.
 - `markdown.copy` — Select or copy exact code and output.
 - `markdown.reuse` — Retain current content through asynchronous rendering.
 
@@ -28,6 +28,10 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   Document assertions distinguish whole prose segments from the table cells'
   nested renderers. Growing tables must retain exact cell content and selection
   bounds and match a fresh adaptive-table render.
+  Table controls must retain the latest manual choice when arriving content
+  crosses the automatic fit threshold, when the reply completes and when
+  another reply appears. Phone-reading cases also exercise history updates and
+  rotation through the production conversation screen.
 
 - **Android `recents-code`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
 
