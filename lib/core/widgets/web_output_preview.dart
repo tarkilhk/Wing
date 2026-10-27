@@ -12,7 +12,7 @@ enum WebOutputFormat { mermaid, svg, html }
 class WebOutputPreview extends StatefulWidget {
   static const maxMermaidSourceLength = 50000;
   static const maxSvgSourceLength = 256 * 1024;
-  static const maxHtmlSourceLength = RemoteFilesClient.defaultMaxDownloadBytes;
+  static const maxHtmlSourceLength = maxFilePreviewBytes;
   static const viewType = 'com.tarkilhk.wing/mermaid_diagram';
 
   final String source;

@@ -8,6 +8,29 @@ import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/remote_files_client.dart';
 
 void main() {
+  for (final extension in ['png', 'svg']) {
+    test('large remote $extension can download but cannot render', () async {
+      final file = RemoteFileDownload(
+        filename: 'image.$extension',
+        bytes: Uint8List(maxFilePreviewBytes + 1),
+      );
+      final owner = ChatOutputsSession(
+        loadHistory: (_) async => throw UnimplementedError(),
+        download: (_) async => file,
+        readText: (_) async => throw UnimplementedError(),
+      );
+      addTearDown(owner.dispose);
+      final output = ChatOutput(
+        kind: ChatOutputKind.image,
+        path: '/srv/image.$extension',
+        url: null,
+        label: file.filename,
+      );
+      await expectLater(owner.prepare(output), throwsFormatException);
+      expect(await owner.download(output.path!), same(file));
+    });
+  }
+
   ChatOutputsSession imageHistory(
     String target,
     List<RemoteFileDownload> deliveries,
@@ -41,9 +64,8 @@ void main() {
         final target = switch (encoding) {
           'encoded' => 'data:image/png;base64,${'A' * (45 * 1024 * 1024)}',
           'base64' =>
-            'data:image/png;base64,${base64Encode(Uint8List(RemoteFilesClient.defaultMaxDownloadBytes + 1))}',
-          _ =>
-            'data:image/png,${'A' * RemoteFilesClient.defaultMaxDownloadBytes}%41',
+            'data:image/png;base64,${base64Encode(Uint8List(maxFilePreviewBytes + 1))}',
+          _ => 'data:image/png,${'A' * maxFilePreviewBytes}%41',
         };
         final deliveries = <RemoteFileDownload>[];
         final owner = imageHistory(target, deliveries);
@@ -70,23 +92,23 @@ void main() {
     );
   }
 
-  test('an embedded image at the decoded limit can preview and share', () async {
-    final deliveries = <RemoteFileDownload>[];
-    final owner = imageHistory(
-      'data:image/png;base64,${base64Encode(Uint8List(RemoteFilesClient.defaultMaxDownloadBytes))}',
-      deliveries,
-    );
-    await owner.load();
-    final preview = await owner.prepare(owner.observation.outputs.single);
-    expect(preview.kind, OutputPreviewKind.image);
-    expect(preview.file!.filename, 'image.png');
-    expect(
-      preview.file!.bytes.length,
-      RemoteFilesClient.defaultMaxDownloadBytes,
-    );
-    await owner.share(preview.file!);
-    expect(deliveries.single, same(preview.file));
-  });
+  test(
+    'an embedded image at the decoded limit can preview and share',
+    () async {
+      final deliveries = <RemoteFileDownload>[];
+      final owner = imageHistory(
+        'data:image/png;base64,${base64Encode(Uint8List(maxFilePreviewBytes))}',
+        deliveries,
+      );
+      await owner.load();
+      final preview = await owner.prepare(owner.observation.outputs.single);
+      expect(preview.kind, OutputPreviewKind.image);
+      expect(preview.file!.filename, 'image.png');
+      expect(preview.file!.bytes.length, maxFilePreviewBytes);
+      await owner.share(preview.file!);
+      expect(deliveries.single, same(preview.file));
+    },
+  );
 
   test(
     'percent-encoded SVG keeps its exact preview and shared bytes',

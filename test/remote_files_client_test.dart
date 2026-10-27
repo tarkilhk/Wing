@@ -1,5 +1,6 @@
 import 'package:wing/core/services/owned_remote_files.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -8,14 +9,25 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/remote_files_client.dart';
 
 class _StreamingClient extends http.BaseClient {
+  _StreamingClient({required this.declaredLength});
+
+  final bool declaredLength;
+  static const byteCount = 33 * 1024 * 1024;
+
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async =>
       http.StreamedResponse(
-        Stream<List<int>>.fromIterable([
-          [1, 2],
-          [3],
-        ]),
+        Stream<List<int>>.fromIterable(
+          List.generate(33, (index) {
+            final chunk = Uint8List(1024 * 1024);
+            chunk.first = index;
+            chunk.last = 255 - index;
+            return chunk;
+          }),
+        ),
         200,
+        contentLength: declaredLength ? byteCount : null,
+        headers: {'content-disposition': 'attachment; filename=delivery.zip'},
       );
 }
 
@@ -169,41 +181,33 @@ void main() {
     expect(download.bytes, [1, 2, 3]);
   });
 
-  test('download rejects a declared body above the mobile limit', () async {
-    final dashboard = dashboardWith(
-      (_) async => http.Response.bytes([1, 2, 3], 200),
-    );
-    final client = RemoteFilesClient(dashboard: dashboard, maxDownloadBytes: 2);
+  for (final declaredLength in [true, false]) {
+    test(
+      'downloads a 33 MiB file with declared length $declaredLength',
+      () async {
+        final dashboard = DashboardClient(
+          host: 'hermes.local',
+          port: 9119,
+          proxied: true,
+          httpClient: _StreamingClient(declaredLength: declaredLength),
+        );
+        addTearDown(dashboard.close);
+        final client = RemoteFilesClient(dashboard: dashboard);
 
-    await expectLater(
-      client.download(
-        '/srv/project/large.bin',
-        profileName: 'writer',
-        storedSessionId: 'chat-7',
-      ),
-      throwsA(isA<DashboardResponseTooLargeException>()),
+        final download = await client.download(
+          '/srv/project/delivery.zip',
+          profileName: 'writer',
+          storedSessionId: 'chat-7',
+        );
+        expect(download.filename, 'delivery.zip');
+        expect(download.bytes.length, _StreamingClient.byteCount);
+        for (var index = 0; index < 33; index++) {
+          expect(download.bytes[index * 1024 * 1024], index);
+          expect(download.bytes[(index + 1) * 1024 * 1024 - 1], 255 - index);
+        }
+      },
     );
-  });
-
-  test('download also bounds a chunked body without a declared size', () async {
-    final dashboard = DashboardClient(
-      host: 'hermes.local',
-      port: 9119,
-      proxied: true,
-      httpClient: _StreamingClient(),
-    );
-    addTearDown(dashboard.close);
-    final client = RemoteFilesClient(dashboard: dashboard, maxDownloadBytes: 2);
-
-    await expectLater(
-      client.download(
-        '/srv/project/chunked.bin',
-        profileName: 'writer',
-        storedSessionId: 'chat-7',
-      ),
-      throwsA(isA<DashboardResponseTooLargeException>()),
-    );
-  });
+  }
 
   test('download reduces encoded server filenames to a basename', () async {
     final dashboard = dashboardWith(

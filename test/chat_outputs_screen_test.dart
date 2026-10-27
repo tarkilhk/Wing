@@ -1239,7 +1239,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('This file exceeds the 32 MiB download limit.'),
+      find.text(
+        'This HTML file is too large to preview. Use Save or share to open it in another app.',
+      ),
       findsOneWidget,
     );
     expect(find.byType(WebOutputPreview), findsNothing);
@@ -1595,7 +1597,7 @@ void main() {
     expect(loads, 3);
   });
 
-  testWidgets('reports the 32 MiB limit on a narrow 200 percent layout', (
+  testWidgets('reports denied file access on a narrow 200 percent layout', (
     tester,
   ) async {
     tester.view.devicePixelRatio = 1;
@@ -1623,9 +1625,7 @@ void main() {
                 isComplete: true,
               ),
               download: (_) async =>
-                  throw const DashboardResponseTooLargeException(
-                    32 * 1024 * 1024,
-                  ),
+                  throw const DashboardHttpException(403, 'fs/download'),
               readText: (_) async => throw StateError('Unexpected preview'),
             ),
           ),
@@ -1639,7 +1639,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('This file exceeds the 32 MiB download limit.'),
+      find.text(
+        'Hermes denied access to this file. Ask Hermes for an accessible copy.',
+      ),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);

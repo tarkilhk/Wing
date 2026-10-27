@@ -29,7 +29,7 @@ try{localStorage.setItem('probe','yes')}catch(e){document.body.dataset.storage='
   final source =
       prefix +
       'x' *
-          (RemoteFilesClient.defaultMaxDownloadBytes -
+          (maxFilePreviewBytes -
               prefix.length -
               tail.length) +
       tail;

@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'connection_manager.dart';
-
 import 'remote_files_client.dart';
 
 class PdfDocument {
@@ -27,8 +25,7 @@ class PdfPreviewService {
   ) => PdfPreviewReader._(this, download);
 
   Future<PdfDocument> open(Uint8List bytes) async {
-    if (bytes.isEmpty ||
-        bytes.length > RemoteFilesClient.defaultMaxDownloadBytes) {
+    if (bytes.isEmpty || bytes.length > maxFilePreviewBytes) {
       throw StateError('This PDF could not be displayed.');
     }
     try {
@@ -146,10 +143,9 @@ final class PdfPreviewReader extends ChangeNotifier {
       }
     } catch (error) {
       if (_active) {
-        _error = error is DashboardResponseTooLargeException
-            ? 'This PDF exceeds the ${(error.maxBytes / (1024 * 1024)).round()} MiB download limit.'
-            : 'This PDF could not be displayed. Go back to open it in '
-                  'another app, or save/share it.';
+        _error =
+            'This PDF could not be displayed. Go back to open it in '
+            'another app, or save/share it.';
       }
     } finally {
       _loading = false;

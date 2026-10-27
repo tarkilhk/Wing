@@ -38,7 +38,8 @@ message, including its file paths.
 
 ## Download limits and temporary files
 
-Downloads have a 32 MiB limit. Embedded images also have a 32 MiB decoded limit;
+Downloads have no fixed size limit in Wing. In-app previews retain a 32 MiB
+budget for downloaded files. Embedded images have a 32 MiB decoded limit;
 oversized images cannot be previewed or shared. Other outputs remain available.
 Authenticated reads time out after 45 seconds and show a retryable error.
 

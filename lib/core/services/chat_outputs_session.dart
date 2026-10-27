@@ -217,6 +217,9 @@ final class ChatOutputsSession extends ChangeNotifier {
         if (uri == null) throw StateError('Invalid image link');
       }
       _requireActive();
+      if (file != null && file.bytes.length > maxFilePreviewBytes) {
+        throw const FormatException('Image attachment too large');
+      }
       if (file != null && _isSvgName(file.filename, path ?? output.url ?? '')) {
         return OutputPreview(
           kind: OutputPreviewKind.svg,

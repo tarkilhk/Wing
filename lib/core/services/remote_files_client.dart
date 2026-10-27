@@ -4,6 +4,9 @@ import 'dart:typed_data';
 import 'connection_manager.dart';
 import 'gateway_endpoint.dart';
 
+/// Budget for in-memory rendering and native preview bridges, not file saving.
+const maxFilePreviewBytes = 32 * 1024 * 1024;
+
 class RemoteTextPreview {
   final String path;
   final String text;
@@ -54,15 +57,9 @@ abstract class RemoteFilesDataSource {
 }
 
 class RemoteFilesClient implements RemoteFilesDataSource {
-  static const defaultMaxDownloadBytes = 32 * 1024 * 1024;
-
   final DashboardClient dashboard;
-  final int maxDownloadBytes;
 
-  RemoteFilesClient({
-    required this.dashboard,
-    this.maxDownloadBytes = defaultMaxDownloadBytes,
-  });
+  RemoteFilesClient({required this.dashboard});
 
   factory RemoteFilesClient.fromConnection(ConnectionAccess access) {
     final connection = access.connection;
@@ -125,7 +122,6 @@ class RemoteFilesClient implements RemoteFilesDataSource {
     final response = await dashboard.apiGetBytes(
       'fs/download',
       queryParameters: {'path': path, ...owner},
-      maxBytes: maxDownloadBytes,
     );
     final disposition = response.headers['content-disposition'] ?? '';
     final encoded = RegExp(

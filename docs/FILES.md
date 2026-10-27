@@ -48,7 +48,7 @@ Tap an assistant file or media result to preview it. Wing supports images, PDFs,
 Markdown, diagrams, self-contained HTML and common audio/video formats.
 Markdown opens as formatted content with icon-only Raw/formatted, copy, share
 and download controls. **Download** lets you choose where Android saves the file;
-downloads are capped at **32 MiB**. Cancelling the destination picker saves
+Wing imposes no fixed download-size limit. Cancelling the destination picker saves
 nothing. Older server file links may no longer be available.
 
 [Find messages and outputs](EXECUTION_FIND_AND_OUTPUTS.md) · [File viewer details](OPENING_OUTPUT_FILES.md)

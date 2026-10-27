@@ -158,7 +158,7 @@ Future<ImageResource> acquireUserAttachmentImage(
       }
     }
   }
-  if (decodedLength > RemoteFilesClient.defaultMaxDownloadBytes) {
+  if (decodedLength > maxFilePreviewBytes) {
     throw const FormatException('Image attachment too large');
   }
   return (mimeType: data.mimeType, bytes: data.contentAsBytes());
@@ -220,8 +220,7 @@ void _admitPercentImageContent(String target, int start, int encodedLimit) {
     }
     encoded += textCount;
     decoded += byteCount;
-    if (encoded > encodedLimit ||
-        decoded > RemoteFilesClient.defaultMaxDownloadBytes) {
+    if (encoded > encodedLimit || decoded > maxFilePreviewBytes) {
       throw const FormatException('Image attachment too large');
     }
   }
@@ -273,7 +272,7 @@ Future<ImageResource> _acquireImageResource(
     throw const FormatException('Image unavailable');
   }
   final bytes = await loadRemote(target);
-  if (bytes.length > RemoteFilesClient.defaultMaxDownloadBytes) {
+  if (bytes.length > maxFilePreviewBytes) {
     throw const FormatException('Image attachment too large');
   }
   return ImageResource.bytes(bytes);
@@ -328,8 +327,9 @@ final class HtmlPreviewReader extends ChangeNotifier {
       final file = await _download();
       if (!_active) return;
       _file = file;
-      if (file.bytes.length > RemoteFilesClient.defaultMaxDownloadBytes) {
-        _error = 'This file exceeds the 32 MiB download limit.';
+      if (file.bytes.length > maxFilePreviewBytes) {
+        _error =
+            'This HTML file is too large to preview. Use Save or share to open it in another app.';
       } else {
         try {
           _source = utf8.decode(file.bytes);

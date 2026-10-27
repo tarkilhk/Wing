@@ -2,15 +2,23 @@ import 'dart:async';
 import 'package:wing/core/services/owned_remote_files.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:wing/core/models/chat_output.dart';
+import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/remote_file_saver.dart';
 import 'package:wing/core/services/remote_files_client.dart';
+import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/deliverable_attachment.dart';
 
 class _Picker extends FilePickerPlatform {
   String? filename;
   Uint8List? data;
   Uri? destination;
   Object? error;
+  Completer<Uri?>? pending;
 
   @override
   Future<Uri?> saveFile({
@@ -27,7 +35,7 @@ class _Picker extends FilePickerPlatform {
     filename = fileName;
     data = bytes;
     if (error != null) throw error!;
-    return destination;
+    return pending == null ? destination : await pending!.future;
   }
 }
 
@@ -77,18 +85,91 @@ void main() {
     picker.error = PlatformException(code: 'write_failed');
     await expectLater(saveRemoteFile(file), throwsA(isA<PlatformException>()));
   });
-  test('oversized bytes never reach the picker', () async {
-    await expectLater(
-      saveRemoteFile(
-        RemoteFileDownload(
-          filename: 'too-large.bin',
-          bytes: Uint8List(RemoteFilesClient.defaultMaxDownloadBytes + 1),
-        ),
-      ),
-      throwsStateError,
+  test('saves files larger than 32 MiB without a size gate', () async {
+    picker.destination = Uri.parse('content://documents/delivery.zip');
+    final largeFile = RemoteFileDownload(
+      filename: 'delivery.zip',
+      bytes: Uint8List(33 * 1024 * 1024),
     );
-    expect(picker.filename, isNull);
+    expect(await saveRemoteFile(largeFile), isTrue);
+    expect(picker.filename, largeFile.filename);
+    expect(picker.data, same(largeFile.bytes));
   });
+
+  for (final dark in [false, true]) {
+    testWidgets(
+      'file card saves 33 MiB with feedback through picker: dark=$dark',
+      (tester) async {
+        final response = Completer<http.Response>();
+        picker.pending = Completer<Uri?>();
+        final source = RemoteFilesClient(
+          dashboard: DashboardClient(
+            host: 'hermes.local',
+            port: 9119,
+            proxied: true,
+            httpClient: MockClient((request) {
+              expect(request.url.path, '/api/fs/download');
+              expect(request.url.queryParameters['profile'], 'writer');
+              expect(request.url.queryParameters['session_id'], 'chat-7');
+              return response.future;
+            }),
+          ),
+        );
+        final owner = OwnedRemoteFiles(
+          source: source,
+          profileName: 'writer',
+          storedSessionId: 'chat-7',
+          release: source.close,
+        );
+        addTearDown(owner.dispose);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(dark ? Brightness.dark : Brightness.light),
+            home: Scaffold(
+              body: DeliverableAttachment(
+                output: const ChatOutput(
+                  kind: ChatOutputKind.file,
+                  label: 'delivery.zip',
+                  path: '/srv/delivery.zip',
+                  url: null,
+                ),
+                onOpen: null,
+                onDownload: (output) => owner.downloadAndSave(
+                  output.path!,
+                  admitPresentation: () => true,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.byTooltip('Download'));
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(picker.filename, isNull);
+
+        response.complete(
+          http.Response.bytes(
+            Uint8List(33 * 1024 * 1024),
+            200,
+            headers: {
+              'content-disposition': 'attachment; filename=delivery.zip',
+            },
+          ),
+        );
+        await tester.pump();
+        expect(picker.filename, 'delivery.zip');
+        expect(picker.data!.length, 33 * 1024 * 1024);
+        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.text('File saved'), findsNothing);
+
+        picker.pending!.complete(Uri.parse('content://documents/delivery.zip'));
+        await tester.pumpAndSettle();
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        expect(find.text('File saved'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   test('empty files can be saved', () async {
     picker.destination = Uri.parse('content://documents/empty.txt');
     expect(

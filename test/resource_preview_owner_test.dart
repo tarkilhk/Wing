@@ -47,6 +47,28 @@ class _Pdf extends PdfPreviewService {
 }
 
 void main() {
+  test(
+    'oversized HTML retains its original for sharing after preview refusal',
+    () async {
+      final file = RemoteFileDownload(
+        filename: 'report.html',
+        bytes: Uint8List(maxFilePreviewBytes + 1),
+      );
+      RemoteFileDownload? shared;
+      final reader = HtmlPreviewReader(
+        download: () async => file,
+        share: (value) async => shared = value,
+      );
+      addTearDown(reader.dispose);
+      await reader.load();
+      expect(reader.observation.source, isNull);
+      expect(reader.observation.error, contains('too large to preview'));
+      expect(reader.observation.hasFile, isTrue);
+      expect(await reader.share(), isNull);
+      expect(shared, same(file));
+    },
+  );
+
   const encodedLimit = 45 * 1024 * 1024;
   const prefix = 'data:image/svg+xml,';
   for (final expanded in [('漢', 9), ('\u0000', 3)]) {

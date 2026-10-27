@@ -8,9 +8,6 @@ import 'platform_share.dart';
 
 String fileOpenErrorMessage(Object error) {
   if (error is PlatformShareBusy) return error.message;
-  if (error is DashboardResponseTooLargeException) {
-    return 'This file exceeds the ${(error.maxBytes / (1024 * 1024)).round()} MiB download limit.';
-  }
   if (error is DashboardHttpException) {
     return switch (error.statusCode) {
       400 =>
