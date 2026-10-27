@@ -208,7 +208,8 @@ List<Map<String, dynamic>> answerHistoryRows(
 class AnswerTarget {
   final int userOrdinal;
   final String prompt;
-  const AnswerTarget(this.userOrdinal, this.prompt);
+  final int? userRowId;
+  const AnswerTarget(this.userOrdinal, this.prompt, {this.userRowId});
 
   static AnswerTarget? at(List<Map<String, dynamic>> messages, int index) {
     if (index < 0 ||
@@ -219,12 +220,14 @@ class AnswerTarget {
     }
     var ordinal = -1;
     var prompt = '';
+    int? rowId;
     for (final message in messages.take(index + 1)) {
       if (isAnswerPrompt(message)) {
         ordinal++;
         prompt = answerMessageText(message);
+        rowId = message['row_id'] is int ? message['row_id'] as int : null;
       }
     }
-    return AnswerTarget(ordinal, prompt);
+    return AnswerTarget(ordinal, prompt, userRowId: rowId);
   }
 }

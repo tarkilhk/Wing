@@ -10,6 +10,8 @@ import 'bot_avatar.dart';
 import 'bot_group_identity.dart';
 import 'bot_mention_scope.dart';
 import 'profile_message.dart';
+import 'user_message_attachment.dart';
+import '../models/chat_output.dart';
 import 'wing_app_bar.dart';
 
 /// One discussion frame for live chats and passive Recents preparation.
@@ -158,7 +160,11 @@ class BotGroupMessage extends StatelessWidget {
     required this.senderAvatarVisible,
     this.loadImages = true,
     this.onSenderTap,
+    this.loadAttachmentImage,
+    this.onDownloadAttachment,
   });
+  final UserAttachmentImageLoader? loadAttachmentImage;
+  final Future<bool> Function(ChatOutput)? onDownloadAttachment;
   final BotGroup group;
   final TranscriptMessage message;
   final BotRecord? appearance;
@@ -178,6 +184,8 @@ class BotGroupMessage extends StatelessWidget {
           : _GroupBubblePalette.forMessage(context, message.senderHandle),
       onSenderTap: onSenderTap,
       loadImages: loadImages,
+      loadAttachmentImage: loadAttachmentImage,
+      onDownloadRemoteFile: onDownloadAttachment,
     ),
   );
 }

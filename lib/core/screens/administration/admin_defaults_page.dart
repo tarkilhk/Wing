@@ -15,6 +15,7 @@ import 'provider_recovery_routes.dart';
 import 'admin_providers_page.dart';
 import 'admin_settings_page.dart';
 import 'admin_widgets.dart';
+import 'admin_delegation_model_page.dart';
 
 class AdminDefaultsPage extends StatefulWidget {
   final ProfileAdministration profile;
@@ -240,6 +241,21 @@ class _AdminDefaultsPageState extends State<AdminDefaultsPage> {
               'Reasoning and speed capabilities were not reported for this model.',
             ),
           const SizedBox(height: 24),
+          AdminGroup(
+            children: [
+              AdminRow(
+                title: 'Subagent model',
+                subtitle: 'Model and provider for delegated work',
+                icon: Icons.account_tree_outlined,
+                onTap: () => adminPushProfile(
+                  context,
+                  _profile,
+                  (_, profile) => AdminDelegationModelPage(profile: profile),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           Text('Helper models', style: Theme.of(context).textTheme.titleMedium),
           const AdminNotice(
             'Automatic tasks choose through Hermes. Named assignments keep their own provider.',

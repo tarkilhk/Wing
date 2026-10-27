@@ -127,7 +127,7 @@ void main() {
       expect(
         host.calls
             .lastWhere((call) => call.$2 == 'session.resume')
-            .$3['omit_messages'],
+            .$3['display_projection'],
         true,
       );
       final reads = host.reads.where((r) => r.$1.endsWith('/messages'));

@@ -106,7 +106,10 @@ void main() {
       expect(fixture.requests.where((r) => r.$1 == 'PUT'), hasLength(1));
       expect(session.state.edit!.saved, 'Saved instructions');
       expect(session.state.edit!.draft, 'Saved instructions');
-      expect(session.state.notice, 'Instructions saved for new sessions.');
+      expect(
+        session.state.notice,
+        'Instructions saved. Hermes can reload them in this chat.',
+      );
       expect(session.state.verified, isFalse);
       expect(session.state.reviewRequired, isFalse);
       await session.save(editor);

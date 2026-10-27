@@ -81,6 +81,11 @@
       "feature": "chat-browser",
       "library": "lib/core/models/browser_mutation.dart"
     },
+    "lib/core/models/canonical_session.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/canonical_session.dart"
+    },
     "lib/core/models/chat_browser_preferences.dart": {
       "role": "domain",
       "feature": "chat-browser",
@@ -226,6 +231,11 @@
       "feature": "chat-activity",
       "library": "lib/core/models/gateway_todo.dart"
     },
+    "lib/core/models/git_review.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/git_review.dart"
+    },
     "lib/core/models/group_notification.dart": {
       "role": "domain",
       "feature": "notifications",
@@ -265,6 +275,11 @@
       "role": "domain",
       "feature": "host-resources",
       "library": "lib/core/models/host_thresholds.dart"
+    },
+    "lib/core/models/hosted_connector_accounts.dart": {
+      "role": "domain",
+      "feature": "administration-connectors",
+      "library": "lib/core/models/hosted_connector_accounts.dart"
     },
     "lib/core/models/local_transcript_message.dart": {
       "role": "domain",
@@ -526,6 +541,11 @@
       "feature": "conversation",
       "library": "lib/core/models/transcript_timeline.dart"
     },
+    "lib/core/models/turn_failure.dart": {
+      "role": "domain",
+      "feature": "conversation",
+      "library": "lib/core/models/turn_failure.dart"
+    },
     "lib/core/models/usage_analytics.dart": {
       "role": "domain",
       "feature": "usage-analytics",
@@ -656,6 +676,11 @@
       "feature": "model-selection",
       "library": "lib/core/screens/administration/admin_defaults_page.dart"
     },
+    "lib/core/screens/administration/admin_delegation_model_page.dart": {
+      "role": "view",
+      "feature": "administration-behavior",
+      "library": "lib/core/screens/administration/admin_delegation_model_page.dart"
+    },
     "lib/core/screens/administration/admin_doctor_diagnosis.dart": {
       "role": "view",
       "feature": "administration-health",
@@ -680,6 +705,11 @@
       "role": "view",
       "feature": "host-resources",
       "library": "lib/core/screens/administration/admin_host_health.dart"
+    },
+    "lib/core/screens/administration/admin_hosted_connector_accounts_page.dart": {
+      "role": "view",
+      "feature": "administration-connectors",
+      "library": "lib/core/screens/administration/admin_hosted_connector_accounts_page.dart"
     },
     "lib/core/screens/administration/admin_identity_page.dart": {
       "role": "view",
@@ -900,6 +930,11 @@
       "role": "view",
       "feature": "connections",
       "library": "lib/core/screens/connection_setup_screen.dart"
+    },
+    "lib/core/screens/git_review_screen.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/screens/git_review_screen.dart"
     },
     "lib/core/screens/health_alert_health_screen.dart": {
       "role": "view",
@@ -1176,6 +1211,11 @@
       "feature": "bots",
       "library": "lib/core/services/bots_session.dart"
     },
+    "lib/core/services/canonical_session_protocol.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/canonical_session_protocol.dart"
+    },
     "lib/core/services/chat_browser_data.dart": {
       "role": "application",
       "feature": "chat-browser",
@@ -1301,6 +1341,11 @@
       "feature": "conversation",
       "library": "lib/core/services/dashboard_read_transport.dart"
     },
+    "lib/core/services/delegation_model_session.dart": {
+      "role": "application",
+      "feature": "administration-behavior",
+      "library": "lib/core/services/delegation_model_session.dart"
+    },
     "lib/core/services/deleted_draft_cleanup_store.dart": {
       "role": "application",
       "feature": "conversation",
@@ -1330,6 +1375,11 @@
       "role": "domain",
       "feature": "connections",
       "library": "lib/core/services/gateway_endpoint.dart"
+    },
+    "lib/core/services/git_review_session.dart": {
+      "role": "application",
+      "feature": "conversation",
+      "library": "lib/core/services/git_review_session.dart"
     },
     "lib/core/services/group_notification_session.dart": {
       "role": "application",
@@ -1390,6 +1440,11 @@
       "role": "application",
       "feature": "host-resources",
       "library": "lib/core/services/host_resources_session.dart"
+    },
+    "lib/core/services/hosted_connector_accounts_session.dart": {
+      "role": "application",
+      "feature": "administration-connectors",
+      "library": "lib/core/services/hosted_connector_accounts_session.dart"
     },
     "lib/core/services/image_clipboard.dart": {
       "role": "platform",
@@ -2161,6 +2216,11 @@
       "feature": "administration-health",
       "library": "lib/core/widgets/health_alerts/health_alerts_scope.dart"
     },
+    "lib/core/widgets/hosted_connection_request_panel.dart": {
+      "role": "view",
+      "feature": "administration-connectors",
+      "library": "lib/core/widgets/hosted_connection_request_panel.dart"
+    },
     "lib/core/widgets/image_paste_menu.dart": {
       "role": "view",
       "feature": "attachments-and-sharing",
@@ -2475,6 +2535,11 @@
       "role": "view",
       "feature": "conversation",
       "library": "lib/core/widgets/transcript_latest_button.dart"
+    },
+    "lib/core/widgets/turn_failure_view.dart": {
+      "role": "view",
+      "feature": "conversation",
+      "library": "lib/core/widgets/turn_failure_view.dart"
     },
     "lib/core/widgets/user_message_attachment.dart": {
       "role": "view",

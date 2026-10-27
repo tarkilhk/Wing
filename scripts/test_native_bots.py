@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
+import xml.etree.ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -114,6 +115,9 @@ def main():
                     shell("settings", "put", "system", "font_scale", "2.0" if large else "1.0")
                     shell("cmd", "uimode", "night", "yes" if name.startswith("dark") else "no")
                     shell("wm", "dismiss-keyguard")
+                    source_file = output / "wing-group-notes.txt"
+                    source_file.write_text("Group review from Android.\n")
+                    adb("push", str(source_file), "/sdcard/Download/wing-group-notes.txt")
                     time.sleep(.8)
                 elif action in ("type", "append"):
                     end = time.monotonic() + 5
@@ -135,6 +139,33 @@ def main():
                     time.sleep(.5)
                 elif action == "back":
                     shell("input", "keyevent", "KEYCODE_BACK")
+                    time.sleep(.5)
+                elif action == "pick-group-file":
+                    end = time.monotonic() + 15
+                    selected = False
+                    opened_roots = False
+                    while time.monotonic() < end:
+                        shell("uiautomator", "dump", "/sdcard/wing-bots-window.xml")
+                        xml = shell("cat", "/sdcard/wing-bots-window.xml")
+                        nodes = list(ET.fromstring(xml).iter("node"))
+                        filename = next((n for n in nodes if n.get("text") == "wing-group-notes.txt"), None)
+                        downloads = next((n for n in nodes if n.get("text") == "Downloads"), None)
+                        roots = next((n for n in nodes if n.get("content-desc") in ("Show roots", "Navigate up")), None)
+                        node = filename if filename is not None else downloads if downloads is not None else roots if not opened_roots else None
+                        if node is not None:
+                            bounds = [int(n) for n in re.findall(r"\d+", node.get("bounds", ""))]
+                            if len(bounds) != 4:
+                                raise RuntimeError("Native picker target has no bounds")
+                            shell("input", "tap", str((bounds[0] + bounds[2]) // 2), str((bounds[1] + bounds[3]) // 2))
+                            if node is filename:
+                                selected = True
+                                break
+                            if node is roots:
+                                opened_roots = True
+                        time.sleep(.2)
+                    if not selected:
+                        (output / (name + "-picker.xml")).write_text(xml)
+                        raise RuntimeError("Group attachment was not selectable in Android Documents")
                     time.sleep(.5)
                 elif action == "picker-cancel":
                     end = time.monotonic() + 5

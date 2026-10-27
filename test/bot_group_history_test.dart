@@ -40,19 +40,26 @@ class _WorkerReplay {
             },
         ],
       },
+      'session.resume' => BotsFixture.passiveSnapshot(
+        params,
+        epoch: epoch,
+        sequence: events.length,
+      ),
       'session.events.since' => {
-        'events': events
-            .where((e) => (e['seq'] as int) > (params['last_seen'] as int))
+        'events': (truncated ? <Map<String, dynamic>>[] : events)
+            .where((e) => (e['seq'] as int) > (params['last_sequence'] as int))
             .toList(),
         'latest_seq': events.length,
-        'truncated': false,
-        'epoch': 'recovery-test',
+        'truncated': truncated,
+        'snapshot_required': truncated,
+        'replay_epoch': epoch,
         'open_requests': openRequests,
       },
       _ => null,
     };
   }
-  bool present = true;
+  bool present = true, truncated = false;
+  String epoch = 'recovery-test';
   String status = 'working';
   final events = <Map<String, dynamic>>[];
   List<Map<String, dynamic>> openRequests = [];
@@ -344,10 +351,16 @@ void main() {
             },
           ],
         },
+        'session.resume' => BotsFixture.passiveSnapshot(
+          params,
+          epoch: 'concurrent-read',
+          sequence: 2,
+        ),
         'session.events.since' => {
-          'epoch': 'concurrent-read',
+          'replay_epoch': 'concurrent-read',
           'latest_seq': 2,
           'truncated': false,
+          'snapshot_required': false,
           'open_requests': [],
           'events': [
             {'seq': 1, 'session_id': 'atlas-live', 'type': 'message.start'},
@@ -637,13 +650,21 @@ void main() {
             },
           ],
         },
+        'session.resume' => BotsFixture.passiveSnapshot(
+          params,
+          epoch: epoch,
+          sequence: events.length,
+        ),
         'session.events.since' => {
           'events': events
-              .where((e) => (e['seq'] as int) > (params['last_seen'] as int))
+              .where(
+                (e) => (e['seq'] as int) > (params['last_sequence'] as int),
+              )
               .toList(),
           'latest_seq': events.length,
           'truncated': false,
-          'epoch': epoch,
+          'snapshot_required': false,
+          'replay_epoch': epoch,
           'open_requests': [],
         },
         _ => null,
@@ -730,11 +751,14 @@ void main() {
         },
         'session.events.since' => {
           'events': events
-              .where((e) => (e['seq'] as int) > (params['last_seen'] as int))
+              .where(
+                (e) => (e['seq'] as int) > (params['last_sequence'] as int),
+              )
               .toList(),
           'latest_seq': events.length,
           'truncated': false,
-          'epoch': 'test',
+          'snapshot_required': false,
+          'replay_epoch': 'test',
         },
         _ => null,
       };
@@ -770,7 +794,8 @@ void main() {
           'events': [],
           'latest_seq': 0,
           'truncated': false,
-          'epoch': 'test',
+          'snapshot_required': false,
+          'replay_epoch': 'test',
         },
         _ => null,
       };
@@ -842,7 +867,8 @@ void main() {
         ],
         'latest_seq': 1,
         'truncated': false,
-        'epoch': 'first',
+        'snapshot_required': false,
+        'replay_epoch': 'first',
       });
       await replay;
       expect(retired.reader.streaming, before);
@@ -852,6 +878,29 @@ void main() {
       expect(fixture.commands, isEmpty);
     });
   }
+
+  test(
+    'worker truncation refreshes saved evidence and continues after its watermark',
+    () async {
+      final replay = _WorkerReplay(fixture);
+      replay.add('message.start');
+      replay.add('message.delta', {'text': 'Lost live range'});
+      replay.truncated = true;
+      await session.select(group.members.first);
+      await session.refreshLive();
+      expect(session.reader.streaming, isEmpty);
+      expect(
+        session.liveError,
+        contains('Earlier live activity is unavailable'),
+      );
+      replay.truncated = false;
+      replay.add('message.start');
+      replay.add('message.delta', {'text': 'New work after the gap'});
+      await session.refreshLive();
+      expect(session.reader.streaming, 'New work after the gap');
+      expect(fixture.commands, isEmpty);
+    },
+  );
 
   test('working history receives the active worker answer', () async {
     fixture.readHook = (profile, method, params) async => switch (method) {
@@ -865,6 +914,11 @@ void main() {
           },
         ],
       },
+      'session.resume' => BotsFixture.passiveSnapshot(
+        params,
+        epoch: 'worker-test',
+        sequence: 2,
+      ),
       'session.events.since' => {
         'events': [
           {'type': 'message.start', 'session_id': 'atlas-live', 'seq': 1},
@@ -877,7 +931,8 @@ void main() {
         ],
         'latest_seq': 2,
         'truncated': false,
-        'epoch': 'worker-test',
+        'snapshot_required': false,
+        'replay_epoch': 'worker-test',
       },
       _ => null,
     };

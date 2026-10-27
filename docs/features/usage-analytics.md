@@ -33,3 +33,8 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 ## Gotchas
 
 The analytics profile picker does not switch the chat workspace. API-equivalent cost is an estimate, not an invoice. Missing or incomplete sections must remain qualified.
+
+Current plan allowance is separate from historical token/cost analytics. It is
+shown in the conversation composer and model chooser through
+[model selection](model-selection.md); those observations do not alter usage
+history or imply an invoice amount.

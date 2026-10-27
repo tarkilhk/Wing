@@ -1,3 +1,10 @@
+import 'package:flutter/services.dart';
+import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/services/bots_repository.dart';
+import 'package:wing/core/services/bots_preferences.dart';
+import 'package:wing/core/services/group_observations.dart';
+import 'package:wing/core/models/hermes_profile.dart';
+import 'support/bots_fixture.dart';
 import 'package:wing/core/services/shared_draft_session.dart';
 import 'package:wing/core/services/workspace_entry_session.dart';
 import 'package:wing/core/services/profile_workspace_registry.dart';
@@ -56,8 +63,9 @@ Future<ProfileWorkspaceController> _controller(
               missingSessions.contains(params['session_id'])) {
             throw JsonRpcError(
               'session.resume',
-              'session not found',
-              code: 4007,
+              'Session does not exist',
+              code: 4001,
+              reason: 'not_found',
             );
           }
           return base.call(method, params);
@@ -106,6 +114,7 @@ Future<Future<bool>> _openReview(
   AndroidSharePayload payload, {
   double textScale = 1,
   ProfileChat? initialChat,
+  BotsSession Function()? createBotsSession,
   ({ProfileSessionKey key, ComposerSavedWork draft})? recoverableDraft,
 }) async {
   final manager = await ConnectionManager.create(
@@ -142,6 +151,7 @@ Future<Future<bool>> _openReview(
     connectionManager: manager,
     entrySession: entry,
     shareIntents: shares,
+    createBotsSession: createBotsSession,
   );
   session.start(startupReady: null, deferredShareId: null);
   final offer = session.claim(explicit: true, presentationBlocked: false)!;
@@ -190,6 +200,64 @@ void main() {
     appPreferences = AppPreferences(await SharedPreferences.getInstance());
   });
   tearDown(() => appPreferences.dispose());
+
+  testWidgets(
+    'incoming share can choose an exact group and keeps text in its draft',
+    (tester) async {
+      final controller = await _controller(
+        ProfileBrowserFixture(),
+        appPreferences: appPreferences,
+      );
+      final fixture = BotsFixture();
+      final scope = WorkspaceScope(
+        connectionId: controller.connection.id,
+        connectionIdentity: controller.connectionIdentity,
+        profileName: 'default',
+      );
+      final repository = BotsRepository(
+        scope: scope,
+        instance: 'Review host',
+        groupObservations: GroupObservations(scope),
+        read: fixture.read,
+        command: fixture.command,
+        ownership: fixture.ownership,
+        savedHistory: fixture.savedHistory,
+      );
+      const channel = MethodChannel(AndroidShareIntentService.channelName);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async => null);
+      addTearDown(
+        () => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null),
+      );
+      final result = await _openReview(
+        tester,
+        controller,
+        const AndroidSharePayload(
+          id: 'group-share',
+          text: 'Discuss this from my phone',
+        ),
+        createBotsSession: () => BotsSession((_) async => [repository]),
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('share-destination-group-room-1')),
+      );
+      await tester.tap(find.byKey(const Key('share-destination-group-room-1')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('share-add-to-draft')));
+      await tester.pumpAndSettle();
+      expect(await result, true);
+      final preferences = await BotsPreferences.load();
+      expect(
+        preferences.messageDraft(scope.connectionIdentity, 'room-1')!.text,
+        'Discuss this from my phone',
+      );
+      expect(
+        fixture.commands.where((call) => call.$2 == 'groups.send'),
+        isEmpty,
+      );
+    },
+  );
 
   testWidgets(
     'reviews text and files with New chat selected on a large phone',
@@ -276,6 +344,7 @@ void main() {
     await tester.tap(find.byKey(const Key('share-add-to-draft')));
     await tester.pumpAndSettle();
 
+    expect(find.byKey(const Key('share-review-error')), findsNothing);
     expect(await result, isTrue);
     expect(controller.current!.scope.profileName, 'work');
     expect(controller.current!.chat!.key.sessionId, 'newest');

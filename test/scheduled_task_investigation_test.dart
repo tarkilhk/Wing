@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -134,16 +135,31 @@ class _Fixture {
               await createGate?.future;
               if (failCreate) throw StateError('offline');
               return {
+                ...canonicalSnapshotFields,
                 'session_id': 'runtime-$number',
                 'stored_session_id': 'investigation-$number',
                 'messages': [],
                 'info': {'profile_name': scope.profileName},
               };
             }
+            if (method == 'session.resume' &&
+                params['session_id'].toString().startsWith('runtime-')) {
+              final number = params['session_id'].toString().split('-').last;
+              return {
+                ...canonicalSnapshotFields,
+                'session_id': params['session_id'],
+                'stored_session_id': 'investigation-$number',
+                'messages': <Map<String, dynamic>>[],
+                'info': {'profile_name': scope.profileName},
+              };
+            }
             if (method == 'prompt.submit') {
               sends.add((scope.profileName, Map.of(params)));
               await sendGate?.future;
-              return {};
+              return canonicalReceipt(
+                params,
+                admissionId: 'investigation-${params['submission_id']}',
+              );
             }
             return source.call(method, params);
           },

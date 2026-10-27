@@ -169,8 +169,10 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
           addTearDown(tester.view.reset);
           tester.view.viewInsets = const FakeViewPadding(bottom: 260);
           host.event('a', 'message.start');
-          await controller.queuePrompt(chat, 'First waiting message');
-          await controller.queuePrompt(chat, 'Second waiting message');
+          await tester.runAsync(() async {
+            await controller.queuePrompt(chat, 'First waiting message');
+            await controller.queuePrompt(chat, 'Second waiting message');
+          });
           await tester.pumpWidget(
             MaterialApp(
               theme: wingTheme(brightness),
@@ -215,9 +217,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             tester,
             'chat-queue-connected-${brightness.name}-$scale',
           );
-          await controller.removeQueuedPrompt(
-            chat,
-            chat.composer.observation.queue.first.id,
+          await tester.runAsync(
+            () => controller.removeQueuedPrompt(
+              chat,
+              chat.composer.observation.queue.first.id,
+            ),
           );
           await tester.pump();
           expect(find.text('First waiting message'), findsNothing);
@@ -225,9 +229,11 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
             find.text('Second waiting message').hitTestable(),
             findsOneWidget,
           );
-          await controller.removeQueuedPrompt(
-            chat,
-            chat.composer.observation.queue.single.id,
+          await tester.runAsync(
+            () => controller.removeQueuedPrompt(
+              chat,
+              chat.composer.observation.queue.single.id,
+            ),
           );
           await tester.pump();
           expect(find.byIcon(WingIcons.queue), findsNothing);

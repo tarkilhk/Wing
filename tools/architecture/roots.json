@@ -6618,6 +6618,105 @@
       "purpose": "Bounded CI SDK installation retries and per-attempt archive diagnostics",
       "source": ".github/workflows/pr-quality.yml; .github/workflows/nightly-tests.yml; .github/workflows/release.yml",
       "status": "supported"
+    },
+    {
+      "id": "host-test-test/bot_group_attachments_test.dart",
+      "kind": "host-test",
+      "path": "test/bot_group_attachments_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/bot_group_attachments_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/canonical_session_protocol_test.dart",
+      "kind": "host-test",
+      "path": "test/canonical_session_protocol_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/canonical_session_protocol_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/delegation_model_session_test.dart",
+      "kind": "host-test",
+      "path": "test/delegation_model_session_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/delegation_model_session_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/git_review_screen_test.dart",
+      "kind": "host-test",
+      "path": "test/git_review_screen_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/git_review_screen_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/git_review_test.dart",
+      "kind": "host-test",
+      "path": "test/git_review_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/git_review_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/hosted_connector_accounts_session_test.dart",
+      "kind": "host-test",
+      "path": "test/hosted_connector_accounts_session_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/hosted_connector_accounts_session_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/turn_failure_test.dart",
+      "kind": "host-test",
+      "path": "test/turn_failure_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/turn_failure_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/upstream_capabilities_ui_test.dart",
+      "kind": "host-test",
+      "path": "test/upstream_capabilities_ui_test.dart",
+      "purpose": "Explicit test/driver entry; environment flags and owned target prerequisites apply",
+      "source": "internal/docs/TESTING.md; test/upstream_capabilities_ui_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/hosted_connection_request_test.dart",
+      "kind": "host-test",
+      "path": "test/hosted_connection_request_test.dart",
+      "purpose": "Received session-owned connector operation actions and lifecycle",
+      "source": "internal/docs/TESTING.md; test/hosted_connection_request_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/native_prompt_controller_test.dart",
+      "kind": "host-test",
+      "path": "test/native_prompt_controller_test.dart",
+      "purpose": "Canonical native prompt generation and independent server request lifecycle",
+      "source": "internal/docs/TESTING.md; test/native_prompt_controller_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "host-test-test/native_prompt_runtime_test.dart",
+      "kind": "host-test",
+      "path": "test/native_prompt_runtime_test.dart",
+      "purpose": "Canonical native prompt generation and independent server request lifecycle",
+      "source": "internal/docs/TESTING.md; test/native_prompt_runtime_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -8187,6 +8286,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/models/canonical_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/models/chat_browser_preferences.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -8332,6 +8436,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/models/git_review.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/models/group_notification.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -8370,6 +8479,11 @@
       "path": "lib/core/models/host_thresholds.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/models/hosted_connector_accounts.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/models/local_transcript_message.dart",
@@ -8632,6 +8746,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/models/turn_failure.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/models/usage_analytics.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -8762,6 +8881,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/screens/administration/admin_delegation_model_page.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/screens/administration/admin_doctor_diagnosis.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -8785,6 +8909,11 @@
       "path": "lib/core/screens/administration/admin_host_health.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/screens/administration/admin_hosted_connector_accounts_page.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/screens/administration/admin_identity_page.dart",
@@ -9005,6 +9134,11 @@
       "path": "lib/core/screens/connection_setup_screen.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/screens/git_review_screen.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/screens/health_alert_health_screen.dart",
@@ -9282,6 +9416,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/services/canonical_session_protocol.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/chat_browser_data.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -9407,6 +9546,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "lib/core/services/delegation_model_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/services/deleted_draft_cleanup_store.dart",
       "area": "lib",
       "provenance": "intentional-untracked"
@@ -9435,6 +9579,11 @@
       "path": "lib/core/services/gateway_endpoint.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/git_review_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/services/group_notification_session.dart",
@@ -9495,6 +9644,11 @@
       "path": "lib/core/services/host_resources_session.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/services/hosted_connector_accounts_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/services/image_clipboard.dart",
@@ -10272,6 +10426,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "lib/core/widgets/hosted_connection_request_panel.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "lib/core/widgets/image_paste_menu.dart",
       "area": "lib",
       "provenance": "tracked"
@@ -10585,6 +10744,11 @@
       "path": "lib/core/widgets/transcript_latest_button.dart",
       "area": "lib",
       "provenance": "tracked"
+    },
+    {
+      "path": "lib/core/widgets/turn_failure_view.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "lib/core/widgets/user_message_attachment.dart",
@@ -11307,6 +11471,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/bot_group_attachments_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/bot_group_draft_session_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -11398,6 +11567,11 @@
     },
     {
       "path": "test/browser_view_dependency_guard_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/canonical_session_protocol_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -11757,6 +11931,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/delegation_model_session_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/deleted_chat_recovery_notice_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -11937,6 +12116,16 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/git_review_screen_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/git_review_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/group_notification_session_test.dart",
       "area": "test",
       "provenance": "tracked"
@@ -12025,6 +12214,16 @@
       "path": "test/host_thresholds_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/hosted_connection_request_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/hosted_connector_accounts_session_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/html_preview_screen_test.dart",
@@ -12193,6 +12392,16 @@
     },
     {
       "path": "test/models_dev_pricing_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/native_prompt_controller_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/native_prompt_runtime_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -13427,6 +13636,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/support/canonical_gateway_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/support/chat_browser_interactions.dart",
       "area": "test",
       "provenance": "tracked"
@@ -13462,6 +13676,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "test/support/git_review_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/support/health_alerts_fixture.dart",
       "area": "test",
       "provenance": "intentional-untracked"
@@ -13470,6 +13689,16 @@
       "path": "test/support/host_resources_fixture.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/support/hosted_connection_request_scenarios.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/support/hosted_connector_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/support/loopback_http_fixtures.dart",
@@ -13538,6 +13767,11 @@
     },
     {
       "path": "test/support/stock_task_blueprints.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/support/upstream_capabilities_scenarios.dart",
       "area": "test",
       "provenance": "intentional-untracked"
     },
@@ -13627,9 +13861,19 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": "test/turn_failure_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "test/turn_notification_service_test.dart",
       "area": "test",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/upstream_capabilities_ui_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
     },
     {
       "path": "test/usage_analytics_session_test.dart",

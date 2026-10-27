@@ -515,7 +515,8 @@ def run(output, tap_only=False):
     screenshot(output / 'light-normal.png')
     tap(text='Once')
     until(lambda: len(state()['decisions']) == 1, 'Once did not submit')
-    assert state()['decisions'][0]['params']['request_id'] == 'qa-1'
+    assert state()['decisions'][0]['params']['prompt_id'] == 'qa-1'
+    assert state()['decisions'][0]['params']['execution_generation'] == 0
     assert state()['pending'][0]['request_id'] == 'qa-2'
     print('PASS: Once resolves the exact head and advances FIFO', flush=True)
     state('/fail', {'enabled': True})
@@ -683,7 +684,8 @@ def check_cold_action(output):
         decisions = saved_notification_decisions()
         return decisions if len(decisions) == before + 1 else None
     decisions = until(acknowledged, 'Cold Once did not submit')
-    assert decisions[-1]['params']['request_id'] == cold_request
+    assert decisions[-1]['params']['prompt_id'] == cold_request
+    assert decisions[-1]['params']['execution_generation'] == 0
     until(lambda: not any(PACKAGE in line for line in adb('shell', 'dumpsys', 'activity', 'activities').splitlines()
                           if 'topResumedActivity=' in line), 'Cold action left Wing in front')
     assert not any('Review command' in (n.get('text'), n.get('content-desc')) for n in nodes())

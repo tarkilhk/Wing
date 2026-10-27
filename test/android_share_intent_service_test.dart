@@ -243,6 +243,37 @@ void main() {
   });
 
   test(
+    'group camera captures an exact room and rejects mixed destinations',
+    () async {
+      const target = {
+        'connection': 'host',
+        'connection_identity': 'instance-1',
+        'room': 'room-1',
+      };
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            expect(call.method, 'capturePhoto');
+            expect(call.arguments, {'target': target});
+            return null;
+          });
+      final service = AndroidShareIntentService();
+      addTearDown(service.dispose);
+      await service.capturePhoto(target);
+      final payload = AndroidSharePayload.fromPlatform({
+        'id': 'photo-1',
+        'text': 'photo',
+        'files': [],
+        'target': target,
+      });
+      expect(payload!.target, target);
+      await expectLater(
+        service.capturePhoto({...target, 'profile': 'default'}),
+        throwsStateError,
+      );
+    },
+  );
+
+  test(
     'incomplete target metadata preserves the share as untargeted content',
     () {
       final untargeted = AndroidSharePayload.fromPlatform({

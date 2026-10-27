@@ -3,6 +3,11 @@ part of 'chat_runtime.dart';
 /// Request lifecycle observations stay with the execution owner. The observer
 /// receives display metadata only; persistence and placement belong to reading.
 extension _RuntimeQuestions on ChatRuntime {
+  String _approvalHistoryId(Map<String, dynamic> raw) =>
+      '${raw['execution_generation'] == null ? '' : 'native/${raw['execution_generation']}/'}approval/${raw['request_id']}';
+  String _clarifyHistoryId(GatewayClarifyRequest question, int? generation) =>
+      '${generation == null ? '' : 'native/$generation/'}clarify/${question.requestId}/${question.questionId ?? ''}';
+
   void _publishQuestion(HermesQuestion question) {
     final old = _questionHistory[question.id];
     if (old != null) {
@@ -39,7 +44,7 @@ extension _RuntimeQuestions on ChatRuntime {
     final request = GatewayApprovalRequest.fromEventData(raw);
     _publishQuestion(
       HermesQuestion(
-        id: 'approval/$id',
+        id: _approvalHistoryId(raw),
         requestId: raw['server_request_id'] is String
             ? raw['server_request_id'] as String
             : id,
@@ -52,11 +57,14 @@ extension _RuntimeQuestions on ChatRuntime {
     );
   }
 
-  void _rememberQuestions(Iterable<GatewayClarifyRequest> questions) {
+  void _rememberQuestions(
+    Iterable<GatewayClarifyRequest> questions, {
+    int? nativeGeneration,
+  }) {
     for (final question in questions) {
       _publishQuestion(
         HermesQuestion(
-          id: 'clarify/${question.requestId}/${question.questionId ?? ''}',
+          id: _clarifyHistoryId(question, nativeGeneration),
           requestId: question.requestId,
           kind: HermesQuestionKind.clarification,
           status: HermesQuestionStatus.pending,
@@ -87,7 +95,10 @@ extension _RuntimeQuestions on ChatRuntime {
 
   void _settleQuestionRequest(String requestId, HermesQuestionStatus status) {
     for (final question in _questionHistory.values.toList()) {
-      if (question.requestId == requestId) _settleQuestion(question.id, status);
+      if (question.requestId == requestId &&
+          !question.id.startsWith('native/')) {
+        _settleQuestion(question.id, status);
+      }
     }
   }
 

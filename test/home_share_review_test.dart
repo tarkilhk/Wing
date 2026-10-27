@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'dart:async';
 import 'package:wing/core/models/profile_session_key.dart';
 
@@ -87,6 +88,7 @@ ProfileWorkspaceController _controller(
   SharedPreferences prefs,
   AppPreferences appPreferences, {
   Set<String> missingSessions = const {},
+  String resumeFailureReason = 'not_found',
   AttachmentDraftService? attachments,
   Future<void> Function()? beforeSessionRead,
   void Function(String)? onRpc,
@@ -134,10 +136,16 @@ ProfileWorkspaceController _controller(
         onRpc?.call(method);
         if (method == 'session.resume' &&
             missingSessions.contains(params['session_id'])) {
-          throw JsonRpcError('session.resume', 'session not found', code: 4007);
+          throw JsonRpcError(
+            'session.resume',
+            'Session does not exist',
+            code: 4001,
+            reason: resumeFailureReason,
+          );
         }
         return method == 'session.create' || method == 'session.resume'
             ? {
+                ...canonicalSnapshotFields,
                 'session_id': 'runtime-${connection.id}',
                 'stored_session_id': method == 'session.resume'
                     ? params['session_id']
@@ -160,6 +168,7 @@ Future<void> _pumpHome(
   AndroidShareIntentService shareIntents, {
   required AppPreferences appPreferences,
   Set<String> missingSessions = const {},
+  String resumeFailureReason = 'not_found',
   ProfileWorkspaceController? controller,
 }) async {
   await tester.pumpWidget(
@@ -184,6 +193,7 @@ Future<void> _pumpHome(
                 manager.prefs,
                 appPreferences,
                 missingSessions: missingSessions,
+                resumeFailureReason: resumeFailureReason,
               ),
           launchIntents: null,
         ),
@@ -838,6 +848,66 @@ void main() {
     );
     expect(shares.pendingShare.value, isNull);
   });
+
+  for (final reason in ['permission_denied', 'storage_unavailable']) {
+    testWidgets(
+      'camera refusal $reason does not recover or consume saved draft',
+      (tester) async {
+        final fixture = await _homeFixture();
+        final manager = fixture.manager;
+        final appPreferences = fixture.appPreferences;
+        await manager.saveConnection('Work', 'work.local', 8642, 'work-key');
+        final connection = manager.getConnections().single;
+        final drafts = ComposerDraftStore(
+          manager.prefs,
+          connectionIdentity: 'home-share-${connection.id}',
+        );
+        await drafts.write(
+          profileName: 'default',
+          sessionId: 'unavailable-chat',
+          text: 'Keep the original saved draft',
+          attachments: [],
+        );
+        final shares = AndroidShareIntentService();
+        addTearDown(shares.dispose);
+        await _pumpHome(
+          tester,
+          manager,
+          shares,
+          appPreferences: appPreferences,
+          missingSessions: {'unavailable-chat'},
+          resumeFailureReason: reason,
+        );
+        final incoming = AndroidSharePayload(
+          id: 'camera-$reason',
+          text: 'Captured content',
+          target: {
+            'connection': connection.id,
+            'connection_identity': 'home-share-${connection.id}',
+            'profile': 'default',
+            'session': 'unavailable-chat',
+          },
+        );
+        shares.pendingShare.value = incoming;
+        await tester.pumpAndSettle();
+        expect(find.text('New chat with recovered draft'), findsNothing);
+        expect(find.text('Keep the original saved draft'), findsNothing);
+        expect(find.text('New chat'), findsOneWidget);
+        expect(
+          find.textContaining('original chat could not be reopened'),
+          findsOneWidget,
+        );
+        expect(shares.pendingShare.value, same(incoming));
+        expect(
+          (await drafts.read(
+            profileName: 'default',
+            sessionId: 'unavailable-chat',
+          ))!.text,
+          'Keep the original saved draft',
+        );
+      },
+    );
+  }
 
   testWidgets(
     'changed camera connection requires explicit destination review',

@@ -1,3 +1,4 @@
+import 'package:wing/core/widgets/gateway_clarify_dialog.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
@@ -17,6 +18,114 @@ import 'profile_workspace_controller_test.dart' show Host;
 
 void main() {
   setUpAll(loadFormFamilyFonts);
+  testWidgets('composer answer reacts to typing, held failure and retry', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final host = Host()..running = false;
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
+    final controller = ProfileWorkspaceController(
+      access: ConnectionAccess(
+        connection: identityTestConnection(),
+        dashboardOAuth: null,
+      ),
+      connectionIdentity: 'composer-answer-ui',
+      preferences: preferences,
+      appPreferences: appPreferences,
+      gatewayFactory: host.gateway,
+    );
+    addTearDown(controller.dispose);
+    await controller.initialize();
+    final chat = await controller.createChat(canDispatch: () => true);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => BotsSession((_) async => const []),
+        ),
+      ),
+    );
+    host.event('a', 'clarify', {
+      'request_id': 'composer-question',
+      'question': 'What should I prepare?',
+    });
+    await tester.pump();
+    await tester.pump();
+    final answer = find.byWidgetPredicate(
+      (widget) =>
+          widget is IconButton && widget.tooltip == 'Answer with composer text',
+    );
+    final editor = find.byKey(const Key('profile-message-composer'));
+    expect(tester.widget<IconButton>(answer).onPressed, isNull);
+    await tester.enterText(editor, 'Summary');
+    await tester.pump();
+    expect(controller.canAnswerWithComposer(chat), isTrue);
+    expect(tester.widget<IconButton>(answer).onPressed, isNotNull);
+    await tester.enterText(editor, '');
+    await tester.pump();
+    expect(tester.widget<IconButton>(answer).onPressed, isNull);
+    await tester.enterText(editor, 'Summary');
+    await tester.pump();
+    var gate = Completer<void>();
+    var fail = true;
+    host.onClarifyResponse = () async {
+      await gate.future;
+      if (fail) throw StateError('Synthetic answer failure');
+    };
+    addTearDown(() {
+      if (!gate.isCompleted) gate.complete();
+    });
+    await tester.ensureVisible(answer);
+    await tester.tap(answer);
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: answer,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    expect(tester.widget<IconButton>(answer).onPressed, isNull);
+    gate.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('Synthetic answer failure'), findsOneWidget);
+    expect(chat.composer.observation.text, 'Summary');
+    expect(tester.widget<IconButton>(answer).onPressed, isNotNull);
+    expect(
+      find.descendant(
+        of: answer,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsNothing,
+    );
+    fail = false;
+    gate = Completer<void>();
+    await tester.ensureVisible(answer);
+    await tester.tap(answer);
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: answer,
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    gate.complete();
+    await tester.pump();
+    await tester.pump();
+    expect(chat.runtime.pendingQuestion, isNull);
+    expect(chat.composer.observation.text, isEmpty);
+    expect(answer, findsNothing);
+    expect(
+      host.calls.where((call) => call.$2 == 'request.answer'),
+      hasLength(2),
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
@@ -79,7 +188,13 @@ void main() {
           await tester.ensureVisible(find.byKey(const Key('clarify-skip')));
           await tester.tap(find.byKey(const Key('clarify-skip')));
           await tester.pump();
-          expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          expect(
+            find.descendant(
+              of: find.byType(GatewayClarifyDialog),
+              matching: find.byType(CircularProgressIndicator),
+            ),
+            findsOneWidget,
+          );
           await captureFormFamily(
             tester,
             'clarify-${brightness.name}-$scale-held',

@@ -1,4 +1,6 @@
 import 'dart:async';
+import '../test/helpers/pump_markdown_widget.dart';
+import 'package:wing/core/widgets/turn_failure_view.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/widgets/profile_goal_panel.dart';
 import 'package:wing/core/widgets/profile_activity_tabs.dart';
@@ -27,6 +29,7 @@ import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_connection_identity.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
@@ -62,6 +65,289 @@ void main() {
   });
 
   tearDown(() => harness.dispose());
+
+  testWidgets(
+    'Git review opens from chat and retains draft through held reads',
+    (tester) async {
+      await harness.launch(tester);
+      await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
+      await _settle(tester);
+      final chat = harness.controller.current!.chat!;
+      for (final theme in [AppThemePreference.light, AppThemePreference.dark]) {
+        await harness.appPreferences.setTheme(theme);
+        await harness.appPreferences.setTextSize(
+          AppTextSizePreference.extraLarge,
+        );
+        await tester.enterText(
+          find.byKey(const Key('profile-message-composer')),
+          'Review without losing this draft',
+        );
+        tester.binding.focusManager.primaryFocus?.unfocus();
+        final held = Completer<void>();
+        harness.fixture.gitReview.listGate = held;
+        await tester.tap(find.byTooltip('Chat actions'));
+        await _settle(tester);
+        await tester.tap(find.text('Git review'));
+        await _settle(tester);
+        expect(find.text('Git review'), findsOneWidget);
+        expect(find.byType(StudioLoadingSlot), findsWidgets);
+        expect(find.byType(StudioLoading), findsOneWidget);
+        await captureJourney(tester, 'git-held-${theme.name}');
+        held.complete();
+        await _pumpUntil(
+          tester,
+          () => find.text('lib/phone.dart').evaluate().isNotEmpty,
+        );
+        await tester.ensureVisible(find.text('lib/phone.dart'));
+        await tester.tap(find.text('lib/phone.dart'));
+        await _pumpUntil(
+          tester,
+          () => find.byTooltip('Copy hunk reference').evaluate().isNotEmpty,
+        );
+        expect(find.text('Working tree compared with HEAD'), findsOneWidget);
+        await captureJourney(tester, 'git-diff-${theme.name}');
+        await tester.ensureVisible(find.text('Staged'));
+        await tester.tap(find.text('Staged'));
+        await _settle(tester);
+        expect(find.text('Index compared with HEAD'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.byTooltip('Copy hunk reference'),
+          160,
+          scrollable: find
+              .descendant(
+                of: find.byType(CustomScrollView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.tap(find.byTooltip('Copy hunk reference'));
+        await _settle(tester);
+        expect(find.text('Reference copied'), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await _settle(tester);
+        await tester.binding.handlePopRoute();
+        await _settle(tester);
+        expect(
+          chat.composer.observation.text,
+          'Review without losing this draft',
+        );
+        expect(tester.takeException(), isNull);
+      }
+    },
+  );
+
+  testWidgets(
+    'live tool progress and plan recovery use the production conversation',
+    (tester) async {
+      await harness.launch(tester);
+      await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
+      await _settle(tester);
+      final chat = harness.controller.current!.chat!;
+      for (final theme in [AppThemePreference.light, AppThemePreference.dark]) {
+        await harness.appPreferences.setTheme(theme);
+        for (final size in [
+          AppTextSizePreference.standard,
+          AppTextSizePreference.extraLarge,
+        ]) {
+          await harness.appPreferences.setTextSize(size);
+          await _settle(tester);
+          await tester.enterText(
+            find.byKey(const Key('profile-message-composer')),
+            'Keep this recovery draft',
+          );
+          tester.binding.focusManager.primaryFocus?.unfocus();
+          emitChatEvent(harness.controller, chat, 'message.start');
+          emitChatEvent(harness.controller, chat, 'session.usage', {
+            'usage': {
+              'plan_gauge': {
+                'id': 'daily',
+                'label': 'Daily',
+                'used_bp': 4200,
+                'resets_at_ms': 1893456000000,
+              },
+            },
+          });
+          await _settle(tester);
+          expect(find.text('Daily · 42% used'), findsOneWidget);
+          await captureJourney(
+            tester,
+            'upstream-gauge-${theme.name}-${size.name}',
+          );
+          emitChatEvent(harness.controller, chat, 'tool.start', {
+            'tool_id': 'progress-${theme.name}-${size.name}',
+            'name': 'mcp_search',
+            'args': {'query': 'project files'},
+          });
+          emitChatEvent(harness.controller, chat, 'tool.progress', {
+            'tool_id': 'progress-${theme.name}-${size.name}',
+            'name': 'mcp_search',
+            'progress': 4,
+            'total': 10,
+            'percent': 40,
+            'message': 'Indexed project files',
+          });
+          await _settle(tester);
+          await tester.openLiveActivity();
+          await _settle(tester);
+          expect(find.text('40% · Indexed project files'), findsOneWidget);
+          await captureJourney(
+            tester,
+            'upstream-progress-${theme.name}-${size.name}',
+          );
+          emitChatEvent(harness.controller, chat, 'tool.complete', {
+            'tool_id': 'progress-${theme.name}-${size.name}',
+            'name': 'mcp_search',
+            'result': 'Four folders indexed',
+          });
+          await _settle(tester);
+          expect(find.text('40% · Indexed project files'), findsNothing);
+          emitChatEvent(harness.controller, chat, 'message.complete', {
+            'status': 'error',
+            'error': 'The provider reported its daily allowance is exhausted.',
+            'error_surface': {
+              'layer': 'billing',
+              'code': 'usage_limit',
+              'retryable': false,
+              'provider': 'nous',
+              'model': 'large-demo',
+              'usage_limit': {
+                'limit_name': 'Daily',
+                'scope': 'all',
+                'message': 'Daily allowance exhausted',
+                'resets_at_ms': 1893456000000,
+                'suggestions': [
+                  {
+                    'provider': 'nous',
+                    'model': 'free-demo',
+                    'label': 'Free demo',
+                    'note': 'free',
+                  },
+                ],
+              },
+            },
+          });
+          await _pumpUntil(
+            tester,
+            () => find.byType(TurnFailureView).evaluate().isNotEmpty,
+          );
+          await tester.ensureVisible(find.byType(TurnFailureView));
+          await _settle(tester);
+          expect(find.text('Plan allowance reached'), findsOneWidget);
+          expect(find.text('Daily allowance exhausted'), findsOneWidget);
+          await captureJourney(
+            tester,
+            'upstream-limit-${theme.name}-${size.name}',
+          );
+          final choose = find.descendant(
+            of: find.byType(TurnFailureView),
+            matching: find.byTooltip('Choose model'),
+          );
+          await tester.ensureVisible(choose);
+          await tester.tap(choose);
+          final modelSearch = find.byKey(const Key('model-search'));
+          await _pumpUntil(
+            tester,
+            () => modelSearch.hitTestable().evaluate().isNotEmpty,
+          );
+          // Search through the real control to leave the effective model's
+          // provider filter and find the plan-backed model from another provider.
+          await tester.enterText(modelSearch, 'large-demo');
+          tester.binding.focusManager.primaryFocus?.unfocus();
+          final info = find.byTooltip('About large-demo');
+          await _pumpUntil(tester, () => info.evaluate().isNotEmpty);
+          await tester.ensureVisible(info);
+          await _pumpUntil(
+            tester,
+            () => info.hitTestable().evaluate().isNotEmpty,
+          );
+          await tester.tap(info);
+          await _settle(tester);
+          expect(find.text('Fixture plan'), findsOneWidget);
+          expect(find.text('0% left'), findsOneWidget);
+          expect(find.text('Stops at the limit'), findsOneWidget);
+          await captureJourney(
+            tester,
+            'upstream-allowance-${theme.name}-${size.name}',
+          );
+          await tester.tap(find.byTooltip('Close model card'));
+          await _settle(tester);
+          await tester.binding.handlePopRoute();
+          await _settle(tester);
+          expect(chat.composer.observation.text, 'Keep this recovery draft');
+          expect(tester.takeException(), isNull);
+        }
+      }
+    },
+  );
+
+  testWidgets(
+    'native clarification answers from the composer with its captured generation',
+    (tester) async {
+      await harness.launch(tester);
+      await harness.appPreferences.setTextSize(
+        AppTextSizePreference.extraLarge,
+      );
+      await tester.tap(find.byKey(const ValueKey('chat-personal-chat-0')));
+      await _settle(tester);
+      final chat = harness.controller.current!.chat!;
+      emitChatEvent(harness.controller, chat, 'clarify.request', {
+        'kind': 'clarify',
+        'prompt_id': 'native-question',
+        'execution_generation': 0,
+        'question': 'Which result should I prepare?',
+        'choices': ['Summary', 'Details'],
+      });
+      await _settle(tester);
+      await tester.enterText(
+        find.byKey(const Key('profile-message-composer')),
+        'Summary',
+      );
+      tester.binding.focusManager.primaryFocus?.unfocus();
+      await _settle(tester);
+      final answer = find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton &&
+            widget.tooltip == 'Answer with composer text',
+      );
+      await tester.ensureVisible(answer);
+      await _pumpUntil(
+        tester,
+        () =>
+            answer.hitTestable().evaluate().isNotEmpty &&
+            tester.widget<IconButton>(answer).onPressed != null,
+      );
+      final gate = harness.fixture.clarificationGate = Completer<void>();
+      addTearDown(() {
+        if (!gate.isCompleted) gate.complete();
+      });
+      await tester.tap(answer);
+      await _pumpUntil(
+        tester,
+        () => harness.fixture.clarificationResponses.isNotEmpty,
+      );
+      expect(
+        find.descendant(
+          of: answer,
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+      await captureJourney(tester, 'native-clarification-answer-pending');
+      expect(harness.fixture.clarificationResponses.single, {
+        'profile': 'personal',
+        'session_id': chat.runtime.runtimeId,
+        'prompt_id': 'native-question',
+        'execution_generation': 0,
+        'answer': 'Summary',
+      });
+      gate.complete();
+      await _pumpUntil(tester, () => chat.runtime.pendingQuestion == null);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(harness.fixture.clarificationResponses, hasLength(1));
+      await captureJourney(tester, 'native-clarification-answered');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('drawer settings profiles chats and projects work at large text', (
     tester,
@@ -199,7 +485,19 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(harness.fixture.configWrites, hasLength(2));
+      final mutation = harness.fixture.configWrites.single;
+      expect(mutation['session_id'], chat.runtime.runtimeId);
+      expect(mutation['profile'], 'personal');
+      expect(mutation['operation'], 'model');
+      expect(mutation['payload'], {
+        'model': 'gpt-5.6-sol',
+        'provider': 'openai-codex',
+        'reasoning': 'xhigh',
+      });
+      expect(mutation['request_id'], isA<String>());
+      expect(mutation['request_id'], isNotEmpty);
+      expect(mutation['expected_revision'], 0);
+      expect(mutation['expected_generation'], 0);
       await captureJourney(tester, 'chat-model-and-draft');
 
       await tester.enterText(
@@ -441,10 +739,44 @@ void main() {
     );
     expect(find.byType(GatewayApprovalPanel), findsNothing);
 
-    // The approved synthetic turn has ended; the server snapshot now owns
-    // the next waiting state rather than the earlier local running flag.
+    final gateway = harness.controller.browserResource('personal').gateway;
+    final queuedAdmission = gateway.canonical
+        .session(chat.runtime.runtimeId)!
+        .pending
+        .single;
+    expect(queuedAdmission.queued, isTrue);
+    expect(queuedAdmission.text, 'Queue this after the synthetic turn');
+    // Completing the current turn cannot locally drain Hermes's accepted FIFO.
     emitChatEvent(harness.controller, chat, 'message.complete', {
       'text': 'The approved fixture turn completed.',
+    });
+    await tester.pump();
+    expect(chat.composer.observation.queue, hasLength(1));
+    // The stock owner publishes the claimed admission on message.start, then
+    // publishes its updated pending receipts through session.info.
+    gateway.onEvent!(
+      StreamEvent(
+        type: 'message.start',
+        sessionId: chat.runtime.runtimeId,
+        envelope: {'admission_id': queuedAdmission.id},
+        data: const {},
+      ),
+    );
+    emitChatEvent(harness.controller, chat, 'session.info', {
+      'running': true,
+      'pending': [
+        {
+          'admission_id': queuedAdmission.id,
+          'input_id': queuedAdmission.inputId,
+          'ref': {'session_id': chat.runtime.runtimeId},
+          'sequence': queuedAdmission.sequence,
+          'status': 'started',
+          'execution_generation': queuedAdmission.generation,
+          'text': queuedAdmission.text,
+          'controls': const <String>[],
+          'steering': false,
+        },
+      ],
     });
     await _pumpUntil(tester, () => chat.composer.observation.queue.isEmpty);
     harness.fixture.requestApproval('personal', chat.runtime.runtimeId);
@@ -996,12 +1328,17 @@ void main() {
     await tester.tap(find.text('Background work'));
     await _settle(tester);
     expect(find.text('Report emulator health'), findsOneWidget);
+    final countdown = find.textContaining('Next in ');
+    await tester.ensureVisible(countdown);
+    await _settle(tester);
+    expect(countdown, findsOneWidget);
     await captureJourney(tester, 'background-work');
     await tester.ensureVisible(find.byTooltip('Pause loop'));
     await _settle(tester);
     await tester.tap(find.byTooltip('Pause loop'));
     await _settle(tester);
     expect(find.text('Loop · Paused'), findsOneWidget);
+    expect(find.textContaining('Next in '), findsNothing);
     await tester.ensureVisible(find.text('dart run roadmap_worker.dart'));
     await _settle(tester);
     await tester.tap(find.text('dart run roadmap_worker.dart'));
@@ -1321,7 +1658,9 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.textContaining('all later history in this chat'),
+      find.text(
+        'Resending replaces this message. This answer is replaced and the prompt runs again.',
+      ),
       findsOneWidget,
     );
     await tester.enterText(
@@ -1352,9 +1691,7 @@ void main() {
     expect(editSubmit.$2, {
       'session_id': source.runtime.runtimeId,
       'text': 'Corrected emulator prompt',
-      'truncate_before_row_id': 3,
-      'confirm_truncate': true,
-      'confirm_empty_truncate': true,
+      'submission_id': editSubmit.$2['submission_id'],
       'profile': 'personal',
     });
     expect(source.runtime.execution, ChatExecution.running);
@@ -1385,7 +1722,11 @@ void main() {
       ValueKey('answer-actions-$sourceAnswerId'),
     );
     final branchesBeforeRegenerate = harness.fixture.answerActionRequests
-        .where((request) => request.$1 == 'session.branch')
+        .where(
+          (request) =>
+              request.$1 == 'session.mutate' &&
+              request.$2['operation'] == 'branch',
+        )
         .length;
     final submitsBeforeRegenerate = harness.fixture.answerActionRequests
         .where((request) => request.$1 == 'prompt.submit')
@@ -1413,7 +1754,9 @@ void main() {
     expect(harness.controller.current!.chat, same(source));
     expect(
       harness.fixture.answerActionRequests.where(
-        (request) => request.$1 == 'session.branch',
+        (request) =>
+            request.$1 == 'session.mutate' &&
+            request.$2['operation'] == 'branch',
       ),
       hasLength(branchesBeforeRegenerate),
     );
@@ -1458,12 +1801,14 @@ void main() {
     await _pumpUntil(tester, () => !source.runtime.changingAnswer);
     await _settle(tester);
     final ordinaryBranchRequest = harness.fixture.answerActionRequests
-        .where((request) => request.$1 == 'session.branch')
+        .where(
+          (request) =>
+              request.$1 == 'session.mutate' &&
+              request.$2['operation'] == 'branch',
+        )
         .last;
-    expect(ordinaryBranchRequest.$2, {
-      'session_id': source.runtime.runtimeId,
-      'count': 4,
-      'profile': 'personal',
+    expect(ordinaryBranchRequest.$2['payload'], {
+      'through_message_id': regeneratedAnswerId,
     });
     expect(
       harness.fixture.answerActionRequests.where(
@@ -1485,9 +1830,12 @@ void main() {
     final submitsBeforeFork = harness.fixture.answerActionRequests
         .where((request) => request.$1 == 'prompt.submit')
         .length;
-    // Fork the selected saved answer while the source continues working.
-    // Its unsent composer draft belongs to the source, not the new branch.
+    // The canonical owner requires idle before copying the saved answer.
     emitChatEvent(harness.controller, source, 'message.start');
+    expect(harness.controller.canBranchAnswer(source), isFalse);
+    harness.fixture.completeAnswerAction('personal', source.runtime.runtimeId);
+    await _settle(tester);
+    expect(harness.controller.canBranchAnswer(source), isTrue);
     harness.fixture.branchGate = Completer<void>();
     harness.fixture.branchEntered = Completer<void>();
     await Scrollable.ensureVisible(
@@ -1512,7 +1860,7 @@ void main() {
     );
     expect(find.byKey(const Key('profile-message-composer')), findsNothing);
     await _pumpUntil(tester, () => harness.fixture.branchEntered!.isCompleted);
-    expect(source.runtime.execution, ChatExecution.running);
+    expect(source.runtime.execution, ChatExecution.completed);
     expect(source.composer.observation.text, 'Continue in emulator fork');
     harness.fixture.branchGate!.complete();
     await _pumpUntil(tester, () => harness.controller.current!.chat != source);
@@ -1548,17 +1896,19 @@ void main() {
     expect(forkSubmits, hasLength(1));
     expect(forkSubmits.single.$2, {
       'session_id': forked.runtime.runtimeId,
-      'queued': true,
+      'submission_id': forkSubmits.single.$2['submission_id'],
       'text': 'Continue in emulator fork',
       'profile': 'personal',
     });
     final forkBranchRequest = harness.fixture.answerActionRequests
-        .where((request) => request.$1 == 'session.branch')
+        .where(
+          (request) =>
+              request.$1 == 'session.mutate' &&
+              request.$2['operation'] == 'branch',
+        )
         .last;
-    expect(forkBranchRequest.$2, {
-      'session_id': source.runtime.runtimeId,
-      'count': 4,
-      'profile': 'personal',
+    expect(forkBranchRequest.$2['payload'], {
+      'through_message_id': regeneratedAnswerId,
     });
     expect(source.composer.observation.text, 'Continue in emulator fork');
     expect(forked.parentSessionId, source.key.sessionId);
@@ -1691,7 +2041,9 @@ class _RoadmapHarness {
       connectionId: controller.connection.id,
       connectionIdentity: controller.connectionIdentity,
       connectionLabel: controller.connection.label,
-      request: base.server.request,
+      request: (method, path, query, body) => path.startsWith('git/')
+          ? fixture.gitReview.readGit(method, path, query, body)
+          : base.server.request(method, path, query, body),
       settingsWrite: base.server.settingsWrite,
       ownedMutation: base.server.ownedMutation,
       gateway: (profile) {
@@ -1953,6 +2305,7 @@ class _RoadmapHarness {
 
   Future<void> dispose() async {
     registry.dispose();
+    fixture.gitReview.server.close();
     appPreferences.dispose();
     await dashboard.close(force: true);
     expect(unexpectedRequests, isEmpty);

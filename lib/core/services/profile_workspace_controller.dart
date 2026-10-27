@@ -1,3 +1,8 @@
+import '../models/model_catalog_details.dart';
+import '../models/canonical_session.dart';
+import 'package:uuid/uuid.dart';
+import '../models/turn_failure.dart';
+import '../models/hosted_connector_accounts.dart';
 import 'chat_transcript_events.dart';
 import 'hermes_question_history.dart';
 import 'subagent_timeline_session.dart';
@@ -113,9 +118,15 @@ class ProfileChat {
   String? _provider;
   String? _reasoningEffort;
   ChatFastMode? _fastMode;
-  bool _reasoningUnconfirmed = false;
   bool? _yolo;
   bool _changingIntelligence = false;
+  ChatIntelligenceSelection? _pendingIntelligence;
+  CurrentPlanGauge? _planGauge;
+  CurrentPlanGauge? get planGauge => _planGauge;
+  String? _readOnlyReason;
+  HostedConnectionOperation? _connectionOperation;
+  Object? _connectionOperationAction;
+  bool _answeringQuestion = false;
   bool _branchingAnswer = false;
   String? _intelligenceRuntime;
   int _intelligenceReadGeneration = 0;
@@ -184,6 +195,11 @@ class ProfileChat {
   ChatFastMode? get fastMode => _fastMode;
   bool? get yolo => _yolo;
   bool get changingIntelligence => _changingIntelligence;
+  ChatIntelligenceSelection? get pendingIntelligence => _pendingIntelligence;
+  String? get readOnlyReason => _readOnlyReason;
+  HostedConnectionOperation? get connectionOperation => _connectionOperation;
+  bool get connectionOperationWorking => _connectionOperationAction != null;
+  bool get answeringQuestion => _answeringQuestion;
   bool get branchingAnswer => _branchingAnswer;
   String? get intelligenceRuntime => _intelligenceRuntime;
   List<GatewayNotice> get reviewNotices =>
@@ -551,7 +567,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final NotificationFocus? Function(ProfileSessionKey)? notificationResultFor;
   final List<NotificationInput> Function(ProfileSessionKey)?
   _notificationInputsFor;
-  final _notificationReplayCursors = <String, int>{};
   final Map<WorkspaceScope, ProfileWorkspaceData> _resources = {};
   final Map<ProfileSessionKey, ProfileChat> _recoveredDraftTargets = {};
   final Set<ProfileSessionKey> _recoveringStoredDrafts = {};
@@ -3754,6 +3769,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       'The session changed, but its continuation was not accepted. Check this chat and refresh session controls before trying again.';
 
   void _updateContext(ProfileChat chat, Map usage) {
+    if (usage.containsKey('plan_gauge') || usage.containsKey('calls')) {
+      chat._planGauge = CurrentPlanGauge.parse(usage['plan_gauge']);
+    }
     final explicitRefresh = chat.contextRefreshPending;
     final compressions = usage['compressions'];
     final compressionChanged =
@@ -4556,9 +4574,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   bool _isMissingSessionResume(JsonRpcError error) =>
-      error.method == 'session.resume' &&
-      error.code == 4007 &&
-      error.message.trim().toLowerCase() == 'session not found';
+      error.method == 'session.resume' && error.reason == 'not_found';
 
   Future<void> _replaceExpiredDraftRuntime(
     ProfileWorkspaceData resource,
@@ -4625,26 +4641,18 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (preserveIntelligence &&
           chat._model != null &&
           chat._provider != null) {
-        final modelResult = await resource.gateway.call('config.set', {
-          'session_id': newRuntime,
-          'key': 'model',
-          'value': WsClient.buildSessionModelValue(
-            provider: chat._provider!,
-            model: chat._model!,
-          ),
-        });
-        if (modelResult['confirm_required'] == true) {
+        final modelResult = await resource.gateway
+            .mutateSession(newRuntime, 'model', {
+              'model': chat._model!,
+              'provider': chat._provider!,
+              if (chat._reasoningEffort != null)
+                'reasoning': chat._reasoningEffort!,
+            });
+        if (modelResult['status'] == 'confirmation_required') {
           throw StateError(
             modelResult['confirm_message']?.toString() ??
                 'Model needs confirmation.',
           );
-        }
-        if (chat._reasoningEffort != null) {
-          await resource.gateway.call('config.set', {
-            'session_id': newRuntime,
-            'key': 'reasoning',
-            'value': chat._reasoningEffort!,
-          });
         }
       }
       if (preserveIntelligence && chat._fastMode != null) {
@@ -4880,11 +4888,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (!identical(current, resource) || !canDispatch()) {
           throw StateError('Profile changed. Open the chat editor again.');
         }
-        final result = await resource.gateway.call('session.title', {
-          'session_id': chat!.runtime.runtimeId,
-          'title': changes['title'],
-        });
-        if (result['session_key'] != id || result['title'] is! String) {
+        final result = await resource.gateway.mutateSession(
+          chat!.runtime.runtimeId,
+          'rename',
+          {'title': changes['title']},
+        );
+        if (result['session_id'] != chat.runtime.runtimeId ||
+            result['title'] is! String) {
           throw const FormatException('Invalid chat title acknowledgement');
         }
         updated = {'title': result['title']};
@@ -5434,14 +5444,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> removeAttachment(ProfileChat chat, String id) async {
     _commandOwner(chat);
     if (!canRemoveAttachment(chat, id)) return;
-    await chat.composer.removeAttachment(id, (path, runtime) async {
-      final owner = _commandOwner(chat);
-      if (runtime != chat.runtime.runtimeId) return;
-      await owner.gateway.call('image.detach', {
-        'session_id': runtime,
-        'path': path,
-      });
-    });
+    // Uploads are staging-only: dropping the draft revokes its reference.
+    await chat.composer.removeAttachment(id);
   }
 
   bool canAddAttachment(ProfileChat chat) {
@@ -5810,9 +5814,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     await openSession(ProfileSessionKey(resource.scope, parent));
   }
 
-  /// Copying saved history does not require an idle source turn.
+  /// Canonical branch preparation and commit both require an idle source.
   bool canBranchAnswer(ProfileChat chat) =>
       !_closed &&
+      !chat.runtime.blocksTurnAdmission &&
+      chat.readOnlyReason == null &&
       !chat.runtime.opening &&
       !chat.runtime.offline &&
       !recovering &&
@@ -5827,6 +5833,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat source,
     int messageIndex, {
     bool regenerate = false,
+    int? expectedLaterTurns,
     bool Function()? isCurrentRequest,
   }) async {
     final resource = _commandOwner(source);
@@ -5878,7 +5885,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         throw StateError('This answer has no saved prompt to regenerate');
       }
       if (regenerate) {
-        if (!await _regenerate(source, target)) {
+        if (!await _regenerate(
+          source,
+          target,
+          expectedLaterTurns: expectedLaterTurns,
+        )) {
           throw StateError(source.runtime.error ?? 'Regeneration failed');
         }
         return source;
@@ -5889,7 +5900,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           .toList();
       final result = await resource.gateway.branch(
         source.runtime.runtimeId,
-        expected.length,
+        selectedId,
       );
       final id = result['stored_session_id'];
       if (id is! String ||
@@ -5900,9 +5911,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           'Branch has no new durable session identity',
         );
       }
-      final parent = result['parent'] == source._key.sessionId
-          ? source._key.sessionId
-          : null;
+      final parent = source._key.sessionId;
       final child = _createChatRecord(
         key: ProfileSessionKey(resource.scope, id),
         runtimeId: result['session_id'] as String,
@@ -5925,7 +5934,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           'title': child._title,
           'source': child._source,
           'profile': resource.scope.profileName,
-          'parent_session_id': ?parent,
+          'parent_session_id': parent,
         },
         ...resource._sessions,
       ]);
@@ -5963,37 +5972,112 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  Future<String> reviewWorkspacePath(ProfileChat chat) async {
+    final resource = _owned(chat), key = chat.key;
+    void requireCurrent() {
+      if (_closed || chat.key != key || !identical(_owned(chat), resource)) {
+        throw StateError('This conversation changed. Reopen Git review.');
+      }
+    }
+
+    requireCurrent();
+    final path = await _referenceCwd(chat, requireCurrent);
+    requireCurrent();
+    if (path == null) {
+      throw StateError(
+        'Git review requires a local terminal workspace reported by this conversation.',
+      );
+    }
+    return path;
+  }
+
   bool _isDestructiveMutationRefusal(Object error) =>
       error is JsonRpcError &&
-      error.method == 'prompt.submit' &&
-      !{'request_timeout', 'connection_closed'}.contains(error.reason) &&
-      // These stock errors precede the history cut (or report its failed write).
-      // Storage errors 5070–5072 and dispatcher failures may follow a saved cut.
-      {
-        -32600,
-        -32601,
-        -32602,
-        4000,
-        4001,
-        4004,
-        4007,
-        4009,
-        4018,
-        4028,
-        4029,
-        4030,
-        4090,
-        4091,
-        4120,
-        4121,
-        4122,
-        4124,
-        5008,
-        5035,
-        5122,
-      }.contains(error.code);
+      error.method == 'session.mutate' &&
+      const {
+        'invalid_params',
+        'revision_conflict',
+        'stale_generation',
+        'session_busy',
+        'unknown_execution',
+        'permission_denied',
+        'session_read_only',
+        'session_superseded',
+        'not_found',
+        'profile_mismatch',
+      }.contains(error.reason);
 
-  Future<bool> _regenerate(ProfileChat chat, AnswerTarget target) async {
+  Future<void> _submitRevisionPrompt(ProfileChat chat, String text) async {
+    final gateway = _commandOwner(chat).gateway;
+    final runtime = chat.runtime.runtimeId;
+    final ticket = await chat.composer.beginSubmission(
+      prompt: text,
+      preserveComposer: true,
+    );
+    var dispatched = false;
+    try {
+      final payload = <String, dynamic>{
+        'session_id': runtime,
+        'submission_id': ticket.submissionId,
+        'text': text,
+      };
+      await chat.composer.prepareDispatch(ticket, payload: payload);
+      _commandOwner(chat);
+      if (chat.runtime.runtimeId != runtime) {
+        throw StateError('Conversation changed before replay.');
+      }
+      final observedSequence = gateway.canonical.session(runtime)!.sequence;
+      dispatched = true;
+      final receipt = CanonicalAdmission.fromJson(
+        await gateway.call('prompt.submit', payload),
+      );
+      if (receipt.sessionId != runtime) {
+        throw const FormatException(
+          'Replay receipt belongs to another conversation',
+        );
+      }
+      gateway.canonical.admission(
+        receipt,
+        inputId: ticket.submissionId,
+        text: ticket.text,
+        observedSequence: observedSequence,
+      );
+      _observeCanonicalPending(chat);
+      try {
+        await chat.composer.settle(ticket, ComposerDelivery.accepted);
+      } finally {
+        // The server owns accepted work even if local journal cleanup fails.
+        await _refreshCanonicalPending(chat);
+      }
+    } catch (_) {
+      await chat.composer.settle(
+        ticket,
+        dispatched
+            ? ComposerDelivery.uncertain
+            : ComposerDelivery.definitelyUnsent,
+      );
+      rethrow;
+    }
+  }
+
+  void _requireRevisionDepth(
+    List<Map<String, dynamic>> history,
+    int index,
+    int? expected,
+  ) {
+    if (expected != null &&
+        history.skip(index + 1).where(isHumanAnswerPrompt).length != expected) {
+      throw const FormatException(
+        'Later work changed. Review the affected turns before revising this message.',
+      );
+    }
+  }
+
+  Future<bool> _regenerate(
+    ProfileChat chat,
+    AnswerTarget target, {
+    int? expectedLaterTurns,
+  }) async {
     final resource = _commandOwner(chat);
     final originalReading = chat.reading.captureBranch();
     final runtimeChange = chat._runtime.beginAnswerChange(submitting: true);
@@ -6003,17 +6087,26 @@ class ProfileWorkspaceController extends ChangeNotifier {
     try {
       _commandOwner(chat);
       await resource.gateway.requireProfile();
+      final fence = resource.gateway.canonical.session(chat.runtime.runtimeId)!;
       final history = await resource.gateway.fullHistory(
         chat.runtime.runtimeId,
       );
       final users = history.where(isAnswerPrompt).toList();
-      if (target.userOrdinal >= users.length ||
+      if (target.userRowId == null ||
+          target.userRowId! <= 0 ||
+          target.userOrdinal >= users.length ||
+          users[target.userOrdinal]['row_id'] != target.userRowId ||
           answerMessageText(users[target.userOrdinal]) != target.prompt) {
         throw StateError(
           'Could not locate the original prompt in this conversation',
         );
       }
       final prompt = users[target.userOrdinal];
+      _requireRevisionDepth(
+        history,
+        history.indexOf(prompt),
+        expectedLaterTurns,
+      );
       if (!isHumanAnswerPrompt(prompt)) {
         throw StateError('An internal delivery cannot be replayed as a prompt');
       }
@@ -6036,14 +6129,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _changed();
       _commandOwner(chat);
       submitted = true;
-      await resource.gateway.call('prompt.submit', {
-        'session_id': chat.runtime.runtimeId,
-        'text': wireText,
-        'truncate_before_row_id': rowId,
-        'confirm_truncate': true,
-        'confirm_empty_truncate': true,
-      });
+      await resource.gateway.mutateSession(chat.runtime.runtimeId, 'rewind', {
+        'target_message_id': rowId,
+      }, expected: fence);
+      await _submitRevisionPrompt(chat, wireText);
     } catch (e) {
+      _observeCanonicalPending(chat);
       if (!submitted || _isDestructiveMutationRefusal(e)) {
         rejected = true;
         chat.reading.restoreBranch(
@@ -6055,8 +6146,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
           dispatched: submitted,
           error: e is FormatException && !submitted
               ? e.message.toString()
-              : e is JsonRpcError && e.code == 4018
-              ? 'Hermes could not match this saved prompt. The conversation is unchanged. Send a new message to continue.'
               : 'Hermes did not accept the regeneration. The conversation is unchanged.',
         );
       } else {
@@ -6086,6 +6175,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     required bool restore,
   }) =>
       !_closed &&
+      chat.readOnlyReason == null &&
       !chat.runtime.opening &&
       !chat.runtime.offline &&
       !recovering &&
@@ -6106,31 +6196,93 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<bool> editSavedPrompt(
     ProfileChat chat,
     Map<String, dynamic> selected,
-    String rawText,
-  ) => _replaceSavedPrompt(chat, selected, rawText, restore: false);
+    String rawText, {
+    int? expectedLaterTurns,
+  }) => _replaceSavedPrompt(
+    chat,
+    selected,
+    rawText,
+    restore: false,
+    expectedLaterTurns: expectedLaterTurns,
+  );
 
   /// Desktop checkpoint restore: cut this prompt and its tail, then rerun it.
   Future<bool> restoreSavedPrompt(
     ProfileChat chat,
-    Map<String, dynamic> selected,
-  ) => _replaceSavedPrompt(
+    Map<String, dynamic> selected, {
+    int? expectedLaterTurns,
+  }) => _replaceSavedPrompt(
     chat,
     selected,
     answerMessageDisplayText(selected),
     restore: true,
+    expectedLaterTurns: expectedLaterTurns,
   );
+
+  Future<Map<String, dynamic>> _waitForRevisionIdle(
+    ProfileChat chat,
+    ProfileGateway gateway,
+    CanonicalSessionObservation stopped,
+    void Function() requireOwner,
+  ) async {
+    final elapsed = Stopwatch()..start();
+    const limit = Duration(seconds: 10);
+    while (elapsed.elapsed < limit) {
+      requireOwner();
+      final snapshot = await gateway
+          .resume(chat._key.sessionId)
+          .timeout(
+            limit - elapsed.elapsed,
+            onTimeout: () => throw const FormatException(
+              'Hermes is still stopping. Wait for the turn to finish before restoring this prompt.',
+            ),
+          );
+      requireOwner();
+      final current = gateway.canonical.session(stopped.sessionId);
+      if (snapshot['session_id'] != stopped.sessionId ||
+          current == null ||
+          current.generation != stopped.generation ||
+          current.authorityEpoch != stopped.authorityEpoch ||
+          current.replayEpoch != stopped.replayEpoch) {
+        throw const FormatException(
+          'The running turn changed. Review the conversation before restoring this prompt.',
+        );
+      }
+      if (current.pending.any((row) => row.queued || row.unknown)) {
+        throw const FormatException(
+          'Queued or uncertain messages still belong to this conversation. Resolve them before restoring this prompt.',
+        );
+      }
+      if (snapshot['running'] == false &&
+          current.pending.every((row) => row.status == 'terminal')) {
+        return snapshot;
+      }
+      if (snapshot['running'] is! bool) {
+        throw const FormatException(
+          'Hermes did not confirm whether the turn has stopped.',
+        );
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+    }
+    throw const FormatException(
+      'Hermes is still stopping. Wait for the turn to finish before restoring this prompt.',
+    );
+  }
 
   Future<bool> _replaceSavedPrompt(
     ProfileChat chat,
     Map<String, dynamic> selected,
     String rawText, {
     required bool restore,
+    int? expectedLaterTurns,
   }) async {
     final resource = _commandOwner(chat);
     final runtimeId = chat.runtime.runtimeId;
+    final key = chat._key;
     void requireOwner() {
-      _commandOwner(chat);
-      if (chat.runtime.runtimeId != runtimeId) {
+      if (!identical(_commandOwner(chat), resource) ||
+          chat._key != key ||
+          chat.runtime.runtimeId != runtimeId) {
         throw StateError('The conversation changed during the request');
       }
     }
@@ -6147,7 +6299,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (!_canReplaceSavedPrompt(chat, selected, restore: restore)) return false;
     final interruptFirst = restore && chat.runtime.blocksTurnAdmission;
     final originalReading = chat.reading.captureBranch();
-    final runtimeChange = chat._runtime.beginAnswerChange(submitting: true);
+    var runtimeChange = chat._runtime.beginAnswerChange(submitting: true);
     _changed();
     ComposerPauseCapture? queuePause;
     var submitted = false;
@@ -6158,10 +6310,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
       await resource.gateway.requireProfile();
       if (interruptFirst) {
         requireOwner();
+        final stopped = resource.gateway.canonical.session(runtimeId)!;
         await resource.gateway.call('session.interrupt', {
           'session_id': runtimeId,
         });
+        final idle = await _waitForRevisionIdle(
+          chat,
+          resource.gateway,
+          stopped,
+          requireOwner,
+        );
+        chat._runtime.installResume(idle);
+        runtimeChange = chat._runtime.beginAnswerChange(submitting: true);
       }
+      final fence = resource.gateway.canonical.session(runtimeId)!;
       final history = await resource.gateway.fullHistory(runtimeId);
       final targetIndex = history.indexWhere(
         (message) => answerMessageId(message) == selectedId,
@@ -6174,6 +6336,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           'History changed. Reconnect to reload before replacing this prompt.',
         );
       }
+      _requireRevisionDepth(history, targetIndex, expectedLaterTurns);
       final rowId = history[targetIndex]['row_id'];
       if (rowId is! int || rowId <= 0) {
         throw StateError('The gateway did not return a saved message address');
@@ -6192,40 +6355,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _changed();
       requireOwner();
       submitted = true;
-      final params = <String, dynamic>{
-        'session_id': runtimeId,
-        'text': wireText,
-        'truncate_before_row_id': rowId,
-        'confirm_truncate': true,
-        'confirm_empty_truncate': true,
-      };
-      var interruptedBusySession = false;
-      for (var attempt = 0; ; attempt++) {
-        requireOwner();
-        try {
-          await resource.gateway.call('prompt.submit', params);
-          break;
-        } on JsonRpcError catch (error) {
-          // Stock rewind refuses busy sessions before cutting history. A live
-          // interrupted tool can take time to settle; keep the same durable cut.
-          if (!restore ||
-              error.code != 4009 ||
-              !_isDestructiveMutationRefusal(error) ||
-              attempt >= 29) {
-            rethrow;
-          }
-          if (!interruptedBusySession) {
-            requireOwner();
-            await resource.gateway.call('session.interrupt', {
-              'session_id': runtimeId,
-            });
-            interruptedBusySession = true;
-          }
-          await Future<void>.delayed(const Duration(milliseconds: 100));
-        }
-      }
+      await resource.gateway.mutateSession(runtimeId, 'rewind', {
+        'target_message_id': rowId,
+      }, expected: fence);
+      await _submitRevisionPrompt(chat, wireText);
       acknowledged = true;
     } catch (e) {
+      _observeCanonicalPending(chat);
       if (!submitted || _isDestructiveMutationRefusal(e)) {
         chat.reading.restoreBranch(
           originalReading,
@@ -6294,6 +6430,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._reasoningEffort =
           info['reasoning_effort']?.toString() ?? chat._reasoningEffort;
       if (info['yolo'] is bool) chat._yolo = info['yolo'] as bool;
+      final pending = chat._pendingIntelligence;
+      if (pending != null &&
+          chat.model == pending.choice.model &&
+          chat.provider == pending.choice.provider &&
+          chat.reasoningEffort == pending.reasoningEffort) {
+        chat._pendingIntelligence = null;
+      }
     }
   }
 
@@ -6337,7 +6480,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._reasoningEffort = WsClient.normalizeReasoningEffort(
         (results[2] as Map<String, dynamic>)['value'],
       );
-      chat._reasoningUnconfirmed = false;
       chat._intelligenceRevision++;
       _changed();
     } catch (_) {
@@ -6389,7 +6531,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat._reasoningEffort = WsClient.normalizeReasoningEffort(
       (results[2] as Map<String, dynamic>)['value'],
     );
-    chat._reasoningUnconfirmed = false;
     chat._fastMode = ChatFastMode.fromValue(
       (results[3] as Map<String, dynamic>)['value'],
     );
@@ -6419,140 +6560,92 @@ class ProfileWorkspaceController extends ChangeNotifier {
       throw ArgumentError('Unsupported reasoning effort');
     }
     final runtime = chat.runtime.runtimeId;
-    final previousModel = chat._model;
-    final previousProvider = chat._provider;
-    final previousEffort = chat._reasoningEffort;
-    void requireCurrentSelection({bool allowAppliedModel = false}) {
+    void requireCurrent() {
       _commandOwner(chat);
       if (_closed ||
           switching ||
           _current?.chat != chat ||
           chat.runtime.runtimeId != runtime ||
-          !((chat._model == previousModel &&
-                  chat._provider == previousProvider) ||
-              (allowAppliedModel &&
-                  chat._model == selection.choice.model &&
-                  chat._provider == selection.choice.provider)) ||
-          chat.runtime.blocksTurnAdmission ||
           chat.runtime.opening ||
+          chat.runtime.reconnecting ||
           chat.runtime.commandRunning ||
           chat.runtime.changingAnswer) {
         throw StateError('Chat changed. Choose the model again.');
       }
     }
 
-    _commandOwner(chat);
     await gateway.requireProfile();
-    requireCurrentSelection();
-    if (previousModel != selection.choice.model ||
-        previousProvider != selection.choice.provider) {
-      final params = <String, dynamic>{
-        'session_id': runtime,
-        'key': 'model',
-        'value': WsClient.buildSessionModelValue(
-          provider: selection.choice.provider,
-          model: selection.choice.model,
-        ),
+    requireCurrent();
+    final pending = chat.pendingIntelligence;
+    final routeChanged =
+        (pending?.choice.model ?? chat.model) != selection.choice.model ||
+        (pending?.choice.provider ?? chat.provider) !=
+            selection.choice.provider;
+    if (routeChanged ||
+        (pending?.reasoningEffort ?? chat.reasoningEffort) !=
+            selection.reasoningEffort) {
+      final operation = routeChanged ? 'model' : 'reasoning';
+      final payload = <String, dynamic>{
+        if (routeChanged) ...{
+          'model': selection.choice.model,
+          'provider': selection.choice.provider,
+          'reasoning': selection.reasoningEffort,
+        } else
+          'effort': selection.reasoningEffort,
       };
-      _commandOwner(chat);
-      var result = await gateway.call('config.set', params);
-      requireCurrentSelection(
-        allowAppliedModel: result['confirm_required'] != true,
-      );
-      if (result['confirm_required'] == true) {
-        requireCurrentSelection();
+      var result = await gateway.mutateSession(runtime, operation, payload);
+      requireCurrent();
+      if (result['status'] == 'confirmation_required') {
+        final token = result['confirm'];
+        if (token is! String || token.isEmpty) {
+          throw const FormatException('Missing model confirmation');
+        }
         final message = result['confirm_message']?.toString().trim() ?? '';
-        final accepted = await confirmModelChange(
+        if (!await confirmModelChange(
           message.isEmpty
               ? 'Hermes requires confirmation before using this model.'
               : message,
-        );
-        if (!accepted) return false;
-        requireCurrentSelection();
-        _commandOwner(chat);
-        result = await gateway.call('config.set', {
-          ...params,
-          'confirm_expensive_model': true,
-        });
-        requireCurrentSelection(
-          allowAppliedModel: result['confirm_required'] != true,
-        );
-        if (result['confirm_required'] == true) {
-          throw StateError('Hermes did not accept the confirmed model change.');
+        )) {
+          return false;
         }
-      }
-    }
-    if (chat.runtime.runtimeId != runtime) {
-      throw StateError('Chat reconnected. Try applying again.');
-    }
-    chat._model = selection.choice.model;
-    chat._provider = selection.choice.provider;
-    chat._intelligenceRevision++;
-    void requireAppliedRoute() {
-      _commandOwner(chat);
-      if (_closed ||
-          switching ||
-          _current?.chat != chat ||
-          chat.runtime.runtimeId != runtime ||
-          chat.model != selection.choice.model ||
-          chat.provider != selection.choice.provider) {
-        throw StateError('Chat changed. Choose the model again.');
-      }
-    }
-
-    final modelChanged =
-        previousModel != selection.choice.model ||
-        previousProvider != selection.choice.provider;
-    if (modelChanged ||
-        chat._reasoningEffort != selection.reasoningEffort ||
-        chat._reasoningUnconfirmed) {
-      try {
-        requireAppliedRoute();
-        chat._reasoningUnconfirmed = true;
-        await gateway.call('config.set', {
-          'session_id': runtime,
-          'key': 'reasoning',
-          'value': selection.reasoningEffort,
+        requireCurrent();
+        result = await gateway.mutateSession(runtime, operation, {
+          ...payload,
+          'confirm': token,
         });
-        requireAppliedRoute();
-        chat._reasoningUnconfirmed = false;
-        chat._reasoningEffort = selection.reasoningEffort;
-        chat._intelligenceRevision++;
-      } catch (_) {
-        if (modelChanged) {
+        requireCurrent();
+        if (result['status'] == 'confirmation_required') {
           throw StateError(
-            'The model changed, but reasoning could not be confirmed. Your choice is still here; Apply again to retry reasoning.',
+            'The model confirmation expired. Choose the model again.',
           );
         }
-        rethrow;
       }
+      if (result['status'] == 'deferred') {
+        chat._pendingIntelligence = selection;
+      } else {
+        chat._pendingIntelligence = null;
+        chat._model = selection.choice.model;
+        chat._provider = selection.choice.provider;
+        chat._reasoningEffort = selection.reasoningEffort;
+      }
+      chat._intelligenceRevision++;
     }
-    if (chat._fastMode != selection.fastMode) {
+    if (chat.fastMode != selection.fastMode) {
+      final Map<String, dynamic> fast;
       try {
-        requireAppliedRoute();
-        final fastResult = await gateway.call('config.set', {
+        fast = await gateway.call('config.set', {
           'session_id': runtime,
           'key': 'fast',
           'value': selection.fastMode.name,
         });
-        if (chat.runtime.runtimeId != runtime) {
-          throw StateError('Chat reconnected. Try applying again.');
-        }
-        requireAppliedRoute();
-        chat._fastMode = ChatFastMode.fromValue(fastResult['value']);
-        if (chat._fastMode != selection.fastMode) {
-          throw StateError('Hermes did not accept fast mode.');
-        }
-        chat._intelligenceRevision++;
       } catch (_) {
-        final updated = [
-          if (modelChanged) 'model',
-          if (previousEffort != chat._reasoningEffort) 'reasoning',
-        ];
+        throw StateError('Fast mode could not be confirmed. Try again.');
+      }
+      requireCurrent();
+      chat._fastMode = ChatFastMode.fromValue(fast['value']);
+      if (chat.fastMode != selection.fastMode) {
         throw StateError(
-          updated.isEmpty
-              ? 'Fast mode could not be confirmed. Try again.'
-              : 'The ${updated.join(' and ')} changed, but fast mode could not be confirmed. Apply again to retry fast mode.',
+          'Hermes did not confirm fast mode. The model choice was accepted.',
         );
       }
     }
@@ -6570,7 +6663,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat._replacingExpiredRuntime ||
         chat.runtime.opening ||
         chat.runtime.commandRunning ||
-        chat.runtime.blocksTurnAdmission ||
+        chat.runtime.reconnecting ||
+        chat.readOnlyReason != null ||
         chat.runtime.changingAnswer ||
         chat._changingIntelligence ||
         switching ||
@@ -6598,6 +6692,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       return true;
     } finally {
+      _observeCanonicalPending(chat);
       chat._changingIntelligence = false;
       _changed();
     }
@@ -6930,10 +7025,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
           break;
         }
         _commandOwner(chat);
-        final result = await resource.gateway.call('session.title', {
-          'session_id': chat.runtime.runtimeId,
-          'title': argument,
-        });
+        final result = await resource.gateway.mutateSession(
+          chat.runtime.runtimeId,
+          'rename',
+          {'title': argument},
+        );
         chat._title = result['title'] as String? ?? argument;
         chat.reading.appendCommandNotice('Session title: ${chat.title}');
       case 'branch':
@@ -6951,10 +7047,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
         if (child == null) throw StateError('Could not branch this chat.');
         if (argument.isNotEmpty) {
           _commandOwner(chat);
-          final result = await resource.gateway.call('session.title', {
-            'session_id': child.runtime.runtimeId,
-            'title': argument,
-          });
+          final result = await resource.gateway.mutateSession(
+            child.runtime.runtimeId,
+            'rename',
+            {'title': argument},
+          );
           child._title = result['title'] as String? ?? argument;
         }
       case 'save':
@@ -6971,12 +7068,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat.reading.appendCommandNotice('Saved on the Hermes host: $file');
       case 'status':
         _commandOwner(chat);
-        final result = await resource.gateway.call('session.status', {
+        final result = await resource.gateway.call('slash.exec', {
           'session_id': chat.runtime.runtimeId,
+          'command': argument.isEmpty ? '/status' : '/status $argument',
         });
-        chat.reading.appendCommandNotice(
-          result['output'] as String? ?? 'Status unavailable.',
-        );
+        if (result['type'] != 'exec' || result['output'] is! String) {
+          throw const FormatException(
+            'Hermes did not return the session status.',
+          );
+        }
+        chat.reading.appendCommandNotice(result['output'] as String);
       case 'yolo':
         if (argument.isNotEmpty) throw StateError('Usage: /yolo');
         if (chat._yolo == null) {
@@ -7233,9 +7334,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }) async {
     final resource = _commandOwner(chat);
     final work = chat.composer.observation;
-    if (chat._replacingExpiredRuntime ||
+    final admittingQueue =
+        queuedPrompt != null && chat.runtime.blocksTurnAdmission;
+    if (chat._readOnlyReason != null ||
+        chat._replacingExpiredRuntime ||
         (commandPrompt == null
-            ? chat.runtime.blocksTurnAdmission
+            ? (!admittingQueue && chat.runtime.blocksTurnAdmission)
             : !commandPrompt.current) ||
         work.sending ||
         work.saving ||
@@ -7247,9 +7351,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
             queuedPrompt == null)) {
       return false;
     }
-    if (commandPrompt == null) {
+    if (commandPrompt == null && !admittingQueue) {
       chat._runtime.beginTurn(submitting: true);
-    } else {
+    } else if (commandPrompt != null) {
       chat._runtime.beginCommandPrompt(commandPrompt);
     }
     chat.reading.cancelReads();
@@ -7340,18 +7444,38 @@ class ProfileWorkspaceController extends ChangeNotifier {
         authoredPrompt,
         selected: ticket.references,
       );
-      await chat.composer.prepareDispatch(ticket);
+      final uploaded = chat.composer.submittedAttachments(ticket);
+      final images = <Map<String, dynamic>>[
+        for (var index = 0; index < uploaded.length; index++)
+          if (uploaded[index].isImage)
+            {
+              'path': uploaded[index].target,
+              'mime': ticket.attachments[index].mediaType,
+            },
+      ];
+      final payload = <String, dynamic>{
+        'session_id': runtime,
+        'submission_id': ticket.submissionId,
+        if (admittingQueue) 'queued': true,
+        'text': promptText.isEmpty && images.isNotEmpty
+            ? 'What do you see in this image?'
+            : promptText,
+        if (images.isNotEmpty) 'attachments': images,
+      };
+      await chat.composer.prepareDispatch(ticket, payload: payload);
       if (commandPrompt != null && !commandPrompt.current) {
         throw StateError('The command continuation has changed.');
       }
       chat._replaceableUnsubmittedRuntime = false;
-      chat.reading.appendPrompt(
-        text: text,
-        displayText: displayText,
-        attachments: chat.composer.submittedAttachments(ticket),
-      );
-      chat.reading.updateStreaming('');
-      chat._runtime.acceptTurn();
+      if (!admittingQueue) {
+        chat.reading.appendPrompt(
+          text: text,
+          displayText: displayText,
+          attachments: chat.composer.submittedAttachments(ticket),
+        );
+        chat.reading.updateStreaming('');
+        chat._runtime.acceptTurn();
+      }
       if (chat._title == 'New chat') {
         chat._title = displayText ?? (text.isEmpty ? 'Attachment' : text);
       }
@@ -7363,28 +7487,75 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (chat.runtime.runtimeId != runtime) {
         throw StateError('Chat reconnected before sending this prompt.');
       }
+      if (resource.gateway.canonical.session(runtime) == null ||
+          resource.gateway.canonical.needsSnapshot(runtime)) {
+        await _refreshCanonicalPending(chat);
+        _commandOwner(chat);
+        if (chat.runtime.runtimeId != runtime ||
+            commandPrompt != null && !commandPrompt.current) {
+          throw StateError('The conversation changed before sending.');
+        }
+      }
+      final authority = resource.gateway.canonical.session(runtime);
+      if (authority == null) {
+        throw StateError(
+          'Reconnect to attach this conversation before sending.',
+        );
+      }
+      final observedSequence = authority.sequence;
       submitted = true;
-      await resource.gateway.call('prompt.submit', {
-        'session_id': runtime,
-        if (queuedPrompt != null) 'queued': true,
-        'text': promptText.isEmpty && ticket.attachments.any((v) => v.isImage)
-            ? 'What do you see in this image?'
-            : promptText,
-      });
+      final receipt = CanonicalAdmission.fromJson(
+        await resource.gateway.call('prompt.submit', payload),
+      );
+      if (receipt.sessionId != runtime) {
+        throw const FormatException(
+          'Submission receipt belongs to another conversation',
+        );
+      }
+      if (receipt.status == 'unknown') {
+        throw StateError(
+          'Hermes recovered an unknown outcome. Review this submission before continuing.',
+        );
+      }
       acknowledged = true;
-      await chat.composer.settle(ticket, ComposerDelivery.accepted);
+      resource.gateway.canonical.admission(
+        receipt,
+        inputId: ticket.submissionId,
+        text: ticket.text,
+        observedSequence: observedSequence,
+      );
+      _observeCanonicalPending(chat);
+      try {
+        await chat.composer.settle(ticket, ComposerDelivery.accepted);
+      } finally {
+        // The server owns accepted work even if local journal cleanup fails.
+        await _refreshCanonicalPending(chat);
+      }
     } catch (error) {
+      final rejected =
+          error is JsonRpcError &&
+          const {
+            'invalid_params',
+            'permission_denied',
+            'session_read_only',
+            'session_superseded',
+            'not_found',
+            'profile_mismatch',
+            'admission_conflict',
+          }.contains(error.reason);
+      final uncertain = submitted && !rejected;
+      _observeCanonicalPending(chat);
       chat._runtime.reportError(
         acknowledged
             ? 'The message was accepted. Remaining unsent work could not be saved.'
-            : submitted
-            ? 'Delivery or completion is uncertain. Reconnect to check history. The prompt will not be resent.'
+            : uncertain
+            ? 'Delivery or completion is uncertain. Reconnect to check the original submission.'
             : error.toString(),
       );
       if (!acknowledged) {
-        if (submitted) {
+        if (uncertain) {
           chat._runtime.beginRecovery();
-        } else {
+        } else if (!admittingQueue) {
           chat._runtime.completeTurn(
             failed: true,
             cancelled: false,
@@ -7397,14 +7568,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
           ticket,
           acknowledged
               ? ComposerDelivery.accepted
-              : submitted
+              : uncertain
               ? ComposerDelivery.uncertain
               : ComposerDelivery.definitelyUnsent,
           error: chat.runtime.error,
         );
       }
       if (acknowledged) await chat.composer.pause();
-      if (submitted && !acknowledged) _scheduleReconnect(resource);
+      if (uncertain && !acknowledged) _scheduleReconnect(resource);
     } finally {
       _changed();
     }
@@ -7425,19 +7596,55 @@ class ProfileWorkspaceController extends ChangeNotifier {
     });
   }
 
+  void _appendAcceptedSteer(ProfileChat chat, String text) {
+    if (chat.reading.streaming.isNotEmpty) {
+      chat.reading.appendAssistant(
+        chat.reading.streaming,
+        turnGeneration: chat._runtime.turnRevision,
+        reasoning: '',
+        responseReused: false,
+        interim: true,
+      );
+      chat.reading.updateStreaming('');
+    }
+    chat._runtime.finishSegment();
+    chat.reading.appendPrompt(
+      text: PreparedComposerMessage.parse(text)?.message ?? text,
+      steering: true,
+    );
+  }
+
   Future<bool> _steerRuntime(
     ProfileChat chat,
     String text, {
     required Iterable<ComposerReference> selected,
   }) async {
+    final resource = _commandOwner(chat);
     final runtime = chat.runtime.runtimeId;
-    final prepared = await _prepareReferences(chat, text, selected: selected);
-    if (chat.runtime.runtimeId != runtime) {
-      throw StateError('The conversation changed before steering.');
+    final authority = resource.gateway.canonical.session(runtime);
+    if (authority == null ||
+        resource.gateway.canonical.needsSnapshot(runtime)) {
+      throw StateError(
+        'Reconnect to refresh the running turn before steering.',
+      );
     }
-    final result = await _commandOwner(
-      chat,
-    ).gateway.call('session.steer', {'session_id': runtime, 'text': prepared});
+    final prepared = await _prepareReferences(chat, text, selected: selected);
+    final current = resource.gateway.canonical.session(runtime);
+    if (!identical(_commandOwner(chat), resource) ||
+        chat.runtime.runtimeId != runtime ||
+        current == null ||
+        current.generation != authority.generation ||
+        current.authorityEpoch != authority.authorityEpoch ||
+        current.replayEpoch != authority.replayEpoch ||
+        resource.gateway.canonical.needsSnapshot(runtime) ||
+        current.readOnlyReason != null) {
+      throw StateError('The running turn changed. Review it before steering.');
+    }
+    final result = await resource.gateway.call('session.steer', {
+      'session_id': runtime,
+      'execution_generation': authority.generation,
+      'text': prepared,
+    });
     if (chat.runtime.runtimeId != runtime) {
       throw StateError(
         'Chat reconnected while steering. Check its history before trying again.',
@@ -7445,7 +7652,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     final status = result['status']?.toString();
     if (status == 'queued') {
-      chat.reading.appendPrompt(text: text, steering: true);
+      _appendAcceptedSteer(chat, text);
       _changed();
       return true;
     }
@@ -7464,6 +7671,96 @@ class ProfileWorkspaceController extends ChangeNotifier {
         selected: chat.composer.observation.references,
       ),
     );
+  }
+
+  void _observeCanonicalPending(ProfileChat chat, {bool notify = true}) {
+    final state = _owned(
+      chat,
+    ).gateway.canonical.session(chat.runtime.runtimeId);
+    if (state == null) return;
+    chat._readOnlyReason = state.readOnlyReason;
+    chat.composer.observePending(state.pending, notify: notify);
+  }
+
+  Future<void> _refreshCanonicalPending(ProfileChat chat) async {
+    final resource = _commandOwner(chat);
+    final runtime = chat.runtime.runtimeId;
+    await resource.gateway.resume(runtime);
+    if (chat.runtime.runtimeId == runtime) _observeCanonicalPending(chat);
+  }
+
+  final _submissionRecoveries = <ProfileChat>{};
+  Future<void> _reconcileCanonicalSubmissions(ProfileChat chat) async {
+    if (!chat.composer.hasRecoverableSubmissions ||
+        !_submissionRecoveries.add(chat)) {
+      return;
+    }
+    try {
+      final gateway = _commandOwner(chat).gateway;
+      await chat.composer.reconcileSubmissions(
+        (payload) async => CanonicalAdmission.fromJson(
+          await gateway.call('prompt.submit', payload),
+        ),
+      );
+      await _refreshCanonicalPending(chat);
+    } catch (error) {
+      chat._runtime.reportError(
+        'Submission recovery is not confirmed. Reconnect to check the original receipt: $error',
+      );
+    } finally {
+      _submissionRecoveries.remove(chat);
+      _changed();
+    }
+  }
+
+  final _canonicalRecoveries = <ProfileChat>{};
+  Future<void> _recoverCanonicalSnapshot(ProfileChat chat) async {
+    if (!_canonicalRecoveries.add(chat)) return;
+    try {
+      final resource = _owned(chat);
+      final read = _captureResume(resource, chat);
+      final result = await resource.gateway.resume(chat.key.sessionId);
+      if (!read.current()) return;
+      _hydrate(chat, result);
+      await refreshHistory(chat);
+    } catch (error) {
+      chat._runtime.reportError(
+        'Conversation updates were interrupted. Reconnect to reload: $error',
+      );
+    } finally {
+      _canonicalRecoveries.remove(chat);
+      _changed();
+    }
+  }
+
+  Future<bool> _serverQueueControl(
+    ProfileChat chat,
+    ComposerQueueId id,
+    String action,
+  ) async {
+    final row = chat.composer.serverAdmission(id);
+    if (row == null) return false;
+    if (chat.readOnlyReason != null ||
+        action == 'prompt.cancel' &&
+            !chat.composer.queueActions(id).canDelete) {
+      throw StateError(
+        'This admission can no longer be changed. Refresh the conversation.',
+      );
+    }
+    final gateway = _commandOwner(chat).gateway;
+    await chat.composer.serverQueueAction(() async {
+      final response = await gateway
+          .call(row.unknown ? 'prompt.resolve_unknown' : action, {
+            'session_id': chat.runtime.runtimeId,
+            'admission_id': row.id,
+            if (row.unknown) 'execution_generation': row.generation,
+          });
+      if (action == 'prompt.steer_queued' && response['status'] == 'started') {
+        _appendAcceptedSteer(chat, row.text);
+      }
+      await _refreshCanonicalPending(chat);
+    });
+    return true;
   }
 
   Future<void> queueScreenMessage(ProfileChat chat, String text) async {
@@ -7558,12 +7855,38 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<void> saveQueuedPromptEdit(ProfileChat chat) async {
     _commandOwner(chat);
-    await chat.composer.saveEdit();
-    await _drainQueuedPrompts(chat);
+    final editing = chat.composer.observation.editing;
+    final row = editing == null ? null : chat.composer.serverAdmission(editing);
+    if (row != null) {
+      final text = chat.composer.observation.editText.trim();
+      await chat.composer.serverQueueAction(() async {
+        final prepared = await _prepareReferences(
+          chat,
+          text,
+          selected: chat.composer.observation.references,
+        );
+        await _commandOwner(chat).gateway.call('prompt.replace_queued', {
+          'session_id': chat.runtime.runtimeId,
+          'admission_id': row.id,
+          'submission_id': const Uuid().v4(),
+          'text': prepared,
+        });
+        await _refreshCanonicalPending(chat);
+      });
+      await chat.composer.cancelEdit();
+    } else {
+      await chat.composer.saveEdit();
+      await _drainQueuedPrompts(chat);
+    }
   }
 
   Future<bool> steerQueuedPromptEdit(ProfileChat chat) async {
     _commandOwner(chat);
+    final editing = chat.composer.observation.editing;
+    if (editing != null && chat.composer.serverAdmission(editing) != null) {
+      if (!chat.composer.queueActions(editing).canSteer) return false;
+      return _serverQueueControl(chat, editing, 'prompt.steer_queued');
+    }
     final accepted = await chat.composer.steerEdit(
       (text, references) => _steerRuntime(chat, text, selected: references),
     );
@@ -7573,6 +7896,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<bool> steerQueuedPrompt(ProfileChat chat, ComposerQueueId id) async {
     _commandOwner(chat);
+    if (chat.composer.serverAdmission(id) != null) {
+      if (!chat.composer.queueActions(id).canSteer) return false;
+      return _serverQueueControl(chat, id, 'prompt.steer_queued');
+    }
     final accepted = await chat.composer.steerQueued(
       id,
       (text, references) => _steerRuntime(chat, text, selected: references),
@@ -7586,11 +7913,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ComposerQueueId prompt,
   ) async {
     _commandOwner(chat);
-    await chat.composer.removeQueued(prompt, (path, runtime) async {
-      final gateway = _commandOwner(chat).gateway;
-      if (runtime != chat.runtime.runtimeId) return;
-      await gateway.call('image.detach', {'session_id': runtime, 'path': path});
-    });
+    if (await _serverQueueControl(chat, prompt, 'prompt.cancel')) return;
+    await chat.composer.removeQueued(prompt);
     await _drainQueuedPrompts(chat);
   }
 
@@ -7631,6 +7955,48 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
   }
 
+  void _requireNativePromptAuthority(
+    ProfileGateway gateway,
+    String runtime,
+    int? generation,
+  ) {
+    final current = gateway.canonical.session(runtime);
+    if (generation == null ||
+        current?.generation != generation ||
+        gateway.canonical.needsSnapshot(runtime)) {
+      throw StateError(
+        'Refresh the conversation to review this request before answering.',
+      );
+    }
+  }
+
+  void _receiveNativePrompt(ProfileChat chat, Map<String, dynamic> prompt) {
+    final state = _owned(
+      chat,
+    ).gateway.canonical.session(chat.runtime.runtimeId);
+    if (state == null || prompt['execution_generation'] != state.generation) {
+      return;
+    }
+    if (!chat._runtime.receiveNativePrompt(prompt)) return;
+    if (prompt['kind'] == 'approval') {
+      final request = chat.runtime.approvals
+          .where(
+            (row) =>
+                row.requestId == prompt['prompt_id'] &&
+                row.nativeGeneration == state.generation,
+          )
+          .firstOrNull;
+      if (request != null) _notifyApproval(chat, request);
+    } else {
+      _notify(
+        chat,
+        ChatNotificationContent.input(
+          chat.runtime.pendingQuestion?.question ?? '',
+        ),
+      );
+    }
+  }
+
   void _receiveApproval(
     ProfileChat chat,
     Map<String, dynamic> request, {
@@ -7659,14 +8025,22 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final runtime = capture.runtimeId;
     final previousIds = chat.runtime.approvals.map((r) => r.requestId).toSet();
     try {
-      final result = await _owned(
-        chat,
-      ).gateway.call('approval.pending', {'session_id': runtime});
+      final gateway = _owned(chat).gateway;
+      final authority = gateway.canonical.session(runtime);
+      if (authority == null || gateway.canonical.needsSnapshot(runtime)) return;
+      final result = await gateway.call('approval.pending', {
+        'session_id': runtime,
+      });
+      final current = gateway.canonical.session(runtime);
       if (_closed ||
+          current?.generation != authority.generation ||
+          current?.authorityEpoch != authority.authorityEpoch ||
+          gateway.canonical.needsSnapshot(runtime) ||
           result['approvals'] is! List ||
-          !chat._runtime.reconcileApprovals(
+          !chat._runtime.reconcileNativeApprovals(
             capture,
             ProfileGateway.records(result['approvals']),
+            authority.generation,
           )) {
         return;
       }
@@ -7679,7 +8053,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _changed();
       for (final request in issued) {
         if (_closed || runtime != chat.runtime.runtimeId) return;
-        await _owned(chat).gateway.call('approval.received', {
+        if (request.nativeGeneration == null) continue;
+        await gateway.call('approval.received', {
           'session_id': runtime,
           'request_id': request.requestId,
         });
@@ -7794,7 +8169,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String? decisionError;
     try {
       _commandOwner(chat);
-      final response = request!.serverRequestId != null
+      final generation = request!.nativeGeneration;
+      if (request.serverRequestId == null) {
+        _requireNativePromptAuthority(gateway, capture.runtimeId, generation);
+      }
+      final response = request.serverRequestId != null
           ? await gateway.call('request.answer', {
               'id': request.serverRequestId,
               'result': {'choice': choice},
@@ -7802,11 +8181,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
           : await gateway.call('approval.respond', {
               'session_id': capture.runtimeId,
               'choice': choice,
-              'request_id': requestId,
+              'prompt_id': requestId,
+              'execution_generation': generation,
             });
+      if (request.serverRequestId == null &&
+          response['prompt_id'] == requestId &&
+          response['status'] == 'already_resolved') {
+        chat._runtime.settleNativePrompt('approval', requestId, generation!);
+        await _refreshApprovals(chat);
+        return;
+      }
       accepted = request.serverRequestId != null
           ? response['status'] == 'ok'
-          : response['resolved'] is num && (response['resolved'] as num) > 0;
+          : response['prompt_id'] == requestId &&
+                response['status'] == 'resolved';
       if (!accepted) throw StateError('This approval is no longer pending.');
       chat._runtime.finishApprovalAnswer(capture, requestId, accepted: true);
       await _refreshApprovals(chat);
@@ -7836,10 +8224,95 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String answer, {
     ChatQuestions? expectedRequest,
   }) async {
+    if (chat._answeringQuestion) return;
+    chat._answeringQuestion = true;
+    _changed();
+    try {
+      await _clarify(chat, answer, expectedRequest: expectedRequest);
+    } finally {
+      chat._answeringQuestion = false;
+      _changed();
+    }
+  }
+
+  bool canAnswerWithComposer(ProfileChat chat) {
+    final work = chat.composer.observation;
+    return chat.runtime.pendingQuestion != null &&
+        !chat.answeringQuestion &&
+        !chat.runtime.offline &&
+        !chat.runtime.reconnecting &&
+        !switching &&
+        !work.saving &&
+        !work.sending &&
+        !work.preparing &&
+        work.editing == null &&
+        work.attachments.isEmpty &&
+        work.references.isEmpty &&
+        work.text.trim().isNotEmpty &&
+        !work.text.trimLeft().startsWith('/');
+  }
+
+  Future<void> answerWithComposer(ProfileChat chat) async {
+    _commandOwner(chat);
+    if (!canAnswerWithComposer(chat)) return;
+    final work = chat.composer.observation;
+    final question = chat.runtime.questions!;
+    chat._answeringQuestion = true;
+    _changed();
+    try {
+      if (await _clarify(chat, work.text.trim(), expectedRequest: question)) {
+        await chat.composer.finishCommand(work.revision);
+      }
+    } finally {
+      chat._answeringQuestion = false;
+      _changed();
+    }
+  }
+
+  Future<bool> _clarify(
+    ProfileChat chat,
+    String answer, {
+    ChatQuestions? expectedRequest,
+  }) async {
     final resource = _commandOwner(chat);
+    final nativeGeneration = chat.runtime.questions?.nativeGeneration;
     final question = chat.runtime.pendingQuestion;
     final capture = chat._runtime.beginQuestionAnswer(expectedRequest);
-    if (capture == null || question == null) return;
+    if (capture == null || question == null) return false;
+    if (nativeGeneration != null) {
+      _requireNativePromptAuthority(
+        resource.gateway,
+        capture.runtimeId,
+        nativeGeneration,
+      );
+      final result = await resource.gateway.call('clarify.respond', {
+        'session_id': capture.runtimeId,
+        'execution_generation': nativeGeneration,
+        'prompt_id': question.requestId,
+        'answer': answer,
+      });
+      if (result['prompt_id'] != question.requestId ||
+          !{'resolved', 'already_resolved'}.contains(result['status'])) {
+        throw StateError('The clarification response was not confirmed.');
+      }
+      if (capture.runtimeId != chat.runtime.runtimeId) return false;
+      if (result['status'] == 'already_resolved') {
+        chat._runtime.settleNativePrompt(
+          'clarify',
+          question.requestId,
+          nativeGeneration,
+        );
+        _changed();
+        return false;
+      }
+      chat._runtime.finishQuestionAnswer(
+        capture,
+        answer: answer,
+        remaining: null,
+      );
+      _changed();
+      return true;
+    }
     final batch = question.questionId != null;
     _commandOwner(chat);
     final result = await resource.gateway.call(
@@ -7860,14 +8333,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       // advanced its batch. It cannot close a different request or runtime.
       if (capture.runtimeId != chat.runtime.runtimeId ||
           chat.runtime.pendingQuestion?.requestId != question.requestId) {
-        return;
+        return false;
       }
       chat._runtime.closeQuestion(question.requestId);
       _changed();
       await reconnect(resource.scope);
       chat._runtime.reportQuestionExpiry(capture);
     } else {
-      if (!capture.current) return;
+      if (!capture.current) return false;
       chat._runtime.finishQuestionAnswer(
         capture,
         answer: answer,
@@ -7877,6 +8350,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       );
     }
     _changed();
+    return result['status'] != 'expired';
   }
 
   Future<void> respondSensitivePrompt(
@@ -7960,6 +8434,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
         .where((c) => c.runtime.runtimeId == event.sessionId)
         .firstOrNull;
     if (chat == null || resource.blocksSession(chat._key.sessionId)) return;
+    if (!resource.gateway.canonical.event(event)) {
+      if (resource.gateway.canonical.needsSnapshot(chat.runtime.runtimeId)) {
+        unawaited(_recoverCanonicalSnapshot(chat));
+      }
+      return;
+    }
     // Only facts a resume snapshot can replace invalidate its read. Independent
     // usage/control/review observations must not hold execution in recovery.
     final compactingBefore = chat.runtime.compacting;
@@ -7975,15 +8455,51 @@ class ProfileWorkspaceController extends ChangeNotifier {
         ? CompletionDiagnostics.start()
         : 0;
     switch (event.type) {
+      case 'connection.request':
+        _observeConnectionOperation(chat, event.data);
+      case 'connection.update':
+        _observeConnectionOperation(chat, event.data, update: true);
+      case 'session.updated':
+        if (event.data['status'] == 'confirmation_required') {
+          chat._runtime.reportError(
+            'The next-turn model needs confirmation. Open Models to review the pending choice.',
+          );
+        }
+        if (event.data['status'] == 'refused') {
+          chat._pendingIntelligence = null;
+          chat._runtime.reportError(
+            'The next-turn model choice could not be applied: ${event.data['reason'] ?? 'choose another model'}.',
+          );
+        }
+        _hydrateIntelligence(chat, {
+          'info': {
+            ...event.data,
+            if (event.data.containsKey('effort'))
+              'reasoning_effort': event.data['effort'],
+          },
+        });
+        unawaited(_observeModelControls(chat));
       case 'session.title':
         if (event.data['session_id'] == chat._key.sessionId) {
           _hydrateTitle(chat, event.data['title']);
         }
       case 'session.info':
+        _observeCanonicalPending(chat);
         _observeReferenceWorkspace(chat, event.data);
         _hydrateIntelligence(chat, {'info': event.data});
         if (event.data.containsKey('side_tasks')) {
           _hydrateSideTasks(chat, event.data['side_tasks']);
+        }
+        if (event.data.containsKey('prompts')) {
+          final generation = _owned(
+            chat,
+          ).gateway.canonical.session(chat.runtime.runtimeId)?.generation;
+          if (generation != null) {
+            chat._runtime.reconcileNativePrompts(
+              event.data['prompts'],
+              generation,
+            );
+          }
         }
         if (event.data.containsKey('open_requests')) {
           chat._runtime.reconcileOpenRequests(event.data['open_requests']);
@@ -8013,6 +8529,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
           _updateContext(chat, event.data['usage'] as Map);
         }
       case 'message.start':
+        final admissionId = event.envelope['admission_id'];
+        final pending = resource.gateway.canonical
+            .session(chat.runtime.runtimeId)
+            ?.pending
+            .where((row) => row.id == admissionId && row.queued)
+            .firstOrNull;
+        if (pending != null && pending.text.isNotEmpty) {
+          chat.reading.appendPrompt(text: pending.text);
+        }
         applyChatTranscriptEvent(
           runtime: chat._runtime,
           reading: chat.reading,
@@ -8023,6 +8548,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       case 'message.interim':
       case 'tool.generating':
       case 'tool.start':
+      case 'tool.progress':
       case 'tool.complete':
         applyChatTranscriptEvent(
           runtime: chat._runtime,
@@ -8085,6 +8611,20 @@ class ProfileWorkspaceController extends ChangeNotifier {
           SideQuestionDeliveryKind.backgroundTask,
           event.data,
         );
+      case 'approval.request':
+      case 'clarify.request':
+        _receiveNativePrompt(chat, event.data);
+      case 'approval.settled':
+      case 'clarify.settled':
+        final promptId = event.data['prompt_id'];
+        final generation = event.data['execution_generation'];
+        if (promptId is String && generation is int) {
+          chat._runtime.settleNativePrompt(
+            event.type.split('.').first,
+            promptId,
+            generation,
+          );
+        }
       case 'approval':
         _receiveApproval(chat, event.data);
         unawaited(_refreshApprovals(chat));
@@ -8195,14 +8735,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     bool isCurrentTurn() => chat._runtime.turnRevision == turnGeneration;
     final failed = completion['status'] == 'error';
     final cancelled = completion['status'] == 'interrupted';
-    final failure = failed
-        ? (completion['error'] ?? completion['text'] ?? 'Turn failed')
-              .toString()
-        : null;
+    final turnFailure = TurnFailure.fromCompletion(completion);
+    final failure = failed ? turnFailure?.message ?? 'Turn failed' : null;
     chat._runtime.completeTurn(
       failed: failed,
       cancelled: cancelled,
       error: failure,
+      failure: turnFailure,
     );
     if ((failed || cancelled) && chat.composer.observation.queue.isNotEmpty) {
       chat.composer.recordRuntimeFailure();
@@ -8212,7 +8751,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         ? CompletionDiagnostics.start()
         : 0;
     final notificationContent = failed
-        ? ChatNotificationContent.failed
+        ? turnFailure == null
+              ? ChatNotificationContent.failed
+              : ChatNotificationContent.failure(turnFailure)
         : cancelled
         ? ChatNotificationContent.stopped
         : ChatNotificationContent.reply(finalText);
@@ -9114,7 +9655,187 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  void _observeConnectionOperation(
+    ProfileChat chat,
+    Object? value, {
+    bool update = false,
+    bool snapshot = false,
+  }) {
+    if (value == null && snapshot) {
+      chat._connectionOperation = null;
+      chat._connectionOperationAction = null;
+      return;
+    }
+    if (value is! Map) return;
+    final previous = chat._connectionOperation;
+    if (update) {
+      if (previous == null ||
+          previous.settled ||
+          value['op_id'] != previous.id) {
+        return;
+      }
+      chat._connectionOperation = previous.applyStatus(
+        Map<String, dynamic>.from(value),
+      );
+      return;
+    }
+    final next = HostedConnectionOperation.fromJson(
+      Map<String, dynamic>.from(value),
+    );
+    if (previous != null &&
+        previous.id == next.id &&
+        previous.sequence >= next.sequence) {
+      return;
+    }
+    if (previous?.id != next.id) chat._connectionOperationAction = null;
+    chat._connectionOperation = next;
+  }
+
+  bool canRefreshConnectionOperation(
+    ProfileChat chat,
+    HostedConnectionOperation expected,
+  ) {
+    final resource = _resources[chat._key.workspace];
+    return !_closed &&
+        !switching &&
+        resource != null &&
+        identical(resource._chats[chat._key.sessionId], chat) &&
+        !resource.blocksSession(chat._key.sessionId) &&
+        !_recoveringStoredDrafts.contains(chat._key) &&
+        !_deletedDrafts.blocks(
+          chat._key.workspace.profileName,
+          chat._key.sessionId,
+        ) &&
+        identical(chat.connectionOperation, expected) &&
+        !expected.settled &&
+        !chat.connectionOperationWorking &&
+        !chat.runtime.opening &&
+        !chat.runtime.offline &&
+        !chat.runtime.reconnecting;
+  }
+
+  bool canContinueConnectionOperation(
+    ProfileChat chat,
+    HostedConnectionOperation expected,
+  ) =>
+      chat.readOnlyReason == null &&
+      canRefreshConnectionOperation(chat, expected);
+
+  Future<void> continueConnectionOperation(
+    ProfileChat chat,
+    HostedConnectionOperation expected,
+  ) => _connectionOperationRequest(chat, expected, continueRequest: true);
+
+  Future<void> refreshConnectionOperation(
+    ProfileChat chat,
+    HostedConnectionOperation expected,
+  ) => _connectionOperationRequest(chat, expected, continueRequest: false);
+
+  Future<void> _connectionOperationRequest(
+    ProfileChat chat,
+    HostedConnectionOperation expected, {
+    required bool continueRequest,
+  }) async {
+    final resource = _commandOwner(chat);
+    if (!(continueRequest
+        ? canContinueConnectionOperation(chat, expected)
+        : canRefreshConnectionOperation(chat, expected))) {
+      throw StateError(
+        'This connection request changed. Refresh the conversation.',
+      );
+    }
+    final key = chat._key;
+    final runtime = chat.runtime.runtimeId;
+    final action = Object();
+    final params = <String, dynamic>{
+      'owner': {'type': 'session', 'session_id': runtime},
+      'op_id': expected.id,
+    };
+    void requireCurrent() {
+      if (_closed ||
+          chat._key != key ||
+          !identical(_resources[key.workspace], resource) ||
+          !identical(resource._chats[key.sessionId], chat) ||
+          chat.runtime.runtimeId != runtime ||
+          chat.connectionOperation?.id != expected.id ||
+          chat.runtime.offline ||
+          chat.runtime.reconnecting ||
+          !identical(chat._connectionOperationAction, action)) {
+        throw StateError('The connection request is no longer current.');
+      }
+      _commandOwner(chat);
+    }
+
+    chat._connectionOperationAction = action;
+    _changed();
+    try {
+      requireCurrent();
+      if (continueRequest) {
+        final receipt = await resource.gateway.call('connection.respond', {
+          ...params,
+          'result': {'settled_by': 'continue'},
+        });
+        requireCurrent();
+        if (receipt['status'] != 'ok' || receipt['settled'] is! bool) {
+          throw const FormatException(
+            'Connection response was not acknowledged.',
+          );
+        }
+        if (receipt['settled'] == true) {
+          // Stock closes the operation before replying; it can no longer be read.
+          chat._connectionOperation = null;
+          return;
+        }
+      }
+      Map<String, dynamic> status;
+      try {
+        status = await resource.gateway.call(
+          'connectors.operation.status',
+          params,
+        );
+      } on JsonRpcError catch (error) {
+        if (error.method != 'connectors.operation.status' ||
+            error.reason != 'UNKNOWN_OPERATION') {
+          rethrow;
+        }
+        requireCurrent();
+        final read = _captureResume(resource, chat);
+        final snapshot = await resource.gateway.resume(key.sessionId);
+        requireCurrent();
+        if (!read.current() || snapshot['session_id'] != runtime) {
+          throw StateError(
+            'The conversation changed while checking this request.',
+          );
+        }
+        _observeCanonicalPending(chat);
+        _observeConnectionOperation(
+          chat,
+          snapshot['pending_connection'],
+          snapshot: true,
+        );
+        return;
+      }
+      requireCurrent();
+      if (status['op_id'] != expected.id) {
+        throw const FormatException(
+          'Connection status belongs to another request.',
+        );
+      }
+      _observeConnectionOperation(chat, status, update: true);
+    } finally {
+      if (identical(chat._connectionOperationAction, action)) {
+        chat._connectionOperationAction = null;
+      }
+      _changed();
+    }
+  }
+
   void _hydrate(ProfileChat chat, Map<String, dynamic> result) {
+    _observeConnectionOperation(
+      chat,
+      result['pending_connection'],
+      snapshot: true,
+    );
     _observeReferenceWorkspace(
       chat,
       result['info'] as Map? ?? const {},
@@ -9124,6 +9845,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (source is String && source.isNotEmpty) chat._source = source;
     final runtime = result['session_id'] as String;
     if (chat.runtime.runtimeId != runtime) {
+      chat._connectionOperationAction = null;
       chat._intelligenceRevision++;
       chat._context = null;
       chat._contextGeneration++;
@@ -9156,6 +9878,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._sideQuestionDeliveries.clear();
     }
     chat._runtime.installResume(result);
+    // Publish notifications only after this complete snapshot has been installed.
+    _observeCanonicalPending(chat, notify: false);
+    unawaited(_reconcileCanonicalSubmissions(chat));
     final usage = (result['info'] as Map?)?['usage'];
     if (usage is Map) _updateContext(chat, usage);
     chat._notificationInputsQuiet = true;

@@ -1664,7 +1664,7 @@ void main() {
     final completed = Completer<void>();
     final read = host
         .gateway(controller.current!.scope)
-        .completedToolActivities('runtime', sessionId: 'new-chat')
+        .completedToolActivities('runtime')
         .then((_) => completed.complete());
     await Future<void>.delayed(Duration.zero);
     expect(completed.isCompleted, isTrue);

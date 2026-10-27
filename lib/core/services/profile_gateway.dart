@@ -1,5 +1,7 @@
 import '../models/chat_list_view.dart' show ProjectFolderSuggestion;
 import 'profile_model_catalog.dart';
+import 'canonical_session_protocol.dart';
+import '../models/canonical_session.dart';
 import 'server_files_repository.dart';
 import 'gateway_endpoint.dart';
 import 'remote_files_client.dart';
@@ -145,6 +147,7 @@ class ProfileGatewayConnection {
 /// The stock modern Hermes contract. All profile-owned traffic passes through
 /// this immutable scope. There is no unscoped or experimental-recovery fallback.
 class ProfileGateway {
+  final canonical = CanonicalSessionProtocol();
   static const commandTimeout = Duration(seconds: 60);
   late final _skillReader = SkillReaderRepository(_get);
   SkillReaderSession skillReader(SkillReaderTarget document) =>
@@ -566,7 +569,8 @@ class ProfileGateway {
           timeout: switch (method) {
             'mcp.servers.oauth.start' => const Duration(seconds: 45),
             'command.dispatch' || 'slash.exec' => commandTimeout,
-            'session.compress' => const Duration(minutes: 11),
+            'session.mutate' when params['operation'] == 'compress' =>
+              const Duration(minutes: 11),
             _ => const Duration(seconds: 30),
           },
         );
@@ -635,6 +639,8 @@ class ProfileGateway {
   }
 
   void disconnect() {
+    canonical.clear();
+    _resumeVersions.updateAll((_, version) => version + 1);
     _connectionGeneration++;
     _disconnect();
   }
@@ -643,6 +649,8 @@ class ProfileGateway {
     if (_closed) return;
     _closed = true;
     _connectionGeneration++;
+    canonical.clear();
+    _resumeVersions.updateAll((_, version) => version + 1);
     modelCatalog.close();
     _close();
     if (reportsLiveChat) connectionStatus?.forgetLive(scope.profileName);
@@ -664,7 +672,74 @@ class ProfileGateway {
   Future<Map<String, dynamic>> call(
     String method, [
     Map<String, dynamic> params = const {},
-  ]) => _rpc(method, {...params, 'profile': scope.profileName});
+  ]) async {
+    final id = params['session_id'];
+    final outgoing = method == 'session.interrupt' && id is String
+        ? canonical.interrupt(id)
+        : params;
+    try {
+      return await _rpc(method, {...outgoing, 'profile': scope.profileName});
+    } on JsonRpcError catch (error) {
+      if (id is String) canonical.refused(id, error);
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> mutateSession(
+    String id,
+    String operation,
+    Map<String, dynamic> payload, {
+    CanonicalSessionObservation? expected,
+  }) async {
+    final params = canonical.mutation(id, operation, payload);
+    if (expected != null) {
+      if (expected.sessionId != id) {
+        throw ArgumentError('Mutation snapshot belongs to another session');
+      }
+      params['expected_revision'] = expected.revision;
+      params['expected_generation'] = expected.generation;
+    }
+    final result = await call('session.mutate', params);
+    canonical.mutationResult(id, result);
+    return result;
+  }
+
+  Future<CanonicalAdmission> submitPrompt({
+    required String sessionId,
+    required String submissionId,
+    required String text,
+    bool queued = false,
+  }) async {
+    final result = await call('prompt.submit', {
+      'session_id': sessionId,
+      'submission_id': submissionId,
+      'text': text,
+      if (queued) 'queued': true,
+    });
+    final receipt = CanonicalAdmission.fromJson(result);
+    if (receipt.sessionId != sessionId) {
+      throw const FormatException(
+        'Submission receipt belongs to another conversation',
+      );
+    }
+    return receipt;
+  }
+
+  Future<CanonicalAdmission> admissionReceipt(
+    String sessionId,
+    String admissionId,
+  ) async {
+    final receipt = CanonicalAdmission.fromJson(
+      await call('prompt.receipt', {
+        'session_id': sessionId,
+        'admission_id': admissionId,
+      }),
+    );
+    if (receipt.sessionId != sessionId || receipt.id != admissionId) {
+      throw const FormatException('Receipt belongs to another submission');
+    }
+    return receipt;
+  }
 
   Future<String> suggestChatTitle(
     String input, {
@@ -1038,8 +1113,8 @@ class ProfileGateway {
     await requireProfile();
     final session = _ownedSession(
       await _browserCommand('session.create', {
-        'source': 'desktop',
-        'close_on_disconnect': false,
+        'source': 'gui',
+        'request_id': const Uuid().v4(),
         'cwd': ?cwd,
         'cwd_explicit': cwdExplicit,
         'title': ?title,
@@ -1073,22 +1148,39 @@ class ProfileGateway {
         : normalized;
   }
 
+  final _resumeVersions = <String, int>{};
   Future<Map<String, dynamic>> resume(String durableId) async {
+    final version = (_resumeVersions[durableId] ?? 0) + 1;
+    _resumeVersions[durableId] = version;
     await requireProfile();
-    return _ownedSession(
-      await call('session.resume', {
-        'session_id': durableId,
-        'omit_messages': true,
-      }),
-    );
+    final result = await call('session.resume', {
+      'session_id': durableId,
+      'display_projection': true,
+    });
+    if (_resumeVersions[durableId] != version) {
+      throw StateError(
+        'A newer conversation refresh superseded this response.',
+      );
+    }
+    return _ownedSession(result);
   }
 
-  Future<Map<String, dynamic>> branch(String runtimeId, int count) async {
-    if (count <= 0) throw ArgumentError.value(count, 'count');
+  Future<Map<String, dynamic>> branch(
+    String runtimeId,
+    int throughRowId,
+  ) async {
+    if (throughRowId <= 0) {
+      throw ArgumentError.value(throughRowId, 'throughRowId');
+    }
     await requireProfile();
-    return _ownedSession(
-      await call('session.branch', {'session_id': runtimeId, 'count': count}),
-    );
+    final result = await mutateSession(runtimeId, 'branch', {
+      'through_message_id': throughRowId,
+    });
+    final child = result['branched_session_id'];
+    if (child is! String || child.isEmpty) {
+      throw const FormatException('Missing branch identity');
+    }
+    return {...await resume(child), 'parent': runtimeId};
   }
 
   /// The persisted transcript that session.branch copies, including archived
@@ -1136,44 +1228,25 @@ class ProfileGateway {
         (await call('session.history', {'session_id': runtimeId}))['messages'],
       );
 
-  /// Current stock resume uses session_key for persisted sessions and
-  /// stored_session_id for a still-live session without a database row.
-  /// Preserve the raw response; runtime identity never substitutes for storage.
+  /// The canonical snapshot identifies durable storage separately from the
+  /// attached runtime. A runtime identity never substitutes for storage.
   String resumeDurableId(Map<String, dynamic> result) {
     _ownedSession(result);
-    String? identity(String field) {
-      if (!result.containsKey(field)) return null;
-      final value = result[field];
-      if (value is! String || value.trim().isEmpty) {
-        throw const FormatException(
-          'Resume response has an invalid durable identity',
-        );
-      }
-      return value;
-    }
-
-    final sessionKey = identity('session_key');
-    final storedId = identity('stored_session_id');
-    if (sessionKey == null && storedId == null) {
+    final id = result['stored_session_id'];
+    if (id is! String || id.trim().isEmpty) {
       throw const FormatException('Resume response has no durable identity');
     }
-    if (sessionKey != null && storedId != null && sessionKey != storedId) {
-      throw const FormatException(
-        'Resume response has conflicting durable identities',
-      );
-    }
-    return sessionKey ?? storedId!;
+    return id;
   }
 
   Map<String, dynamic> _ownedSession(Map<String, dynamic> result) {
     final info = result['info'];
-    // Stock Hermes omits profile_name from a live session's lazy info while
-    // its agent is uninitialized. The request is already profile-scoped.
-    // Reject any explicit conflicting owner, including in a lazy response.
+    // Canonical non-local snapshots may expose only desktop_protocol in info.
+    // The request is already profile-scoped; local snapshots echo their owner.
+    // Reject any explicit conflicting or malformed profile identity.
     if (info is! Map ||
-        (info.containsKey('profile_name')
-            ? info['profile_name'] != scope.profileName
-            : info['lazy'] != true)) {
+        (info.containsKey('profile_name') &&
+            info['profile_name'] != scope.profileName)) {
       throw const FormatException(
         'Session response has a different profile owner',
       );
@@ -1182,86 +1255,34 @@ class ProfileGateway {
         (result['session_id'] as String).isEmpty) {
       throw const FormatException('Session response has no runtime identity');
     }
+    if (!canonical.snapshot(result)) {
+      throw StateError(
+        'Newer conversation updates arrived while refreshing. Refresh again.',
+      );
+    }
     return result;
   }
 
   static const historyPageSize = 50;
 
-  /// Passive receipts across this saved chat's retained runtime event rings.
-  /// Cold resume mints a new runtime; the process GUI log names earlier runtimes.
+  /// Completed timing receipts from the canonical conversation's retained epoch.
+  /// Missing or evicted replay leaves saved transcript timing unknown.
   Future<List<GatewayToolActivity>> completedToolActivities(
-    String runtimeId, {
-    required String sessionId,
-  }) async {
-    final currentRead = _completedRuntimeTools(runtimeId);
-    final runtimes = await _savedToolRuntimes(sessionId);
-    final completed = <String, GatewayToolActivity>{};
-    void retain(Iterable<GatewayToolActivity> activities) {
-      for (final activity in activities) {
-        final id = activity.toolId!;
-        completed.remove(id);
-        completed[id] = activity;
-      }
-    }
-
-    final previous = runtimes.where((id) => id != runtimeId).toList();
-    // Bound simultaneous ring reads. A failed/evicted ring cannot discard
-    // measurements from the other runtimes of the same saved conversation.
-    for (var offset = 0; offset < previous.length; offset += 4) {
-      final pages = await Future.wait(
-        previous.skip(offset).take(4).map(_completedRuntimeTools),
-      );
-      for (final page in pages) {
-        retain(page);
-      }
-    }
-    retain(await currentRead);
-    return List.unmodifiable(completed.values);
-  }
-
-  Future<List<String>> _savedToolRuntimes(String sessionId) async {
-    try {
-      // GUI logging and replay rings belong to the dashboard process. Do not
-      // redirect this read to a named profile's separate agent log directory.
-      final log = await _get('logs', {
-        'file': 'gui',
-        'search': sessionId,
-        'lines': '500',
-      });
-      final lines = log['lines'];
-      if (lines is! List) throw const FormatException('Missing GUI log lines');
-      final accepted = RegExp(
-        r'tui prompt accepted: ui_session=([0-9a-f]{8}) '
-        r'session_key=(\S*) agent_session_id=(\S+) kind=',
-      );
-      final runtimes = <String>{};
-      for (final line in lines.whereType<String>()) {
-        final match = accepted.firstMatch(line);
-        if (match == null ||
-            (match.group(2) != sessionId && match.group(3) != sessionId)) {
-          continue;
-        }
-        final id = match.group(1)!;
-        runtimes.remove(id);
-        runtimes.add(id);
-      }
-      // Stock replay retains at most 64 runtime rings. No log contents enter
-      // the reading cache; only verified identities are used for these reads.
-      return runtimes.toList().reversed.take(64).toList().reversed.toList();
-    } catch (_) {
-      // Log retention/access is independent of the current runtime's replay.
-      return const [];
-    }
-  }
-
-  Future<List<GatewayToolActivity>> _completedRuntimeTools(
     String runtimeId,
   ) async {
     try {
+      final authority = canonical.session(runtimeId);
+      if (authority == null) return const [];
       final snapshot = await call('session.events.since', {
         'session_id': runtimeId,
-        'last_seen': 0,
+        'replay_epoch': authority.replayEpoch,
+        'last_sequence': 0,
       });
+      if (snapshot['snapshot_required'] == true ||
+          snapshot['truncated'] == true ||
+          snapshot['replay_epoch'] != authority.replayEpoch) {
+        return const [];
+      }
       final events = snapshot['events'];
       if (events is! List) throw const FormatException('Missing event replay');
       final completed = <String, GatewayToolActivity>{};
@@ -1425,7 +1446,6 @@ class ProfileGateway {
       'profiles.create',
       'profiles.set_asset',
       'session.create',
-      'session.title',
       'groups.create',
       'groups.send',
       'groups.rename',
@@ -1620,17 +1640,7 @@ class ProfileGateway {
     final endpoint = 'sessions/${Uri.encodeComponent(id)}';
     // Stock Hermes fences sidebar writes with an owner-issued revision. A
     // plain flags PATCH is rejected with mutation_identity_required (HTTP 409).
-    final snapshot = await read('$endpoint/mutation-snapshot');
-    final revision = snapshot['runtime_revision'];
-    final generation = snapshot['runtime_generation'];
-    if (snapshot['session_id'] != id ||
-        snapshot['exists'] != true ||
-        revision is! int ||
-        revision < 0 ||
-        generation is! int ||
-        generation < 0) {
-      throw const FormatException('Invalid session mutation snapshot');
-    }
+    final fence = await _rowMutationFence(id);
     requireCurrent();
     final result = await patch(
       endpoint,
@@ -1638,8 +1648,7 @@ class ProfileGateway {
         ...capturedChanges,
         'profile': scope.profileName,
         'request_id': requestId,
-        'expected_revision': revision,
-        'expected_generation': generation,
+        ...fence,
       },
       canDispatch,
       () {},
@@ -1650,7 +1659,27 @@ class ProfileGateway {
     return result;
   }
 
-  /// Same operation as Desktop: moves the stored workspace, not a local tag.
+  /// One captured profile's stored row fences every browser mutation. The owner
+  /// arbitrates concurrent turns and writes; a global live list cannot do that.
+  Future<Map<String, int>> _rowMutationFence(String id) async {
+    final snapshot = await read(
+      'sessions/${Uri.encodeComponent(id)}/mutation-snapshot',
+    );
+    final revision = snapshot['runtime_revision'];
+    final generation = snapshot['runtime_generation'];
+    if (snapshot['session_id'] != id ||
+        snapshot['exists'] != true ||
+        revision is! int ||
+        revision < 0 ||
+        generation is! int ||
+        generation < 0) {
+      throw const FormatException('Invalid session mutation snapshot');
+    }
+    return {'expected_revision': revision, 'expected_generation': generation};
+  }
+
+  /// Re-homes the stored conversation and its frozen execution workspace in one
+  /// canonical mutation. A turn claimed after the snapshot makes the owner refuse.
   Future<Map<String, dynamic>> moveSession(
     String id,
     String cwd, {
@@ -1660,49 +1689,25 @@ class ProfileGateway {
       throw ArgumentError('A chat and project folder are required');
     }
     await requireProfile();
-    // Stock workspace.move finds live agents by durable ID without checking
-    // profile ownership. Resolve the owner and reject colliding live sessions.
-    final live = records((await call('session.active_list'))['sessions']);
-    if (live.any((row) => row['session_key'] == id)) {
-      final session = _ownedSession(
-        await _browserCommand('session.resume', {
-          'session_id': id,
-          'omit_messages': true,
-        }, canDispatch),
-      );
-      final storedId = session['stored_session_id'] ?? session['session_key'];
-      if (storedId != id ||
-          session.containsKey('session_key') && session['session_key'] != id) {
-        throw const FormatException('Session response has a different chat');
-      }
-      final matching = records(
-        (await call('session.active_list'))['sessions'],
-      ).where((row) => row['session_key'] == id).toList();
-      if (matching.length != 1 ||
-          matching.single['id'] != session['session_id']) {
-        throw StateError(
-          'Hermes could not verify this chat\'s project owner. '
-          'Refresh and try moving again.',
-        );
-      }
-      if (matching.single['status'] != 'idle') {
-        throw StateError(
-          'This chat is working or waiting for input on Hermes. '
-          'Stop it or let it finish before moving.',
-        );
-      }
-    }
-    final result = await _browserCommand('session.workspace.move', {
-      'session_key': id,
-      'cwd': cwd,
+    final fence = await _rowMutationFence(id);
+    final result = await _browserCommand('session.mutate', {
+      'session_id': id,
+      'request_id': const Uuid().v4(),
+      ...fence,
+      'operation': 'workspace',
+      'payload': {'cwd': cwd},
     }, canDispatch);
-    if (result['cwd'] is! String ||
+    if (result['session_id'] != id ||
+        result['operation'] != 'workspace' ||
+        result['revision'] is! int ||
+        result['cwd'] is! String ||
         (result['cwd'] as String).trim().isEmpty ||
         (result['branch'] != null && result['branch'] is! String) ||
         (result['git_repo_root'] != null &&
             result['git_repo_root'] is! String)) {
       throw const FormatException('Invalid workspace move response');
     }
+    canonical.mutationResult(id, result);
     return {
       'cwd': result['cwd'],
       'git_branch': result['branch'],
@@ -1759,60 +1764,14 @@ class ProfileGateway {
     if (remove == null) {
       throw StateError('Session mutation transport unavailable');
     }
-    var admitted = false;
-    var historyDispatched = false;
-    bool active() => canDispatch() || admitted && !historyDispatched;
-    final live = records((await call('session.active_list'))['sessions']);
-    if (live.any((row) => row['session_key'] == id)) {
-      // The live list has no profile owner. Resolve through scoped resume before
-      // closing anything: the same durable ID can exist in another profile.
-      final session = _ownedSession(
-        await _browserCommand('session.resume', {
-          'session_id': id,
-          'omit_messages': true,
-        }, canDispatch),
-      );
-      // Fresh resumes expose stored_session_id; reusing an open runtime exposes
-      // session_key instead. If both are present they must agree.
-      final storedId = session['stored_session_id'] ?? session['session_key'];
-      if (storedId != id ||
-          session.containsKey('session_key') && session['session_key'] != id) {
-        throw const FormatException('Session response has a different chat');
-      }
-      final runtimeId = session['session_id'] as String;
-      final current = records((await call('session.active_list'))['sessions'])
-          .where((row) => row['id'] == runtimeId && row['session_key'] == id)
-          .toList();
-      if (current.length != 1 || current.single['status'] != 'idle') {
-        throw StateError(
-          'This chat is working or waiting for input on Hermes. '
-          'Stop it or let it finish before deleting.',
-        );
-      }
-      // Finalize the runtime before removing its stored history, so a later
-      // agent flush cannot write into a deleted session.
-      final result = await _browserCommand(
-        'session.close',
-        {'session_id': runtimeId},
-        () {
-          if (!canDispatch()) return false;
-          admitted = true;
-          return true;
-        },
-      );
-      if (result['closed'] != true) {
-        throw StateError(
-          'Hermes could not close this chat. Try deleting again.',
-        );
-      }
-    }
+    final fence = await _rowMutationFence(id);
+    // The owner deletes and retires the runtime atomically. The stock REST
+    // endpoint also removes the deleted conversations' on-disk artifacts.
     final result = await remove(
       'sessions/${Uri.encodeComponent(id)}',
-      {'profile': scope.profileName},
-      active,
-      () {
-        historyDispatched = true;
-      },
+      {'profile': scope.profileName, 'request_id': const Uuid().v4(), ...fence},
+      canDispatch,
+      () {},
     );
     if (result['ok'] != true) {
       throw const FormatException('Session deletion not acknowledged');

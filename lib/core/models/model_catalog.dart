@@ -108,11 +108,24 @@ class ModelCatalog {
             : null,
         warning: _text(row['warning']),
         usage: _usage(row['usage']),
+        planUsage: PlanUsage.parse(row['plan_usage']),
+        usageLevels: Map.unmodifiable({
+          if (row['usage_levels'] case final Map levels)
+            for (final entry in levels.entries)
+              if (entry.key is String && entry.value is String)
+                entry.key as String: entry.value as String,
+        }),
       );
       providers.add(provider);
       final pricing = row['pricing'];
       final capabilities = row['capabilities'];
-      for (final id in row['models'] as List) {
+      final listed = row['models'] as List;
+      final featured = provider.planUsage?.featuredModelIds ?? const <String>{};
+      final ordered = [
+        ...featured.where(listed.contains),
+        ...listed.where((id) => !featured.contains(id)),
+      ];
+      for (final id in ordered) {
         if (id is! String || id.trim().isEmpty) {
           throw const FormatException('Expected a nonempty string model ID');
         }

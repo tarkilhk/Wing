@@ -162,6 +162,9 @@ class CommandHost extends Host {
                 'replace_from': (params['text'] as String).runes.length,
               };
         }
+        if (method == 'session.status') {
+          throw StateError('session.status is not a canonical owner method');
+        }
         if (method == 'command.dispatch' || method == 'slash.exec') {
           return await respond?.call(method, params) ??
               {'type': 'exec', 'output': 'Done'};
@@ -287,6 +290,80 @@ void main() {
     if (!controllerDisposed) controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'status uses the exact canonical command and preserves captured profile',
+    () async {
+      final entered = Completer<void>();
+      final response = Completer<Map<String, dynamic>>();
+      host.respond = (method, params) async {
+        expect(method, 'slash.exec');
+        expect(params, {
+          'session_id': 'a-runtime',
+          'profile': 'a',
+          'command': '/status',
+        });
+        entered.complete();
+        return response.future;
+      };
+      chat.composer.editText('/status');
+      final sending = controller.send(chat);
+      await entered.future;
+      expect(chat.runtime.commandRunning, true);
+      await controller.send(chat);
+      expect(
+        host.commandCalls.where((call) => call.$1 == 'slash.exec'),
+        hasLength(1),
+      );
+      await controller.switchProfile('b');
+      response.complete({
+        'type': 'exec',
+        'output': 'Model: precise-model · session a',
+      });
+      await sending;
+      expect(chat.runtime.commandRunning, false);
+      expect(chat.composer.observation.text, isEmpty);
+      expect(
+        chat.reading.messages
+            .where((row) => row['_command_notice'] == true)
+            .single['content'],
+        'Model: precise-model · session a',
+      );
+      expect(controller.current!.scope.profileName, 'b');
+      expect(
+        host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+        isEmpty,
+      );
+    },
+  );
+
+  for (final malformed in [false, true]) {
+    test(
+      'status ${malformed ? 'malformed receipt' : 'failure'} preserves draft without model admission',
+      () async {
+        host.respond = (_, _) async {
+          if (malformed) return {'type': 'exec'};
+          throw StateError('Status unavailable on Hermes');
+        };
+        chat.composer.editText('/status');
+        await controller.send(chat);
+        expect(chat.composer.observation.text, '/status');
+        expect(chat.runtime.commandRunning, false);
+        expect(
+          chat.runtime.error,
+          contains(malformed ? 'did not return' : 'Status unavailable'),
+        );
+        expect(
+          host.commandCalls.where((call) => call.$1 == 'slash.exec'),
+          hasLength(1),
+        );
+        expect(
+          host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
+          isEmpty,
+        );
+      },
+    );
+  }
 
   for (final retained in [false, true]) {
     testWidgets(
@@ -884,6 +961,12 @@ void main() {
         host.commandCalls.where((call) => call.$1 == 'prompt.submit'),
         hasLength(1),
         reason: chat.runtime.error,
+      );
+      final methods = host.commandCalls.map((call) => call.$1).toList();
+      expect(methods, contains('session.resume'));
+      expect(
+        methods.indexOf('session.resume'),
+        lessThan(methods.indexOf('prompt.submit')),
       );
       expect(chat.runtime.execution, ChatExecution.running);
     },
@@ -1594,7 +1677,7 @@ void main() {
             .where((call) => call.$1 == 'session.resume')
             .single
             .$2,
-        {'session_id': 'same', 'omit_messages': true, 'profile': 'a'},
+        {'session_id': 'same', 'display_projection': true, 'profile': 'a'},
       );
       expect(notification, isNull);
       expect(

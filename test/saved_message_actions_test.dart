@@ -203,17 +203,17 @@ void main() {
               .onPressed,
           isNotNull,
         );
-        host.submitError = JsonRpcError(
-          'prompt.submit',
+        host.mutationError = JsonRpcError(
+          'session.mutate',
           'Session busy',
-          code: 4009,
+          reason: 'session_busy',
         );
         await tester.tap(submit);
         for (
           var i = 0;
           i < 100 &&
               (original.runtime.changingAnswer ||
-                  !host.calls.any((call) => call.$1 == 'prompt.submit'));
+                  !host.calls.any((call) => call.$1 == 'session.mutate'));
           i++
         ) {
           await tester.pump(const Duration(milliseconds: 1));
@@ -388,6 +388,29 @@ void main() {
   }
 
   test(
+    'a confirmed depth cannot silently include newly appended turns',
+    () async {
+      final selected = original.reading.messages.first;
+      host.history('a', 'original').add({
+        'role': 'user',
+        'text': 'Newer work',
+        'row_id': 99,
+      });
+      expect(
+        await controller.restoreSavedPrompt(
+          original,
+          selected,
+          expectedLaterTurns: 1,
+        ),
+        isFalse,
+      );
+      expect(original.runtime.error, contains('Later work changed'));
+      expect(host.calls.where((call) => call.$1 == 'session.mutate'), isEmpty);
+      expect(host.history('a', 'original').last['text'], 'Newer work');
+    },
+  );
+
+  test(
     'restore reruns the selected saved prompt, retaining draft and paused queue',
     () async {
       await controller.updateDraft(original, 'Keep this separate draft');
@@ -398,14 +421,21 @@ void main() {
       );
       final prompt = original.reading.messages.first;
       expect(await controller.restoreSavedPrompt(original, prompt), isTrue);
-      expect(host.calls.lastWhere((call) => call.$1 == 'prompt.submit').$2, {
+      final submit = host.calls
+          .lastWhere((call) => call.$1 == 'prompt.submit')
+          .$2;
+      expect(submit, {
         'session_id': 'runtime-original',
         'profile': 'a',
         'text': 'Original prompt',
-        'truncate_before_row_id': 1,
-        'confirm_truncate': true,
-        'confirm_empty_truncate': true,
+        'submission_id': submit['submission_id'],
       });
+      expect(submit['submission_id'], isNotEmpty);
+      final rewind = host.calls
+          .lastWhere((call) => call.$1 == 'session.mutate')
+          .$2;
+      expect(rewind['operation'], 'rewind');
+      expect(rewind['payload'], {'target_message_id': 1});
       expect(host.history('a', 'original').first['text'], 'Original prompt');
       expect(
         host
@@ -419,7 +449,13 @@ void main() {
         original.composer.observation.queue.single.text,
         'Queued followup',
       );
-      expect(host.calls.where((call) => call.$1 == 'session.branch'), isEmpty);
+      expect(
+        host.calls.where(
+          (call) =>
+              call.$1 == 'session.mutate' && call.$2['operation'] == 'branch',
+        ),
+        isEmpty,
+      );
     },
   );
 
@@ -427,10 +463,10 @@ void main() {
     'restore refusal retains history and never resubmits as a new prompt',
     () async {
       final before = original.reading.messages.toList();
-      host.submitError = JsonRpcError(
-        'prompt.submit',
+      host.mutationError = JsonRpcError(
+        'session.mutate',
         'Target no longer exists',
-        code: 4018,
+        reason: 'revision_conflict',
       );
       expect(
         await controller.restoreSavedPrompt(original, before.first),
@@ -438,12 +474,56 @@ void main() {
       );
       expect(original.reading.messages, before);
       expect(original.runtime.error, contains('did not accept the restore'));
-      expect(
-        host.calls.where((call) => call.$1 == 'prompt.submit'),
-        hasLength(1),
-      );
+      expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
     },
   );
+
+  for (final reason in ['not_found', 'profile_mismatch']) {
+    for (final regenerate in [false, true]) {
+      test(
+        '${regenerate ? 'regenerate' : 'restore'} $reason refusal preserves history without an uncertain submission',
+        () async {
+          final before = original.reading.messages.toList();
+          host.mutationError = JsonRpcError(
+            'session.mutate',
+            'The target is unavailable',
+            code: 4001,
+            reason: reason,
+          );
+          if (regenerate) {
+            await expectLater(
+              controller.branchAnswer(
+                original,
+                original.reading.messages.indexWhere(
+                  (row) => row['role'] == 'assistant',
+                ),
+                regenerate: true,
+                expectedLaterTurns: 1,
+              ),
+              throwsStateError,
+            );
+          } else {
+            expect(
+              await controller.restoreSavedPrompt(original, before.first),
+              isFalse,
+            );
+          }
+          expect(original.reading.messages, before);
+          expect(original.runtime.error, contains('did not accept'));
+          expect(original.runtime.error, isNot(contains('uncertain')));
+          expect(original.runtime.reconnecting, isFalse);
+          expect(
+            host.calls.where((call) => call.$1 == 'session.mutate'),
+            hasLength(1),
+          );
+          expect(
+            host.calls.where((call) => call.$1 == 'prompt.submit'),
+            isEmpty,
+          );
+        },
+      );
+    }
+  }
 
   test(
     'restore transport uncertainty is not retried or rolled back as unsent',
@@ -483,41 +563,136 @@ void main() {
   });
 
   test(
-    'restore retries only the refused durable cut while interruption settles',
+    'restore waits for confirmed idle after interrupt acknowledgement',
     () async {
+      host.running = true;
+      host.interruptRequested = Completer<void>();
+      final firstRead = host.resumeDelay = Completer<void>();
       emitChatEvent(controller, original, 'message.start');
-      final prompt = original.reading.messages.first;
-      host.busySubmissions = 2;
-      expect(await controller.restoreSavedPrompt(original, prompt), isTrue);
-      final submits = host.calls
-          .where((call) => call.$1 == 'prompt.submit')
-          .toList();
-      expect(submits, hasLength(3));
-      expect(submits.map((call) => call.$2), everyElement(submits.first.$2));
+      final restoring = controller.restoreSavedPrompt(
+        original,
+        original.reading.messages.first,
+        expectedLaterTurns: 1,
+      );
+      await host.interruptRequested!.future.timeout(const Duration(seconds: 3));
+      expect(original.runtime.changingAnswer, isTrue);
+      expect(host.calls.where((call) => call.$1 == 'session.mutate'), isEmpty);
+      firstRead.complete();
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(host.calls.where((call) => call.$1 == 'session.mutate'), isEmpty);
+      expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+      host.running = false;
+      host.resumeDelay = null;
+      expect(await restoring, isTrue);
       expect(
-        host.history('a', 'original').where((row) => row['role'] == 'user'),
+        host.calls.where((call) => call.$1 == 'session.interrupt'),
+        hasLength(1),
+      );
+      expect(
+        host.calls.where((call) => call.$1 == 'session.mutate'),
+        hasLength(1),
+      );
+      expect(
+        host.calls.where((call) => call.$1 == 'prompt.submit'),
         hasLength(1),
       );
     },
   );
 
+  for (final changed in ['generation', 'runtime', 'depth']) {
+    test(
+      'restore refuses $changed changes while waiting for interrupt settlement',
+      () async {
+        host.running = true;
+        host.interruptRequested = Completer<void>();
+        final held = host.resumeDelay = Completer<void>();
+        emitChatEvent(controller, original, 'message.start');
+        final restoring = controller.restoreSavedPrompt(
+          original,
+          original.reading.messages.first,
+          expectedLaterTurns: 1,
+        );
+        await host.interruptRequested!.future.timeout(
+          const Duration(seconds: 3),
+        );
+        host.running = false;
+        if (changed == 'generation') host.executionGeneration++;
+        if (changed == 'runtime') {
+          host.resumedRuntimeOverride = 'runtime-replacement';
+        }
+        if (changed == 'depth') {
+          host.history('a', 'original').addAll([
+            {'role': 'user', 'text': 'New later work', 'row_id': 100},
+            {'role': 'assistant', 'text': 'New answer', 'row_id': 101},
+          ]);
+        }
+        held.complete();
+        expect(await restoring, isFalse);
+        expect(
+          host.calls.where((call) => call.$1 == 'session.mutate'),
+          isEmpty,
+        );
+        expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+        expect(
+          host.calls.where((call) => call.$1 == 'session.interrupt'),
+          hasLength(1),
+        );
+      },
+    );
+  }
+
   test(
-    'restore interrupts a gateway-busy session even before its live event arrives',
+    'regeneration refuses a replacement physical prompt with identical text',
     () async {
-      final prompt = original.reading.messages.first;
-      host.busySubmissions = 1;
-      expect(await controller.restoreSavedPrompt(original, prompt), isTrue);
-      final methods = host.calls.map((call) => call.$1).toList();
-      final firstSubmit = methods.indexOf('prompt.submit');
-      final interrupt = methods.indexOf('session.interrupt');
-      final finalSubmit = methods.lastIndexOf('prompt.submit');
-      expect(interrupt, greaterThan(firstSubmit));
-      expect(finalSubmit, greaterThan(interrupt));
-      final submits = host.calls.where((call) => call.$1 == 'prompt.submit');
-      expect(submits, hasLength(2));
-      expect(submits.last.$2, submits.first.$2);
+      host.historyReads = 0;
+      host.beforeHistoryRead = (count) {
+        if (count != 2) return;
+        final rows = host.history('a', 'original');
+        rows[0] = {...rows[0], 'row_id': 900};
+        rows[2] = {...rows[2], 'row_id': 901};
+      };
+      await expectLater(
+        controller.branchAnswer(
+          original,
+          original.reading.messages.indexWhere(
+            (row) => row['role'] == 'assistant',
+          ),
+          regenerate: true,
+          expectedLaterTurns: 1,
+        ),
+        throwsStateError,
+      );
+      expect(host.calls.where((call) => call.$1 == 'session.mutate'), isEmpty);
+      expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+      expect(host.history('a', 'original').first['row_id'], 900);
     },
   );
+
+  for (final observedWorking in [false, true]) {
+    test(
+      'busy rewind is a definite refusal without resubmitting (observed working: $observedWorking)',
+      () async {
+        if (observedWorking) {
+          emitChatEvent(controller, original, 'message.start');
+        }
+        final prompt = original.reading.messages.first;
+        final before = original.reading.messages.toList();
+        host.busySubmissions = 1;
+        expect(await controller.restoreSavedPrompt(original, prompt), isFalse);
+        expect(
+          host.calls.where((call) => call.$1 == 'session.mutate'),
+          hasLength(1),
+        );
+        expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
+        expect(
+          host.calls.where((call) => call.$1 == 'session.interrupt'),
+          observedWorking ? hasLength(1) : isEmpty,
+        );
+        expect(original.reading.messages, before);
+        expect(original.runtime.error, contains('did not accept the restore'));
+      },
+    );
+  }
 
   test('restore requires a human prompt with a durable address', () async {
     for (final row in [
@@ -582,8 +757,8 @@ void main() {
       );
       expect(
         host.calls
-            .lastWhere((call) => call.$1 == 'prompt.submit')
-            .$2['truncate_before_row_id'],
+            .lastWhere((call) => call.$1 == 'session.mutate')
+            .$2['payload']['target_message_id'],
         4,
       );
       expect(
@@ -624,14 +799,21 @@ void main() {
     );
 
     expect(accepted, isTrue);
-    expect(host.calls.lastWhere((call) => call.$1 == 'prompt.submit').$2, {
+    final submit = host.calls
+        .lastWhere((call) => call.$1 == 'prompt.submit')
+        .$2;
+    expect(submit, {
       'session_id': 'runtime-original',
       'profile': 'a',
       'text': 'Corrected prompt',
-      'truncate_before_row_id': 1,
-      'confirm_truncate': true,
-      'confirm_empty_truncate': true,
+      'submission_id': submit['submission_id'],
     });
+    expect(submit['submission_id'], isNotEmpty);
+    final rewind = host.calls
+        .lastWhere((call) => call.$1 == 'session.mutate')
+        .$2;
+    expect(rewind['operation'], 'rewind');
+    expect(rewind['payload'], {'target_message_id': 1});
     expect(original.composer.observation.text, 'Unrelated composer draft');
     expect(original.composer.observation.queue.single.text, 'Queued followup');
     expect(original.composer.observation.paused, isTrue);
@@ -653,10 +835,10 @@ void main() {
         .history('a', 'original')
         .map(Map<String, dynamic>.of)
         .toList();
-    host.submitError = JsonRpcError(
-      'prompt.submit',
+    host.mutationError = JsonRpcError(
+      'session.mutate',
       'Session busy',
-      code: 4009,
+      reason: 'session_busy',
     );
 
     final accepted = await controller.editSavedPrompt(
@@ -675,10 +857,7 @@ void main() {
     expect(original.composer.observation.paused, isTrue);
     expect(original.runtime.execution, statusBefore);
     expect(host.history('a', 'original'), serverHistoryBefore);
-    expect(
-      host.calls.where((call) => call.$1 == 'prompt.submit'),
-      hasLength(1),
-    );
+    expect(host.calls.where((call) => call.$1 == 'prompt.submit'), isEmpty);
     expect(original.runtime.reconnecting, isFalse);
   });
 
@@ -755,10 +934,12 @@ void main() {
         );
         expect(original.composer.observation.paused, isTrue);
         expect(original.runtime.execution, ChatExecution.completed);
-        expect(
-          host.calls.where((call) => call.$1 == 'prompt.submit'),
-          hasLength(1),
-        );
+        final submits = host.calls
+            .where((call) => call.$1 == 'prompt.submit')
+            .toList();
+        expect(submits, hasLength(2));
+        expect(submits.last.$2, submits.first.$2);
+        expect(host.admissionReceipts, hasLength(1));
       },
     );
   }
@@ -823,7 +1004,7 @@ void main() {
     expect(find.text('Edit message'), findsOneWidget);
     expect(
       find.text(
-        "Resending replaces this message and all later history in this chat.",
+        "Resending replaces this message. This answer is replaced and the prompt runs again.",
       ),
       findsOneWidget,
     );
@@ -848,10 +1029,10 @@ void main() {
   testWidgets('rejected edit keeps the correction in the dialog', (
     tester,
   ) async {
-    host.submitError = JsonRpcError(
-      'prompt.submit',
+    host.mutationError = JsonRpcError(
+      'session.mutate',
       'Session busy',
-      code: 4009,
+      reason: 'session_busy',
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -875,7 +1056,7 @@ void main() {
         var i = 0;
         i < 100 &&
             (original.runtime.changingAnswer ||
-                !host.calls.any((call) => call.$1 == 'prompt.submit'));
+                !host.calls.any((call) => call.$1 == 'session.mutate'));
         i++
       ) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
@@ -899,12 +1080,17 @@ void main() {
     testWidgets(
       'pending saved edit blocks dismissal and input until ${rejected ? 'refusal' : 'acceptance'}',
       (tester) async {
-        host.submitDelay = Completer<void>();
+        final held = Completer<void>();
         if (rejected) {
-          host.submitError = JsonRpcError(
-            'prompt.submit',
+          host.mutationDelay = held;
+        } else {
+          host.submitDelay = held;
+        }
+        if (rejected) {
+          host.mutationError = JsonRpcError(
+            'session.mutate',
             'Session busy',
-            code: 4009,
+            reason: 'session_busy',
           );
         }
         await tester.pumpWidget(
@@ -927,7 +1113,7 @@ void main() {
         await tester.pump();
         for (
           var i = 0;
-          i < 100 && !host.calls.any((call) => call.$1 == 'prompt.submit');
+          i < 100 && !host.calls.any((call) => call.$1 == 'session.mutate');
           i++
         ) {
           await tester.pump(const Duration(milliseconds: 1));
@@ -936,7 +1122,7 @@ void main() {
           );
         }
         expect(
-          host.calls.where((call) => call.$1 == 'prompt.submit'),
+          host.calls.where((call) => call.$1 == 'session.mutate'),
           hasLength(1),
         );
         expect(original.runtime.changingAnswer, isTrue);
@@ -952,12 +1138,12 @@ void main() {
           ),
           findsOneWidget,
         );
-        host.submitDelay!.complete();
+        held.complete();
         for (
           var i = 0;
           i < 100 &&
               (original.runtime.changingAnswer ||
-                  !host.calls.any((call) => call.$1 == 'prompt.submit'));
+                  !host.calls.any((call) => call.$1 == 'session.mutate'));
           i++
         ) {
           await tester.pump(const Duration(milliseconds: 1));
@@ -970,12 +1156,19 @@ void main() {
         expect(original.runtime.changingAnswer, isFalse);
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
-        expect(
-          host.calls
-              .singleWhere((call) => call.$1 == 'prompt.submit')
-              .$2['text'],
-          'Retained correction',
-        );
+        if (!rejected) {
+          expect(
+            host.calls
+                .singleWhere((call) => call.$1 == 'prompt.submit')
+                .$2['text'],
+            'Retained correction',
+          );
+        } else {
+          expect(
+            host.calls.where((call) => call.$1 == 'prompt.submit'),
+            isEmpty,
+          );
+        }
         if (rejected) {
           expect(
             find.descendant(
@@ -1016,7 +1209,13 @@ void main() {
     expect(find.byKey(const ValueKey('composer-choice-fork')), findsNothing);
     expect(find.byTooltip('Branch in new session'), findsWidgets);
     await gesture.up();
-    expect(host.calls.where((call) => call.$1 == 'session.branch'), isEmpty);
+    expect(
+      host.calls.where(
+        (call) =>
+            call.$1 == 'session.mutate' && call.$2['operation'] == 'branch',
+      ),
+      isEmpty,
+    );
     await tester.pumpWidget(const SizedBox());
   });
 }

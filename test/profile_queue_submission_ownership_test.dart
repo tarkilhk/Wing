@@ -72,6 +72,10 @@ void main() {
         const Duration(seconds: 3),
       );
       expect(chat.composer.observation.sending, isTrue);
+      host.imageAttachResult = {
+        'attached': true,
+        'path': '/profile/images/follow-up.png',
+      };
       final followUp = await image(chat, 'follow-up');
       await controller.updateDraft(chat, 'follow-up question');
       try {
@@ -110,13 +114,22 @@ void main() {
       }
       expect(chat.composer.observation.sending, isFalse);
       expect(chat.composer.observation.attachments, isEmpty);
-      expect(
-        chat.composer.observation.queue.single.attachments.map(
-          (file) => file.id,
-        ),
-        [followUp.id],
-      );
-      expect(await File(followUp.cachedPath).exists(), isTrue);
+      final accepted = chat.composer.observation.queue.single;
+      expect(accepted.text, 'follow-up question');
+      expect(accepted.serverOwned, isTrue);
+      expect(accepted.attachments, isEmpty);
+      final payloads = host.canonicalPayloads.values.toList();
+      expect(payloads, hasLength(2));
+      expect(payloads.first['text'], 'first image question');
+      expect(payloads.first['attachments'], [
+        {'path': '/profile/images/upload.png', 'mime': 'image/png'},
+      ]);
+      expect(payloads.last['text'], 'follow-up question');
+      expect(payloads.last['attachments'], [
+        {'path': '/profile/images/follow-up.png', 'mime': 'image/png'},
+      ]);
+      expect(await File(original.cachedPath).exists(), isFalse);
+      expect(await File(followUp.cachedPath).exists(), isFalse);
       host.promptSubmitStarted = null;
       host.promptSubmitDelay = null;
       await controller.resumeQueue(chat);

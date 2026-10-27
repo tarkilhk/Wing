@@ -202,8 +202,6 @@ class _LoopSection extends StatelessWidget {
     details: [
       _loopCadence(loop),
       _loopRunCount(loop),
-      if (loop.nextDueAt > 0)
-        'Next due ${_serverTime(context, loop.nextDueAt)}',
       if (loop.awaitingResponse) 'Waiting for the current response',
       if (loop.deferredByGoal) 'Deferred while the goal is active',
       if (loop.pausedReason case final reason? when reason.trim().isNotEmpty)
@@ -211,6 +209,17 @@ class _LoopSection extends StatelessWidget {
       if (loop.lastStopReason case final reason? when reason.trim().isNotEmpty)
         'Stopped: $reason',
     ],
+    timing:
+        loop.status == SessionLoopStatus.active &&
+            loop.nextDueAt > 0 &&
+            !loop.awaitingResponse &&
+            !loop.deferredByGoal
+        ? ActivityTime.countdown(
+            due: DateTime.fromMillisecondsSinceEpoch(
+              (loop.nextDueAt * 1000).round(),
+            ),
+          )
+        : null,
     actions: [
       if (actions.contains(SessionControlAction.loopPause))
         ActivityDetailAction(
@@ -296,6 +305,7 @@ class _WorkSection extends StatelessWidget {
   final String prompt;
   final List<String> details;
   final List<Widget> actions;
+  final Widget? timing;
 
   const _WorkSection({
     required this.icon,
@@ -303,6 +313,7 @@ class _WorkSection extends StatelessWidget {
     required this.prompt,
     required this.details,
     required this.actions,
+    this.timing,
   });
 
   @override
@@ -314,6 +325,7 @@ class _WorkSection extends StatelessWidget {
         facts: details,
       ),
       ActivityDetailStatus(label: title, icon: icon, actions: actions),
+      ?timing,
     ],
   );
 }
@@ -489,14 +501,6 @@ String _loopRunCount(SessionLoop loop) {
     return '${loop.ticksFired}/${loop.maxTicks} tick budget';
   }
   return '${loop.ticksFired} runs';
-}
-
-String _serverTime(BuildContext context, num epochSeconds) {
-  final date = DateTime.fromMillisecondsSinceEpoch(
-    (epochSeconds * 1000).round(),
-  ).toLocal();
-  final localizations = MaterialLocalizations.of(context);
-  return '${localizations.formatShortDate(date)} ${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(date))}';
 }
 
 String _duration(num seconds) {

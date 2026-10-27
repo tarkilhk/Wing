@@ -31,6 +31,102 @@ import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_execution_activity.dart';
 
 void main() {
+  testWidgets('countdown uses readable units for long and short delays', (
+    tester,
+  ) async {
+    final now = DateTime.utc(2026, 10, 28);
+    for (final entry in <Duration, String>{
+      const Duration(days: 3, hours: 2): '3d 2h',
+      const Duration(hours: 4, minutes: 5): '4h 5m',
+      const Duration(minutes: 2, seconds: 9): '2m 9s',
+      const Duration(milliseconds: 1): '1s',
+    }.entries) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ActivityTime.countdown(
+              due: now.add(entry.key),
+              wallClock: () => now,
+            ),
+          ),
+        ),
+      );
+      expect(find.text('Next in ${entry.value}'), findsOneWidget);
+      expect(
+        tester.widget<Tooltip>(find.byType(Tooltip)).message,
+        contains('Scheduled'),
+      );
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  testWidgets('countdown stops while hidden and never reports negative time', (
+    tester,
+  ) async {
+    var now = DateTime.utc(2026, 10, 28);
+    final due = now.add(const Duration(seconds: 5));
+    Widget frame(bool visible) => MaterialApp(
+      home: Scaffold(
+        body: TickerMode(
+          enabled: visible,
+          child: ActivityTime.countdown(due: due, wallClock: () => now),
+        ),
+      ),
+    );
+    await tester.pumpWidget(frame(true));
+    expect(find.textContaining('Next in'), findsOneWidget);
+    await tester.pumpWidget(frame(false));
+    now = now.add(const Duration(seconds: 10));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.textContaining('Next in'), findsOneWidget);
+    await tester.pumpWidget(frame(true));
+    expect(find.text('Due now'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('live progress wraps in $brightness at $scale', (
+        tester,
+      ) async {
+        await tester.binding.setSurfaceSize(const Size(320, 720));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            home: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(scale)),
+              child: Scaffold(
+                body: SingleChildScrollView(
+                  child: ProfileToolCall(
+                    call: ToolCallPresentation.live(
+                      const GatewayToolActivity(
+                        toolId: 'mcp-call',
+                        name: 'mcp_search',
+                        phase: GatewayToolActivityPhase.running,
+                        progress: GatewayToolProgress(
+                          value: 4,
+                          total: 10,
+                          percent: 40,
+                          message:
+                              'Indexing the project files and shared documents',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(
+          find.text('40% · Indexing the project files and shared documents'),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
   testWidgets('short payload keeps copy without a redundant viewer action', (
     tester,
   ) async {

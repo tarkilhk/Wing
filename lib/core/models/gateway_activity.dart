@@ -2,6 +2,55 @@ import 'dart:convert';
 
 enum GatewayToolActivityPhase { running, generating, completed }
 
+/// Ephemeral MCP progress for an exact running call; never a saved result.
+final class GatewayToolProgress {
+  const GatewayToolProgress({
+    required this.value,
+    this.total,
+    this.percent,
+    this.message,
+  });
+
+  final double value;
+  final double? total;
+  final int? percent;
+  final String? message;
+
+  static GatewayToolProgress? parse(Map<String, dynamic> data) {
+    final value = data['progress'];
+    if (value is! num || !value.isFinite || value < 0) return null;
+    final total = data['total'];
+    final percent = data['percent'];
+    final message = data['message'];
+    return GatewayToolProgress(
+      value: value.toDouble(),
+      total: total is num && total.isFinite && total > 0
+          ? total.toDouble()
+          : null,
+      percent: percent is int && percent >= 0 && percent <= 100
+          ? percent
+          : null,
+      message: message is String && message.trim().isNotEmpty
+          ? message.trim()
+          : null,
+    );
+  }
+
+  String get label => [
+    if (percent != null)
+      '$percent%'
+    else if (total != null)
+      '${_number(value)} / ${_number(total!)}'
+    else
+      _number(value),
+    ?message,
+  ].join(' · ');
+
+  static String _number(double value) => value == value.truncateToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toString();
+}
+
 /// Structured labels supplied by stock Hermes for connector/MCP bridge calls.
 final class ToolCallLabel {
   const ToolCallLabel({
@@ -38,6 +87,7 @@ class GatewayToolActivity {
   final String? context;
   final String? summary;
   final List<ToolCallLabel> labels;
+  final GatewayToolProgress? progress;
 
   /// Monotonic receipt time of a live backend start, never a replay or draft.
   final Duration? startedAt;
@@ -54,6 +104,7 @@ class GatewayToolActivity {
     this.summary,
     this.labels = const [],
     this.startedAt,
+    this.progress,
   });
 
   bool get isTerminal => phase == GatewayToolActivityPhase.completed;
@@ -84,6 +135,7 @@ class GatewayToolActivity {
   }) {
     final phase = switch (eventType) {
       'tool.start' => GatewayToolActivityPhase.running,
+      'tool.progress' => GatewayToolActivityPhase.running,
       'tool.generating' => GatewayToolActivityPhase.generating,
       'tool.complete' => GatewayToolActivityPhase.completed,
       _ => null,
@@ -117,6 +169,9 @@ class GatewayToolActivity {
       summary: _firstText(data, const ['summary']),
       labels: ToolCallLabel.parse(data['labels']),
       startedAt: eventType == 'tool.start' ? receivedAt : null,
+      progress: eventType == 'tool.progress'
+          ? GatewayToolProgress.parse(data)
+          : null,
     );
   }
 
@@ -133,8 +188,23 @@ class GatewayToolActivity {
       summary: update.summary ?? summary,
       labels: update.labels.isEmpty ? labels : update.labels,
       startedAt: startedAt ?? update.startedAt,
+      progress: update.isTerminal ? null : update.progress ?? progress,
     );
   }
+
+  GatewayToolActivity withoutProgress() => GatewayToolActivity(
+    toolId: toolId,
+    name: name,
+    phase: phase,
+    detail: detail,
+    durationSeconds: durationSeconds,
+    arguments: arguments,
+    result: result,
+    context: context,
+    summary: summary,
+    labels: labels,
+    startedAt: startedAt,
+  );
 
   static String? _firstText(Map<String, dynamic> data, List<String> keys) {
     for (final key in keys) {

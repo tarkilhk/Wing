@@ -6,12 +6,16 @@ class QueuedPromptDraft {
   final List<ComposerReference> references;
   final List<AttachmentDraft> attachments;
   final bool submissionUncertain;
+  final String? submissionId;
+  final Map<String, dynamic>? submissionPayload;
 
   QueuedPromptDraft({
     required this.text,
     Iterable<ComposerReference> references = const [],
     Iterable<AttachmentDraft> attachments = const [],
     this.submissionUncertain = false,
+    this.submissionId,
+    this.submissionPayload,
   }) : references = List.unmodifiable(references),
        attachments = List.unmodifiable(attachments);
 }

@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/shared_draft_session.dart';
 import 'package:wing/core/services/workspace_entry_session.dart';
@@ -121,6 +122,7 @@ ProfileWorkspaceController profileController(
       },
       rpc: (method, _) async => switch (method) {
         'session.create' => {
+          ...canonicalSnapshotFields,
           'session_id': 'runtime',
           'stored_session_id': 'stored',
           'info': {'profile_name': 'default'},

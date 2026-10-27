@@ -2,6 +2,7 @@ import 'package:wing/core/models/composer_reference.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/composer_work.dart';
 import 'support/composer_fixture.dart';
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'dart:async';
@@ -79,7 +80,7 @@ void main() {
 
     controller.addListener(observe);
     try {
-      await reached.future;
+      await reached.future.timeout(const Duration(seconds: 5));
     } finally {
       controller.removeListener(observe);
     }
@@ -117,6 +118,9 @@ void main() {
     await controller.initialize();
     chat = await controller.createChat(canDispatch: () => true);
     emitChatEvent(controller, chat, 'message.start');
+    // These local-draft cases deliberately hold preparation before admission.
+    // Canonical server-queue cases explicitly resume below.
+    await chat.composer.pause();
   });
   tearDown(() async {
     controller.dispose();
@@ -147,6 +151,7 @@ void main() {
       await controller.updateDraft(chat, 'Finished signing in');
       final file = await attachment('screen-draft.txt');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
         preferences: controller.preferences,
         text: 'Finished signing in',
@@ -216,165 +221,185 @@ void main() {
   );
 
   test(
-    'two queued messages send exactly once and leave a separate draft alone',
+    'canonical queued receipts admit both inputs before the active turn ends',
     () async {
+      await controller.resumeQueue(chat);
       await controller.queuePrompt(chat, 'First');
       await controller.queuePrompt(chat, 'Second');
       await controller.updateDraft(chat, 'Still composing');
       final file = await attachment('unused.txt');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
-        preferences: controller.preferences,
+        preferences: prefs,
         appendAttachments: [file],
       );
-      finish();
-      await until(() => sends() == 1 && !chat.composer.observation.draining);
-      expect(queuedTexts(), ['Second']);
-      expect(chat.composer.observation.text, 'Still composing');
-      expect(chat.composer.observation.attachments.map((value) => value.id), [
-        file.id,
-      ]);
-      finish();
-      await until(() => sends() == 2 && !chat.composer.observation.draining);
-      expect(chat.composer.observation.queue, isEmpty);
-      expect(host.calls.where((call) => call.$2 == 'file.attach'), isEmpty);
-      finish();
-      await until(() => chat.runtime.execution == ChatExecution.completed);
       expect(sends(), 2);
+      expect(queuedTexts(), ['First', 'Second']);
+      expect(
+        chat.composer.observation.queue.every((row) => row.serverOwned),
+        true,
+      );
+      finish();
+      await until(() => queuedTexts().length == 1);
+      expect(queuedTexts(), ['Second']);
+      finish();
+      await until(() => queuedTexts().isEmpty);
+      expect(sends(), 2);
+      expect(host.calls.where((call) => call.$2 == 'file.attach'), isEmpty);
       expect(chat.composer.observation.text, 'Still composing');
+      expect(chat.composer.observation.attachments.single.id, file.id);
     },
   );
 
   test(
-    'lost acknowledgement survives restart as a paused queue without resending',
+    'lost queued acknowledgement recovers the same admission across restart',
     () async {
-      await controller.queuePrompt(chat, 'Send once');
+      await controller.resumeQueue(chat);
       host.promptSubmitFails = true;
-      finish();
-      await until(() => sends() == 1 && !chat.composer.observation.draining);
-      expect(chat.composer.observation.paused, isTrue);
-      expect(queuedTexts(), ['Send once']);
-      expect((await saved())!.queuePaused, isTrue);
+      await controller.queuePrompt(chat, 'Send once');
+      expect(sends(), 1);
+      expect(chat.composer.observation.paused, true);
       final key = chat.key;
       controller.dispose();
-      host.running = false;
+      host.promptSubmitFails = false;
       controller = makeController();
       await controller.initialize();
-      await controller.openSession(key);
-      chat = controller.current!.chat!;
-      expect(chat.composer.observation.paused, isTrue);
+      chat = (await controller.openSession(key))!;
+      expect(host.canonicalAdmissions, hasLength(1));
+      final requests = host.calls.where((call) => call.$2 == 'prompt.submit');
+      expect(
+        requests.map((call) => call.$3['submission_id']).toSet(),
+        hasLength(1),
+      );
       expect(queuedTexts(), ['Send once']);
-      expect(sends(), 1);
+      expect(chat.composer.observation.queue.single.serverOwned, true);
     },
   );
 
   test(
-    'reopening refreshes Hermes before draining a saved unsent queue',
+    'reopening observes accepted server queue without admitting it again',
     () async {
+      await controller.resumeQueue(chat);
       await controller.queuePrompt(chat, 'After the running turn');
       final key = chat.key;
       controller.dispose();
-      host.running = false;
       controller = makeController();
       await controller.initialize();
-      await controller.openSession(key);
-      chat = controller.current!.chat!;
+      chat = (await controller.openSession(key))!;
       expect(sends(), 1);
-      expect(chat.composer.observation.queue, isEmpty);
-      final methods = host.calls.map((call) => call.$2).toList();
-      expect(methods, containsAll(['session.resume', 'prompt.submit']));
-      expect(
-        methods.indexOf('session.resume'),
-        lessThan(methods.indexOf('prompt.submit')),
-      );
-    },
-  );
-
-  test(
-    'the pending head is saved paused before its acknowledgement arrives',
-    () async {
-      await controller.queuePrompt(chat, 'First');
-      await controller.queuePrompt(chat, 'Second');
-      host.promptSubmitDelay = Completer<void>();
-      host.promptSubmitStarted = Completer<void>();
-      finish();
-      await host.promptSubmitStarted!.future;
-      final snapshot = (await saved())!;
-      expect(snapshot.queuePaused, isTrue);
-      expect(snapshot.queuedPrompts.map((prompt) => prompt.text), [
-        'First',
-        'Second',
-      ]);
-      await controller.removeQueuedPrompt(
-        chat,
-        chat.composer.observation.queue[0].id,
-      );
-      expect(queuedTexts(), ['First', 'Second']);
-      await controller.stop(chat);
-      host.promptSubmitDelay!.complete();
-      await until(() => !chat.composer.observation.draining);
-      expect(chat.composer.observation.paused, isTrue);
-      expect(queuedTexts(), ['Second']);
-      finish();
-      await until(() => chat.runtime.execution == ChatExecution.completed);
-      expect(sends(), 1);
-    },
-  );
-
-  test(
-    'a failed turn pauses remaining messages until explicitly resumed',
-    () async {
-      await controller.queuePrompt(chat, 'Follow-up');
-      host.event('a', 'turn.end', {'status': 'error'});
-      await until(() => chat.runtime.execution == ChatExecution.failed);
-      expect(chat.composer.observation.paused, isTrue);
-      expect(sends(), 0);
-      host.running = false;
-      await Future.wait([
-        controller.resumeQueue(chat),
-        controller.resumeQueue(chat),
-      ]);
+      expect(queuedTexts(), ['After the running turn']);
+      expect(chat.composer.observation.queue.single.serverOwned, true);
       expect(
         host.calls.where((call) => call.$2 == 'session.resume'),
-        hasLength(1),
+        isNotEmpty,
       );
-      expect(sends(), 1);
-      expect(chat.composer.observation.queue, isEmpty);
     },
   );
 
   test(
-    'queued attachments send before the prompt and leave the composer alone',
+    'held admission is durably uncertain before its receipt arrives',
     () async {
-      final queuedFile = await attachment('queued.txt');
-      await restoreComposerFixture(
-        chat: chat,
-        preferences: controller.preferences,
-        text: 'Review queued',
-        appendAttachments: [queuedFile],
-      );
-      await controller.queuePrompt(chat, chat.composer.observation.text);
+      await controller.resumeQueue(chat);
+      host.promptSubmitDelay = Completer<void>();
+      host.promptSubmitStarted = Completer<void>();
+      final queuing = controller.queuePrompt(chat, 'First');
+      await host.promptSubmitStarted!.future;
+      final snapshot = (await saved())!;
+      expect(snapshot.queuePaused, true);
+      expect(snapshot.queuedPrompts.single.submissionUncertain, true);
+      expect(chat.composer.observation.draining, true);
+      host.promptSubmitDelay!.complete();
+      await queuing;
+      expect(queuedTexts(), ['First']);
+      expect(chat.composer.observation.queue.single.serverOwned, true);
+      expect((await saved())?.queuedPrompts ?? [], isEmpty);
+    },
+  );
+
+  test('server queued edit replaces the exact admission at the tail', () async {
+    await controller.resumeQueue(chat);
+    await controller.queuePrompt(chat, 'Original');
+    await controller.queuePrompt(chat, 'Second');
+    await controller.updateDraft(chat, 'Separate draft');
+    final original = chat.composer.observation.queue.first;
+    await controller.beginQueuedPromptEdit(chat, original.id);
+    controller.updateQueuedPromptEdit(chat, 'Updated');
+    await controller.saveQueuedPromptEdit(chat);
+    expect(queuedTexts(), ['Second', 'Updated']);
+    expect(chat.composer.observation.text, 'Separate draft');
+    final replace = host.calls.singleWhere(
+      (call) => call.$2 == 'prompt.replace_queued',
+    );
+    expect(replace.$3['admission_id'], 'admission-1');
+    expect(replace.$3['text'], 'Updated');
+    expect(sends(), 2);
+  });
+
+  test(
+    'server cancel and steer use admitted identity without another submit',
+    () async {
+      await controller.resumeQueue(chat);
+      await controller.queuePrompt(chat, 'Same');
+      await controller.queuePrompt(chat, 'Same');
+      final rows = List.of(chat.composer.observation.queue);
+      await controller.removeQueuedPrompt(chat, rows.first.id);
+      expect(queuedTexts(), ['Same']);
       expect(
-        chat.composer.observation.queue.single.attachments.map(
-          (file) => file.id,
+        await controller.steerQueuedPrompt(
+          chat,
+          chat.composer.observation.queue.single.id,
         ),
-        [queuedFile.id],
+        true,
       );
-      expect(chat.composer.observation.text, isEmpty);
-      expect(chat.composer.observation.attachments, isEmpty);
+      expect(queuedTexts(), ['Same']);
+      final transfer = chat.composer.observation.queue.single;
+      expect(transfer.pendingSteering, true);
+      expect(chat.composer.queueActions(transfer.id), (
+        canEdit: false,
+        canDelete: false,
+        canSteer: false,
+      ));
+      host.event('a', 'turn.end');
+      expect(queuedTexts(), isEmpty);
+      expect(
+        host.calls
+            .singleWhere((call) => call.$2 == 'prompt.cancel')
+            .$3['admission_id'],
+        'admission-1',
+      );
+      expect(
+        host.calls
+            .singleWhere((call) => call.$2 == 'prompt.steer_queued')
+            .$3['admission_id'],
+        'admission-2',
+      );
+      expect(sends(), 2);
+    },
+  );
 
-      final composingFile = await attachment('composing.txt');
-      await controller.updateDraft(chat, 'Still composing');
+  test(
+    'queued attachments upload before admission and preserve separate composer work',
+    () async {
+      final file = await attachment('queued.txt');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
-        preferences: controller.preferences,
-        appendAttachments: [composingFile],
+        preferences: prefs,
+        text: 'Review queued',
+        appendAttachments: [file],
       );
-      finish();
-      await until(() => sends() == 1 && !chat.composer.observation.draining);
-
+      await controller.queuePrompt(chat, 'Review queued');
+      final composing = await attachment('composing.txt');
+      await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
+        chat: chat,
+        preferences: prefs,
+        text: 'Still composing',
+        appendAttachments: [composing],
+      );
+      await controller.resumeQueue(chat);
       final methods = host.calls.map((call) => call.$2).toList();
-      expect(methods, containsAll(['file.attach', 'prompt.submit']));
       expect(
         methods.indexOf('file.attach'),
         lessThan(methods.indexOf('prompt.submit')),
@@ -383,82 +408,80 @@ void main() {
         (call) => call.$2 == 'prompt.submit',
       );
       expect(submit.$3['text'], contains('attached:queued.txt'));
-      expect(chat.composer.observation.queue, isEmpty);
-      expect(await File(queuedFile.cachedPath).exists(), isFalse);
+      expect(chat.composer.observation.queue.single.serverOwned, true);
+      expect(chat.composer.observation.queue.single.attachments, isEmpty);
+      expect(await File(file.cachedPath).exists(), false);
       expect(chat.composer.observation.text, 'Still composing');
-      expect(chat.composer.observation.attachments.map((file) => file.id), [
-        composingFile.id,
-      ]);
-      expect(await File(composingFile.cachedPath).exists(), isTrue);
+      expect(chat.composer.observation.attachments.single.id, composing.id);
+      expect(await File(composing.cachedPath).exists(), true);
     },
   );
 
-  test('attachment-only queue sends its uploaded reference', () async {
-    final file = await attachment('only.txt');
-    await restoreComposerFixture(
-      chat: chat,
-      preferences: controller.preferences,
-      appendAttachments: [file],
-    );
-    await controller.queuePrompt(chat, '');
-
-    finish();
-    await until(() => sends() == 1 && !chat.composer.observation.draining);
-
-    final submit = host.calls.singleWhere((call) => call.$2 == 'prompt.submit');
-    expect(submit.$3['text'], 'attached:only.txt');
-    expect(chat.composer.observation.queue, isEmpty);
-    expect(await File(file.cachedPath).exists(), isFalse);
-  });
+  test(
+    'attachment-only queue submits its uploaded reference to server FIFO',
+    () async {
+      final file = await attachment('only.txt');
+      await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
+        chat: chat,
+        preferences: prefs,
+        appendAttachments: [file],
+      );
+      await controller.queuePrompt(chat, '');
+      await controller.resumeQueue(chat);
+      expect(
+        host.calls.singleWhere((call) => call.$2 == 'prompt.submit').$3['text'],
+        'attached:only.txt',
+      );
+      expect(chat.composer.observation.queue.single.serverOwned, true);
+      expect(await File(file.cachedPath).exists(), false);
+    },
+  );
 
   test(
-    'lost attachment prompt acknowledgement restores a paused reusable head',
+    'lost attachment acknowledgement reuses uploaded reference and stable input ID',
     () async {
       final file = await attachment('uncertain.txt');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
-        preferences: controller.preferences,
+        preferences: prefs,
         text: 'With file',
         appendAttachments: [file],
       );
-      await controller.queuePrompt(chat, chat.composer.observation.text);
+      await controller.queuePrompt(chat, 'With file');
       host.promptSubmitFails = true;
-
-      finish();
-      await until(() => sends() == 1 && !chat.composer.observation.draining);
-      expect(chat.composer.observation.paused, isTrue);
-      expect(
-        chat.composer.observation.queue.single.attachments.single.status,
-        AttachmentDraftStatus.attached,
-      );
+      await controller.resumeQueue(chat);
       expect(
         chat.composer.observation.queue.single.attachments.single.refText,
         'attached:uncertain.txt',
       );
-      expect(await File(file.cachedPath).exists(), isTrue);
       final key = chat.key;
       controller.dispose();
-      host
-        ..promptSubmitFails = false
-        ..running = false;
+      host.promptSubmitFails = false;
       controller = makeController();
       await controller.initialize();
-      await controller.openSession(key);
-      chat = controller.current!.chat!;
-
-      expect(chat.composer.observation.paused, isTrue);
+      chat = (await controller.openSession(key))!;
+      expect(host.canonicalAdmissions, hasLength(1));
       expect(
-        chat.composer.observation.queue.single.attachments.single.refText,
-        'attached:uncertain.txt',
+        host.calls.where((call) => call.$2 == 'file.attach'),
+        hasLength(1),
       );
-      expect(await File(file.cachedPath).exists(), isTrue);
-      expect(sends(), 1);
+      expect(
+        host.calls
+            .where((call) => call.$2 == 'prompt.submit')
+            .map((call) => call.$3['submission_id'])
+            .toSet(),
+        hasLength(1),
+      );
+      expect(chat.composer.observation.queue.single.serverOwned, true);
     },
   );
 
   test('attachment upload failure keeps the paused head and cache', () async {
     final file = await attachment('upload-fails.txt');
     await restoreComposerFixture(
+      paused: chat.composer.observation.paused,
       chat: chat,
       preferences: controller.preferences,
       appendAttachments: [file],
@@ -466,7 +489,7 @@ void main() {
     await controller.queuePrompt(chat, '');
     host.fileAttachFails = true;
 
-    finish();
+    await controller.resumeQueue(chat);
     await until(
       () =>
           !chat.composer.observation.draining &&
@@ -492,6 +515,7 @@ void main() {
     () async {
       final file = await attachment('missing-local.txt');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
         preferences: controller.preferences,
         text: 'Keep this queued work',
@@ -502,7 +526,7 @@ void main() {
       await controller.updateDraft(chat, 'Newer separate draft');
       await File(file.cachedPath).delete();
 
-      finish();
+      await controller.resumeQueue(chat);
       await until(
         () =>
             !chat.composer.observation.draining &&
@@ -555,6 +579,7 @@ void main() {
       final originalFile = await attachment('original.txt');
       final newerFile = await attachment('newer.txt');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
         preferences: controller.preferences,
         text: 'Original',
@@ -598,58 +623,45 @@ void main() {
 
   for (final persistentFailure in [false, true]) {
     test(
-      'failed ACK removal never replays accepted attachment: persistent=$persistentFailure',
+      'local ACK cleanup failure preserves one canonical admission: persistent=$persistentFailure',
       () async {
         final file = await attachment('keep.txt');
         await restoreComposerFixture(
+          paused: chat.composer.observation.paused,
           chat: chat,
-          preferences: controller.preferences,
+          preferences: prefs,
           text: 'Send once',
           appendAttachments: [file],
         );
-        await controller.queuePrompt(chat, chat.composer.observation.text);
+        await controller.queuePrompt(chat, 'Send once');
         draftStore
           ..failNextEmptyQueueWrite = true
           ..failEmptyQueueWrites = persistentFailure;
-
-        finish();
-        await until(() => sends() == 1 && !chat.composer.observation.draining);
-        expect(chat.composer.observation.paused, isTrue);
-        expect(queuedTexts(), isEmpty);
-        expect(await File(file.cachedPath).exists(), persistentFailure);
-        final snapshot = await saved();
-        if (persistentFailure) {
-          expect(snapshot!.queuePaused, isTrue);
-          expect(snapshot.queuedPrompts.single.text, 'Send once');
-          expect(snapshot.queuedPrompts.single.submissionUncertain, isTrue);
-        } else {
-          expect(snapshot, isNull);
-        }
-
-        finish();
-        await until(() => chat.runtime.execution == ChatExecution.completed);
+        await controller.resumeQueue(chat);
         expect(sends(), 1);
+        expect(host.canonicalAdmissions, hasLength(1));
+        expect(
+          chat.composer.observation.queue.where((row) => row.serverOwned),
+          hasLength(1),
+        );
         final key = chat.key;
         controller.dispose();
         draftStore.failEmptyQueueWrites = false;
-        host.running = false;
         controller = makeController();
         await controller.initialize();
-        await controller.openSession(key);
-        chat = controller.current!.chat!;
-        expect(sends(), 1);
-        if (persistentFailure) {
-          expect(queuedTexts(), ['Send once']);
-          expect(
-            chat.composer.observation.queue.single.submissionUncertain,
-            isTrue,
-          );
-          expect(chat.composer.observation.paused, isTrue);
-          await expectLater(controller.resumeQueue(chat), throwsStateError);
-        } else {
-          expect(chat.composer.observation.queue, isEmpty);
-        }
-        expect(sends(), 1);
+        chat = (await controller.openSession(key))!;
+        expect(host.canonicalAdmissions, hasLength(1));
+        expect(
+          host.calls
+              .where((call) => call.$2 == 'prompt.submit')
+              .map((call) => call.$3['submission_id'])
+              .toSet(),
+          hasLength(1),
+        );
+        expect(
+          chat.composer.observation.queue.where((row) => row.serverOwned),
+          hasLength(1),
+        );
       },
     );
   }
@@ -659,6 +671,7 @@ void main() {
     await controller.queuePrompt(chat, 'Second');
     final file = await attachment('draft-buffer.txt');
     await restoreComposerFixture(
+      paused: chat.composer.observation.paused,
       chat: chat,
       preferences: controller.preferences,
       appendAttachments: [file],
@@ -669,15 +682,16 @@ void main() {
       chat.composer.observation.queue.first.id,
     );
     controller.updateQueuedPromptEdit(chat, 'Changed');
+    await controller.resumeQueue(chat);
     finish();
     await until(() => chat.runtime.execution == ChatExecution.completed);
     expect(sends(), 0);
     expect((await saved())!.queuePaused, isTrue);
     expect((await saved())!.text, 'Separate draft');
     await controller.saveQueuedPromptEdit(chat);
-    await until(() => sends() == 1 && !chat.composer.observation.draining);
+    await until(() => sends() == 2 && !chat.composer.observation.draining);
     expect(
-      host.calls.singleWhere((call) => call.$2 == 'prompt.submit').$3['text'],
+      host.calls.where((call) => call.$2 == 'prompt.submit').first.$3['text'],
       'Changed',
     );
     expect(queuedTexts(), ['Second']);
@@ -694,6 +708,7 @@ void main() {
       final queuedFile = await attachment('queued-edit.txt');
       chat.composer.editText('Original');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
         preferences: controller.preferences,
         appendAttachments: [queuedFile],
@@ -747,6 +762,7 @@ void main() {
       await controller.queuePrompt(chat, 'Second');
       final file = await attachment('buffered.txt');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
         preferences: controller.preferences,
         appendAttachments: [file],
@@ -831,6 +847,7 @@ void main() {
       final file = await attachment('edit.txt');
       chat.composer.editText('Original');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
         preferences: controller.preferences,
         appendAttachments: [file],
@@ -924,6 +941,7 @@ void main() {
   test('stale empty capture leaves newer composer work in place', () async {
     final newerFile = await attachment('newer-composer.txt');
     await restoreComposerFixture(
+      paused: chat.composer.observation.paused,
       chat: chat,
       preferences: controller.preferences,
       text: 'Newer composer text',
@@ -951,9 +969,9 @@ void main() {
         chat,
         chat.composer.observation.queue[0].id,
       );
-      await controller.updateDraft(chat, 'Typed while saving');
+      final typing = controller.updateDraft(chat, 'Typed while saving');
       delay.complete();
-      await removing;
+      await Future.wait([removing, typing]);
 
       expect(chat.composer.observation.queue, isEmpty);
       expect(chat.composer.observation.text, 'Typed while saving');
@@ -962,7 +980,7 @@ void main() {
   );
 
   test(
-    'turn end during queued removal still drains the remaining head',
+    'turn end during local removal preserves the remaining row until explicit resume',
     () async {
       await controller.queuePrompt(chat, 'Remove me');
       await controller.queuePrompt(chat, 'Send me');
@@ -976,9 +994,11 @@ void main() {
       finish();
       delay.complete();
       await removing;
-      await until(() => sends() == 1 && !chat.composer.observation.draining);
-
-      expect(chat.composer.observation.queue, isEmpty);
+      expect(sends(), 0);
+      expect(queuedTexts(), ['Send me']);
+      await controller.resumeQueue(chat);
+      expect(sends(), 1);
+      expect(chat.composer.observation.queue.single.serverOwned, true);
       final submit = host.calls.singleWhere(
         (call) => call.$2 == 'prompt.submit',
       );
@@ -992,6 +1012,7 @@ void main() {
       final queuedFile = await attachment('delete-queued.txt');
       final composerFile = await attachment('delete-composer.txt');
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
         preferences: controller.preferences,
         text: 'Queued',
@@ -999,10 +1020,12 @@ void main() {
       );
       await controller.queuePrompt(chat, chat.composer.observation.text);
       emitChatEvent(controller, chat, 'session.info', {
+        ...canonicalSnapshotFields,
         'open_requests': [],
         'running': false,
       });
       await restoreComposerFixture(
+        paused: chat.composer.observation.paused,
         chat: chat,
         preferences: controller.preferences,
         appendAttachments: [composerFile],

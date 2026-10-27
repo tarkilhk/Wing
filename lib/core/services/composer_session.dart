@@ -1,5 +1,8 @@
+import 'package:uuid/uuid.dart';
+import '../models/canonical_session.dart';
 import '../models/composer_reference.dart';
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import '../models/attachment_draft.dart';
@@ -18,6 +21,7 @@ class _QueueEntry {
   _QueueEntry(this.value) : id = ComposerQueueId();
   final ComposerQueueId id;
   QueuedPromptDraft value;
+  CanonicalAdmission? admission;
 }
 
 class _SubmissionWork {
@@ -77,6 +81,7 @@ class ComposerSession {
   Future<void>? _writes;
   final _files = <AttachmentDraft>[];
   final _queue = <_QueueEntry>[];
+  final _serverQueue = <_QueueEntry>[];
   final _jobs = <AttachmentImageJob>{};
   Completer<Uint8List>? _clipboardReadCancelled;
   _QueueEntry? _editing;
@@ -100,6 +105,9 @@ class ComposerSession {
     references: value.value.references,
     attachments: value.value.attachments.map(_file),
     submissionUncertain: value.value.submissionUncertain,
+    serverOwned: value.admission != null,
+    unknownOutcome: value.admission?.unknown ?? false,
+    pendingSteering: value.admission?.steering ?? false,
   );
 
   ComposerObservation get observation => ComposerObservation(
@@ -113,7 +121,16 @@ class ComposerSession {
                 ? _files
                 : _files.take(_preparationBaseCount))
             .map(_file),
-    queue: _queue.map(_item),
+    queue: [
+      ..._serverQueue,
+      ..._queue.where(
+        (entry) => !_serverQueue.any(
+          (accepted) =>
+              entry.value.submissionId != null &&
+              accepted.admission!.inputId == entry.value.submissionId,
+        ),
+      ),
+    ].map(_item),
     editing: _editing?.id,
     editText: _editText,
     paused: _paused,
@@ -127,6 +144,104 @@ class ComposerSession {
     error: _error,
   );
   Future<void>? get admittedWrites => _writes;
+
+  CanonicalAdmission? serverAdmission(ComposerQueueId id) => _serverQueue
+      .where((entry) => identical(entry.id, id))
+      .firstOrNull
+      ?.admission;
+
+  /// A server snapshot replaces only accepted work. Local unsent preparations
+  /// remain separate; matching input identity retires uncertain local copies.
+  void observePending(
+    Iterable<CanonicalAdmission> pending, {
+    bool notify = true,
+  }) {
+    final previous = {
+      for (final item in _serverQueue) item.admission!.id: item,
+    };
+    final rows = pending.toList();
+    _serverQueue.clear();
+    for (final row in rows.where(
+      (row) =>
+          row.queued || row.unknown || row.status == 'started' && row.steering,
+    )) {
+      final item =
+          previous[row.id] ?? _QueueEntry(QueuedPromptDraft(text: row.text));
+      item.admission = row;
+      final prepared = PreparedComposerMessage.parse(row.text);
+      item.value = QueuedPromptDraft(
+        text: prepared?.message ?? row.text,
+        references: prepared?.references ?? const [],
+        submissionId: row.inputId,
+      );
+      _serverQueue.add(item);
+    }
+    if (_editing?.admission != null && !_serverQueue.contains(_editing)) {
+      _editing = null;
+      _editText = '';
+      _error =
+          'That queued message has already moved on. The server has the latest state.';
+    }
+    if (notify) _changed();
+  }
+
+  bool get hasRecoverableSubmissions => _queue.any(
+    (entry) =>
+        entry.value.submissionUncertain &&
+        entry.value.submissionId != null &&
+        entry.value.submissionPayload != null,
+  );
+
+  Future<void> reconcileSubmissions(
+    Future<CanonicalAdmission> Function(Map<String, dynamic>) replay,
+  ) async {
+    _ensure();
+    for (final entry in List<_QueueEntry>.of(_queue)) {
+      final input = entry.value;
+      final payload = input.submissionPayload;
+      if (!input.submissionUncertain ||
+          input.submissionId == null ||
+          payload == null) {
+        continue;
+      }
+      if (payload['submission_id'] != input.submissionId ||
+          payload['session_id'] != _runtime().runtimeId) {
+        continue;
+      }
+      final receipt = await replay(Map<String, dynamic>.from(payload));
+      _ensure();
+      if (!_queue.contains(entry) || !identical(entry.value, input)) continue;
+      if (receipt.sessionId != _runtime().runtimeId) {
+        throw const FormatException(
+          'Submission recovered in another conversation',
+        );
+      }
+      _queue.remove(entry);
+      await _persist();
+      await _attachments.removeAll(input.attachments);
+      _changed();
+    }
+  }
+
+  Future<T> serverQueueAction<T>(Future<T> Function() action) async {
+    _ensure();
+    if (_saving || _steering) {
+      throw StateError('Wait for the queue action to finish.');
+    }
+    _saving = true;
+    _error = null;
+    _changed();
+    try {
+      return await action();
+    } catch (error) {
+      _error = error.toString();
+      rethrow;
+    } finally {
+      _saving = false;
+      _changed();
+    }
+  }
+
   bool get _hasWork =>
       _text.isNotEmpty ||
       _files.isNotEmpty ||
@@ -185,7 +300,9 @@ class ComposerSession {
 
   Future<void> _persist() {
     if (_acknowledgedDeletion()) return Future.value();
-    final outgoing = _submissions.values.where((v) => v.consume).firstOrNull;
+    final outgoing = _submissions.values
+        .where((v) => v.queue == null)
+        .firstOrNull;
     final text = _text;
     final references = _references;
     final files = [
@@ -356,20 +473,36 @@ class ComposerSession {
   ({bool canEdit, bool canSteer, bool canDelete}) queueActions(
     ComposerQueueId id,
   ) {
-    final item = _queue.where((entry) => identical(entry.id, id)).firstOrNull;
-    final available = item != null && _queueAvailable;
+    final item = [
+      ..._serverQueue,
+      ..._queue,
+    ].where((entry) => identical(entry.id, id)).firstOrNull;
+    final available =
+        item != null &&
+        _queueAvailable &&
+        !item.value.submissionUncertain &&
+        (item.admission == null ||
+            item.admission!.queued ||
+            item.admission!.unknown);
     final selected = _editing == null || identical(_editing, item);
     final text =
         (identical(_editing, item) ? _editText : item?.value.text ?? '').trim();
     final runtime = _runtime();
     return (
-      canEdit: available && selected,
+      canEdit:
+          available &&
+          selected &&
+          (item.admission == null ||
+              item.admission!.controls.contains('replace')),
       canDelete: available,
       canSteer:
           available &&
           selected &&
           runtime.connected &&
           runtime.canSteer &&
+          (item.admission == null ||
+              item.admission!.controls.contains('steer') &&
+                  text == item.value.text.trim()) &&
           item.value.attachments.isEmpty &&
           text.isNotEmpty &&
           !text.startsWith('/') &&
@@ -839,23 +972,13 @@ class ComposerSession {
         );
       });
 
-  Future<void> removeAttachment(
-    String id,
-    Future<void> Function(String path, String runtime) detach,
-  ) async {
+  Future<void> removeAttachment(String id) async {
     _ensure();
     if (!canRemoveAttachment(id)) return;
     final file = _files.firstWhere((v) => v.id == id);
     _saving = true;
     _changed();
     try {
-      if (file.imagePath != null && file.attachedSessionId != null) {
-        await detach(file.imagePath!, file.attachedSessionId!);
-        _ensure();
-        file.status = AttachmentDraftStatus.ready;
-        file.imagePath = null;
-        file.attachedSessionId = null;
-      }
       final index = _files.indexOf(file);
       _files.removeAt(index);
       _revision++;
@@ -1048,7 +1171,9 @@ class ComposerSession {
     final original = _text, uncertain = _uncertain;
     final originalReferences = _references;
     final moved = consumeMatchingDraft && _text.trim() == text;
-    final outgoing = _submissions.values.where((v) => v.consume).firstOrNull;
+    final outgoing = _submissions.values
+        .where((v) => v.queue == null)
+        .firstOrNull;
     final files = moved
         ? _files
               .where((v) => outgoing?.value.attachments.contains(v) != true)
@@ -1117,7 +1242,10 @@ class ComposerSession {
   }
 
   _QueueEntry _entry(ComposerQueueId id) =>
-      _queue.where((v) => identical(v.id, id)).firstOrNull ??
+      [
+        ..._serverQueue,
+        ..._queue,
+      ].where((v) => identical(v.id, id)).firstOrNull ??
       (throw StateError('This queued message has changed. Reopen the queue.'));
 
   Future<void> beginEdit(ComposerQueueId id) async {
@@ -1127,6 +1255,11 @@ class ComposerSession {
     }
     final item = _entry(id);
     if (identical(_editing, item)) return;
+    if (!queueActions(id).canEdit) {
+      throw StateError(
+        'This accepted message can no longer be edited. Refresh the queue.',
+      );
+    }
     if (_editing != null) {
       throw StateError('Queue or cancel your current edit first.');
     }
@@ -1207,10 +1340,7 @@ class ComposerSession {
     }
   }
 
-  Future<void> removeQueued(
-    ComposerQueueId id,
-    Future<void> Function(String path, String runtime) detach,
-  ) async {
+  Future<void> removeQueued(ComposerQueueId id) async {
     _ensure();
     if (_draining || _saving) return;
     final item = _queue.where((value) => identical(value.id, id)).firstOrNull;
@@ -1218,15 +1348,6 @@ class ComposerSession {
     final index = _queue.indexOf(item);
     _saving = true;
     try {
-      for (final file in item.value.attachments) {
-        if (file.imagePath != null && file.attachedSessionId != null) {
-          await detach(file.imagePath!, file.attachedSessionId!);
-          _ensure();
-          file.status = AttachmentDraftStatus.ready;
-          file.imagePath = null;
-          file.attachedSessionId = null;
-        }
-      }
       _queue.remove(item);
       _changed();
       try {
@@ -1306,13 +1427,16 @@ class ComposerSession {
       text,
       item?.value.references ?? _references,
     );
+    final submissionId = item?.value.submissionId ?? const Uuid().v4();
     final ticket = ComposerSubmission(
+      submissionId: submissionId,
       text: text,
       references: references,
       attachments: files.map(_file),
     );
     _submissions[ticket] = _SubmissionWork(
       value: QueuedPromptDraft(
+        submissionId: submissionId,
         text: text,
         references: references,
         attachments: files,
@@ -1392,11 +1516,18 @@ class ComposerSession {
           ),
       ]);
 
-  Future<void> prepareDispatch(ComposerSubmission ticket) async {
+  Future<void> prepareDispatch(
+    ComposerSubmission ticket, {
+    Map<String, dynamic>? payload,
+  }) async {
     _ensure();
     final work = _submission(ticket);
     work.value = QueuedPromptDraft(
       text: work.value.text,
+      submissionId: ticket.submissionId,
+      submissionPayload: payload == null
+          ? null
+          : Map<String, dynamic>.from(jsonDecode(jsonEncode(payload)) as Map),
       references: work.value.references,
       attachments: work.value.attachments,
       submissionUncertain: true,
@@ -1423,6 +1554,8 @@ class ComposerSession {
     } else {
       final value = QueuedPromptDraft(
         text: work.value.text,
+        submissionId: ticket.submissionId,
+        submissionPayload: work.value.submissionPayload,
         references: work.value.references,
         attachments: work.value.attachments,
         submissionUncertain: delivery == ComposerDelivery.uncertain,
@@ -1433,6 +1566,9 @@ class ComposerSession {
         _paused = true;
       } else if (work.queue != null) {
         work.queue!.value = value;
+      } else if (delivery == ComposerDelivery.uncertain) {
+        _queue.insert(0, _QueueEntry(value));
+        _paused = true;
       }
     }
     _error = error;
@@ -1587,7 +1723,7 @@ class ComposerSession {
       return;
     }
     final runtime = _runtime();
-    if (!runtime.automaticDrainAvailable || runtime.working) return;
+    if (!runtime.automaticDrainAvailable) return;
     try {
       _ensureAvailable();
     } catch (_) {
@@ -1606,7 +1742,6 @@ class ComposerSession {
           !_paused &&
           !_saving &&
           _queue.isNotEmpty &&
-          !_runtime().working &&
           _runtime().automaticDrainAvailable) {
         _ensureAvailable();
         await _persist();

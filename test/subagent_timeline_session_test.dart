@@ -17,11 +17,11 @@ void main() {
   late List<(String, Map<String, dynamic>)> calls;
   late List<Map<String, dynamic>> events, rows;
   late List<int> offsets;
-  late String epoch, resumedId;
+  late String epoch, mountedId, storedId;
   late bool current, failRead, failHistory, truncated;
   Future<void>? held;
   Map<String, dynamic> event(String type, Map<String, dynamic> payload) => {
-    'session_id': 'watch-child',
+    'session_id': 'child-session',
     'seq': events.length + 1,
     'type': type,
     'payload': payload,
@@ -33,7 +33,8 @@ void main() {
     rows = [];
     offsets = [];
     epoch = 'epoch-1';
-    resumedId = 'child-session';
+    mountedId = 'child-session';
+    storedId = 'child-session';
     current = true;
     failRead = false;
     failHistory = false;
@@ -49,17 +50,22 @@ void main() {
         if (failRead) throw StateError('offline');
         if (method == 'session.resume') {
           return {
-            'session_id': 'watch-child',
-            'resumed': resumedId,
+            'session_id': mountedId,
+            'stored_session_id': storedId,
+            'replay_epoch': epoch,
+            'last_sequence': events.length,
             'running': true,
           };
         }
         expect(method, 'session.events.since');
+        expect(params.containsKey('last_seen'), isFalse);
+        final missing = truncated || params['replay_epoch'] != epoch;
         return {
-          'epoch': epoch,
+          'replay_epoch': epoch,
           'latest_seq': events.length,
-          'truncated': truncated,
-          'events': List.of(events),
+          'truncated': missing,
+          'snapshot_required': missing,
+          'events': missing ? [] : List.of(events),
         };
       },
       history: (id, offset) async {
@@ -127,7 +133,7 @@ void main() {
   );
 
   test(
-    'mounts the exact lazy child and retains saved tool inputs and results',
+    'mounts the exact canonical child and retains saved tool inputs and results',
     () async {
       rows.addAll([
         {
@@ -155,8 +161,7 @@ void main() {
       expect(calls.first.$1, 'session.resume');
       expect(calls.first.$2, {
         'session_id': 'child-session',
-        'lazy': true,
-        'omit_messages': true,
+        'display_projection': true,
       });
       expect(session.messages.first['tool_calls'], [
         {
@@ -303,17 +308,33 @@ void main() {
     events.add(event('message.delta', {'text': 'Second epoch'}));
     await session.refresh();
     expect(session.streaming, 'Second epoch');
-    expect(calls.last.$2['last_seen'], 0);
+    expect(calls.last.$2['last_sequence'], 0);
+    expect(calls.last.$2['replay_epoch'], 'epoch-2');
+    expect(calls.where((call) => call.$1 == 'session.resume'), hasLength(2));
+    expect(
+      session.qualification,
+      contains('Earlier live activity is unavailable'),
+    );
   });
 
   test('watch identity mismatch cannot supply another child replay', () async {
-    resumedId = 'different-child';
+    storedId = 'different-child';
     rows.add({'id': 1, 'role': 'assistant', 'content': 'Exact saved child'});
     await session.refresh();
     expect(session.liveError, isNotNull);
     expect(session.messages.single['content'], 'Exact saved child');
     expect(calls.map((call) => call.$1), ['session.resume']);
   });
+
+  test(
+    'a different canonical mount cannot replace the selected child',
+    () async {
+      mountedId = storedId = 'different-child';
+      await session.refresh();
+      expect(session.liveError, isNotNull);
+      expect(calls.map((call) => call.$1), ['session.resume']);
+    },
+  );
 
   test('replay rejects a foreign child before applying any event', () async {
     events.add(event('message.start', {}));
@@ -347,6 +368,27 @@ void main() {
     );
   });
 
+  test('a truncated replay resumes after the snapshot watermark', () async {
+    events.add(event('message.start', {}));
+    events.add(event('message.delta', {'text': 'Missing from the ring'}));
+    truncated = true;
+    rows.add({
+      'id': 1,
+      'role': 'assistant',
+      'content': 'Saved recovery evidence',
+    });
+    await session.refresh();
+    expect(session.streaming, isEmpty);
+    expect(session.messages.single['content'], 'Saved recovery evidence');
+    expect(session.qualification, isNotNull);
+    truncated = false;
+    events.add(event('message.start', {}));
+    events.add(event('message.delta', {'text': 'Newly received answer'}));
+    await session.refresh();
+    expect(calls.last.$2['last_sequence'], 2);
+    expect(session.streaming, 'Newly received answer');
+  });
+
   test(
     'paging retains order and a complete prefix across latest refresh',
     () async {
@@ -358,15 +400,18 @@ void main() {
         isCurrent: () => true,
         read: (method, params) async => method == 'session.resume'
             ? {
-                'session_id': 'watch-child',
-                'resumed': 'child-session',
+                'session_id': 'child-session',
+                'stored_session_id': 'child-session',
+                'replay_epoch': 'epoch',
+                'last_sequence': 0,
                 'running': false,
               }
             : {
-                'epoch': 'epoch',
+                'replay_epoch': 'epoch',
                 'events': <Map<String, dynamic>>[],
                 'latest_seq': 0,
                 'truncated': false,
+                'snapshot_required': false,
               },
         history: (id, offset) async {
           reads.add(offset);

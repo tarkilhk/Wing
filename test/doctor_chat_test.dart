@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/doctor_finding_draft_session.dart';
 import 'package:wing/core/models/administration_operation.dart';
@@ -75,6 +76,7 @@ class _Fixture {
               await creationGate?.future;
               if (failCreation) throw StateError('Chat connection unavailable');
               return {
+                ...canonicalSnapshotFields,
                 'session_id': 'runtime-$number',
                 'stored_session_id': 'doctor-$number',
                 'info': {'profile_name': scope.profileName},

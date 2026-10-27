@@ -45,6 +45,20 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
       discover: base.discover,
       get: base.read,
       rpc: (method, params) => switch (method) {
+        'session.interrupt' => () async {
+          expect(params['execution_generation'], isA<int>());
+          calls.add((scope.profileName, method, Map.of(params)));
+          return {
+            'ref': {
+              'profile_id': '/fixture/${scope.profileName}',
+              'session_id': params['session_id'],
+            },
+            'authority_epoch': 1,
+            'revision': 0,
+            'execution_generation': params['execution_generation'],
+            'execution_state': 'idle',
+          };
+        }(),
         'session.steer' => () {
           steerRequests.add(Map.of(params));
           return steerReply?.future ?? Future.value(steerResult);

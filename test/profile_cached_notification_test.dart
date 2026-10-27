@@ -138,7 +138,7 @@ void main() {
         notices.single.inputs.single.content.preview,
         contains('Choose environment 0'),
       );
-      expect(host.resumeCalls.single['omit_messages'], isTrue);
+      expect(host.resumeCalls.single['display_projection'], isTrue);
       expect(cached.runtime.runtimeId, 'outside-runtime');
       expect(cached.runtime.offline, isFalse);
     },
@@ -166,7 +166,7 @@ void main() {
 
   for (final mismatch in [
     {'session_id': 'wrong-runtime'},
-    {'session_key': 'wrong-session'},
+    {'stored_session_id': 'wrong-session'},
     {
       'info': {'profile_name': 'b'},
     },

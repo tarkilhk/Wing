@@ -8,6 +8,7 @@ void applyChatTranscriptEvent({
   required TranscriptReading reading,
   required String type,
   required Map<String, dynamic> data,
+  bool live = true,
 }) {
   switch (type) {
     case 'message.start':
@@ -35,9 +36,12 @@ void applyChatTranscriptEvent({
       runtime.finishSegment();
     case 'tool.generating':
     case 'tool.start':
+    case 'tool.progress':
     case 'tool.complete':
-      final activity = runtime.observeTool(type, data);
-      if (activity != null && type != 'tool.generating') {
+      final activity = runtime.observeTool(type, data, live: live);
+      if (activity != null &&
+          type != 'tool.generating' &&
+          type != 'tool.progress') {
         reading.observeTool(activity);
       }
     case 'reasoning.delta':

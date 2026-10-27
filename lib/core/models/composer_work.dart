@@ -35,6 +35,9 @@ final class ComposerQueueObservation {
     Iterable<ComposerReference> references = const [],
     required Iterable<ComposerAttachmentObservation> attachments,
     required this.submissionUncertain,
+    this.serverOwned = false,
+    this.unknownOutcome = false,
+    this.pendingSteering = false,
   }) : references = List.unmodifiable(references),
        attachments = List.unmodifiable(attachments);
 
@@ -43,6 +46,7 @@ final class ComposerQueueObservation {
   final List<ComposerReference> references;
   final List<ComposerAttachmentObservation> attachments;
   final bool submissionUncertain;
+  final bool serverOwned, unknownOutcome, pendingSteering;
 }
 
 enum ComposerUnavailableReason {
@@ -154,12 +158,14 @@ final class ComposerObservation {
 /// A captured claim on outgoing work; only its issuing owner can settle it.
 final class ComposerSubmission {
   ComposerSubmission({
+    required this.submissionId,
     required this.text,
     Iterable<ComposerReference> references = const [],
     required Iterable<ComposerAttachmentObservation> attachments,
   }) : references = List.unmodifiable(references),
        attachments = List.unmodifiable(attachments);
 
+  final String submissionId;
   final String text;
   final List<ComposerReference> references;
   final List<ComposerAttachmentObservation> attachments;

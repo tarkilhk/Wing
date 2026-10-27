@@ -939,10 +939,17 @@ void main() {
             )).first;
             final stopGate = Completer<void>();
             fixture.commandHook = (profile, method, params) async {
-              if (method != 'groups.stop') return null;
+              if (method != 'groups.${continuing ? 'retry' : 'stop'}') {
+                return null;
+              }
               await stopGate.future;
               fixture.pending.clear();
-              return {'cancelled': 1};
+              return continuing
+                  ? {
+                      'retried': true,
+                      'task': {'room_id': group.id, 'task_id': 'stranded-task'},
+                    }
+                  : {'cancelled': 1};
             };
             final frame = GlobalKey();
             late BotGroupSession session;
@@ -982,13 +989,16 @@ void main() {
             expect(find.text('Stop group work'), findsNothing);
             await tester.tapAt(const Offset(20, 500));
             await tester.pumpAndSettle();
-            fixture.pending.add({'kind': 'retry', 'task_id': 'stranded-task'});
+            fixture.pending.add({
+              'kind': 'retry',
+              'task_id': 'stranded-task',
+              'member_id': 'atlas',
+              'execution_generation': 4,
+            });
             await session.refresh();
             await tester.pumpAndSettle();
             expect(
-              find.text(
-                'Work paused; Continue stops this attempt and asks the bots to resume.',
-              ),
+              find.text('Atlas could not finish. Retry this attempt.'),
               findsOneWidget,
             );
             expect(find.byTooltip('Stop group work'), findsNothing);
@@ -1012,7 +1022,7 @@ void main() {
             if (continuing) {
               await tester.tapAt(const Offset(20, 500));
               await tester.pumpAndSettle();
-              final resume = find.byTooltip('Continue group work');
+              final resume = find.byTooltip('Retry group attempt');
               expect(resume, findsOneWidget);
               final resumeRect = tester.getRect(resume);
               expect(
@@ -1041,65 +1051,39 @@ void main() {
             expect(find.byType(StudioLoading), findsOneWidget);
             expect(session.canStopGroupWork, isFalse);
             final calls = fixture.commands
-                .where((call) => call.$2 == 'groups.stop')
+                .where(
+                  (call) =>
+                      call.$2 == 'groups.${continuing ? 'retry' : 'stop'}',
+                )
                 .toList();
             expect(calls, hasLength(1));
             expect(calls.single.$1, 'default');
             expect(calls.single.$3['room_id'], group.id);
-            expect(calls.single.$3['cancel_id'], isNotEmpty);
-            expect(
-              fixture.commands.any((call) => call.$2 == 'groups.retry'),
-              isFalse,
-            );
+            if (continuing) {
+              expect(calls.single.$3, {
+                'room_id': group.id,
+                'task_id': 'stranded-task',
+                'member_id': 'atlas',
+                'execution_generation': 4,
+              });
+            } else {
+              expect(calls.single.$3['cancel_id'], isNotEmpty);
+            }
             expect(
               tester.widget<TextField>(input).controller!.text,
               'Keep this draft',
             );
-            fixture.sendLost = continuing;
             stopGate.complete();
             await tester.pumpAndSettle();
-            if (continuing) {
-              expect(session.awaitingContinuation, isTrue);
-              expect(
-                find.text(
-                  'Work was stopped; Continue resends the same continuation message.',
-                ),
-                findsOneWidget,
-              );
-              expect(
-                tester.widget<TextField>(input).controller!.text,
-                'Keep this draft',
-              );
-              await _render(
-                tester,
-                frame,
-                'deferred-continue-unconfirmed-${brightness.name}-$scale',
-              );
-              await tester.tap(find.byTooltip('Continue group work'));
-              await tester.pumpAndSettle();
-              expect(fixture.commands[1].$3, fixture.commands[2].$3);
-            }
-            expect(
-              fixture.commands.map((call) => call.$2),
-              continuing
-                  ? ['groups.stop', 'groups.send', 'groups.send']
-                  : ['groups.stop'],
-            );
-            if (continuing) {
-              expect(
-                find.text(
-                  'Continue the unfinished work from where you left off. Check the conversation and current results first, and avoid repeating completed work.',
-                ),
-                findsOneWidget,
-              );
-            }
+            expect(fixture.commands.map((call) => call.$2), [
+              continuing ? 'groups.retry' : 'groups.stop',
+            ]);
+            expect(fixture.events, hasLength(1));
             expect(session.acting, isFalse);
             expect(session.runtime!.actions, isEmpty);
             expect(session.canStopGroupWork, isFalse);
             expect(
-              find.text(
-                'Work paused; Continue stops this attempt and asks the bots to resume.',
-              ),
+              find.text('Atlas could not finish. Retry this attempt.'),
               findsNothing,
             );
             expect(
@@ -2793,6 +2777,10 @@ void main() {
           expect(transcript.offset, closeTo(0, .01));
           await _render(tester, frame, 'draft-${brightness.name}-$scale');
           fixture.sendLost = true;
+          fixture.readHook = (_, method, _) async {
+            if (method == 'groups.log') throw StateError('History unavailable');
+            return null;
+          };
           await tester.tap(send);
           await tester.pumpAndSettle();
           expect(tester.widget<TextField>(input).readOnly, isTrue);
@@ -2800,6 +2788,7 @@ void main() {
           expect(find.byTooltip('Retry same message'), findsOneWidget);
           expect(find.byType(ActionChip), findsNothing);
           await _render(tester, frame, 'uncertain-${brightness.name}-$scale');
+          fixture.readHook = null;
           await tester.tap(find.byTooltip('Retry same message'));
           await tester.pumpAndSettle();
           expect(controller.text, isEmpty);

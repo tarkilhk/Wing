@@ -8,6 +8,7 @@ import '../services/owned_remote_files.dart';
 import '../theme/wing_theme.dart';
 import 'chat_image_preview.dart';
 import 'resource_filename.dart';
+import 'studio_error.dart';
 
 typedef UserAttachmentImageLoader = Future<Uint8List> Function(String path);
 
@@ -20,6 +21,7 @@ class UserMessageAttachmentTile extends StatefulWidget {
   final void Function(ImageProvider?)? onOpen;
   final ValueChanged<ImageProvider>? onImageReady;
   final int additionalImages;
+  final Future<bool> Function(UserMessageAttachment)? onDownload;
 
   const UserMessageAttachmentTile({
     super.key,
@@ -31,6 +33,7 @@ class UserMessageAttachmentTile extends StatefulWidget {
     this.onOpen,
     this.onImageReady,
     this.additionalImages = 0,
+    this.onDownload,
   });
 
   @override
@@ -41,6 +44,9 @@ class UserMessageAttachmentTile extends StatefulWidget {
 class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile>
     with WidgetsBindingObserver {
   bool _failed = false;
+  bool _downloading = false;
+  String? _downloadError;
+  int _downloadGeneration = 0;
   bool _acquired = false;
   int _generation = 0;
   ImageProvider? _currentProvider;
@@ -115,6 +121,11 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile>
   @override
   void didUpdateWidget(covariant UserMessageAttachmentTile oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.attachment.target != widget.attachment.target) {
+      _downloadGeneration++;
+      _downloading = false;
+      _downloadError = null;
+    }
     if (oldWidget.attachment.target != widget.attachment.target ||
         oldWidget.loadImages != widget.loadImages ||
         oldWidget.attachment.isImage != widget.attachment.isImage ||
@@ -214,8 +225,67 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile>
     );
   }
 
+  Future<void> _download() async {
+    if (_downloading || widget.onDownload == null) return;
+    final generation = _downloadGeneration;
+    setState(() {
+      _downloading = true;
+      _downloadError = null;
+    });
+    try {
+      final saved = await widget.onDownload!(widget.attachment);
+      if (saved && mounted && generation == _downloadGeneration) {
+        ScaffoldMessenger.maybeOf(
+          context,
+        )?.showSnackBar(const SnackBar(content: Text('File saved')));
+      }
+    } catch (_) {
+      if (mounted && generation == _downloadGeneration) {
+        setState(
+          () => _downloadError =
+              'File could not be saved. Try downloading again.',
+        );
+      }
+    } finally {
+      if (mounted && generation == _downloadGeneration) {
+        setState(() => _downloading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final preview = _content(context);
+    if (widget.onDownload == null) return preview;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        preview,
+        StudioButtonPress(
+          child: IconButton(
+            tooltip: 'Download ${widget.attachment.name}',
+            onPressed: _downloading ? null : _download,
+            icon: _downloading
+                ? SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      value: MediaQuery.disableAnimationsOf(context)
+                          ? .75
+                          : null,
+                      semanticsLabel: 'Downloading ${widget.attachment.name}',
+                    ),
+                  )
+                : const Icon(Icons.download_outlined, size: 20),
+          ),
+        ),
+        if (_downloadError case final error?) StudioError(error),
+      ],
+    );
+  }
+
+  Widget _content(BuildContext context) {
     final preview = _preview(context);
     if (widget.additionalImages == 0) return preview;
     return StudioButtonPress(
@@ -328,8 +398,10 @@ class UserMessageAttachments extends StatefulWidget {
     this.loadImage,
     this.loadImages = true,
     this.imageServerAvailable = true,
+    this.onDownload,
   });
 
+  final Future<bool> Function(UserMessageAttachment)? onDownload;
   final List<UserMessageAttachment> attachments;
   final double width;
   final UserAttachmentImageLoader? loadImage;
@@ -368,6 +440,7 @@ class _UserMessageAttachmentsState extends State<UserMessageAttachments> {
     loadImages: widget.loadImages,
     previewSize: size,
     imageServerAvailable: widget.imageServerAvailable,
+    onDownload: widget.onDownload,
     onImageReady: (provider) {
       if (mounted) _previewProviders[attachment.target] = provider;
     },

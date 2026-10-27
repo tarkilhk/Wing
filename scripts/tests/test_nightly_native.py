@@ -207,6 +207,23 @@ class NativeExecution(unittest.TestCase):
                 flutter.call_args.kwargs['checkpoint']()
             self.assertEqual(run.call_count, 1)
 
+    def test_administration_requires_all_captured_views(self):
+        with patch.object(self.runner, 'flutter'):
+            with self.assertRaisesRegex(RuntimeError, 'Missing administration captures'):
+                self.runner.administration()
+
+    def test_administration_hidden_keyboard_cannot_be_acknowledged(self):
+        stage = {'name': 'hosted-account-light-1.0-keyboard', 'token': 'held', 'keyboard': True}
+        def flutter(*args, **kwargs):
+            kwargs['checkpoint']()
+        with patch.object(self.runner, 'flutter', side_effect=flutter), \
+             patch.object(self.runner, 'read_checkpoint', return_value=stage), \
+             patch.object(self.runner, 'shell', return_value='mWindowVisible=false mIsInputViewShown=true'), \
+             patch.object(nightly.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'visible keyboard'):
+                self.runner.administration()
+            run.assert_not_called()
+
 
 class Catalog(unittest.TestCase):
     def test_large_health_runs_at_320_dp_with_enlarged_system_text(self):
@@ -297,9 +314,27 @@ class Catalog(unittest.TestCase):
             runner = nightly.Runner(Path(directory))
             runner.device = 'emulator-5562'
             for family in nightly.FAMILIES:
+                def run_suite(*args, **kwargs):
+                    if family != 'administration' or 'checkpoint' not in kwargs:
+                        return
+                    for theme in ('dark', 'light'):
+                        for scale in ('1.0', '2.0'):
+                            for surface, states in (
+                                ('hosted-account', ('-keyboard', '-pending', '-failed')),
+                                ('delegation', ('-keyboard', '-pending')),
+                                ('prepared-compression', ('',)),
+                                ('connection-request', ('-request', '-pending', '-failed')),
+                            ):
+                                for state in states:
+                                    name = f'{surface}-{theme}-{scale}{state}'
+                                    stage = {'name': name, 'token': name, 'keyboard': state == '-keyboard'}
+                                    with patch.object(runner, 'read_checkpoint', return_value=stage), \
+                                         patch.object(nightly.subprocess, 'run'), \
+                                         patch.object(runner, 'shell', return_value='mWindowVisible=true mIsInputViewShown=true'):
+                                        kwargs['checkpoint']()
                 with self.subTest(family=family), \
                      patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
-                     patch.object(runner, 'run') as run, \
+                     patch.object(runner, 'run', side_effect=run_suite) as run, \
                      patch.object(runner, 'adb', return_value=''), \
                      patch.object(runner, 'shell', side_effect=lambda *args:
                                   '123' if args[0] == 'pidof' else 'webview_devtools_remote_123'), \

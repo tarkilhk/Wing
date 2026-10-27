@@ -166,7 +166,7 @@ void main() {
   );
 
   test(
-    'discarding a failed outbox message detaches its accepted image',
+    'discarding a failed outbox message drops its uploaded image reference',
     () async {
       final image = await attach('picture.png', image: true);
       final notes = await attach('notes.txt');
@@ -178,11 +178,9 @@ void main() {
       expect(outgoing.submissionUncertain, isFalse);
       await controller.updateDraft(chat, 'Fresh composer');
       await controller.removeQueuedPrompt(chat, outgoing.id);
-      expect(host.calls.singleWhere((call) => call.$2 == 'image.detach').$3, {
-        'profile': 'a',
-        'session_id': chat.runtime.runtimeId,
-        'path': '/profile/images/upload.png',
-      });
+      // Canonical image uploads are references owned by the submission.
+      // Removing unsent work drops its reference without mutating another turn.
+      expect(host.calls.where((call) => call.$2 == 'image.detach'), isEmpty);
       expect(chat.composer.observation.attachments, isEmpty);
       expect(chat.composer.observation.queue, isEmpty);
       expect(chat.composer.observation.text, 'Fresh composer');
@@ -202,10 +200,11 @@ void main() {
         host.calls.where((call) => call.$2 == 'image.attach_bytes'),
         hasLength(1),
       );
-      expect(
-        host.calls.singleWhere((call) => call.$2 == 'prompt.submit').$3['text'],
-        'Fresh composer',
-      );
+      final fresh = host.calls
+          .singleWhere((call) => call.$2 == 'prompt.submit')
+          .$3;
+      expect(fresh['text'], 'Fresh composer');
+      expect(fresh.containsKey('attachments'), isFalse);
     },
   );
 

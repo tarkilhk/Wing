@@ -5,7 +5,9 @@ import '../cli.dart' as cli;
 import '../model.dart';
 
 const id = 'ARCH_CURRENT_TOOL_EVENTS';
-const unsupportedEvents = {'tool.progress', 'tool.args_delta', 'tool.error'};
+// Stock e5ea5fd includes tool.progress. Its live exact-call admission is covered
+// by ChatRuntime regressions; retired event aliases remain forbidden here.
+const unsupportedEvents = {'tool.args_delta', 'tool.error'};
 const unsupportedKeys = {
   'toolCallId',
   'tool_call_id',
@@ -265,7 +267,7 @@ class _Dispatches extends RecursiveAstVisitor<void> {
         source.path,
         source.lineAt(literal.offset),
         '${scope.owner}.${scope.method}:$kind:${literal.value}',
-        'Use current stock tool.start/generating/complete and canonical tool-event keys; arbitrary nested results and saved history are separate contracts.',
+        'Use current stock tool.start/generating/progress/complete and canonical tool-event keys; arbitrary nested results and saved history are separate contracts.',
       ),
     );
   }

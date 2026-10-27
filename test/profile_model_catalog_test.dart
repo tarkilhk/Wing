@@ -18,6 +18,105 @@ Map<String, dynamic> payload(String model) => {
 };
 
 void main() {
+  test('plan allowances preserve exhausted gauges and exact model routes', () {
+    final catalog = ModelCatalog.fromOptions({
+      'providers': [
+        {
+          'slug': 'nous',
+          'name': 'Nous',
+          'models': ['large', 'free'],
+          'usage_levels': {'large': 'top_tier', 'free': 'free'},
+          'plan_usage': {
+            'kind': 'usage_window',
+            'plan': 'Plus',
+            'featured_model_ids': ['free'],
+            'credits_pay': false,
+            'gauges': [
+              {
+                'label': 'day',
+                'left_fraction': 0,
+                'scope': 'all',
+                'resets_at_ms': 1793203200000,
+              },
+              {'label': 'top_tier', 'left_fraction': 0.25, 'scope': 'top_tier'},
+            ],
+          },
+        },
+        {
+          'slug': 'other',
+          'name': 'Other',
+          'models': ['large'],
+        },
+      ],
+    });
+    final plan = catalog.provider('nous')!.planUsage!;
+    expect(plan.gauges.first.leftFraction, 0);
+    expect(plan.gauges.first.resetsAt!.millisecondsSinceEpoch, 1793203200000);
+    expect(plan.creditsPay, isFalse);
+    expect(catalog.choice('nous', 'large')!.allowanceLabel, 'Large');
+    expect(catalog.choice('nous', 'free')!.recommended, isTrue);
+    expect(catalog.choices.map((choice) => choice.model), [
+      'free',
+      'large',
+      'large',
+    ]);
+    expect(catalog.choice('nous', 'free')!.allowanceGauges, isEmpty);
+    expect(catalog.choice('nous', 'large')!.allowanceGauges, hasLength(2));
+    expect(
+      catalog.choice('nous', 'large')!.planLimitLabel,
+      'Allowance used up',
+    );
+    expect(catalog.choice('nous', 'free')!.planLimitLabel, isNull);
+    expect(catalog.choice('other', 'large')!.allowanceLabel, isNull);
+    expect(catalog.choice('other', 'large')!.recommended, isFalse);
+  });
+  test('plan parsing rejects unknown kinds and invalid reset timestamps', () {
+    expect(PlanUsage.parse({'kind': 'unknown'}), isNull);
+    final plan = PlanUsage.parse({
+      'kind': 'usage_window',
+      'gauges': [
+        {
+          'label': 'day',
+          'scope': 'all',
+          'left_fraction': 0,
+          'resets_at_ms': 9223372036854775807,
+        },
+      ],
+    })!;
+    expect(plan.gauges.single.resetsAt, isNull);
+    expect(
+      CurrentPlanGauge.parse({
+        'id': 'day',
+        'label': 'Daily',
+        'used_bp': 8500,
+      })!.usedPercent,
+      85,
+    );
+    expect(
+      CurrentPlanGauge.parse({
+        'id': 'day',
+        'label': 'Daily',
+        'used_bp': double.nan,
+      }),
+      isNull,
+    );
+    expect(
+      CurrentPlanGauge.parse({
+        'id': 'day',
+        'label': 'Daily',
+        'used_bp': 9999,
+      })!.usedLabel,
+      '99% used',
+    );
+    expect(
+      CurrentPlanGauge.parse({
+        'id': 'day',
+        'label': 'Daily',
+        'used_bp': 1,
+      })!.usedLabel,
+      '<1% used',
+    );
+  });
   final scope = WorkspaceScope(
     connectionId: 'one',
     connectionIdentity: 'identity',

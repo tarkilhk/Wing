@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -157,6 +158,44 @@ void main() {
         );
         final administration = AdministrationFixture('Home server');
         final fixture = BotsFixture(server: administration.server);
+        final groupUploads = <String, Map<String, dynamic>>{};
+        final groupBytes = <String, String>{};
+        final retryHeld = Completer<void>();
+        var historyUnavailable = false;
+        fixture.commandHook = (_, method, params) async {
+          if (method == 'groups.attachment.upload') {
+            final id =
+                'att_${(groupUploads.length + 1).toRadixString(16).padLeft(32, '0')}';
+            final data = params['data_base64'] as String;
+            final manifest = <String, dynamic>{
+              'attachment_id': id,
+              'kind': params['kind'],
+              'name': params['name'],
+              'mime': params['mime'],
+              'size': base64Decode(data).length,
+            };
+            groupUploads[id] = manifest;
+            groupBytes[id] = data;
+            return {...manifest, 'state': 'uncommitted'};
+          }
+          if (method == 'groups.retry') await retryHeld.future;
+          return null;
+        };
+        fixture.readHook = (_, method, params) async {
+          if (method == 'groups.log' && historyUnavailable) {
+            throw StateError('History unavailable');
+          }
+          if (method == 'groups.attachment.download') {
+            final id = params['attachment_id'] as String;
+            return {
+              ...groupUploads[id]!,
+              'event_id': params['event_id'],
+              'data_base64': groupBytes[id],
+            };
+          }
+          return null;
+        };
+
         fixture.profiles.first['name'] = 'personal';
         fixture.profiles.first['display_name'] = 'personal';
         fixture.profiles.first['canonical_session']['id'] = 'pinned';
@@ -472,6 +511,7 @@ void main() {
         );
         expect(tester.view.viewInsets.bottom, greaterThan(0));
         fixture.sendLost = true;
+        historyUnavailable = true;
         await tester.tap(find.byTooltip('Send group message'));
         await until(
           () =>
@@ -488,6 +528,7 @@ void main() {
         await _native(tester, '$label-group-hide', keyboard: false);
         expect(tester.view.viewInsets.bottom, 0);
         await _native(tester, '$label-retry');
+        historyUnavailable = false;
         await tester.tap(find.byTooltip('Retry same message'));
         await until(
           () =>
@@ -502,6 +543,76 @@ void main() {
           'one accepted group message and an editable empty composer',
         );
         expect(fixture.events, hasLength(1));
+
+        fixture.pending.add({
+          'kind': 'retry',
+          'task_id': 'native-retry',
+          'member_id': 'atlas',
+          'execution_generation': 7,
+        });
+        await tester.tap(find.byTooltip('Group options'));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.text('Refresh group'));
+        await until(
+          () => visible(find.byTooltip('Retry group attempt')),
+          'exact group retry action',
+        );
+        await tester.tap(find.byTooltip('Retry group attempt'));
+        await tester.pump(const Duration(milliseconds: 100));
+        await _native(tester, '$label-exact-retry-pending');
+        expect(fixture.commands.last.$2, 'groups.retry');
+        expect(fixture.commands.last.$3, {
+          'room_id': 'room-1',
+          'task_id': 'native-retry',
+          'member_id': 'atlas',
+          'execution_generation': 7,
+        });
+        retryHeld.complete();
+        await until(
+          () => find.byTooltip('Retry group attempt').evaluate().isEmpty,
+          'accepted exact group retry',
+        );
+        expect(
+          fixture.commands.where((call) => call.$2 == 'groups.stop'),
+          isEmpty,
+        );
+        await tester.tap(find.byTooltip('Add group attachment'));
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.tap(find.text('Files'));
+        await _native(
+          tester,
+          '$label-pick-group-file',
+          action: 'pick-group-file',
+        );
+        await until(
+          () =>
+              groupUploads.isNotEmpty &&
+              visible(find.text('wing-group-notes.txt')),
+          'native picked file uploaded into group draft',
+        );
+        await _native(tester, '$label-group-file-ready');
+        await tester.tap(find.byTooltip('Send group message'));
+        await until(
+          () =>
+              fixture.events.length == 2 &&
+              visible(find.byTooltip('Download wing-group-notes.txt')),
+          'attachment-only group message and exact download control',
+        );
+        final manifest = groupUploads.values.single;
+        expect((fixture.events.last['payload'] as Map)['attachments'], [
+          manifest,
+        ]);
+        await _native(tester, '$label-group-file-sent');
+        await tester.tap(find.byTooltip('Download wing-group-notes.txt'));
+        await _native(
+          tester,
+          '$label-group-save-cancel',
+          action: 'picker-cancel',
+        );
+        await until(
+          () => visible(find.byTooltip('Download wing-group-notes.txt')),
+          'cancelled native save leaves group attachment readable',
+        );
         await _native(tester, '$label-group-back', action: 'back');
         await until(
           () =>

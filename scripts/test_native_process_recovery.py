@@ -36,10 +36,22 @@ def validate_checkpoints(records: list[dict], run_id: str) -> None:
         raise ValueError('Recovery submission and upload counts must be integers')
     if records[0].get('submissions') != 1 or records[0].get('uploads') != 1:
         raise ValueError('Original process did not submit the attachment exactly once')
-    if records[1].get('submissions') != 0 or records[1].get('uploads') != 0:
-        raise ValueError('Relaunch replayed an uncertain submission or attachment')
+    if records[1].get('submissions') != 1 or records[1].get('uploads') != 0:
+        raise ValueError('Relaunch must recover one exact submission without reuploading')
+    for record in records:
+        if type(record.get('server_admission_count')) is not int or record['server_admission_count'] != 1:
+            raise ValueError('Recovery must retain exactly one remote admission')
+        for key in ('submission_id', 'admission_id'):
+            if not isinstance(record.get(key), str) or not record[key]:
+                raise ValueError('Recovery must identify its exact submission and admission')
+        wire = record.get('wire_payload')
+        if (not isinstance(wire, dict) or wire.get('submission_id') != record['submission_id']
+                or not all(isinstance(wire.get(key), str) and wire[key] for key in ('session_id', 'profile', 'text'))):
+            raise ValueError('Recovery requires the original scoped wire payload')
+    if any(records[0][key] != records[1][key] for key in ('submission_id', 'admission_id', 'wire_payload')):
+        raise ValueError('Recovery changed submission identity, accepted receipt or wire payload')
     if any(records[1].get(key) is not True for key in
-           ('draft_restored', 'attachment_restored', 'outbox_paused')):
+           ('draft_restored', 'attachment_restored', 'outbox_paused', 'receipt_reconciled')):
         raise ValueError('Relaunch did not restore all user work')
 
 

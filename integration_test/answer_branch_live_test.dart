@@ -16,10 +16,14 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 
-/// Real Android UI and local gateway. One short Luna turn in a disposable chat.
+/// Real Android UI and local gateway. One short Luna turn in a new branch.
+/// HERMES_FORK_SEED_SESSION_ID must name an operator-prepared, idle canonical
+/// Luna chat in android-qa-a with the six visible messages asserted below.
+/// The seed is only read/branched: no import, rewind, deletion, or seed cleanup.
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   const port = int.fromEnvironment('HERMES_TEST_PORT');
+  const seedId = String.fromEnvironment('HERMES_FORK_SEED_SESSION_ID');
   testWidgets(
     'fork buttons copy exact boundaries and continue independently',
     (tester) async {
@@ -47,38 +51,26 @@ void main() {
       await controller.switchProfile('android-qa-a');
       expect(controller.error, isNull);
       final resource = controller.current!;
-      final parents = await resource.gateway.sessions();
-      expect(parents.rows, isNotEmpty);
-      final seed = await resource.gateway.call('session.create', {
-        'parent_session_id': parents.rows.first['id'],
-        'source': 'desktop',
-        'title': 'Android fork device QA',
-        'messages': [
-          {
-            'role': 'user',
-            'content': 'Remember my test token JADE-42. Reply Saved.',
-          },
-          {'role': 'assistant', 'content': 'Saved.'},
-          {'role': 'user', 'content': '[System: model changed for QA]'},
-          {'role': 'user', 'content': 'What is my test token?'},
-          {'role': 'assistant', 'content': 'JADE-42'},
-          {'role': 'user', 'content': 'Change my test token to AMBER-99.'},
-          {'role': 'assistant', 'content': 'Your token is now AMBER-99.'},
-        ],
-      });
-      // A seeded session may still be finishing its asynchronous agent startup.
-      for (var attempt = 0; attempt < 30; attempt++) {
-        final result = await resource.gateway.call('session.resume', {
-          'session_id': seed['stored_session_id'],
-        });
-        if (result['info']?['profile_name'] == resource.scope.profileName) {
-          break;
-        }
-        await Future<void>.delayed(const Duration(milliseconds: 200));
-      }
-      await controller.openSession(
-        ProfileSessionKey(resource.scope, seed['stored_session_id'] as String),
+      expect(
+        seedId,
+        isNotEmpty,
+        reason: 'Provide an existing operator-prepared canonical seed chat.',
       );
+      final seed = await resource.gateway.resume(seedId);
+      expect(resource.gateway.resumeDurableId(seed), seedId);
+      expect(seed['running'], isFalse, reason: 'The seed must be idle.');
+      expect(
+        seed['pending'],
+        isEmpty,
+        reason: 'The seed must have no queued work.',
+      );
+      expect(
+        seed['info']['launch_request'],
+        isA<Map>(),
+        reason: 'The seed must have a canonical local execution policy.',
+      );
+      expect(seed['info']['model'], 'gpt-5.6-luna');
+      await controller.openSession(ProfileSessionKey(resource.scope, seedId));
       final source = resource.chat!;
       final original = jsonEncode(
         await resource.gateway.fullHistory(source.runtime.runtimeId),
@@ -87,7 +79,18 @@ void main() {
           .where((m) => !isHiddenAnswerMessage(m))
           .map(answerMessageText)
           .toList();
-      expect(expected.length, 6);
+      expect(
+        expected,
+        const [
+          'Remember my test token JADE-42. Reply Saved.',
+          'Saved.',
+          'What is my test token?',
+          'JADE-42',
+          'Change my test token to AMBER-99.',
+          'Your token is now AMBER-99.',
+        ],
+        reason: 'The supplied seed must match the documented boundary fixture.',
+      );
       await tester.pumpWidget(
         MaterialApp(home: ProfileWorkspaceScreen(controller: controller)),
       );

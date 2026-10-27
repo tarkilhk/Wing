@@ -65,9 +65,28 @@ void main() {
       final originalKeys = savedPhase == null
           ? preferences.getKeys()
           : (jsonDecode(savedPhase) as List).cast<String>().toSet();
+      // This fixture ledger is backend truth, saved independently of Composer.
+      // Android kills both the UI and its in-process transport, so restore the
+      // already accepted remote receipt before opening the client's journal.
+      final serverFile = File(
+        '${Directory.systemTemp.path}/wing-process-server-$_runId.json',
+      );
+      final serverLedger = restarting
+          ? Map<String, dynamic>.from(
+              jsonDecode(await serverFile.readAsString()) as Map,
+            )
+          : <String, dynamic>{};
+      final heldReplay = Completer<void>();
       final host = Host()
         ..running = false
         ..promptSubmitFails = !restarting;
+      if (restarting) {
+        host.canonicalAdmissions[serverLedger['input'] as String] =
+            Map<String, dynamic>.from(serverLedger['receipt'] as Map);
+        host.canonicalPayloads[serverLedger['input'] as String] =
+            Map<String, dynamic>.from(serverLedger['payload'] as Map);
+        host.promptSubmitDelay = heldReplay;
+      }
       final owner = AppPreferences(preferences);
       final controller = ProfileWorkspaceController(
         access: ConnectionAccess(
@@ -121,6 +140,8 @@ void main() {
       );
       await until(() => editor.evaluate().isNotEmpty, 'Conversation opens');
       if (!restarting) {
+        // Freeze automatic resume until the host force-stops this process.
+        host.resumeDelay = Completer<void>();
         final source = File(
           '${Directory.systemTemp.path}/process-recovery-$_runId.txt',
         );
@@ -166,7 +187,36 @@ void main() {
           ),
           isTrue,
         );
-        await _checkpoint('ready_for_stop', {'submissions': 1, 'uploads': 1});
+        final accepted = host.canonicalAdmissions.entries.single;
+        final wire = host.calls
+            .singleWhere((call) => call.$2 == 'prompt.submit')
+            .$3;
+        expect(saved.queuedPrompts.single.submissionId, wire['submission_id']);
+        expect(saved.queuedPrompts.single.submissionPayload, {
+          for (final entry in wire.entries)
+            if (entry.key != 'profile') entry.key: entry.value,
+        });
+        // A real server can finish while the app is gone. Record that outcome
+        // from the fixture's admission, never from restored client input.
+        final remoteReceipt = {
+          ...accepted.value,
+          'status': 'terminal',
+          'outcome': 'completed',
+        };
+        final ledger = {
+          'input': accepted.key,
+          'receipt': remoteReceipt,
+          'payload': wire,
+        };
+        await serverFile.writeAsString(jsonEncode(ledger), flush: true);
+        await _checkpoint('ready_for_stop', {
+          'submissions': 1,
+          'uploads': 1,
+          'submission_id': wire['submission_id'],
+          'admission_id': remoteReceipt['admission_id'],
+          'wire_payload': wire,
+          'server_admission_count': host.canonicalAdmissions.length,
+        });
         // No finally/dispose path runs: the driver kills this Android process.
         while (true) {
           await tester.pump(const Duration(milliseconds: 100));
@@ -209,14 +259,36 @@ void main() {
       expect(tester.widget<TextField>(editor).controller!.text, _draft);
       expect(queued().hitTestable(), findsOneWidget);
       expect(find.text('Queue paused'), findsOneWidget);
-      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      final replay = host.calls
+          .where((call) => call.$2 == 'prompt.submit')
+          .toList();
+      expect(replay, hasLength(1));
+      expect(replay.single.$3, serverLedger['payload']);
+      expect(host.canonicalAdmissions, hasLength(1));
+      expect(host.canonicalAdmissions.values.single, serverLedger['receipt']);
       expect(host.calls.where((call) => call.$2 == 'file.attach'), isEmpty);
+      heldReplay.complete();
+      await until(
+        () =>
+            chat.composer.observation.queue.isEmpty &&
+            !chat.composer.observation.saving,
+        'The same remote receipt retires the recovered input',
+      );
+      await chat.composer.admittedWrites;
+      expect(tester.widget<TextField>(editor).controller!.text, _draft);
+      expect(host.canonicalAdmissions, hasLength(1));
+      final settled = (await store.read(profileName: 'a', sessionId: 'same'))!;
+      expect(settled.queuedPrompts, isEmpty);
+      expect(settled.text, _draft);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       controller.dispose();
       owner.dispose();
       disposed = true;
-      await File(attachment.cachedPath).delete();
+      if (await File(attachment.cachedPath).exists()) {
+        await File(attachment.cachedPath).delete();
+      }
+      await serverFile.delete();
       await store.write(
         profileName: 'a',
         sessionId: 'same',
@@ -227,11 +299,16 @@ void main() {
         expect(await preferences.remove(key), isTrue);
       }
       restoredEvidence = {
-        'submissions': 0,
+        'submissions': 1,
+        'submission_id': replay.single.$3['submission_id'],
+        'admission_id': host.canonicalAdmissions.values.single['admission_id'],
+        'wire_payload': replay.single.$3,
+        'server_admission_count': host.canonicalAdmissions.length,
         'uploads': 0,
         'draft_restored': true,
         'attachment_restored': true,
         'outbox_paused': true,
+        'receipt_reconciled': true,
       };
     },
     timeout: const Timeout(Duration(minutes: 10)),

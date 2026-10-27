@@ -635,7 +635,7 @@ final class TranscriptReading implements TranscriptReader {
       final historyRead = _transport.history(sessionId, runtimeId: runtimeId);
       // The REST transcript omits durations. Recover actual completion receipts
       // alongside the page, including calls completed while Wing was detached.
-      final toolRead = _readCompletedTools(sessionId, runtimeId);
+      final toolRead = _readCompletedTools(runtimeId);
       if (CompletionDiagnostics.enabled) {
         CompletionDiagnostics.finish(
           'controller.history_setup_sync',
@@ -733,14 +733,10 @@ final class TranscriptReading implements TranscriptReader {
   }
 
   Future<List<GatewayToolActivity>> _readCompletedTools(
-    String sessionId,
     String runtimeId,
   ) async {
     try {
-      return await _transport.completedToolActivities(
-        runtimeId,
-        sessionId: sessionId,
-      );
+      return await _transport.completedToolActivities(runtimeId);
     } catch (_) {
       // Timing enrichment is optional; a failed read cannot hide saved messages.
       return const [];

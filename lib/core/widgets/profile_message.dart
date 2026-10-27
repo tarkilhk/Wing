@@ -11,6 +11,7 @@ import 'anchored_expansion_tile.dart';
 import 'package:flutter/services.dart';
 
 import '../models/chat_output.dart';
+import '../models/user_message_content.dart';
 import '../models/bots.dart';
 import '../models/transcript_message.dart';
 import 'markdown_message_content.dart';
@@ -181,6 +182,9 @@ class ProfileMessage extends StatelessWidget {
                             loadImages: loadImages,
                             loadImage: loadAttachmentImage,
                             imageServerAvailable: attachmentImagesAvailable,
+                            onDownload: onDownloadRemoteFile == null
+                                ? null
+                                : _downloadAttachment,
                           ),
                         ),
                       Material(
@@ -330,6 +334,9 @@ class ProfileMessage extends StatelessWidget {
                               loadImages: loadImages,
                               loadImage: loadAttachmentImage,
                               imageServerAvailable: attachmentImagesAvailable,
+                              onDownload: onDownloadRemoteFile == null
+                                  ? null
+                                  : _downloadAttachment,
                             ),
                           ),
                         ClipRRect(
@@ -539,6 +546,16 @@ class ProfileMessage extends StatelessWidget {
     return footer;
   }
 
+  Future<bool> _downloadAttachment(UserMessageAttachment attachment) =>
+      onDownloadRemoteFile!(
+        ChatOutput(
+          kind: attachment.isImage ? ChatOutputKind.image : ChatOutputKind.file,
+          path: attachment.target,
+          url: null,
+          label: attachment.name,
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     if (message.kind == TranscriptMessageKind.hidden) {
@@ -731,6 +748,9 @@ class ProfileMessage extends StatelessWidget {
                 loadImages: loadImages,
                 loadImage: loadAttachmentImage,
                 imageServerAvailable: attachmentImagesAvailable,
+                onDownload: onDownloadRemoteFile == null
+                    ? null
+                    : _downloadAttachment,
               ),
             ),
           Padding(

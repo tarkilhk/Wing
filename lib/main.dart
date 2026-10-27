@@ -1,3 +1,4 @@
+import 'core/models/bots.dart';
 import 'core/services/health_alert_incident_store.dart';
 import 'core/models/scheduled_task.dart';
 import 'core/theme/project_icon_glyphs.dart';
@@ -102,6 +103,7 @@ ProfileWorkspaceScreen _buildWorkspaceScreen({
   required VoidCallback? onPreferencesChanged,
   required AppDestination destination,
   ProfileSessionKey? initialBotSession,
+  BotGroup? initialGroup,
   ScheduledTaskInvestigationRequest? initialInvestigation,
   bool initialQuickChat = false,
   bool initialSearchChats = false,
@@ -111,6 +113,7 @@ ProfileWorkspaceScreen _buildWorkspaceScreen({
   createBotsSession: createBotsSession,
   onOpenBotChat: onOpenBotChat,
   initialBotSession: initialBotSession,
+  initialGroup: initialGroup,
   initialInvestigation: initialInvestigation,
   initialDestination: destination,
   initialQuickChat: initialQuickChat,
@@ -123,6 +126,13 @@ ProfileWorkspaceScreen _buildWorkspaceScreen({
   savedConnections: connectionManager.getConnections,
   onSelectConnection: onSelectConnection,
   onPreferencesChanged: onPreferencesChanged,
+  onCaptureGroupPhoto: shareIntents == null
+      ? null
+      : (group) => shareIntents.capturePhoto({
+          'connection': group.scope.connectionId,
+          'connection_identity': group.scope.connectionIdentity,
+          'room': group.id,
+        }),
   onCapturePhoto: shareIntents == null
       ? null
       : (target) => shareIntents.capturePhoto(target.toJson()),
@@ -640,6 +650,8 @@ class WingAppState extends State<WingApp> with WidgetsBindingObserver {
           connectionManager: widget.connManager,
           entrySession: entry,
           shareIntents: widget.shareIntents,
+          createBotsSession: () =>
+              savedBotsSession(widget.connManager, _profileControllers),
         ),
         enableProfileNotifications: enableProfileNotifications,
         connManager: widget.connManager,
@@ -1087,6 +1099,7 @@ class HomeScreenState extends State<HomeScreen> {
           createBotsSession: widget.createBotsSession,
           onOpenBotChat: selectBotChat,
           initialBotSession: botChat,
+          initialGroup: incomingSharedDraft?.group,
           onSelectConnection: selectWorkspaceConnection,
           configurationActions: buildConfigurationActions,
           enableNotifications: widget.enableProfileNotifications,

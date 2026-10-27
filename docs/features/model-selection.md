@@ -7,8 +7,9 @@ Feature ID: `model-selection`.
 ## Sub-features
 
 - `model-selection.choose` — Browse and inspect supplied model options.
-- `model-selection.apply` — Confirm the captured model or reasoning choice.
+- `model-selection.apply` — Confirm the captured model and reasoning in one canonical mutation. While a turn is running, an accepted deferred choice appears as Next turn; the effective model remains unchanged until the server applies it. Reopening the picker starts from the pending choice.
 - `model-selection.reject` — Retain the previous setting after cancellation or rejection.
+- `model-selection.allowances` — Inspect supplied plan allowances and reset times, Large/Free labels and recommendations in server order. The composer shows the current task's supplied allowance; a model card shows allowances that apply to that exact route.
 
 ## How to get to it (user POV)
 
@@ -21,7 +22,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
-  flutter test --no-pub test/model_chooser_test.dart test/profile_model_edit_session_test.dart test/chat_model_confirmation_test.dart
+  flutter test --no-pub test/model_chooser_test.dart test/profile_model_edit_session_test.dart test/chat_model_confirmation_test.dart test/profile_intelligence_test.dart
   ```
 
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
@@ -31,5 +32,12 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```
 
 ## Gotchas
+
+Free models do not inherit paid-model limits. Missing plan data is unknown;
+Wing neither invents availability nor enables credit spending. A structured
+allowance failure can open the picker or select a supplied alternative through
+the normal confirmation flow, retaining the draft without resending it.
+`profile_model_catalog_test.dart` covers plan decoding and exact-route scope;
+`turn_failure_test.dart` covers held, failed and duplicate recovery actions.
 
 Conversation model changes and profile defaults have different scopes. A selected picker row is not a confirmed backend change; handle an explicit confirmation or rejection.

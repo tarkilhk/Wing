@@ -25,7 +25,7 @@ python3 scripts/test_nightly_native.py notification-cold --output build/feature-
 python3 scripts/test_nightly_native.py voice --output build/feature-verification/journeys
 ```
 
-The first command requires all four critical journeys, all nine roadmap journeys and actual outbox process-death recovery. Its named outcomes cover uncertain Send beside a newer draft; profile/project navigation; model/reference/find/output controls; approval/queue ownership; child/parent work; saved-answer edit/regenerate/fork; and scoped administration/update refusal. Read those outcomes rather than inferring coverage from the suite title.
+The first command requires all four critical journeys, all twelve roadmap journeys and actual outbox process-death recovery. Its named outcomes cover uncertain Send beside a newer draft; native clarification from composer text; local Git review; live progress and plan recovery; profile/project navigation; model/reference/find/output controls; approval/queue ownership; child/parent work; saved-answer edit/regenerate/fork; and scoped administration/update refusal. Read those outcomes rather than inferring coverage from the suite title.
 The approval journey checks the immediately visible Review command panel and
 exact selectable command before using its icon-only Approve once action.
 

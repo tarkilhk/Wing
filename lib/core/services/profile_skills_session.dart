@@ -369,7 +369,7 @@ class ProfileSkillsSession extends ChangeNotifier {
       acknowledged = true;
       if (!live()) return;
       _edit = SkillEditObservation(desired, _edit!.draft, false);
-      _notice = 'Instructions saved for new sessions.';
+      _notice = 'Instructions saved. Hermes can reload them in this chat.';
       _verified = false;
       _emit();
       if (!live()) return;

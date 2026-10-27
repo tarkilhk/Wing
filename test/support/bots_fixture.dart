@@ -176,6 +176,13 @@ class BotsFixture {
     String method,
     Map<String, dynamic> params,
   ) async {
+    if (method == 'session.events.since' &&
+        (params.length != 3 ||
+            params['replay_epoch'] is! String ||
+            params['last_sequence'] is! int ||
+            params['session_id'] is! String)) {
+      throw const FormatException('Invalid canonical passive replay payload');
+    }
     final custom = await readHook?.call(profile, method, params);
     Map<String, dynamic> stockLog(Map<String, dynamic> result) => {
       ...result,
@@ -188,6 +195,15 @@ class BotsFixture {
       ],
     };
     if (custom != null) {
+      if (method == 'session.events.since' &&
+          custom['replay_epoch'] != params['replay_epoch']) {
+        return {
+          ...custom,
+          'events': <Map<String, dynamic>>[],
+          'truncated': true,
+          'snapshot_required': true,
+        };
+      }
       return method == 'groups.log' ? stockLog(custom) : custom;
     }
     if (method == 'groups.log') {
@@ -218,6 +234,7 @@ class BotsFixture {
       return stockLog(response());
     }
     return switch (method) {
+      'session.resume' => passiveSnapshot(params),
       'session.list' => {'sessions': workerRows[profile] ?? []},
       'profiles.list' => {
         'profiles': jsonDecode(jsonEncode(profiles)),
@@ -266,6 +283,26 @@ class BotsFixture {
     };
   }
 
+  static Map<String, dynamic> passiveSnapshot(
+    Map<String, dynamic> params, {
+    String epoch = 'test',
+    int sequence = 0,
+    bool running = true,
+  }) {
+    if (params.length != 2 ||
+        params['display_projection'] != true ||
+        params['session_id'] is! String) {
+      throw const FormatException('Invalid canonical passive mount payload');
+    }
+    return {
+      'session_id': params['session_id'],
+      'stored_session_id': params['session_id'],
+      'replay_epoch': epoch,
+      'last_sequence': sequence,
+      'running': running,
+    };
+  }
+
   Future<Map<String, dynamic>> command(
     String profile,
     String method,
@@ -281,6 +318,15 @@ class BotsFixture {
       method,
       Map<String, dynamic>.from(jsonDecode(jsonEncode(params))),
     ));
+    if (method == 'session.create' &&
+        !mapEquals(params, {
+          'title': 'Bot Chat',
+          'hidden': true,
+          'follow_profile_config': true,
+          'source': 'gui',
+        })) {
+      throw const FormatException('Invalid canonical Bot Chat create payload');
+    }
     final custom = await commandHook?.call(profile, method, params);
     if (custom != null) return custom;
     switch (method) {
@@ -309,20 +355,10 @@ class BotsFixture {
           },
         };
       case 'session.create':
-        return {
-          'session_id': 'new-runtime-${++_newSession}',
-          'stored_session_id': 'new-root-$_newSession',
-          'info': {'lazy': true},
-        };
-      case 'session.title':
-        profiles.firstWhere(
-          (p) => p['name'] == profile,
-        )['canonical_session'] = {
-          'id': 'new-root-$_newSession',
-          'resolved_id': 'new-root-$_newSession',
-          'preview': '',
-        };
-        return {'title': params['title']};
+        final id = 'new-bot-chat-${++_newSession}';
+        profiles.firstWhere((p) => p['name'] == profile)['canonical_session'] =
+            {'id': id, 'resolved_id': id, 'preview': ''};
+        return {'session_id': id, 'stored_session_id': id};
       case 'profiles.create':
         profiles.add(
           BotsFixture.profile(
@@ -359,6 +395,21 @@ class BotsFixture {
       case 'groups.create':
         return {
           'room': {...room, 'room_id': params['room_id']},
+        };
+      case 'groups.retry':
+        pending.removeWhere(
+          (action) =>
+              action['task_id'] == params['task_id'] &&
+              action['member_id'] == params['member_id'] &&
+              action['execution_generation'] == params['execution_generation'],
+        );
+        return {
+          'retried': true,
+          'task': {
+            'room_id': params['room_id'],
+            'task_id': params['task_id'],
+            'execution_generation': (params['execution_generation'] as int) + 1,
+          },
         };
       case 'groups.approve':
         pending.clear();

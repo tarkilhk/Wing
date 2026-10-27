@@ -18,6 +18,7 @@ Confirm only if you intend to switch now.''';
   void Function(Map<String, dynamic>)? onAcceptedWrite;
   String? resumedRuntimeId;
   bool failReasoning = false;
+  bool deferMutation = false;
   bool failFast = false;
   String fastMode = 'normal';
   bool confirmModel = false;
@@ -97,28 +98,48 @@ Confirm only if you intend to switch now.''';
           await configGetDelay?.future;
           return {'value': configGetValue};
         }
+        if (method == 'session.mutate') {
+          final operation = params['operation'];
+          final payload = Map<String, dynamic>.from(params['payload'] as Map);
+          writes.add(Map.of(params));
+          await configSetDelay?.future;
+          if (payload['confirm'] != null && failConfirmedModel) {
+            throw StateError('Model rejected');
+          }
+          if (operation == 'model' &&
+              confirmModel &&
+              (payload['confirm'] == null || repeatConfirmation)) {
+            return {
+              'status': 'confirmation_required',
+              'confirm_required': true,
+              'confirm': 'fixture-model-confirmation',
+              'confirm_message': modelWarning,
+            };
+          }
+          if ((operation == 'reasoning' ||
+                  (operation == 'model' && payload.containsKey('reasoning'))) &&
+              failReasoning) {
+            throw StateError('Reasoning rejected');
+          }
+          onAcceptedWrite?.call(params);
+          canonicalRevisions['${scope.profileName}:${params['session_id']}'] =
+              (params['expected_revision'] as int) + 1;
+          return {
+            'session_id': params['session_id'],
+            'operation': operation,
+            'status': deferMutation ? 'deferred' : 'applied',
+            'revision': (params['expected_revision'] as int) + 1,
+            'execution_generation': params['expected_generation'],
+          };
+        }
         if (method == 'config.set') {
-          if (!const {'model', 'reasoning', 'fast'}.contains(params['key'])) {
+          if (params['key'] != 'fast') {
             throw StateError('Unexpected intelligence write: ${params['key']}');
           }
           writes.add(Map.of(params));
           await configSetDelay?.future;
-          if (params['confirm_expensive_model'] == true && failConfirmedModel) {
-            throw StateError('Model rejected');
-          }
-          if (params['key'] == 'model' &&
-              confirmModel &&
-              (params['confirm_expensive_model'] != true ||
-                  repeatConfirmation)) {
-            return {'confirm_required': true, 'confirm_message': modelWarning};
-          }
-          if (params['key'] == 'fast') {
-            if (failFast) throw StateError('Fast rejected');
-            fastMode = params['value'] as String;
-          }
-          if (params['key'] == 'reasoning' && failReasoning) {
-            throw StateError('Reasoning rejected');
-          }
+          if (failFast) throw StateError('Fast rejected');
+          fastMode = params['value'] as String;
           onAcceptedWrite?.call(params);
           return {'status': 'ok', 'value': params['value']};
         }

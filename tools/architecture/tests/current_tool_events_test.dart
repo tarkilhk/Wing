@@ -41,8 +41,8 @@ const _cases = [
   ),
   _Case('original parser status alias', 1, cli: true, model: "data['status'];"),
   _Case(
-    'original progress parser',
-    1,
+    'stock progress parser',
+    0,
     model: "switch(eventType) { case 'tool.progress': break; }",
   ),
   _Case(
@@ -57,8 +57,8 @@ const _cases = [
     tool: "if(type != 'tool.error') {}",
   ),
   _Case(
-    'coordinator unsupported dispatch',
-    1,
+    'coordinator stock progress dispatch',
+    0,
     controller: "switch(event.type) { case 'tool.progress': break; }",
   ),
   _Case(

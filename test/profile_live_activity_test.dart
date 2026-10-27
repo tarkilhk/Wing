@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -101,9 +102,9 @@ class ActivityHost {
       }
       if (method == 'session.create' || method == 'session.resume') {
         return {
+          ...canonicalSnapshotFields,
           'session_id': '${scope.profileName}-runtime',
           'stored_session_id': 'same',
-          'session_key': 'same',
           'running': resumedRunning,
           'info': {'profile_name': scope.profileName},
         };

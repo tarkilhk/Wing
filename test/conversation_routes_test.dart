@@ -490,6 +490,14 @@ void main() {
           });
           var working = true;
           fixture.readHook = (_, method, params) async {
+            if (method == 'session.resume') {
+              return BotsFixture.passiveSnapshot(
+                params,
+                epoch: 'route-test',
+                sequence: 5,
+                running: working,
+              );
+            }
             if (method == 'session.active_list') {
               return {
                 'sessions': [
@@ -552,12 +560,18 @@ void main() {
                       'seq': 5,
                     },
                   ])
-                    if ((event['seq'] as int) > (params['last_seen'] as int))
-                      {...event, 'session_id': 'atlas-live'},
+                    if ((event['seq'] as int) >
+                        (params['last_sequence'] as int))
+                      {
+                        ...event,
+                        'session_id': 'atlas-live',
+                        'replay_epoch': 'route-test',
+                      },
                 ],
                 'latest_seq': 5,
                 'truncated': false,
-                'epoch': 'route-test',
+                'replay_epoch': 'route-test',
+                'snapshot_required': false,
                 'open_requests': [],
               };
             }

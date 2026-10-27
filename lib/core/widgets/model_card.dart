@@ -26,6 +26,7 @@ class ModelCard extends StatelessWidget {
     final controls = choice.controls;
     final provider = choice.providerInfo;
     final usage = provider?.usage;
+    final plan = provider?.planUsage;
     Widget fact(String label, String value) => Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -135,7 +136,33 @@ class ModelCard extends StatelessWidget {
                 if (controls.reasoning) fact('Reasoning', 'Adjustable'),
                 if (controls.fast) fact('Fast mode', 'Available'),
               ],
+              if (plan != null) ...[
+                const Divider(height: 24),
+                if (plan.plan case final name? when name.isNotEmpty)
+                  fact('Plan', name),
+                if (choice.allowanceLabel case final label?)
+                  fact('Allowance', label),
+                for (final gauge in choice.allowanceGauges) ...[
+                  fact(gauge.label, gauge.remainingLabel),
+                  if (gauge.resetsAt case final reset?)
+                    fact('Resets', _resetLabel(context, reset)),
+                ],
+                if (plan.pauseLabel case final reason?)
+                  Text(
+                    reason,
+                    style: tokens.typography.label.copyWith(
+                      color: tokens.warning,
+                    ),
+                  ),
+                if (plan.creditsPay case final enabled?
+                    when choice.allowanceLabel != 'Free')
+                  fact(
+                    'After allowance',
+                    enabled ? 'Uses credits' : 'Stops at the limit',
+                  ),
+              ],
               if (usage != null &&
+                  plan == null &&
                   (usage.windows.isNotEmpty || usage.accounts.isNotEmpty)) ...[
                 const Divider(height: 24),
                 Text(

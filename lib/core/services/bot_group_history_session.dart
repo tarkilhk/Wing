@@ -1,4 +1,5 @@
 import '../models/hermes_question.dart';
+import '../models/canonical_session.dart';
 import 'chat_transcript_events.dart';
 import 'conversation_reading_memory.dart';
 import 'subagent_timeline_session.dart';
@@ -165,31 +166,75 @@ class BotGroupHistorySession extends ChangeNotifier
         reading._sequence = 0;
         reading._epoch = null;
         reading._partialLive = false;
+        reading._agents.clear();
         reading._runtime.replaceRuntime(id);
         reading._reading.updateStreaming('');
       }
-      var replay = await repository.groupMemberObservation(
-        group,
-        member,
-        'session.events.since',
-        {'session_id': id, 'last_seen': reading._sequence},
-      );
+      Future<void> mount({
+        String? expectedEpoch,
+        bool skipMissing = false,
+      }) async {
+        final snapshot = await repository.groupMemberObservation(
+          group,
+          member,
+          'session.resume',
+          {'session_id': id, 'display_projection': true},
+        );
+        if (!current()) return;
+        final cursor = CanonicalReplayCursor.fromSnapshot(
+          snapshot,
+          expectedSessionId: id,
+          expectedEpoch: expectedEpoch,
+        );
+        reading._epoch = cursor.epoch;
+        reading._sequence = skipMissing ? cursor.sequence : 0;
+        reading._runtime.replaceRuntime(id);
+        reading._runtime.observeExecutionSnapshot(snapshot);
+      }
+
+      Future<Map<String, dynamic>> readReplay() => repository
+          .groupMemberObservation(group, member, 'session.events.since', {
+            'session_id': id,
+            'replay_epoch': reading._epoch,
+            'last_sequence': reading._sequence,
+          });
+      if (reading._epoch == null) {
+        await mount();
+        if (!current()) return;
+      }
+      var replay = await readReplay();
       if (!current()) return;
-      final epoch = replay['epoch'];
+      final epoch = replay['replay_epoch'];
       if (epoch is! String || epoch.isEmpty) {
         throw const FormatException('Missing worker replay epoch');
       }
-      if (reading._epoch != null && reading._epoch != epoch) {
-        reading._sequence = 0;
-        reading._runtime.replaceRuntime(id);
-        reading._reading.updateStreaming('');
-        replay = await repository.groupMemberObservation(
-          group,
-          member,
-          'session.events.since',
-          {'session_id': id, 'last_seen': 0},
-        );
+      if (reading._epoch != epoch) {
+        reading._partialLive = true;
+        reading._agents.clear();
+        await mount(expectedEpoch: epoch);
         if (!current()) return;
+        reading._reading.updateStreaming('');
+        replay = await readReplay();
+        if (!current()) return;
+      }
+      if (replay['replay_epoch'] != reading._epoch) {
+        throw const FormatException('Worker replay changed during refresh');
+      }
+      if (replay['snapshot_required'] is! bool ||
+          replay['truncated'] is! bool) {
+        throw const FormatException('Missing canonical replay continuity');
+      }
+      if (replay['snapshot_required'] == true || replay['truncated'] == true) {
+        reading._partialLive = true;
+        reading._agents.clear();
+        await mount(expectedEpoch: reading._epoch, skipMissing: true);
+        if (!current()) return;
+        reading._reading.updateStreaming('');
+        await _load(refresh: true, quiet: true);
+        if (!current()) return;
+        reading._liveError =
+            'Earlier live activity is unavailable. Showing saved history and received updates.';
+        return;
       }
       final events = replay['events'];
       final latest = replay['latest_seq'];
@@ -239,7 +284,7 @@ class BotGroupHistorySession extends ChangeNotifier
         }
         terminal |= reading.observeExecution(type, data);
       }
-      reading._epoch = replay['epoch'] as String;
+      reading._epoch = replay['replay_epoch'] as String;
       reading._sequence = latest;
       reading._runtime.reconcileOpenRequests(replay['open_requests']);
       if (!terminal) {
@@ -633,6 +678,7 @@ final class _BotGroupHistoryReading implements TranscriptReader {
   bool observeExecution(String type, Map<String, dynamic> data) {
     _runtime.observeEvent(type, data);
     applyChatTranscriptEvent(
+      live: false,
       runtime: _runtime,
       reading: _reading,
       type: type,

@@ -107,11 +107,12 @@ void main() {
 
   Future<ProfileChat> restart(
     ProfileWorkspaceController controller,
-    ProfileChat chat,
-  ) async {
+    ProfileChat chat, {
+    bool running = false,
+  }) async {
     controller.dispose();
     controllers.remove(controller);
-    host.running = false;
+    host.running = running;
     final restarted = makeController();
     await restarted.initialize();
     await restarted.openSession(chat.key);
@@ -325,14 +326,14 @@ void main() {
 
   for (final acknowledgementLost in [false, true]) {
     test(
-      'dispatched outgoing restart blocks replay with independent fresh draft: lost=$acknowledgementLost',
+      'dispatched outgoing restart recovers the same receipt beside the fresh draft: lost=$acknowledgementLost',
       () async {
         final controller = makeController();
         await controller.initialize();
         final chat = await controller.createChat(canDispatch: () => true);
         await controller.updateDraft(chat, 'Original outgoing');
         host.promptSubmitStarted = Completer<void>();
-        host.promptSubmitDelay = Completer<void>();
+        final originalAck = host.promptSubmitDelay = Completer<void>();
         host.promptSubmitFails = acknowledgementLost;
         final sending = controller.send(chat);
         await host.promptSubmitStarted!.future.timeout(
@@ -340,70 +341,50 @@ void main() {
         );
         await controller.updateDraft(chat, 'Fresh follow-up');
         if (acknowledgementLost) {
-          host.promptSubmitDelay!.complete();
+          originalAck.complete();
           await sending;
         } else {
           sending.ignore();
         }
         final stored = await saved(chat);
         expect(stored.text, 'Fresh follow-up');
-        expect(stored.submissionUncertain, isFalse);
-        expect(stored.queuedPrompts.single.text, 'Original outgoing');
         expect(stored.queuedPrompts.single.submissionUncertain, isTrue);
-        final restored = await restart(controller, chat);
+        final originalId = stored.queuedPrompts.single.submissionId;
+        final originalPayload = stored.queuedPrompts.single.submissionPayload;
+        host.promptSubmitDelay = null;
+        host.promptSubmitFails = false;
+        final restored = await restart(controller, chat, running: true);
+        if (!originalAck.isCompleted) originalAck.complete();
         expect(restored.composer.observation.text, 'Fresh follow-up');
-        expect(restored.composer.observation.submissionUncertain, isFalse);
-        expect(
-          restored.composer.observation.queue.single.submissionUncertain,
-          isTrue,
-        );
-        expect(restored.composer.observation.paused, isTrue);
-        expect(restored.runtime.error, contains('queued message is uncertain'));
-        final restarted = controllers.last;
-        await expectLater(restarted.resumeQueue(restored), throwsStateError);
-        emitChatEvent(restarted, restored, 'message.start');
-        await restarted.beginQueuedPromptEdit(
-          restored,
-          restored.composer.observation.queue.single.id,
-        );
-        expect(await restarted.steerQueuedPromptEdit(restored), isFalse);
-        await restarted.cancelQueuedPromptEdit(restored);
-        expect(
-          host.calls.where((call) => call.$2 == 'prompt.submit'),
-          hasLength(1),
-        );
-        final head = restored.composer.observation.queue.single;
-        await restarted.beginQueuedPromptEdit(restored, head.id);
-        restarted.updateQueuedPromptEdit(restored, head.text);
-        await restarted.saveQueuedPromptEdit(restored);
-        expect(
-          restored.composer.observation.queue.single.submissionUncertain,
-          isTrue,
-        );
-        await expectLater(restarted.resumeQueue(restored), throwsStateError);
-        await restarted.removeQueuedPrompt(
-          restored,
-          restored.composer.observation.queue.single.id,
-        );
+        expect(restored.composer.observation.queue, isEmpty);
         expect((await saved(restored)).queuedPrompts, isEmpty);
-        expect(restored.composer.observation.text, 'Fresh follow-up');
+        final attempts = host.calls
+            .where((call) => call.$2 == 'prompt.submit')
+            .toList();
+        expect(attempts, hasLength(2));
+        expect(attempts[0].$3['submission_id'], originalId);
+        expect(attempts[1].$3, attempts[0].$3);
+        expect(attempts[1].$3, {...?originalPayload, 'profile': 'a'});
+        expect(host.canonicalAdmissions, hasLength(1));
       },
     );
   }
 
   test(
-    'existing queued head keeps uncertainty after restart without duplication',
+    'queued head recovery preserves the accepted row and later local work',
     () async {
       final controller = makeController();
       await controller.initialize();
       final chat = await controller.createChat(canDispatch: () => true);
       emitChatEvent(controller, chat, 'message.start');
+      await chat.composer.pause();
       await controller.queuePrompt(chat, 'Queued outgoing');
       await controller.queuePrompt(chat, 'Later queued');
       await controller.updateDraft(chat, 'Fresh composer');
       host.promptSubmitStarted = Completer<void>();
-      host.promptSubmitDelay = Completer<void>();
-      host.event('a', 'turn.end', {'status': 'completed'});
+      final originalAck = host.promptSubmitDelay = Completer<void>();
+      final draining = controller.resumeQueue(chat);
+      draining.ignore();
       await host.promptSubmitStarted!.future.timeout(
         const Duration(seconds: 3),
       );
@@ -414,26 +395,36 @@ void main() {
         'Later queued',
       ]);
       expect(stored.queuedPrompts.first.submissionUncertain, isTrue);
-      final restored = await restart(controller, chat);
-      expect(restored.composer.observation.queue, hasLength(2));
+      host.promptSubmitDelay = null;
+      final restored = await restart(controller, chat, running: true);
+      originalAck.complete();
+      expect(restored.composer.observation.text, 'Fresh composer');
+      expect(restored.composer.observation.queue.map((row) => row.text), [
+        'Queued outgoing',
+        'Later queued',
+      ]);
+      expect(restored.composer.observation.queue.first.serverOwned, isTrue);
+      expect(restored.composer.observation.queue.last.serverOwned, isFalse);
+      final replay = host.calls
+          .where((call) => call.$2 == 'prompt.submit')
+          .toList();
+      expect(replay, hasLength(2));
+      expect(replay[1].$3, replay[0].$3);
+      expect(host.canonicalAdmissions, hasLength(1));
+      final restarted = controllers.last;
+      await restarted.resumeQueue(restored);
+      expect(host.canonicalAdmissions, hasLength(2));
       expect(
-        restored.composer.observation.queue.first.submissionUncertain,
+        restored.composer.observation.queue.every((row) => row.serverOwned),
         isTrue,
       );
-      await expectLater(
-        controllers.last.resumeQueue(restored),
-        throwsStateError,
-      );
-      expect(
-        host.calls.where((call) => call.$2 == 'prompt.submit'),
-        hasLength(1),
-      );
+      expect((await saved(restored)).queuedPrompts, isEmpty);
     },
   );
 
   for (final fresh in ['Fresh follow-up', 'Original outgoing']) {
     test(
-      'interrupted upload restart keeps waiting files and fresh draft: $fresh',
+      'interrupted upload restart admits the original file and preserves the fresh draft: $fresh',
       () async {
         final controller = makeController();
         await controller.initialize();
@@ -447,73 +438,48 @@ void main() {
         final attachment = (await saved(chat)).attachments.single;
         await controller.updateDraft(chat, 'Original outgoing');
         host.fileAttachStarted = Completer<void>();
-        host.fileAttachDelay = Completer<void>();
-        // Leave upload unresolved, just as a killed process cannot finish it.
+        final originalUpload = host.fileAttachDelay = Completer<void>();
         controller.send(chat).ignore();
         await host.fileAttachStarted!.future.timeout(
           const Duration(seconds: 3),
         );
-        expect(chat.composer.observation.text, isEmpty);
         await controller.updateDraft(chat, fresh);
-        final stored = await ComposerDraftStore(
-          preferences,
-          connectionIdentity: 'outgoing-recovery',
-        ).read(profileName: 'a', sessionId: key.sessionId);
-        expect(stored!.text, fresh);
-        expect(stored.queuedPrompts, hasLength(1));
+        final stored = await saved(chat);
+        expect(stored.text, fresh);
         expect(stored.queuedPrompts.single.text, 'Original outgoing');
         expect(
           stored.queuedPrompts.single.attachments.single.id,
           attachment.id,
         );
-        expect(stored.attachments, isEmpty);
-        expect(stored.queuePaused, isFalse);
         expect(stored.queuedPrompts.single.submissionUncertain, isFalse);
+        expect(await File(attachment.cachedPath).exists(), isTrue);
         controller.dispose();
         controllers.remove(controller);
-        // Keep the server busy while inspecting restored ownership. This message
-        // never dispatched, so it may safely resume once the server becomes idle.
-        host.running = true;
-        final restarted = makeController();
-        await restarted.initialize();
-        await restarted.openSession(key);
-        final restored = restarted.current!.chat!;
-        expect(restored.composer.observation.text, fresh);
-        expect(restored.composer.observation.attachments, isEmpty);
-        expect(
-          restored.composer.observation.queue.single.text,
-          'Original outgoing',
-        );
-        expect(
-          restored.composer.observation.queue.single.attachments.single.id,
-          attachment.id,
-        );
-        expect(
-          await File(
-            (await saved(
-              restored,
-            )).queuedPrompts.single.attachments.single.cachedPath,
-          ).exists(),
-          isTrue,
-        );
-        expect(restored.composer.observation.paused, isFalse);
-        expect(
-          restored.composer.observation.queue.single.submissionUncertain,
-          isFalse,
-        );
-        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+        // The new process retries unfinished local preparation, then the server
+        // admits the resulting input even while another turn is running.
         host
           ..fileAttachDelay = null
           ..fileAttachStarted = null
-          ..running = false;
-        await restarted.resumeQueue(restored);
+          ..running = true;
+        final restarted = makeController();
+        await restarted.initialize();
+        await restarted.openSession(key);
+        originalUpload.complete();
+        final restored = restarted.current!.chat!;
         expect(restored.composer.observation.text, fresh);
         expect(restored.composer.observation.attachments, isEmpty);
-        expect(restored.composer.observation.queue, isEmpty);
+        expect(restored.composer.observation.queue.single.serverOwned, isTrue);
         expect(
-          host.calls.where((call) => call.$2 == 'prompt.submit'),
-          hasLength(1),
+          restored.composer.observation.queue.single.text,
+          contains('Original outgoing'),
         );
+        final outgoing = host.calls
+            .where((call) => call.$2 == 'prompt.submit')
+            .single;
+        expect(outgoing.$3['queued'], isTrue);
+        expect(outgoing.$3['text'], 'attached:note.txt\n\nOriginal outgoing');
+        expect(host.canonicalAdmissions, hasLength(1));
+        expect((await saved(restored)).queuedPrompts, isEmpty);
         expect(await File(attachment.cachedPath).exists(), isFalse);
       },
     );

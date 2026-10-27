@@ -8,6 +8,12 @@ import '../../widgets/studio_loading.dart';
 import '../../widgets/bot_group_conversation.dart';
 import '../../widgets/recent_conversations/conversation_route_scope.dart';
 import 'dart:async';
+import 'package:file_picker/file_picker.dart';
+import '../../services/android_share_intent_service.dart';
+import '../../services/remote_file_saver.dart';
+import '../../models/attachment_draft.dart';
+import '../../presentation/attachment_preview_image.dart';
+import '../../widgets/composer_attachment_tile.dart';
 import 'package:flutter/material.dart';
 import '../../services/bot_group_session.dart';
 import '../../services/bot_group_history_session.dart';
@@ -37,6 +43,7 @@ class BotGroupScreen extends StatefulWidget {
     required this.voiceInputSettings,
     required this.stopVoicePlayback,
     this.voiceDevice,
+    this.onCapturePhoto,
     this.onEdit,
     this.onOpenBotChat,
     this.onOpenBotSettings,
@@ -45,6 +52,7 @@ class BotGroupScreen extends StatefulWidget {
   final VoiceInputSettings? Function() voiceInputSettings;
   final Future<void> Function() stopVoicePlayback;
   final VoiceDevice? voiceDevice;
+  final Future<void> Function()? onCapturePhoto;
   final Future<BotGroup?> Function(BotGroup)? onEdit;
   final Future<void> Function(BotRecord)? onOpenBotChat, onOpenBotSettings;
   @override
@@ -73,6 +81,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
 
   final _transcript = ConversationTranscriptController();
   bool _capturing = false, _foreground = true;
+  bool _launchingCamera = false;
   bool _inspectingDetails = false, _refreshingGroup = false;
   Object? _inspectedAvatarMessage;
   bool _presentationVisible = true, _restoreComposerFocus = false;
@@ -114,6 +123,43 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       await _session.refresh();
     } finally {
       if (mounted) setState(() => _refreshingGroup = false);
+    }
+  }
+
+  Future<void> _pickAttachments({required bool photos}) async {
+    if (!_session.canAddAttachments) return;
+    _focus.unfocus();
+    try {
+      final files = await FilePicker.pickFiles(
+        type: photos ? FileType.image : FileType.any,
+      );
+      if (!mounted || files.isEmpty) return;
+      if (files.any((file) => file.path == null)) {
+        throw StateError('A selected file could not be opened.');
+      }
+      await _session.addAttachments([
+        for (final file in files)
+          AndroidSharedFile(
+            path: file.path!,
+            name: file.name,
+            byteLength: file.lengthSync() ?? 0,
+            mediaType: switch (file.extension?.toLowerCase()) {
+              'png' => 'image/png',
+              'jpg' || 'jpeg' => 'image/jpeg',
+              'webp' => 'image/webp',
+              'pdf' => 'application/pdf',
+              'txt' || 'md' || 'csv' => 'text/plain',
+              _ => 'application/octet-stream',
+            },
+          ),
+      ]);
+    } catch (_) {
+      if (mounted) {
+        showStudioError(
+          context,
+          'Files could not be opened. Choose them again.',
+        );
+      }
     }
   }
 
@@ -201,6 +247,10 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       key: ValueKey<(String, int)>(entry.presentationId as (String, int)),
       group: _session.group,
       message: entry.message,
+      loadAttachmentImage: (target) async =>
+          (await _session.downloadAttachment(target)).bytes,
+      onDownloadAttachment: (output) async =>
+          saveRemoteFile(await _session.downloadAttachment(output.target)),
       appearance: user || member == null
           ? null
           : _session.appearance(member.profile),
@@ -329,10 +379,20 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     final needsApproval = _session.pendingApprovals.isNotEmpty;
     final interrupted =
         runtime?.blocked == true || runtime?.actions.isNotEmpty == true;
+    final memberActivity = <String>[
+      for (final activity
+          in runtime?.memberActivity ?? const <BotGroupMemberActivity>[])
+        if (_session.group.members
+                .where((member) => member.id == activity.memberId)
+                .firstOrNull
+            case final member?)
+          '${member.name} · ${activity.status}',
+    ].join(' · ');
     final String? label;
     final bool active;
     final IconData? icon;
-    final pendingAction = _session.sending || _session.acting;
+    final pendingAction =
+        _session.sending || _session.acting || _launchingCamera;
     if (_session.pendingText != null && !pendingAction) {
       label = 'Message not confirmed · Retry the same message';
       active = false;
@@ -342,15 +402,19 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       active = false;
       icon = Icons.error_outline;
     } else if (needsApproval) {
-      label = 'Waiting for your approval';
+      label = memberActivity.isEmpty
+          ? 'Waiting for your approval'
+          : 'Waiting for your approval · $memberActivity';
       active = false;
       icon = Icons.help_rounded;
     } else if (interrupted) {
-      label = 'Group work is interrupted';
+      label = memberActivity.isEmpty
+          ? 'Group work is interrupted'
+          : 'Group work is interrupted · $memberActivity';
       active = false;
       icon = Icons.pause_circle_outline;
     } else if (runtime?.working == true) {
-      label = 'Bots are working…';
+      label = memberActivity.isEmpty ? 'Bots are working…' : memberActivity;
       active = true;
       icon = null;
     } else {
@@ -666,7 +730,8 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         canStop &&
         !_session.sending &&
         _session.pendingText == null &&
-        _composer.text.trim().isEmpty;
+        _composer.text.trim().isEmpty &&
+        _session.attachments.isEmpty;
     final locked =
         _session.pendingText != null || _session.sending || _voiceInput.active;
     return BotGroupConversation(
@@ -766,18 +831,16 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _session.awaitingContinuation
-                            ? 'Work was stopped; Continue resends the same continuation message.'
-                            : 'Work paused; Continue stops this attempt and asks the bots to resume.',
+                        '${_session.group.members.where((member) => member.id == action.member).firstOrNull?.name ?? 'Bot'} could not finish. Retry this attempt.',
                         style: Theme.of(context).textTheme.titleSmall,
                       ),
                       StudioButtonPress(
                         child: IconButton(
-                          tooltip: 'Continue group work',
+                          tooltip: 'Retry group attempt',
                           onPressed: _session.acting || _session.sending
                               ? null
                               : () => _session.resolve(action),
-                          icon: const Icon(Icons.play_arrow),
+                          icon: const Icon(Icons.refresh),
                         ),
                       ),
                     ],
@@ -806,6 +869,44 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         valueListenable: _composer,
         builder: (context, _, _) => ConversationComposer(
           beforeField: [
+            if (_session.attachments.isNotEmpty ||
+                _session.attachmentPreparation != null)
+              ComposerAttachmentStrip(
+                preparing: _session.attachmentPreparation != null,
+                children: [
+                  for (final (index, attachment)
+                      in _session.attachments.indexed)
+                    ComposerAttachmentSlot(
+                      key: ValueKey(('group-attachment-slot', index)),
+                      child: ComposerAttachmentTile(
+                        key: ValueKey(attachment.id),
+                        name: attachment.name,
+                        kind: _session.attachmentPreview(attachment) == null
+                            ? AttachmentDraftKind.genericFile
+                            : AttachmentDraftKind.image,
+                        previewImage:
+                            _session.attachmentPreview(attachment) == null
+                            ? null
+                            : AttachmentPreviewImage(
+                                _session.attachmentPreview(attachment)!,
+                              ),
+                        onRemove: !_session.canAddAttachments
+                            ? null
+                            : () => _session.removeAttachment(attachment),
+                      ),
+                    ),
+                  if (_session.attachmentPreparation case final preparation?)
+                    ComposerAttachmentSlot(
+                      key: ValueKey((
+                        'group-attachment-slot',
+                        _session.attachments.length,
+                      )),
+                      child: ComposerPendingAttachmentTile(
+                        preparation: preparation,
+                      ),
+                    ),
+                ],
+              ),
             VoiceInputActivity(context: this.context, controller: _voiceInput),
           ],
           focusNode: _focus,
@@ -826,6 +927,47 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               ),
             ),
           ),
+          controls: StudioButtonPress(
+            child: PopupMenuButton<String>(
+              tooltip: 'Add group attachment',
+              enabled:
+                  _session.canAddAttachments &&
+                  !_voiceInput.active &&
+                  !_launchingCamera,
+              icon: const Icon(Icons.add),
+              onSelected: (choice) async {
+                if (choice != 'camera') {
+                  await _pickAttachments(photos: choice == 'photos');
+                  return;
+                }
+                setState(() => _launchingCamera = true);
+                try {
+                  await widget.onCapturePhoto!();
+                } catch (_) {
+                  if (context.mounted) {
+                    showStudioError(
+                      context,
+                      'The camera could not open. Try again.',
+                    );
+                  }
+                } finally {
+                  if (mounted) setState(() => _launchingCamera = false);
+                }
+              },
+              itemBuilder: (_) => [
+                if (widget.onCapturePhoto != null)
+                  const StudioPopupMenuItem(
+                    value: 'camera',
+                    child: Text('Camera'),
+                  ),
+                const StudioPopupMenuItem(
+                  value: 'photos',
+                  child: Text('Photos'),
+                ),
+                const StudioPopupMenuItem(value: 'files', child: Text('Files')),
+              ],
+            ),
+          ),
           primaryAction: ComposerIconButton(
             focused: false,
             label: stopping
@@ -839,8 +981,10 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                 ? _session.stop
                 : _session.sending ||
                       _session.acting ||
+                      _session.attachmentPreparation != null ||
                       (_session.pendingText == null &&
-                          _composer.text.trim().isEmpty)
+                          _composer.text.trim().isEmpty &&
+                          _session.attachments.isEmpty)
                 ? null
                 : _send,
             icon: ComposerActionGlyph(

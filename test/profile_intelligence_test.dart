@@ -290,11 +290,13 @@ void main() {
         selection,
         confirmModelChange: (_) async => fail('Unexpected confirmation'),
       );
-      expect(host.writes, hasLength(2));
-      expect(
-        host.writes.first['value'],
-        'gpt-5.6-sol --provider openai-codex --session',
-      );
+      expect(host.writes, hasLength(1));
+      expect(host.writes.single['operation'], 'model');
+      expect(host.writes.single['payload'], {
+        'model': 'gpt-5.6-sol',
+        'provider': 'openai-codex',
+        'reasoning': 'xhigh',
+      });
       expect(
         host.writes.every(
           (p) => p['profile'] == 'personal' && p['session_id'] == 'runtime',
@@ -307,7 +309,7 @@ void main() {
       expect(restored.reasoningEffort, 'high');
       restored.composer.editText('Verify settings');
       await reopened.send(restored);
-      expect(host.writes, hasLength(2));
+      expect(host.writes, hasLength(1));
       await reopened.switchProfile('work');
       final other = await reopened.createChat(canDispatch: () => true);
       expect(other.model, 'gpt-6-astra');
@@ -400,7 +402,7 @@ void main() {
   );
 
   test(
-    'failed reasoning preserves the confirmed model and previous effort',
+    'rejected atomic model and reasoning change preserves both previous values',
     () async {
       final chat = controller.current!.chat!;
       host.failReasoning = true;
@@ -412,7 +414,8 @@ void main() {
         ),
         throwsStateError,
       );
-      expect(chat.model, 'gpt-5.6-sol');
+      expect(host.writes, hasLength(1));
+      expect(chat.model, 'gpt-6-astra');
       expect(chat.reasoningEffort, 'high');
       expect(chat.changingIntelligence, isFalse);
     },
@@ -423,7 +426,7 @@ void main() {
     () async {
       final chat = controller.current!.chat!;
       host.onAcceptedWrite = (params) {
-        if (params['key'] == 'model') {
+        if (params['operation'] == 'model') {
           emitChatEvent(controller, chat, 'session.info', {
             'model': selection.choice.model,
             'provider': selection.choice.provider,
@@ -465,16 +468,18 @@ void main() {
       expect(chat.model, selection.choice.model);
       expect(chat.reasoningEffort, 'xhigh');
       expect(chat.fastMode, ChatFastMode.normal);
-      expect(host.writes.map((w) => w['key']), ['model', 'reasoning', 'fast']);
+      expect(host.writes.map((w) => w['operation'] ?? w['key']), [
+        'model',
+        'fast',
+      ]);
       host.failFast = false;
       await controller.setIntelligence(
         chat,
         chosen,
         confirmModelChange: (_) async => fail('Unexpected confirmation'),
       );
-      expect(host.writes.map((w) => w['key']), [
+      expect(host.writes.map((w) => w['operation'] ?? w['key']), [
         'model',
-        'reasoning',
         'fast',
         'fast',
       ]);
@@ -519,13 +524,7 @@ void main() {
     expect(host.writes.single['value'], 'normal');
   });
 
-  for (final staleChange in [
-    'runtime',
-    'model',
-    'provider',
-    'profile',
-    'busy',
-  ]) {
+  for (final staleChange in ['runtime', 'model', 'provider', 'profile']) {
     test('confirmation cannot apply after $staleChange changes', () async {
       host.confirmModel = true;
       final chat = controller.current!.chat!;
@@ -539,27 +538,113 @@ void main() {
                 host.resumedRuntimeId = 'replacement';
                 await controller.reconnect(chat.key.workspace);
               case 'model':
+                host.repeatConfirmation = true;
                 emitChatEvent(controller, chat, 'session.info', {
                   'model': 'gpt-5.4-mini',
                 });
               case 'provider':
+                host.repeatConfirmation = true;
                 emitChatEvent(controller, chat, 'session.info', {
                   'provider': 'other-provider',
                 });
               case 'profile':
                 await controller.switchProfile('work');
-              case 'busy':
-                emitChatEvent(controller, chat, 'message.start');
             }
             return true;
           },
         ),
         throwsStateError,
       );
-      expect(host.writes, hasLength(1));
+      expect(
+        host.writes,
+        hasLength(staleChange == 'model' || staleChange == 'provider' ? 2 : 1),
+      );
       expect(chat.reasoningEffort, 'high');
       expect(chat.changingIntelligence, isFalse);
     });
+  }
+
+  test(
+    'a busy model choice remains pending until server hydration confirms it',
+    () async {
+      final chat = controller.current!.chat!;
+      await controller.loadIntelligence(chat);
+      host.deferMutation = true;
+      emitChatEvent(controller, chat, 'message.start');
+      expect(
+        await controller.setIntelligence(
+          chat,
+          selection,
+          confirmModelChange: (_) async => fail('Unexpected confirmation'),
+        ),
+        isTrue,
+      );
+      expect(host.writes, hasLength(1));
+      expect(chat.model, 'gpt-6-astra');
+      expect(chat.reasoningEffort, 'high');
+      expect(chat.pendingIntelligence, selection);
+      emitChatEvent(controller, chat, 'session.updated', {
+        'model': selection.choice.model,
+        'provider': selection.choice.provider,
+        'effort': selection.reasoningEffort,
+      });
+      expect(chat.model, selection.choice.model);
+      expect(chat.reasoningEffort, selection.reasoningEffort);
+      expect(chat.pendingIntelligence, isNull);
+    },
+  );
+
+  for (final changeRoute in [false, true]) {
+    test(
+      'returning to the effective ${changeRoute ? 'model' : 'reasoning'} supersedes a deferred choice',
+      () async {
+        final chat = controller.current!.chat!;
+        await controller.loadIntelligence(chat);
+        final effective = ChatIntelligenceSelection(
+          choice: ModelChoice(provider: chat.provider!, model: chat.model!),
+          reasoningEffort: chat.reasoningEffort!,
+          fastMode: chat.fastMode!,
+        );
+        host.deferMutation = true;
+        emitChatEvent(controller, chat, 'message.start');
+        final pending = changeRoute
+            ? selection
+            : ChatIntelligenceSelection(
+                choice: effective.choice,
+                reasoningEffort: 'low',
+                fastMode: effective.fastMode,
+              );
+        await controller.setIntelligence(
+          chat,
+          pending,
+          confirmModelChange: (_) async => false,
+        );
+        expect(chat.pendingIntelligence, pending);
+        await controller.setIntelligence(
+          chat,
+          effective,
+          confirmModelChange: (_) async => false,
+        );
+        expect(host.writes, hasLength(2));
+        expect(
+          host.writes.last['operation'],
+          changeRoute ? 'model' : 'reasoning',
+        );
+        expect(
+          host.writes.last['payload'],
+          changeRoute
+              ? {
+                  'model': effective.choice.model,
+                  'provider': effective.choice.provider,
+                  'reasoning': effective.reasoningEffort,
+                }
+              : {'effort': effective.reasoningEffort},
+        );
+        expect(chat.pendingIntelligence, effective);
+        expect(chat.model, effective.choice.model);
+        expect(chat.reasoningEffort, effective.reasoningEffort);
+      },
+    );
   }
 
   for (final repeatedGuard in [false, true]) {
@@ -668,19 +753,20 @@ void main() {
       expect(controller.current!.chat!.model, 'gpt-6-astra');
       await tester.tap(find.byTooltip('Switch model'));
       await tester.pumpAndSettle();
-      expect(host.writes, hasLength(3));
-      expect(host.writes[1], {
-        ...host.writes[0],
-        'confirm_expensive_model': true,
+      expect(host.writes, hasLength(2));
+      expect(host.writes.last['operation'], 'model');
+      expect(host.writes.last['payload'], {
+        ...host.writes.first['payload'] as Map,
+        'confirm': 'fixture-model-confirmation',
       });
-      expect(host.writes.last['key'], 'reasoning');
+      expect(host.writes.last['session_id'], host.writes.first['session_id']);
       expect(controller.current!.chat!.model, 'gpt-5.6-sol');
       expect(tester.takeException(), isNull);
     },
   );
 
   testWidgets(
-    'retrying a partial model save writes only the failed reasoning',
+    'retrying a rejected atomic model save preserves and reapplies both choices',
     (tester) async {
       host.failReasoning = true;
       tester.view.physicalSize = const Size(390, 844);
@@ -704,19 +790,17 @@ void main() {
       await tester.tap(find.byTooltip('Apply model settings'));
       await tester.pumpAndSettle();
 
-      expect(
-        find.textContaining('model changed, but reasoning'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Reasoning rejected'), findsOneWidget);
       expect(find.text('Models'), findsOneWidget);
-      expect(host.writes, hasLength(2));
-      expect(controller.current!.chat!.model, 'gpt-5.6-sol');
+      expect(host.writes, hasLength(1));
+      expect(controller.current!.chat!.model, 'gpt-6-astra');
       expect(controller.current!.chat!.reasoningEffort, 'high');
       host.failReasoning = false;
       await tester.tap(find.byTooltip('Apply model settings'));
       await tester.pumpAndSettle();
-      expect(host.writes, hasLength(3));
-      expect(host.writes.last['key'], 'reasoning');
+      expect(host.writes, hasLength(2));
+      expect(host.writes.last['operation'], 'model');
+      expect(host.writes.last['payload'], host.writes.first['payload']);
       expect(controller.current!.chat!.model, 'gpt-5.6-sol');
       expect(tester.takeException(), isNull);
     },
@@ -752,7 +836,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('5.6 Sol'), findsOneWidget);
       expect(controller.current!.chat!.reasoningEffort, 'xhigh');
-      expect(host.writes, hasLength(2));
+      expect(host.writes, hasLength(1));
       expect(tester.takeException(), isNull);
     },
   );
@@ -968,8 +1052,8 @@ void main() {
               expect(host.writes, isEmpty);
               await held.up();
               await tester.pumpAndSettle();
-              expect(host.writes.single['key'], 'reasoning');
-              expect(host.writes.single['value'], 'low');
+              expect(host.writes.single['operation'], 'reasoning');
+              expect(host.writes.single['payload'], {'effort': 'low'});
               expect(chat.reasoningEffort, 'low');
             case 'tap selection':
               await tester.tap(thinking);
@@ -978,8 +1062,8 @@ void main() {
                 find.byKey(const Key('composer-reasoning-choice-low')),
               );
               await tester.pumpAndSettle();
-              expect(host.writes.single['key'], 'reasoning');
-              expect(host.writes.single['value'], 'low');
+              expect(host.writes.single['operation'], 'reasoning');
+              expect(host.writes.single['payload'], {'effort': 'low'});
               expect(chat.reasoningEffort, 'low');
             case 'fast toggle':
               await tester.tap(lightning);

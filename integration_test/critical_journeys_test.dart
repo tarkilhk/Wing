@@ -132,6 +132,20 @@ void main() {
     );
     expect(queued('Do not send this twice').hitTestable(), findsOneWidget);
     expect(find.text('Queue paused'), findsOneWidget);
+    // The server accepted this input before the fixture lost its ACK. Capture
+    // that authority before destroying the phone owner, not after recovery.
+    expect(host.canonicalAdmissions, hasLength(1));
+    final accepted = Map<String, dynamic>.from(
+      host.canonicalAdmissions.values.single,
+    );
+    final originalPayload = Map<String, dynamic>.from(
+      host.calls.firstWhere((call) => call.$2 == 'prompt.submit').$3,
+    );
+    expect(accepted['input_id'], originalPayload['submission_id']);
+    expect(originalPayload['submission_id'], isA<String>());
+    expect(originalPayload['submission_id'], isNotEmpty);
+    expect(accepted['status'], 'started');
+    expect(originalPayload['text'], 'Do not send this twice');
     await tester.enterText(editor, 'My newer draft');
     await tester.pump();
     // Wait on durable storage rather than a fixed debounce duration.
@@ -142,10 +156,16 @@ void main() {
         DateTime.now().isBefore(deadline)) {
       await tester.pump(const Duration(milliseconds: 50));
     }
-    expect(
-      (await store.read(profileName: 'a', sessionId: 'same'))?.text,
-      'My newer draft',
-    );
+    final persisted = (await store.read(profileName: 'a', sessionId: 'same'))!;
+    expect(persisted.text, 'My newer draft');
+    expect(persisted.queuedPrompts, hasLength(1));
+    final outgoing = persisted.queuedPrompts.single;
+    expect(outgoing.submissionUncertain, isTrue);
+    expect(outgoing.submissionId, originalPayload['submission_id']);
+    expect(outgoing.submissionPayload, isNotNull);
+    // Profile scoping belongs to the gateway; the journal retains the exact
+    // submission body before that transport envelope is added.
+    expect({...outgoing.submissionPayload!, 'profile': 'a'}, originalPayload);
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
     controllers.remove(controller);
@@ -215,27 +235,40 @@ void main() {
     await until(
       () =>
           editor.hitTestable().evaluate().isNotEmpty &&
-          queued(
-            'Do not send this twice',
-          ).hitTestable().evaluate().isNotEmpty &&
-          find.text('Queue paused').hitTestable().evaluate().isNotEmpty,
-      'The restored draft and paused outgoing message must be visible',
+          restoredChat.composer.observation.displayedText == 'My newer draft' &&
+          restoredChat.composer.observation.queue.isEmpty &&
+          !restoredChat.composer.observation.saving &&
+          !restoredChat.composer.observation.draining,
+      'Receipt recovery must retire the uncertain copy and preserve the newer draft',
       failureDetails: restorationDetails,
     );
     expect(tester.widget<TextField>(editor).controller!.text, 'My newer draft');
-    expect(queued('Do not send this twice').hitTestable(), findsOneWidget);
-    expect(find.text('Queue paused'), findsOneWidget);
-    expect(
-      restoredChat.composer.observation.queue.single.submissionUncertain,
-      isTrue,
-    );
-    expect(
-      host.calls.where((call) => call.$2 == 'prompt.submit'),
-      hasLength(1),
-    );
+    expect(queued('Do not send this twice'), findsNothing);
+    expect(find.text('Queue paused'), findsNothing);
+    // Accepted, already-started work belongs to Hermes. Keeping a paused local
+    // copy here would falsely offer a second submission after successful recovery.
+    final cleanupDeadline = DateTime.now().add(const Duration(seconds: 10));
+    var recovered = await store.read(profileName: 'a', sessionId: 'same');
+    while ((recovered == null || recovered.queuedPrompts.isNotEmpty) &&
+        DateTime.now().isBefore(cleanupDeadline)) {
+      await tester.pump(const Duration(milliseconds: 50));
+      recovered = await store.read(profileName: 'a', sessionId: 'same');
+    }
+    expect(recovered, isNotNull);
+    expect(recovered!.text, 'My newer draft');
+    expect(recovered.queuedPrompts, isEmpty);
+    expect(recovered.submissionUncertain, isFalse);
+    final submissions = host.calls
+        .where((call) => call.$2 == 'prompt.submit')
+        .toList();
+    expect(submissions.length, greaterThanOrEqualTo(2));
+    expect(submissions.map((call) => call.$3), everyElement(originalPayload));
+    expect(host.canonicalAdmissions, hasLength(1));
+    expect(host.canonicalAdmissions.values.single, accepted);
+    expect(host.canonicalPayloads.values.single, originalPayload);
 
-    // Leaving and returning through the actual browser must preserve both pieces
-    // of work, and must never turn an uncertain submission into an automatic retry.
+    // Reopening through the browser preserves the newer draft without reviving
+    // a local copy of the remotely accepted input.
     final browserRow = find.byKey(const ValueKey('chat-a-same'));
     await tester.binding.handlePopRoute();
     await until(
@@ -248,18 +281,21 @@ void main() {
     await until(
       () =>
           editor.hitTestable().evaluate().isNotEmpty &&
-          queued(
-            'Do not send this twice',
-          ).hitTestable().evaluate().isNotEmpty &&
-          find.text('Queue paused').hitTestable().evaluate().isNotEmpty,
-      'Reopening the chat must show both the draft and paused outgoing message',
+          restoredChat.composer.observation.displayedText == 'My newer draft' &&
+          restoredChat.composer.observation.queue.isEmpty,
+      'Reopening must preserve the draft without reviving accepted outgoing work',
       failureDetails: restorationDetails,
     );
     expect(tester.widget<TextField>(editor).controller!.text, 'My newer draft');
-    expect(queued('Do not send this twice').hitTestable(), findsOneWidget);
+    expect(queued('Do not send this twice'), findsNothing);
+    expect(find.text('Queue paused'), findsNothing);
     expect(
-      host.calls.where((call) => call.$2 == 'prompt.submit'),
-      hasLength(1),
+      host.calls
+          .where((call) => call.$2 == 'prompt.submit')
+          .map((call) => call.$3),
+      everyElement(originalPayload),
     );
+    expect(host.canonicalAdmissions, hasLength(1));
+    expect(host.canonicalAdmissions.values.single, accepted);
   });
 }

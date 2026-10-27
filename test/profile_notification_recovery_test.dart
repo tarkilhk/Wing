@@ -123,53 +123,54 @@ void main() {
     appPreferences.dispose();
   });
 
-  testWidgets(
-    'notification opens a stock lazy runtime without a profile echo',
-    (tester) async {
-      // Stock _fallback_session_info before the resumed agent is initialized.
-      host.resumeInfo = {
-        'cwd': '/workspace',
-        'branch': '',
-        'project': null,
-        'lazy': true,
-        'model': 'test-model',
-        'skills': <String, dynamic>{},
-        'tools': <String, dynamic>{},
-        'desktop_contract': 8,
-      };
-      await controller.openNotification(chat.key);
-      await tester.pumpWidget(
-        MaterialApp(
-          home: ProfileWorkspaceScreen(
-            createBotsSession: () => BotsSession((_) async => const []),
-            controller: controller,
-          ),
-        ),
-      );
-      await tester.pump();
-
-      expect(chat.runtime.openingError, isNull);
-      expect(chat.runtime.opening, isFalse);
-      expect(controller.notificationChat, isNull);
-      expect(controller.current!.chat, same(chat));
-      expect(chat.composer.observation.text, 'My unsent follow-up');
-      expect(retry, findsNothing);
-      expect(
-        host.calls
-            .where((call) => call.$2 == 'session.resume')
-            .single
-            .$3['profile'],
-        chat.key.workspace.profileName,
-      );
-      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
-      await tester.pumpWidget(const SizedBox.shrink());
+  // Canonical local snapshots echo their profile even before agent creation;
+  // non-local snapshots may carry only the protocol identity.
+  for (final info in [
+    {'desktop_protocol': 'hermes-gateway-v1'},
+    {
+      'desktop_protocol': 'hermes-gateway-v1',
+      'profile_name': 'a',
+      'lazy': true,
     },
-  );
+  ]) {
+    testWidgets(
+      'notification opens the canonical ${info.containsKey('profile_name') ? 'local lazy' : 'minimal non-local'} snapshot',
+      (tester) async {
+        host.resumeInfo = info;
+        await controller.openNotification(chat.key);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: ProfileWorkspaceScreen(
+              createBotsSession: () => BotsSession((_) async => const []),
+              controller: controller,
+            ),
+          ),
+        );
+        await tester.pump();
+
+        expect(chat.runtime.openingError, isNull);
+        expect(chat.runtime.opening, isFalse);
+        expect(controller.notificationChat, isNull);
+        expect(controller.current!.chat, same(chat));
+        expect(chat.composer.observation.text, 'My unsent follow-up');
+        expect(retry, findsNothing);
+        expect(
+          host.calls
+              .where((call) => call.$2 == 'session.resume')
+              .single
+              .$3['profile'],
+          chat.key.workspace.profileName,
+        );
+        expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
 
   for (final info in [
     {'lazy': true, 'profile_name': 'another-profile'},
     {'lazy': true, 'profile_name': null},
-    {'lazy': false},
+    {'profile_name': 17},
   ]) {
     test(
       'rejects invalid or conflicting session owner metadata: $info',
@@ -375,7 +376,13 @@ void main() {
           .where((call) => call.$2 == 'prompt.submit')
           .single;
       expect(submitted.$3['text'], 'My unsent follow-up');
-      expect(submitted.$3['queued'], isTrue);
+      final inputId = submitted.$3['submission_id'];
+      expect(inputId, isA<String>());
+      expect(inputId, isNotEmpty);
+      expect(host.canonicalAdmissions, hasLength(1));
+      final receipt = host.canonicalAdmissions.values.single;
+      expect(receipt['input_id'], inputId);
+      expect((receipt['ref'] as Map)['session_id'], chat.runtime.runtimeId);
       expect(chat.composer.observation.queue, isEmpty);
       await tester.pumpWidget(const SizedBox.shrink());
     },

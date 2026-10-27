@@ -29,11 +29,17 @@ void main() {
       'content': 'review:Memory updated',
       '_review_notice': 'runtime:12',
       'timestamp': 101.25,
-      'pending_approval': {'command': 'never restore'},
+      'prompts': [
+        {
+          'kind': 'approval',
+          'prompt_id': 'never-restore',
+          'execution_generation': 0,
+        },
+      ],
     });
     expect(saved['_review_notice'], 'runtime:12');
     expect(saved['timestamp'], 101.25);
-    expect(saved.containsKey('pending_approval'), isFalse);
+    expect(saved.containsKey('prompts'), isFalse);
   });
 
   test('a user message cannot claim a trusted review receipt', () {
@@ -245,13 +251,19 @@ void main() {
         'content': 'Internal context',
         ...marker,
         'session_id': 'live-runtime',
-        'pending_approval': {'request_id': 'not-reading'},
+        'prompts': [
+          {
+            'kind': 'approval',
+            'prompt_id': 'not-reading',
+            'execution_generation': 0,
+          },
+        ],
         'metadata': {'unrelated': 'excluded'},
       });
       expect(isHiddenAnswerMessage(saved), isTrue);
       expect(answerMessageId(saved), 3);
       expect(saved.keys, isNot(contains('session_id')));
-      expect(saved.keys, isNot(contains('pending_approval')));
+      expect(saved.keys, isNot(contains('prompts')));
       expect(saved.keys, isNot(contains('metadata')));
     }
   });

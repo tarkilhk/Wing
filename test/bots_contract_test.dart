@@ -818,7 +818,12 @@ void main() {
     Future<void> Function(BotGroup, BotGroupSendOutcome)? afterSend,
   }) async {
     final fixture = BotsFixture();
-    fixture.pending.add({'kind': 'retry', 'task_id': 'paused-task'});
+    fixture.pending.add({
+      'kind': 'retry',
+      'task_id': 'paused-task',
+      'member_id': 'atlas',
+      'execution_generation': 4,
+    });
     final group = (await readFixtureGroups(
       fixture.repository,
       groupMessages: null,
@@ -999,239 +1004,77 @@ void main() {
   );
 
   test(
-    'continue group work waits for Stop and excludes duplicate taps',
-    () async {
-      final preparations = <String>[];
-      final outcomes = <BotGroupSendOutcome>[];
-      final (fixture, session) = await pausedGroup(
-        beforeSend: (_, eventId) async {
-          preparations.add(eventId);
-        },
-        afterSend: (_, outcome) async {
-          outcomes.add(outcome);
-        },
-      );
-      final stopped = Completer<void>(), started = Completer<void>();
-      fixture.commandHook = (_, method, _) async {
-        if (method != 'groups.stop') return null;
-        started.complete();
-        await stopped.future;
-        fixture.pending.clear();
-        return {'cancelled': 1};
-      };
-      final action = session.runtime!.actions.single;
-      final continuing = session.resolve(action);
-      await Future<void>.delayed(Duration.zero);
-      expect(fixture.commands.first.$2, 'groups.stop');
-      await started.future;
-      await session.resolve(action);
-      expect(await session.send('A concurrent message'), isFalse);
-      expect(fixture.commands.map((c) => c.$2), ['groups.stop']);
-      expect(session.acting, isTrue);
-      stopped.complete();
-      await continuing;
-      await session.refresh();
-      expect(fixture.commands.map((c) => c.$2), ['groups.stop', 'groups.send']);
-      expect(fixture.commands.last.$3['payload'], {
-        'text':
-            'Continue the unfinished work from where you left off. Check the conversation and current results first, and avoid repeating completed work.',
-        'thread_id': session.group.id,
-      });
-      expect(session.runtime!.actions, isEmpty);
-      expect(session.acting, isFalse);
-      expect(session.error, isNull);
-      expect(preparations, [fixture.commands.last.$3['event_id']]);
-      expect(outcomes.single.eventId, preparations.single);
-      expect(outcomes.single.dispatched, isTrue);
-      expect(outcomes.single.sequence, 1);
-    },
-  );
-
-  for (final failure in ['lost', 'invalid']) {
-    test(
-      'continue group work never sends after $failure Stop confirmation',
-      () async {
-        final (fixture, session) = await pausedGroup();
-        var fails = true;
-        fixture.commandHook = (_, method, _) async {
-          if (method != 'groups.stop') return null;
-          if (fails) {
-            if (failure == 'lost') {
-              throw StateError('Stop acknowledgement lost');
-            }
-            return {'cancelled': 'invalid'};
-          }
-          fixture.pending.clear();
-          return {'cancelled': 1};
-        };
-        final action = session.runtime!.actions.single;
-        await session.resolve(action);
-        expect(fixture.commands.map((c) => c.$2), ['groups.stop']);
-        expect(session.error, contains('Stop could not be confirmed'));
-        expect(session.runtime!.actions.single.key, action.key);
-        fails = false;
-        await session.resolve(action);
-        expect(fixture.commands.map((c) => c.$2), [
-          'groups.stop',
-          'groups.stop',
-          'groups.send',
-        ]);
-        expect(
-          fixture.commands[0].$3['cancel_id'],
-          fixture.commands[1].$3['cancel_id'],
-        );
-      },
-    );
-  }
-
-  test(
-    'continue group work keeps an unconfirmed send across refresh without another Stop',
+    'group retry dispatches exact attempt once without Stop or synthetic input',
     () async {
       final (fixture, session) = await pausedGroup();
-      fixture.sendLost = true;
-      fixture.commandHook = (_, method, _) async {
-        if (method != 'groups.stop') return null;
-        fixture.pending.clear();
-        return {'cancelled': 1};
-      };
-      final mention = session
-          .completeMentions(MentionQuery.at('@atl', 4)!)
-          .items
-          .single
-          .reference;
-      session.editMentions('Ask @Atlas next', selected: mention);
-      final references = List.of(session.composerReferences);
+      final gate = Completer<void>();
+      fixture.beforeCommand = () => gate.future;
       final action = session.runtime!.actions.single;
+      final retry = session.resolve(action);
+      expect(session.acting, true);
       await session.resolve(action);
-      await session.refresh();
-      expect(session.runtime!.actions.single.key, action.key);
-      expect(session.error, contains('Continue'));
-      expect(await session.send('Ask @Atlas next'), isFalse);
-      await session.resolve(action);
-      await session.refresh();
-      expect(fixture.commands.map((c) => c.$2), [
-        'groups.stop',
-        'groups.send',
-        'groups.send',
-      ]);
-      expect(fixture.commands[1].$3, fixture.commands[2].$3);
-      expect(fixture.events, hasLength(1));
-      expect(session.composerReferences, references);
-      expect(session.pendingText, isNull);
-      expect(session.runtime!.actions, isEmpty);
-    },
-  );
-
-  test(
-    'continue group work preserves a prior unconfirmed user message',
-    () async {
-      final (fixture, session) = await pausedGroup();
-      fixture.sendLost = true;
-      expect(await session.send('My own message'), isFalse);
-      await session.resolve(session.runtime!.actions.single);
-      expect(fixture.commands.map((c) => c.$2), ['groups.send']);
-      expect(session.pendingText, 'My own message');
-      expect(session.error, contains('Confirm your message'));
-    },
-  );
-
-  for (final phase in ['stop', 'prepare']) {
-    test('continue group work retires during $phase without sending', () async {
-      final gate = Completer<void>(), started = Completer<void>();
-      final outcomes = <BotGroupSendOutcome>[];
-      final (fixture, session) = await pausedGroup(
-        retireInTest: true,
-        beforeSend: phase == 'prepare'
-            ? (_, _) async {
-                started.complete();
-                await gate.future;
-              }
-            : null,
-        afterSend: (_, outcome) async {
-          outcomes.add(outcome);
-        },
-      );
-      fixture.commandHook = (_, method, _) async {
-        if (method != 'groups.stop') return null;
-        if (phase == 'stop') {
-          started.complete();
-          await gate.future;
-        }
-        fixture.pending.clear();
-        return {'cancelled': 1};
-      };
-      final continuing = session.resolve(session.runtime!.actions.single);
-      await started.future;
-      session.dispose();
+      expect(await session.send('Concurrent'), false);
       gate.complete();
-      await continuing;
-      expect(fixture.commands.map((c) => c.$2), ['groups.stop']);
-      if (phase == 'prepare') expect(outcomes.single.dispatched, isFalse);
-    });
-  }
-
-  test(
-    'continue group work rejects stale state after a confirmed continuation',
-    () async {
-      final (fixture, session) = await pausedGroup();
-      final action = session.runtime!.actions.single;
-      final gate = Completer<void>(), started = Completer<void>();
-      var hold = true;
-      fixture.readHook = (_, method, _) async {
-        if (method != 'groups.state' || !hold) return null;
-        final stale = {
-          'room': Map<String, dynamic>.from(fixture.room),
-          'driver_status': {
-            'working': false,
-            'blocked': true,
-            'pending_actions': [
-              Map<String, dynamic>.from(fixture.pending.single),
-            ],
-          },
-        };
-        started.complete();
-        await gate.future;
-        return stale;
-      };
-      final reading = session.refresh();
-      await started.future;
-      await session.resolve(action);
-      expect(session.runtime!.actions, isEmpty);
-      await session.resolve(action);
-      expect(fixture.commands.map((c) => c.$2), ['groups.stop', 'groups.send']);
-      hold = false;
-      gate.complete();
-      await reading;
+      await retry;
       await session.refresh();
-      expect(session.runtime!.actions, isEmpty);
-      await session.resolve(action);
-      expect(fixture.commands.map((c) => c.$2), ['groups.stop', 'groups.send']);
-    },
-  );
-
-  test(
-    'continue group work leaves explicit approval decisions unchanged',
-    () async {
-      final (fixture, session) = await pausedGroup();
-      fixture.pending.clear();
-      fixture.pending.add({
-        'kind': 'approval',
-        'task_id': 'approval-task',
+      expect(fixture.commands.map((call) => call.$2), ['groups.retry']);
+      expect(fixture.commands.single.$3, {
+        'room_id': session.group.id,
+        'task_id': 'paused-task',
         'member_id': 'atlas',
-        'request_id': 'req-1',
-        'execution_generation': 3,
-        'approval': {
-          'command': 'test',
-          'description': 'Approve command',
-          'choices': ['once', 'deny'],
-        },
+        'execution_generation': 4,
       });
-      await session.refresh();
-      await session.resolve(session.runtime!.actions.single, choice: 'once');
-      expect(fixture.commands.map((c) => c.$2), ['groups.approve']);
-      expect(fixture.commands.single.$3['choice'], 'once');
+      expect(fixture.events, isEmpty);
+      expect(session.runtime!.actions, isEmpty);
+      expect(session.acting, false);
     },
   );
+
+  test(
+    'group retry rejects stale generations and preserves its draft',
+    () async {
+      final (fixture, session) = await pausedGroup();
+      final original = session.runtime!.actions.single;
+      await session.editMentions('Keep my draft');
+      fixture.pending.single['execution_generation'] = 5;
+      await session.refresh();
+      await session.resolve(original);
+      expect(fixture.commands, isEmpty);
+      await session.resolve(session.runtime!.actions.single);
+      expect(fixture.commands.single.$3['execution_generation'], 5);
+      expect(session.draftText, 'Keep my draft');
+      expect(fixture.events, isEmpty);
+    },
+  );
+
+  test(
+    'unconfirmed retry shows recovery without guessing a continuation',
+    () async {
+      final (fixture, session) = await pausedGroup();
+      fixture.commandHook = (_, method, _) async => method == 'groups.retry'
+          ? {
+              'retried': true,
+              'task': {'room_id': 'other', 'task_id': 'paused-task'},
+            }
+          : null;
+      await session.resolve(session.runtime!.actions.single);
+      expect(session.error, contains('Retry could not be confirmed'));
+      expect(fixture.commands.map((call) => call.$2), ['groups.retry']);
+      expect(session.acting, false);
+      expect(fixture.events, isEmpty);
+    },
+  );
+
+  test('group retry retires before dispatch when its owner closes', () async {
+    final (fixture, session) = await pausedGroup(retireInTest: true);
+    final gate = Completer<void>();
+    fixture.beforeCommand = () => gate.future;
+    final retry = session.resolve(session.runtime!.actions.single);
+    session.dispose();
+    gate.complete();
+    await retry;
+    expect(fixture.commands, isEmpty);
+  });
 
   test(
     'presence validation distinguishes successful uncertainty from failed reads',
@@ -1343,6 +1186,10 @@ void main() {
         latestSequence: 20,
         runtimeAvailable: true,
         working: true,
+        memberActivity: const [
+          BotGroupMemberActivity(memberId: 'atlas', status: 'running'),
+          BotGroupMemberActivity(memberId: 'mira', status: 'queued'),
+        ],
       );
       final updated = state.applyTo(room);
       expect(updated.latestSequence, 20);
@@ -1896,6 +1743,10 @@ void main() {
                 'working': true,
                 'blocked': false,
                 'counts': {'running': 1},
+                'member_activity': [
+                  {'member_id': 'atlas', 'status': 'running'},
+                  {'member_id': 'mira', 'status': 'queued'},
+                ],
                 'pending_actions': [],
               },
             }
@@ -1940,6 +1791,10 @@ void main() {
               'working': true,
               'blocked': false,
               'counts': {'running': 1},
+              'member_activity': [
+                {'member_id': 'atlas', 'status': 'running'},
+                {'member_id': 'mira', 'status': 'queued'},
+              ],
               'pending_actions': [],
             },
           };
@@ -1984,6 +1839,10 @@ void main() {
           'working': true,
           'blocked': false,
           'counts': {'running': 1},
+          'member_activity': [
+            {'member_id': 'atlas', 'status': 'running'},
+            {'member_id': 'mira', 'status': 'queued'},
+          ],
           'pending_actions': [],
         },
       },
@@ -2028,6 +1887,10 @@ void main() {
             'working': true,
             'blocked': false,
             'counts': {'running': 1},
+            'member_activity': [
+              {'member_id': 'atlas', 'status': 'running'},
+              {'member_id': 'mira', 'status': 'queued'},
+            ],
             'pending_actions': [],
           },
         },
@@ -2061,6 +1924,10 @@ void main() {
           'working': true,
           'blocked': false,
           'counts': {'running': 1},
+          'member_activity': [
+            {'member_id': 'atlas', 'status': 'running'},
+            {'member_id': 'mira', 'status': 'queued'},
+          ],
           'pending_actions': [],
         },
       },
@@ -3458,16 +3325,16 @@ void main() {
       final bot = (await fixture.repository.bots()).first;
       final key = await fixture.repository.openChat(bot, () => true, () {});
       expect(key.chat!.workspace, bot.scope);
-      expect(key.chat!.sessionId, 'new-root-1');
-      expect(fixture.commands.first.$2, 'session.create');
-      expect(fixture.commands.first.$3['hidden'], true);
-      expect(fixture.commands.first.$3['follow_profile_config'], true);
-      expect(fixture.commands.last.$3, {
-        'session_id': 'new-runtime-1',
+      expect(key.chat!.sessionId, 'new-bot-chat-1');
+      expect(fixture.commands.single.$2, 'session.create');
+      expect(fixture.commands.single.$3, {
         'title': 'Bot Chat',
+        'hidden': true,
+        'follow_profile_config': true,
+        'source': 'gui',
       });
       await fixture.repository.openChat(bot, () => true, () {});
-      expect(fixture.commands.length, 2);
+      expect(fixture.commands, hasLength(1));
     },
   );
   test(
@@ -3476,12 +3343,15 @@ void main() {
       final fixture = BotsFixture();
       fixture.profiles.first['canonical_session'] = null;
       fixture.commandHook = (_, method, _) async {
-        if (method == 'session.title') {
+        if (method == 'session.create') {
           fixture.profiles.first['canonical_session'] = {
             'id': 'desktop-winner',
             'preview': 'Desktop message',
           };
-          throw StateError('Unique title');
+          return {
+            'session_id': 'desktop-winner',
+            'stored_session_id': 'desktop-winner',
+          };
         }
         return null;
       };
@@ -3493,6 +3363,29 @@ void main() {
       expect(key.chat!.sessionId, 'desktop-winner');
       expect(fixture.commands.where((c) => c.$2 == 'session.create').length, 1);
       expect(fixture.commands.any((c) => c.$2 == 'prompt.submit'), false);
+    },
+  );
+  test(
+    'a lost titled-create acknowledgement recovers without resubmission',
+    () async {
+      final fixture = BotsFixture();
+      fixture.profiles.first['canonical_session'] = null;
+      fixture.commandHook = (_, method, _) async {
+        if (method == 'session.create') {
+          fixture.profiles.first['canonical_session'] = {
+            'id': 'accepted-bot-chat',
+            'resolved_id': 'accepted-bot-chat',
+            'preview': '',
+          };
+          throw StateError('Connection closed after creation');
+        }
+        return null;
+      };
+      final bot = (await fixture.repository.bots()).first;
+      final opened = await fixture.repository.openChat(bot, () => true, () {});
+      expect(opened.chat!.sessionId, 'accepted-bot-chat');
+      await fixture.repository.openChat(bot, () => true, () {});
+      expect(fixture.commands.single.$2, 'session.create');
     },
   );
   test(

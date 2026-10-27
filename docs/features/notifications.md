@@ -7,7 +7,7 @@ Feature ID: `notifications`.
 ## Sub-features
 
 - `notifications.route` — Open the exact notification owner.
-- `notifications.act` — Answer a supported request without duplication. Command review uses the same exact-command and request-details content as normal, bot and group chats, while keeping the selected notification approval scope explicit.
+- `notifications.act` — Answer a supported request without duplication, retaining its exact request and turn identity. Command review uses the same exact-command and request-details content as normal, bot and group chats, while keeping the selected notification approval scope explicit.
 - `notifications.settle` — Keep read dismissed and restored notices consistent.
 
 ## How to get to it (user POV)
@@ -21,7 +21,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
-  flutter test --no-pub test/notification_answer_visibility_test.dart test/group_notification_session_test.dart test/profile_notification_coverage_test.dart test/app_notification_routing_test.dart test/notification_approval_review_test.dart
+  flutter test --no-pub test/notification_answer_visibility_test.dart test/group_notification_session_test.dart test/profile_notification_coverage_test.dart test/app_notification_routing_test.dart test/notification_approval_review_test.dart test/native_prompt_controller_test.dart
   ```
 
   The queued native cold-tap case includes the notification device fixture's

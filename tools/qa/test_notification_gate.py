@@ -211,7 +211,7 @@ class ColdActionReceiptTest(unittest.TestCase):
                 if reads == 1:
                     raise subprocess.CalledProcessError(1, 'cat')
                 return ('<map><string name="flutter.notification_qa_decisions">'
-                        '[{"params":{"request_id":"cold-request"}}]'
+                        '[{"params":{"prompt_id":"cold-request","execution_generation":0}}]'
                         '</string></map>')
             return ''
 
@@ -449,7 +449,7 @@ class GroupApprovalControlsTest(unittest.TestCase):
 
 class ColdActionPreferenceReadTest(unittest.TestCase):
     def test_cold_action_verdict_uses_the_receipt_returned_by_its_poll(self):
-        receipt = [{'params': {'request_id': 'captured-request'}}]
+        receipt = [{'params': {'prompt_id': 'captured-request', 'execution_generation': 0}}]
         with patch.object(driver, 'state', return_value={
                 'decisions': [], 'pending': [{'request_id': 'captured-request'}],
         }), patch.object(driver, 'adb', side_effect=lambda *args:
@@ -463,7 +463,7 @@ class ColdActionPreferenceReadTest(unittest.TestCase):
         self.assertEqual(observations.call_count, 1)
 
     def test_atomic_replacement_retries_empty_and_partial_xml_until_exact_receipt(self):
-        receipt = [{'params': {'request_id': 'captured-request'}}]
+        receipt = [{'params': {'prompt_id': 'captured-request', 'execution_generation': 0}}]
         complete = ET.Element('map')
         ET.SubElement(complete, 'string', {
             'name': 'flutter.notification_qa_decisions',

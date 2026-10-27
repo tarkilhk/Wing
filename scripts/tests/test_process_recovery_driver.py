@@ -1,4 +1,4 @@
-"""Reject partial, stale and replaying Android process-recovery evidence."""
+"""Reject partial, stale and identity-changing Android process-recovery evidence."""
 import unittest
 
 from scripts.test_native_process_recovery import validate_checkpoints
@@ -6,13 +6,21 @@ from scripts.test_native_process_recovery import validate_checkpoints
 
 class ProcessRecoveryCompletion(unittest.TestCase):
     def records(self):
+        identity = {
+            'submission_id': 'input-1', 'admission_id': 'accepted-1',
+            'server_admission_count': 1,
+            'wire_payload': {'submission_id': 'input-1', 'session_id': 'chat',
+                             'profile': 'a', 'text': 'Exact original input'},
+        }
         return [
-            {'phase': 'ready_for_stop', 'run_id': 'owned', 'pid': 100, 'submissions': 1, 'uploads': 1},
-            {'phase': 'restored', 'run_id': 'owned', 'pid': 200, 'submissions': 0, 'uploads': 0,
-             'draft_restored': True, 'attachment_restored': True, 'outbox_paused': True},
+            {**identity, 'phase': 'ready_for_stop', 'run_id': 'owned', 'pid': 100,
+             'submissions': 1, 'uploads': 1},
+            {**identity, 'phase': 'restored', 'run_id': 'owned', 'pid': 200,
+             'submissions': 1, 'uploads': 0, 'draft_restored': True,
+             'attachment_restored': True, 'outbox_paused': True, 'receipt_reconciled': True},
         ]
 
-    def test_two_distinct_processes_restore_all_work_without_replay(self):
+    def test_two_distinct_processes_recover_exact_receipt_without_new_admission(self):
         validate_checkpoints(self.records(), 'owned')
 
     def test_partial_or_duplicate_phases_fail(self):
@@ -64,15 +72,34 @@ class ProcessRecoveryCompletion(unittest.TestCase):
     def test_duplicate_submit_or_upload_fails(self):
         for field in ('submissions', 'uploads'):
             records = self.records()
-            records[1][field] = 1
+            records[1][field] = 2 if field == 'submissions' else 1
             with self.subTest(field=field), self.assertRaises(ValueError):
                 validate_checkpoints(records, 'owned')
 
     def test_each_missing_user_work_observation_fails(self):
-        for field in ('draft_restored', 'attachment_restored', 'outbox_paused'):
+        for field in ('draft_restored', 'attachment_restored', 'outbox_paused', 'receipt_reconciled'):
             records = self.records()
             del records[1][field]
             with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_checkpoints(records, 'owned')
+
+    def test_changed_identity_payload_or_duplicate_admission_fails(self):
+        for key, value in (
+            ('submission_id', 'different-input'), ('admission_id', 'different-admission'),
+            ('server_admission_count', 2),
+            ('wire_payload', {'submission_id': 'input-1', 'session_id': 'chat',
+                              'profile': 'b', 'text': 'Exact original input'}),
+        ):
+            records = self.records()
+            records[1][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                validate_checkpoints(records, 'owned')
+
+    def test_missing_wire_proof_fails(self):
+        for key in ('submission_id', 'admission_id', 'wire_payload', 'server_admission_count'):
+            records = self.records()
+            del records[1][key]
+            with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_checkpoints(records, 'owned')
 
 

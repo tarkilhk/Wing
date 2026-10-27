@@ -51,15 +51,18 @@ DIRECT_SUITES = {
         'Android editors: keyboard, conflict, accessibility action and discard',
         'Android full-screen Identity retains long draft on back',
         'Android provider ownership and separate capability actions at large text',
+        'Connected apps retain named-account drafts through held failure and retry',
+        'Subagent route and prepared compression save through production controls',
+        'Conversation connection requests retain owner through pending failure and retry',
     }),
     'queued_message_edit_test.dart': frozenset({
         'long press opens the native keyboard; Queue restores text and files',
         'Cancel restores the draft and discards only the queue edit',
         'red cross asks before deleting just the selected instruction',
         'Steer waits for acknowledgement, sends once and restores the draft',
-        'rejected and failed steering preserve the edit for recovery',
-        'turn completion holds the edit then sends the saved version once',
-        'queued attachments survive editing at large text with the keyboard',
+        'rejected and failed canonical steering preserve the admitted instruction',
+        'server claim retires an outdated edit without resubmission',
+        'unaccepted attachment draft survives editing at large text with the keyboard',
     }),
 }
 
@@ -303,7 +306,10 @@ class Runner:
                       'administration': 'administration_native_test.dart'}
             if family in direct:
                 target = direct[family]
-                self.flutter(target, DIRECT_SUITES[target])
+                if family == 'administration':
+                    self.administration()
+                else:
+                    self.flutter(target, DIRECT_SUITES[target])
             elif family in ('health-entry', 'transcript-expansion'):
                 # These entrypoints reuse complete host suites; all registered
                 # cases must finish, with no errors, skips or empty verdict.
@@ -362,6 +368,45 @@ class Runner:
         if not isinstance(stage, dict):
             raise ValueError('Native checkpoint must be a JSON object')
         return stage
+
+    def administration(self):
+        seen = set()
+        captures = set()
+        expected = {
+            f'{surface}-{theme}-{scale}{state}'
+            for theme in ('dark', 'light') for scale in ('1.0', '2.0')
+            for surface, states in (
+                ('hosted-account', ('-keyboard', '-pending', '-failed')),
+                ('delegation', ('-keyboard', '-pending')),
+                ('prepared-compression', ('',)),
+                ('connection-request', ('-request', '-pending', '-failed')),
+            ) for state in states
+        }
+
+        def checkpoint():
+            stage = self.read_checkpoint(DEV, 'code_cache/wing-administration-stage.json')
+            if stage is None or stage['token'] in seen:
+                return
+            token, name = stage['token'], stage['name']
+            if name not in expected:
+                raise ValueError('Unknown administration checkpoint: ' + name)
+            keyboard = self.shell('dumpsys', 'input_method')
+            (self.output / (name + '-input-method.txt')).write_text(keyboard)
+            if stage.get('keyboard') is True and not input_view_visible(keyboard):
+                raise RuntimeError('Administration checkpoint requires a visible keyboard: ' + name)
+            with (self.output / (name + '.png')).open('wb') as capture:
+                subprocess.run([android.adb_path(), '-s', self.device, 'exec-out',
+                                'screencap', '-p'], stdout=capture, check=True, timeout=25)
+            subprocess.run([android.adb_path(), '-s', self.device, 'shell', 'run-as', DEV,
+                            'sh', '-c', '"cat > code_cache/wing-administration-ack"'],
+                           input=token, text=True, check=True, timeout=25)
+            seen.add(token)
+            captures.add(name)
+
+        self.flutter('administration_native_test.dart', DIRECT_SUITES['administration_native_test.dart'],
+                     defines=('--dart-define=ADMINISTRATION_NATIVE_CAPTURE=true',), checkpoint=checkpoint)
+        if captures != expected:
+            raise RuntimeError('Missing administration captures: ' + ', '.join(sorted(expected - captures)))
 
     def slash(self):
         seen = set()

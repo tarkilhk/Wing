@@ -1,4 +1,9 @@
 import 'dart:async';
+import '../models/attachment_draft.dart';
+import '../models/composer_work.dart';
+import 'attachment_draft_service.dart';
+import 'android_share_intent_service.dart';
+import 'remote_files_client.dart';
 import '../models/transcript_position.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
@@ -46,7 +51,9 @@ class BotGroupSession extends ChangeNotifier {
     this.onRead,
     this.beforeSend,
     this.afterSend,
-  }) : _group = group {
+    AttachmentDraftService? attachmentService,
+  }) : _group = group,
+       _attachmentService = attachmentService ?? AttachmentDraftService() {
     repository.retain();
     _appearance = appearances.appearanceForGroup(group);
     appearances.addListener(_appearanceChanged);
@@ -62,6 +69,15 @@ class BotGroupSession extends ChangeNotifier {
       if (saved != null) {
         _draft = saved.text;
         _references = retainComposerReferences(_draft, saved.references);
+        _attachments = List.of(saved.attachments);
+        if (saved.pendingEventId case final eventId?) {
+          if (saved.pendingWireText == null || saved.pendingText == null) {
+            throw const FormatException('Incomplete pending group message');
+          }
+          _pending = (eventId, saved.pendingText!);
+          _pendingWireText = saved.pendingWireText;
+          _pendingAttachments = List.unmodifiable(_attachments);
+        }
       }
     } catch (_) {
       _draftError = 'The saved group draft could not be read on this device.';
@@ -228,13 +244,192 @@ class BotGroupSession extends ChangeNotifier {
     return _saveDraft();
   }
 
+  final AttachmentDraftService _attachmentService;
+  List<BotGroupAttachment> _attachments = [];
+  List<BotGroupAttachment> get attachments => List.unmodifiable(_attachments);
+  final Map<String, AttachmentDraft> _attachmentPreviews = {};
+  ComposerAttachmentPreparation? _attachmentPreparation;
+  ComposerAttachmentPreparation? get attachmentPreparation =>
+      _attachmentPreparation;
+  bool get canAddAttachments =>
+      !_closed &&
+      !_sending &&
+      !_acting &&
+      _pending == null &&
+      _attachmentPreparation == null;
+  AttachmentPreviewSource? attachmentPreview(BotGroupAttachment attachment) {
+    final draft = _attachmentPreviews[attachment.id];
+    return draft == null || !draft.isImage
+        ? null
+        : _attachmentService.previewSource(draft);
+  }
+
+  Future<bool> addAttachments(
+    List<AndroidSharedFile> files, {
+    bool atomic = false,
+  }) async {
+    if (!canAddAttachments) return false;
+    if (files.isEmpty) return true;
+    final originalIds = _attachments.map((item) => item.id).toSet();
+    var success = false;
+    _attachmentPreparation = ComposerAttachmentPreparation(
+      imageCount: files.where((file) => file.isImage).length,
+      fileCount: files.where((file) => !file.isImage).length,
+    );
+    _actionError = null;
+    notifyListeners();
+    repository.retain();
+    try {
+      for (final file in files) {
+        if (_closed) return false;
+        if (_attachments.length >= 8) {
+          throw const AttachmentDraftException(
+            'A group message can include up to 8 attachments.',
+          );
+        }
+        AttachmentDraft? draft;
+        var retained = false;
+        try {
+          draft = file.isImage
+              ? await _attachmentService.prepareImage(
+                  sourcePath: file.path,
+                  displayName: file.name,
+                  existingDrafts: const [],
+                )
+              : await _attachmentService.prepareGenericFile(
+                  sourcePath: file.path,
+                  displayName: file.name,
+                  mediaType: file.mediaType,
+                  existingDrafts: const [],
+                );
+          if (_closed) return false;
+          if (draft.byteLength > 15000000 ||
+              _attachments.fold<int>(0, (size, item) => size + item.size) +
+                      draft.byteLength >
+                  25000000) {
+            throw const AttachmentDraftException(
+              'Group attachments allow 15 MB per file and 25 MB per message.',
+            );
+          }
+          final data = await _attachmentService.readDataUrl(draft);
+          final attachment = await repository.uploadGroupAttachment(
+            group,
+            uploadId: const Uuid().v4(),
+            name: draft.name,
+            mime: draft.mediaType,
+            kind: draft.isImage
+                ? 'image'
+                : draft.mediaType == 'application/pdf'
+                ? 'pdf'
+                : 'file',
+            dataBase64: data.substring(data.indexOf(',') + 1),
+            canDispatch: () => !_closed,
+          );
+          if (_closed) return false;
+          _attachments.add(attachment);
+          _attachmentPreviews[attachment.id] = draft;
+          retained = true;
+          _draftRevision++;
+          if (!atomic && !await _saveDraft()) {
+            throw StateError('Draft persistence failed');
+          }
+          if (!_closed) notifyListeners();
+        } finally {
+          if (!retained && draft != null) {
+            await _attachmentService.removeCachedFile(draft);
+          }
+        }
+      }
+      success = true;
+    } catch (error) {
+      if (atomic && !_closed) {
+        final removed = _attachments
+            .where((item) => !originalIds.contains(item.id))
+            .toList();
+        _attachments.removeWhere((item) => !originalIds.contains(item.id));
+        for (final item in removed) {
+          final preview = _attachmentPreviews.remove(item.id);
+          if (preview != null) {
+            await _attachmentService.removeCachedFile(preview);
+          }
+        }
+        _draftRevision++;
+      }
+      if (!_closed) {
+        _actionError = error is AttachmentDraftException
+            ? error.message
+            : 'The attachment could not be added. Your draft is kept. Choose the file again.';
+      }
+    } finally {
+      repository.release();
+      if (!_closed) {
+        _attachmentPreparation = null;
+        notifyListeners();
+      }
+    }
+    return success;
+  }
+
+  AndroidSharePayload? _stagedShare;
+
+  /// The shared intake stays unacknowledged until its whole batch is durable.
+  Future<bool> stageSharedContent(AndroidSharePayload payload) async {
+    if (!canAddAttachments) return false;
+    final alreadyStaged =
+        identical(_stagedShare, payload) ||
+        (payload.id != null && _stagedShare?.id == payload.id);
+    if (alreadyStaged) return await _saveDraft() && !_closed;
+    if (!await addAttachments(payload.files, atomic: true) || _closed) {
+      return false;
+    }
+    _stagedShare = payload;
+    final text = payload.text;
+    if (text != null && text.isNotEmpty) {
+      _draft = _draft.isEmpty ? text : '$_draft\n$text';
+      _draftRevision++;
+      _references = retainComposerReferences(_draft, _references);
+    }
+    final saved = await _saveDraft();
+    if (!_closed) notifyListeners();
+    return saved && !_closed;
+  }
+
+  Future<void> removeAttachment(BotGroupAttachment attachment) async {
+    if (!canAddAttachments) return;
+    _attachments.removeWhere((item) => item.id == attachment.id);
+    final preview = _attachmentPreviews.remove(attachment.id);
+    _draftRevision++;
+    notifyListeners();
+    await _saveDraft();
+    if (preview != null) await _attachmentService.removeCachedFile(preview);
+  }
+
+  Future<RemoteFileDownload> downloadAttachment(String target) async {
+    if (_closed) throw StateError('The group was closed.');
+    for (final event in _events.values) {
+      for (final attachment in event.attachments) {
+        if (attachment.target(event.eventId) != target) continue;
+        final bytes = await repository.downloadGroupAttachment(
+          group,
+          event.eventId,
+          attachment,
+        );
+        if (_closed) throw StateError('The group was closed.');
+        return RemoteFileDownload(filename: attachment.name, bytes: bytes);
+      }
+    }
+    throw StateError(
+      'This attachment is not in the group history. Refresh the group.',
+    );
+  }
+
   String _draft = '';
   String get draftText => _draft;
   String? _draftError;
   int _draftRevision = 0;
   int _draftWriteRevision = 0;
 
-  Future<void> _saveDraft() async {
+  Future<bool> _saveDraft() async {
     final revision = _draftRevision;
     try {
       final saved = preferences.writeMessageDraft(
@@ -242,6 +437,10 @@ class BotGroupSession extends ChangeNotifier {
         group.id,
         _draft,
         _references,
+        attachments: _attachments,
+        pendingEventId: _pending?.$1,
+        pendingWireText: _pendingWireText,
+        pendingText: _pending?.$2,
       );
       _draftWriteRevision = preferences.messageDraftRevision(
         group.scope.connectionIdentity,
@@ -252,12 +451,14 @@ class BotGroupSession extends ChangeNotifier {
         _draftError = null;
         notifyListeners();
       }
+      return true;
     } catch (_) {
       if (!_closed && revision == _draftRevision) {
         _draftError =
             'Draft could not be saved on this device. Edit your message to retry.';
         notifyListeners();
       }
+      return false;
     }
   }
 
@@ -302,20 +503,7 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   BotGroupRuntime? _runtime;
-  BotGroupRuntime? get runtime {
-    final value = _runtime;
-    final continuation = _continuation;
-    if (value == null ||
-        continuation == null ||
-        value.actions.any((action) => action.key == continuation.action.key)) {
-      return value;
-    }
-    return BotGroupRuntime(
-      working: value.working,
-      blocked: value.blocked,
-      actions: [continuation.action, ...value.actions],
-    );
-  }
+  BotGroupRuntime? get runtime => _runtime;
 
   late final questionHistory = preferences.questions(
     group.scope.connectionIdentity,
@@ -331,8 +519,6 @@ class BotGroupSession extends ChangeNotifier {
         : preferences.pendingApprovals(group, current);
   }
 
-  _GroupContinuation? _continuation;
-  bool get awaitingContinuation => _continuation?.stopped == true;
   int _recoveryRevision = 0;
   bool _acting = false;
   bool get acting => _acting;
@@ -358,6 +544,7 @@ class BotGroupSession extends ChangeNotifier {
   String? get error => _actionError ?? _draftError ?? _readError;
   (String, String)? _pending;
   String? _pendingWireText;
+  List<BotGroupAttachment> _pendingAttachments = const [];
   String? get pendingText => _pending?.$2;
   Timer? _poll;
   bool _capturing = false;
@@ -494,6 +681,24 @@ class BotGroupSession extends ChangeNotifier {
           observation.publish();
         }
       }
+      if (_pending case final pending?) {
+        if (_events.values.any(
+          (event) =>
+              event.eventId == BotsRepository.groupUserEventId(pending.$1),
+        )) {
+          final ids = _pendingAttachments.map((item) => item.id).toSet();
+          _attachments.removeWhere((item) => ids.contains(item.id));
+          _pending = null;
+          _pendingWireText = null;
+          _pendingAttachments = const [];
+          if (_draft.trim() == pending.$2) {
+            _draft = '';
+            _draftRevision++;
+            _references = const [];
+          }
+          await _acknowledgeDraft(pending, ids);
+        }
+      }
       _historyAvailable = true;
       _readError = null;
     } catch (_) {
@@ -510,12 +715,32 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
 
+  Future<void> _acknowledgeDraft(
+    (String, String) attempt,
+    Set<String> attachmentIds,
+  ) async {
+    try {
+      await preferences.acknowledgeMessageDraft(
+        group.scope.connectionIdentity,
+        group.id,
+        attempt.$1,
+        attempt.$2,
+        attachmentIds,
+      );
+    } catch (_) {
+      if (!_closed) {
+        _draftError =
+            'Message sent. The saved draft could not be cleared on this device.';
+      }
+    }
+  }
+
   Future<bool> send(String text) async {
-    if (_closed || _sending || _acting || text.trim().isEmpty) return false;
-    if (_continuation != null) {
-      _actionError =
-          'Tap Continue to confirm the continuation message, or Stop to cancel.';
-      notifyListeners();
+    if (_closed ||
+        _sending ||
+        _acting ||
+        _attachmentPreparation != null ||
+        (text.trim().isEmpty && _attachments.isEmpty)) {
       return false;
     }
     if (_pending != null && _pending!.$2 != text.trim()) {
@@ -562,7 +787,9 @@ class BotGroupSession extends ChangeNotifier {
           }
         }
         _pendingWireText = _canonicalText(attempt.$2, references);
+        _pendingAttachments = List.unmodifiable(_attachments);
       }
+      if (!await _saveDraft() || _closed) return false;
       sequence = await repository.sendGroup(
         group,
         attempt.$1,
@@ -571,7 +798,17 @@ class BotGroupSession extends ChangeNotifier {
         () {
           dispatched = true;
         },
+        attachments: _pendingAttachments,
       );
+      final sentIds = _pendingAttachments.map((item) => item.id).toSet();
+      _attachments.removeWhere((item) => sentIds.contains(item.id));
+      _pendingAttachments = const [];
+      for (final id in sentIds) {
+        final preview = _attachmentPreviews.remove(id);
+        if (preview != null) {
+          unawaited(_attachmentService.removeCachedFile(preview));
+        }
+      }
       _pending = null;
       _pendingWireText = null;
       if (_draftRevision == draftRevision &&
@@ -585,8 +822,8 @@ class BotGroupSession extends ChangeNotifier {
         _draftRevision++;
         _references = const [];
         if (!_closed) notifyListeners();
-        await _saveDraft();
       }
+      await _acknowledgeDraft(attempt, sentIds);
       if (!_closed) unawaited(refresh());
       return !_closed;
     } catch (_) {
@@ -594,6 +831,8 @@ class BotGroupSession extends ChangeNotifier {
         if (!dispatched) {
           _pending = null;
           _pendingWireText = null;
+          _pendingAttachments = const [];
+          await _saveDraft();
         }
         _actionError = dispatched
             ? 'Message not confirmed. Retry sends the same message once.'
@@ -619,7 +858,7 @@ class BotGroupSession extends ChangeNotifier {
 
   Future<void> resolve(BotGroupAction action, {String? choice}) async {
     if (action.kind == 'retry') {
-      await _continueWork(action);
+      await _retryWork(action);
       return;
     }
     if (_closed ||
@@ -671,77 +910,37 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
 
-  Future<void> _continueWork(BotGroupAction action) async {
+  Future<void> _retryWork(BotGroupAction action) async {
     if (_closed ||
         _acting ||
         _sending ||
-        runtime?.actions.any((value) => value.key == action.key) != true) {
+        _runtime?.actions.any((current) => current.key == action.key) != true) {
       return;
     }
-    if (_pending != null) {
-      _actionError = 'Confirm your message before continuing group work.';
-      notifyListeners();
-      return;
-    }
-    if (_continuation != null && _continuation!.action.key != action.key) {
-      _actionError =
-          'Tap Continue on the pending attempt before starting another.';
-      notifyListeners();
-      return;
-    }
-    final attempt = _continuation ??= _GroupContinuation(action);
     _recoveryRevision++;
     _acting = true;
     _actionError = null;
     repository.retain();
     notifyListeners();
     try {
-      if (!attempt.stopped) {
-        await repository.groupAction(
-          group,
-          'stop',
-          attempt.cancelId,
-          () => !_closed,
-          () {},
+      await repository.resolveGroup(group, action, null, () => !_closed, () {});
+      if (_runtime case final value? when !_closed) {
+        _runtime = BotGroupRuntime(
+          working: value.working,
+          blocked: value.blocked,
+          memberActivity: value.memberActivity,
+          actions: value.actions.where((current) => current.key != action.key),
         );
-        attempt.stopped = true;
-        _forgetStoppedActions();
-      }
-      if (_closed) return;
-      _sending = true;
-      notifyListeners();
-      var dispatched = false;
-      int? sequence;
-      try {
-        await beforeSend?.call(group, attempt.eventId);
-        if (_closed) return;
-        sequence = await repository.sendGroup(
-          group,
-          attempt.eventId,
-          'Continue the unfinished work from where you left off. Check the conversation and current results first, and avoid repeating completed work.',
-          () => !_closed,
-          () => dispatched = true,
-        );
-        _continuation = null;
-        _forgetStoppedActions();
-      } finally {
-        await afterSend?.call(group, (
-          eventId: attempt.eventId,
-          dispatched: dispatched,
-          sequence: sequence,
-        ));
       }
     } catch (_) {
       if (!_closed) {
-        _actionError = attempt.stopped
-            ? 'Message not confirmed. Tap Continue to resend.'
-            : 'Stop could not be confirmed. Tap Continue to try again.';
+        _actionError =
+            'Retry could not be confirmed. Refresh the group before retrying.';
       }
     } finally {
       repository.release();
       if (!_closed) {
         _acting = false;
-        _sending = false;
         notifyListeners();
         unawaited(refresh());
       }
@@ -754,6 +953,7 @@ class BotGroupSession extends ChangeNotifier {
       _runtime = BotGroupRuntime(
         working: value.working,
         blocked: value.blocked,
+        memberActivity: value.memberActivity,
         actions: const [],
       );
     }
@@ -774,7 +974,6 @@ class BotGroupSession extends ChangeNotifier {
         () => !_closed,
         () {},
       );
-      _continuation = null;
       _forgetStoppedActions();
     } catch (_) {
       if (!_closed) _actionError = 'Stop could not be confirmed.';
@@ -791,20 +990,15 @@ class BotGroupSession extends ChangeNotifier {
   @override
   void dispose() {
     _closed = true;
+    _attachmentService.cancelImagePreparations();
+    for (final draft in _attachmentPreviews.values) {
+      unawaited(_attachmentService.removeCachedFile(draft));
+    }
     appearances.removeListener(_appearanceChanged);
     _poll?.cancel();
     repository.release();
     super.dispose();
   }
-}
-
-/// One captured Stop/send transaction retained while confirmation is uncertain.
-final class _GroupContinuation {
-  _GroupContinuation(this.action);
-  final BotGroupAction action;
-  final String cancelId = const Uuid().v4();
-  final String eventId = const Uuid().v4();
-  bool stopped = false;
 }
 
 /// Discussion input adapter. It lends reading facts to the same transcript used

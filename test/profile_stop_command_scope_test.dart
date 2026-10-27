@@ -59,11 +59,13 @@ class _ScopedProcessHost extends Host {
             'session_id',
             'profile',
             if (method == 'process.kill') 'process_id',
+            if (method == 'session.interrupt') 'execution_generation',
           };
           expect(params.keys.toSet().difference(allowed), isEmpty);
           expect(params['session_id'], isA<String>());
           expect(params['profile'], scope.profileName);
           if (method == 'session.interrupt') {
+            expect(params['execution_generation'], 0);
             if (failInterrupt) throw StateError('Interrupt rejected');
             return {'status': 'interrupted'};
           }

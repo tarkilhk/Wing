@@ -17,7 +17,22 @@ class ActivityTime extends StatefulWidget {
     this.showUnavailable = false,
     this.clock = toolActivityNow,
     this.wallClock = DateTime.now,
-  }) : _intervalStart = null;
+  }) : _intervalStart = null,
+       _deadline = null;
+
+  /// A received schedule deadline, not evidence that work has started.
+  const ActivityTime.countdown({
+    super.key,
+    required DateTime due,
+    this.wallClock = DateTime.now,
+  }) : _deadline = due,
+       _intervalStart = null,
+       durationSeconds = null,
+       backendStartedAt = null,
+       startedAt = null,
+       subject = 'Next run',
+       showUnavailable = false,
+       clock = toolActivityNow;
 
   /// Conversation interval, using saved message times and first live receipt.
   ActivityTime.interval({
@@ -33,9 +48,11 @@ class ActivityTime extends StatefulWidget {
        subject = 'Activity',
        showUnavailable = false,
        clock = toolActivityNow,
-       _intervalStart = start;
+       _intervalStart = start,
+       _deadline = null;
 
   final DateTime? _intervalStart;
+  final DateTime? _deadline;
   bool get _interval => _intervalStart != null;
   final double? durationSeconds;
   final Duration? startedAt;
@@ -86,13 +103,23 @@ class _ActivityTimeState extends State<ActivityTime>
     if (widget.durationSeconds != null ||
         (widget.startedAt == null &&
             widget.backendStartedAt == null &&
-            widget._intervalStart == null) ||
+            widget._intervalStart == null &&
+            widget._deadline == null) ||
+        (widget._deadline != null &&
+            !widget._deadline!.isAfter(widget.wallClock())) ||
         !TickerMode.valuesOf(context).enabled ||
         (lifecycle != null && lifecycle != AppLifecycleState.resumed)) {
       return;
     }
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+        if (widget._deadline != null &&
+            !widget._deadline!.isAfter(widget.wallClock())) {
+          _timer?.cancel();
+          _timer = null;
+        }
+      }
     });
   }
 
@@ -105,6 +132,34 @@ class _ActivityTimeState extends State<ActivityTime>
 
   @override
   Widget build(BuildContext context) {
+    if (widget._deadline case final deadline?) {
+      final seconds =
+          deadline.difference(widget.wallClock()).inMilliseconds / 1000;
+      final local = deadline.toLocal();
+      final material = MaterialLocalizations.of(context);
+      final remaining = Duration(seconds: seconds.ceil());
+      final text = seconds <= 0
+          ? 'Due now'
+          : 'Next in ${remaining.inDays > 0
+                ? '${remaining.inDays}d ${remaining.inHours % 24}h'
+                : remaining.inHours > 0
+                ? '${remaining.inHours}h ${remaining.inMinutes % 60}m'
+                : remaining.inMinutes > 0
+                ? '${remaining.inMinutes}m ${remaining.inSeconds % 60}s'
+                : '${remaining.inSeconds}s'}';
+      return Tooltip(
+        message:
+            'Scheduled ${material.formatShortDate(local)} · ${material.formatTimeOfDay(TimeOfDay.fromDateTime(local))}. Phone and server clocks may differ.',
+        child: Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            color: WingTokens.of(context).muted,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      );
+    }
     final finalTime = widget.durationSeconds;
     final start = widget.startedAt;
     final backendStart = widget._intervalStart == null

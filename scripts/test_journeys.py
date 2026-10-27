@@ -29,6 +29,9 @@ CRITICAL = frozenset({
     'uncertain Send survives owner recreation beside a newer draft',
 })
 ROADMAP = frozenset({
+    'native clarification answers from the composer with its captured generation',
+    'Git review opens from chat and retains draft through held reads',
+    'live tool progress and plan recovery use the production conversation',
     'drawer settings profiles chats and projects work at large text',
     'draft model slash find outputs and context use the production chat',
     'a missing staged file restores as removable without sending',
@@ -121,6 +124,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--device', help='Reuse a disposable emulator; physical devices are rejected')
     parser.add_argument('--output', type=Path, default=ROOT / 'build/android-journeys')
+    parser.add_argument('--capture-frames', action='store_true',
+                        help='Export production Flutter frames from journey capture points before retiring the emulator')
     args = parser.parse_args()
     os.chdir(ROOT)
     if args.device and not args.device.startswith('emulator-'):
@@ -139,6 +144,8 @@ def main() -> int:
             for name, target, expected in SUITES:
                 command = ['flutter', 'test', '--no-pub', '--no-uninstall', '-d', device,
                            '--reporter=json', target]
+                if args.capture_frames:
+                    command.append('--dart-define=CAPTURE_JOURNEYS=true')
                 suite = result['suites'][name] = {'passed': False, 'command': command}
                 log_path = output / f'{name}.jsonl'
                 setup = completed_onboarding(device, suite.setdefault('onboarding', {})) if name == 'roadmap' else nullcontext()
@@ -156,6 +163,17 @@ def main() -> int:
                         # Retire descendants even after an interrupted Flutter leader.
                         stop_process_group(process)
                 suite.update(verdict(log_path.read_text().splitlines(), code, expected))
+                if args.capture_frames:
+                    captures = output / (name + '-frames')
+                    captures.mkdir(exist_ok=True)
+                    suite['frames'] = []
+                    for path in sorted(set(re.findall(r'Journey frame: ([^"\\\s]+\.png)', log_path.read_text()))):
+                        destination = captures / Path(path).name
+                        with destination.open('wb') as frame:
+                            subprocess.run([android.adb_path(), '-s', device, 'exec-out',
+                                            'run-as', 'com.tarkilhk.wing.notificationqa', 'cat', path],
+                                           stdout=frame, check=True, timeout=25)
+                        suite['frames'].append(str(destination))
                 if not suite['passed']:
                     break
             else:

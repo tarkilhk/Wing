@@ -20,6 +20,7 @@ import 'support/bots_fixture.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'composer_references_test.dart' show ReferenceHost;
 import 'profile_workspace_controller_test.dart' show Host;
@@ -325,53 +326,38 @@ void main() {
   );
 
   test(
-    'queued context reads at dispatch and unavailable context pauses the complete message',
+    'queued context is captured at server admission and unreadable context stays local',
     () async {
       host.event('a', 'message.start');
       await controller.updateDraft(chat, 'Read ${ref.token}', reference: ref);
       await controller.queuePrompt(chat, chat.composer.observation.text);
-      expect(
-        host.references.reads.where((r) => r.startsWith('files/read')),
-        isEmpty,
-      );
-      host.references.files[ref.target] = 'changed at dispatch';
-      host.event('a', 'turn.end', {'status': 'completed'});
-      await until(
-        () =>
-            host.calls.any((c) => c.$2 == 'prompt.submit') &&
-            !chat.composer.observation.draining,
-      );
-      final prepared = PreparedComposerMessage.parse(
-        lastCall('prompt.submit')['text'],
-      )!;
-      expect(prepared.context, contains('changed at dispatch'));
+      final submitted = lastCall('prompt.submit');
+      final prepared = PreparedComposerMessage.parse(submitted['text'])!;
+      expect(prepared.context, contains('original'));
       expect(prepared.references.single.target, ref.target);
       expect(
         host.references.reads.where((r) => r.startsWith('files/read')),
         hasLength(1),
       );
+      host.references.files[ref.target] = 'changed after admission';
+      host.event('a', 'turn.end', {'status': 'completed'});
+      expect(lastCall('prompt.submit'), submitted);
+      host.references.files.clear();
       await controller.updateDraft(
         chat,
         'Read ${ref.token} again',
         reference: ref,
       );
       await controller.queuePrompt(chat, chat.composer.observation.text);
-      host.references.files.clear();
-      host.event('a', 'turn.end', {'status': 'completed'});
       await until(
         () =>
             chat.composer.observation.paused &&
             !chat.composer.observation.draining,
       );
       expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
-      expect(
-        chat.composer.observation.queue.single.references.single.target,
-        ref.target,
-      );
-      expect(
-        chat.composer.observation.queue.single.text,
-        'Read ${ref.token} again',
-      );
+      final failed = chat.composer.observation.queue.last;
+      expect(failed.references.single.target, ref.target);
+      expect(failed.text, 'Read ${ref.token} again');
     },
   );
 
@@ -419,6 +405,88 @@ void main() {
   });
 
   test(
+    'steering refuses a newer generation after reference preparation',
+    () async {
+      host.event('a', 'message.start');
+      await controller.updateDraft(chat, 'Read ${ref.token}', reference: ref);
+      host.references.readStarted = Completer<void>();
+      host.references.hold = Completer<void>();
+      final steering = controller.steer(chat, chat.composer.observation.text);
+      final refused = expectLater(steering, throwsStateError);
+      await host.references.readStarted!.future.timeout(
+        const Duration(seconds: 3),
+      );
+      host.gateways['a']!.onEvent!(
+        StreamEvent(
+          type: 'message.start',
+          sessionId: chat.runtime.runtimeId,
+          data: const {},
+          envelope: const {
+            'seq': 1,
+            'execution_generation': 1,
+            'authority_epoch': 1,
+            'replay_epoch': 'fixture-epoch',
+          },
+        ),
+      );
+      host.references.hold!.complete();
+      await refused;
+      expect(host.calls.where((call) => call.$2 == 'session.steer'), isEmpty);
+      expect(chat.composer.observation.text, 'Read ${ref.token}');
+      expect(chat.composer.observation.references.single.target, ref.target);
+    },
+  );
+
+  test(
+    'accepted prepared queue editing preserves authored text and its canonical reference',
+    () async {
+      host.event('a', 'message.start');
+      const queued = ComposerReference(
+        kind: ComposerReferenceKind.file,
+        token: '@file:note.md',
+        target: '/work/note.md',
+      );
+      const draft = ComposerReference(
+        kind: ComposerReferenceKind.file,
+        token: '@file:note.md',
+        target: '/other/note.md',
+      );
+      host.references.files[draft.target] = 'Independent draft context';
+      await controller.updateDraft(
+        chat,
+        'Read ${queued.token}',
+        reference: queued,
+      );
+      await controller.queuePrompt(chat, chat.composer.observation.text);
+      final row = chat.composer.observation.queue.single;
+      expect(row.text, 'Read ${queued.token}');
+      await controller.updateDraft(
+        chat,
+        'Later ${draft.token}',
+        reference: draft,
+      );
+      await controller.beginQueuedPromptEdit(chat, row.id);
+      expect(chat.composer.observation.editText, 'Read ${queued.token}');
+      expect(chat.composer.observation.references.single.target, queued.target);
+      controller.updateQueuedPromptEdit(chat, 'Review ${queued.token} again');
+      await controller.saveQueuedPromptEdit(chat);
+      final replacement = PreparedComposerMessage.parse(
+        lastCall('prompt.replace_queued')['text'],
+      )!;
+      expect(replacement.message, 'Review ${queued.token} again');
+      expect(replacement.references.single.target, queued.target);
+      expect(replacement.context, contains('original'));
+      expect(replacement.context, isNot(contains('Independent draft context')));
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Review ${queued.token} again',
+      );
+      expect(chat.composer.observation.text, 'Later ${draft.token}');
+      expect(chat.composer.observation.references.single.target, draft.target);
+    },
+  );
+
+  test(
     'queued steering prepares the selected references independently of the draft',
     () async {
       host.event('a', 'message.start');
@@ -446,11 +514,18 @@ void main() {
         reference: draft,
       );
       expect(await controller.steerQueuedPrompt(chat, selected), isTrue);
-      final prepared = PreparedComposerMessage.parse(
-        lastCall('session.steer')['text'],
-      )!;
+      final admitted = lastCall('prompt.submit');
+      final prepared = PreparedComposerMessage.parse(admitted['text'])!;
       expect(prepared.references.single.target, queued.target);
-      expect(chat.composer.observation.queue, isEmpty);
+      expect(
+        lastCall('prompt.steer_queued')['admission_id'],
+        host.canonicalAdmissions.values.single['admission_id'],
+      );
+      expect(
+        chat.composer.observation.queue.single.text,
+        'Read ${queued.token}',
+      );
+      expect(chat.composer.queueActions(selected).canSteer, isFalse);
       expect(chat.composer.observation.text, 'Later ${draft.token}');
       expect(chat.composer.observation.references.single.target, draft.target);
     },
@@ -489,7 +564,10 @@ void main() {
       final prepared = PreparedComposerMessage.parse(dispatch['text'])!;
       expect(prepared.context, contains('fresh restore content'));
       expect(prepared.references.single.target, selected.target);
-      expect(dispatch['truncate_before_row_id'], 6);
+      final mutation = lastCall('session.mutate');
+      expect(mutation['operation'], 'rewind');
+      expect(mutation['payload'], {'target_message_id': 6});
+      expect(dispatch.containsKey('truncate_before_row_id'), isFalse);
     },
   );
 

@@ -76,6 +76,8 @@ try {
     ['%%{init: {"securityLevel": "loose"}}%%\nflowchart LR\nA-->B', false],
     ['---\nconfig:\n  securityLevel: loose\n---\nflowchart LR\nA-->B', false],
     ['flowchart LR\nSECRET_PARSE_TEXT_7f13 -- broken', false],
+    ['flowchart LR\nA["ice point<br/>limit-up below twenty"] --> B["warming<br/>volume up"]', false],
+    ['flowchart LR\nA["one&nbsp;two"] --> B["three #nbsp; four"]', true],
   ];
   const results = [];
 
@@ -114,6 +116,13 @@ try {
   assert.equal(results[5].body.includes('securityLevel'), false);
   assert.match(results[6].status, /could not parse/i);
   assert.equal(results[6].body.includes('SECRET_PARSE_TEXT_7f13'), false);
+  for (const [index, result] of results.slice(7).entries()) {
+    assert.equal(result.rendered, true, `multiline label ${index} failed: ${result.status}`);
+    assert.equal(result.svg, true);
+    assert.equal(result.blockedNodes, 0);
+  }
+  assert.match(results[7].body, /ice point/);
+  assert.match(results[8].body, /one/);
 
   console.log('Rendered flowchart, sequence, and pie cases in headless Chromium.');
   console.log('Rejected links and config overrides, and kept errors free of source text.');

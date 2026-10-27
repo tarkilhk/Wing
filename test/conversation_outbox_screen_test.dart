@@ -20,7 +20,6 @@ import 'package:wing/core/widgets/profile_queued_messages.dart';
 
 import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
-import 'support/composer_fixture.dart';
 
 void main() {
   const capture = bool.fromEnvironment('CAPTURE_OUTBOX');
@@ -262,6 +261,7 @@ void main() {
     expect(chat.composer.observation.sending, isFalse);
     expect(chat.composer.observation.text, 'Fresh editable draft');
     expect(chat.composer.observation.queue.single.text, 'Second message');
+    expect(chat.composer.observation.queue.single.serverOwned, isTrue);
     expect(queuedText('First message'), findsNothing);
     expect(queuedText('Second message').hitTestable(), findsOneWidget);
     expect(
@@ -270,11 +270,15 @@ void main() {
     );
     host.promptSubmitStarted = null;
     host.promptSubmitDelay = null;
-    emitChatEvent(controller, chat, 'turn.end', {'status': 'completed'});
+    host.event(chat.key.workspace.profileName, 'turn.end', {
+      'status': 'completed',
+    });
     for (var i = 0; i < 30 && chat.composer.observation.queue.isNotEmpty; i++) {
       await tester.pump(const Duration(milliseconds: 10));
     }
     expect(chat.composer.observation.queue, isEmpty);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(queuedText('Second message'), findsNothing);
     expect(tester.getSize(find.byType(ProfileQueuedMessages)).height, 0);
     expect(chat.composer.observation.text, 'Fresh editable draft');

@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:wing/core/services/bots_session.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:io';
@@ -123,6 +125,45 @@ void main() {
       image.dispose();
     });
   }
+
+  testWidgets('status control shows held work and then the owner response', (
+    tester,
+  ) async {
+    final response = Completer<Map<String, dynamic>>();
+    host.respond = (_, _) => response.future;
+    await show(tester);
+    await tester.enterText(find.byType(TextField).last, '/status');
+    await tester.pump();
+    await tester.tap(find.byTooltip('Send'));
+    await frames(tester);
+    final pulse = find.byWidgetPredicate(
+      (widget) => widget is StudioLoading && widget.label == 'Running command',
+    );
+    // The painted status glyph deliberately ignores pointers.
+    expect(pulse, findsOneWidget);
+    final bounds = tester.getRect(pulse);
+    expect(bounds.width, greaterThan(0));
+    expect(bounds.top, greaterThanOrEqualTo(0));
+    expect(bounds.bottom, lessThanOrEqualTo(800));
+    await capture(tester, 'status-held');
+    expect(
+      host.commandCalls.where((call) => call.$1 == 'slash.exec'),
+      hasLength(1),
+    );
+    response.complete({
+      'type': 'exec',
+      'output': 'Status from the captured Hermes session',
+    });
+    await frames(tester);
+    expect(pulse, findsNothing);
+    expect(
+      find.text('Status from the captured Hermes session'),
+      findsOneWidget,
+    );
+    await capture(tester, 'status-completed');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   test(
     'repeated approval changes keep their order through history refreshes',

@@ -9,6 +9,9 @@ import 'connection_manager.dart';
 import 'profile_workspace_controller.dart';
 import 'workspace_entry_session.dart';
 import 'ws_client.dart';
+import 'bots_session.dart';
+import 'bot_group_session.dart';
+import '../models/bots.dart';
 
 /// Issued for one exact intake item and one Home lifetime. The route borrows it.
 class SharedDraftOffer {
@@ -35,6 +38,10 @@ class SharedDraftOffer {
   final AndroidSharePayload _payload;
   Object _profileSelection = Object();
   ProfileChat? _initial, _created, _recoveryTarget, _stagedChat;
+  BotsSession? _bots;
+  List<BotGroup> _groups = const [];
+  BotGroup? _stagedGroup;
+  BotGroupSession? _groupDraft;
   ({ProfileSessionKey key, ComposerSavedWork draft})? _recovery;
   String? _notice, _error;
   SharedDraftReviewState? _lastReview;
@@ -44,7 +51,8 @@ class SharedDraftOffer {
 }
 
 class SharedDraftNavigation {
-  SharedDraftNavigation._(this.entry, this.returnToHome);
+  SharedDraftNavigation._(this.entry, this.returnToHome, this.group);
+  final BotGroup? group;
   final WorkspaceEntryPlan entry;
   final bool returnToHome;
 }
@@ -56,6 +64,7 @@ class SharedDraftSession extends ChangeNotifier {
     required ConnectionManager connectionManager,
     required WorkspaceEntrySession entrySession,
     required AndroidShareIntentService? shareIntents,
+    this.createBotsSession,
   }) : _manager = connectionManager,
        _entry = entrySession,
        _shares = shareIntents {
@@ -63,6 +72,7 @@ class SharedDraftSession extends ChangeNotifier {
     _shares?.intakeError.addListener(_intakeError);
   }
   static const _newChat = '__new_chat__', _recoverDraft = '__recover_draft__';
+  final BotsSession Function()? createBotsSession;
   final ConnectionManager _manager;
   final WorkspaceEntrySession _entry;
   final AndroidShareIntentService? _shares;
@@ -212,9 +222,22 @@ class SharedDraftSession extends ChangeNotifier {
       controller.addListener(_controllerChanged);
       if (controller.discovery == null) await controller.initialize();
       _requireEntry(offer);
+      final bots = offer._bots = createBotsSession?.call();
+      if (bots != null) {
+        await bots.refresh();
+        _requireEntry(offer);
+        offer._groups = bots.state.groups
+            .where(
+              (group) =>
+                  group.scope.connectionId == controller.connection.id &&
+                  group.scope.connectionIdentity ==
+                      controller.connectionIdentity,
+            )
+            .toList();
+      }
       ProfileSessionKey? verified;
       final target = offer._payload.target;
-      if (target != null) {
+      if (target != null && !target.containsKey('room')) {
         try {
           final key = ProfileSessionKey.fromJson(target);
           if (controller.owns(key) &&
@@ -232,8 +255,7 @@ class SharedDraftSession extends ChangeNotifier {
           _requireEntry(offer);
           if (error is JsonRpcError &&
               error.method == 'session.resume' &&
-              error.code == 4007 &&
-              error.message.trim().toLowerCase() == 'session not found' &&
+              error.reason == 'not_found' &&
               verified != null &&
               controller.current?.chats.containsKey(verified.sessionId) ==
                   false) {
@@ -252,6 +274,22 @@ class SharedDraftSession extends ChangeNotifier {
         _requireEntry(offer);
       }
       offer._resource = controller.current;
+      if (target?['room'] case final roomId?) {
+        final group = offer._groups
+            .where(
+              (group) =>
+                  group.id == roomId &&
+                  group.scope.connectionIdentity ==
+                      target!['connection_identity'] &&
+                  group.scope.connectionId == target['connection'],
+            )
+            .firstOrNull;
+        if (group != null) {
+          offer._destination = _groupDestination(group);
+          await _stageGroup(offer, group);
+          return false;
+        }
+      }
       if (offer._initial != null && reviewDestination == null) {
         await _stage(offer, offer._initial!);
         return false;
@@ -340,6 +378,13 @@ class SharedDraftSession extends ChangeNotifier {
     final initial = offer._initial;
     final recovery = offer._recovery;
     final choices = <SharedDraftDestination>[
+      for (final group in offer._groups)
+        SharedDraftDestination(
+          profileSelection: offer._profileSelection,
+          id: _groupDestination(group),
+          presentationId: 'share-destination-group-${group.id}',
+          label: 'Group · ${group.name}',
+        ),
       if (recovery?.key.workspace.profileName == profile)
         SharedDraftDestination(
           profileSelection: offer._profileSelection,
@@ -500,6 +545,13 @@ class SharedDraftSession extends ChangeNotifier {
     _changed();
     try {
       _requireReview(offer);
+      final selectedGroup = offer._groups
+          .where((group) => _groupDestination(group) == destination)
+          .firstOrNull;
+      if (selectedGroup != null) {
+        await _stageGroup(offer, selectedGroup);
+        return _canNavigate(offer);
+      }
       final ProfileChat chat;
       if (destination == _recoverDraft) {
         final recovery = offer._recovery;
@@ -572,6 +624,37 @@ class SharedDraftSession extends ChangeNotifier {
     }
   }
 
+  static String _groupDestination(BotGroup group) => 'group:${group.key}';
+
+  Future<void> _stageGroup(SharedDraftOffer offer, BotGroup group) async {
+    _requireReview(offer);
+    if (offer._groupDraft?.group.key != group.key) {
+      offer._groupDraft?.dispose();
+      offer._groupDraft = offer._bots!.openGroup(group);
+    }
+    final draft = offer._groupDraft!;
+    if (draft.pendingText != null) {
+      throw StateError(
+        'Open this group and confirm its pending message first.',
+      );
+    }
+    if (!await draft.stageSharedContent(offer._payload)) {
+      throw StateError(
+        draft.error ?? 'Shared content could not be added to the group.',
+      );
+    }
+    _requireReview(offer);
+    offer._staged = true;
+    offer._stagedGroup = group;
+    final cleared = await _shares!.acknowledgeShare(offer._native);
+    if (_owns(offer) && !cleared) {
+      _notice = const SharedDraftNotice(
+        'Content was added to the group draft, but the incoming share could not be cleared. Discard it from Home to avoid adding it twice.',
+        error: true,
+      );
+    }
+  }
+
   Future<void> _stage(SharedDraftOffer offer, ProfileChat chat) async {
     _requireReview(offer);
     await offer._controller!.stageSharedDraft(chat, offer._payload);
@@ -597,6 +680,12 @@ class SharedDraftSession extends ChangeNotifier {
   bool _canNavigate(SharedDraftOffer offer) {
     final chat = offer._stagedChat;
     final resource = offer._resource;
+    if (offer._stagedGroup != null) {
+      return _owns(offer) &&
+          offer._staged &&
+          offer._entry != null &&
+          _entry.isCurrent(offer._entry!);
+    }
     return _owns(offer) &&
         offer._staged &&
         chat != null &&
@@ -612,11 +701,17 @@ class SharedDraftSession extends ChangeNotifier {
   SharedDraftNavigation? navigation(SharedDraftOffer offer) =>
       _canNavigate(offer) &&
           !(offer._retainWorkspace && offer._controller!.hasMountedRoutes)
-      ? SharedDraftNavigation._(offer._entry!, offer._payload.target != null)
+      ? SharedDraftNavigation._(
+          offer._entry!,
+          offer._payload.target != null,
+          offer._stagedGroup,
+        )
       : null;
   void finish(SharedDraftOffer offer) {
     if (!_owns(offer)) return;
     offer._controller?.removeListener(_controllerChanged);
+    offer._groupDraft?.dispose();
+    offer._bots?.dispose();
     _active = null;
     _changed();
   }
@@ -653,6 +748,8 @@ class SharedDraftSession extends ChangeNotifier {
     if (_closed) return;
     _closed = true;
     _active?._controller?.removeListener(_controllerChanged);
+    _active?._groupDraft?.dispose();
+    _active?._bots?.dispose();
     _shares?.pendingShare.removeListener(_intakeChanged);
     _shares?.intakeError.removeListener(_intakeError);
     if (_notificationDepth == 0) super.dispose();

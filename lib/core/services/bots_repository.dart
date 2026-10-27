@@ -573,20 +573,13 @@ class BotsRepository {
           'title': 'Bot Chat',
           'hidden': true,
           'follow_profile_config': true,
-          'source': 'desktop',
-          'close_on_disconnect': false,
+          'source': 'gui',
         },
         canDispatch,
         onDispatched,
       );
-      final runtime = _requiredText(created['session_id']);
-      await _command(
-        bot.profile.name,
-        'session.title',
-        {'session_id': runtime, 'title': 'Bot Chat'},
-        canDispatch,
-        onDispatched,
-      );
+      // Canonical titled creation commits the title and hidden flag atomically.
+      _requiredText(created['session_id']);
     } catch (error) {
       // A concurrent desktop creation or lost acknowledgement may have won.
       final resolved = (await bots())
@@ -814,6 +807,7 @@ class BotsRepository {
         latestSequence: decoded.latestSequence,
         runtimeAvailable: runtime != null,
         working: runtime?.working ?? false,
+        memberActivity: runtime?.memberActivity ?? const [],
         blocked:
             runtime != null && (runtime.blocked || runtime.actions.isNotEmpty),
       );
@@ -1036,7 +1030,7 @@ class BotsRepository {
     return page;
   }
 
-  /// Mount only the stock lazy child watch; never build or prompt an agent.
+  /// Mount only the stock read-only child subscription; never prompt an agent.
   Future<Map<String, dynamic>> watchSubagent(
     BotGroup group,
     BotGroupMember member,
@@ -1052,12 +1046,11 @@ class BotsRepository {
     }
     return _read(member.profile, 'session.resume', {
       'session_id': child,
-      'lazy': true,
-      'omit_messages': true,
+      'display_projection': true,
     });
   }
 
-  /// Passive inspection only. Never attaches, resumes or controls the worker.
+  /// Passive reads and canonical subscriptions only; never controls the worker.
   Future<Map<String, dynamic>> groupMemberObservation(
     BotGroup group,
     BotGroupMember member,
@@ -1071,6 +1064,7 @@ class BotsRepository {
         ) ||
         !const {
           'session.active_list',
+          'session.resume',
           'session.events.since',
         }.contains(method)) {
       throw ArgumentError('Invalid worker observation');
@@ -1152,6 +1146,10 @@ class BotsRepository {
           ),
           text: _text(payload['text']),
           passedMemberId: passedMemberId,
+          attachments: List.unmodifiable([
+            for (final item in _rows(payload['attachments'] ?? const []))
+              BotGroupAttachment.fromJson(item),
+          ]),
         );
       }),
       cursor,
@@ -1269,8 +1267,9 @@ class BotsRepository {
     String event,
     String text,
     bool Function() canDispatch,
-    void Function() onDispatched,
-  ) async {
+    void Function() onDispatched, {
+    List<BotGroupAttachment> attachments = const [],
+  }) async {
     _ownsGroup(group);
     final result = await _command(
       'default',
@@ -1278,7 +1277,12 @@ class BotsRepository {
       {
         'room_id': group.id,
         'event_id': event,
-        'payload': {'text': text, 'thread_id': group.id},
+        'payload': {
+          'text': text,
+          'thread_id': group.id,
+          if (attachments.isNotEmpty)
+            'attachments': attachments.map((item) => item.toJson()).toList(),
+        },
       },
       canDispatch,
       onDispatched,
@@ -1296,6 +1300,60 @@ class BotsRepository {
       throw const FormatException('Invalid group send receipt');
     }
     return sequence;
+  }
+
+  Future<BotGroupAttachment> uploadGroupAttachment(
+    BotGroup group, {
+    required String uploadId,
+    required String name,
+    required String mime,
+    required String kind,
+    required String dataBase64,
+    required bool Function() canDispatch,
+  }) async {
+    _ownsGroup(group);
+    final result = await _command(
+      'default',
+      'groups.attachment.upload',
+      {
+        'room_id': group.id,
+        'upload_id': uploadId,
+        'name': name,
+        'mime': mime,
+        'kind': kind,
+        'data_base64': dataBase64,
+      },
+      canDispatch,
+      () {},
+    );
+    return BotGroupAttachment.fromJson(result);
+  }
+
+  Future<Uint8List> downloadGroupAttachment(
+    BotGroup group,
+    String eventId,
+    BotGroupAttachment attachment,
+  ) async {
+    _ownsGroup(group);
+    final result = await _read('default', 'groups.attachment.download', {
+      'room_id': group.id,
+      'event_id': eventId,
+      'attachment_id': attachment.id,
+    });
+    final returned = BotGroupAttachment.fromJson(result);
+    if (returned.id != attachment.id ||
+        returned.size != attachment.size ||
+        returned.name != attachment.name ||
+        returned.mime != attachment.mime ||
+        result['event_id'] != eventId ||
+        result['data_base64'] is! String) {
+      throw const FormatException('Group attachment identity mismatch');
+    }
+    final bytes = base64Decode(result['data_base64'] as String);
+    if (bytes.length != attachment.size) {
+      throw const FormatException('Incomplete group attachment');
+    }
+    return bytes;
   }
 
   Future<({BotGroupRuntime runtime, int sequence})> groupRuntime(
@@ -1354,8 +1412,17 @@ class BotsRepository {
     for (final action in _rows(status['pending_actions'])) {
       final kind = _requiredText(action['kind']);
       if (kind == 'retry') {
+        final generation = action['execution_generation'];
+        if (generation is! int || generation < 1) {
+          throw const FormatException('Invalid group retry attempt');
+        }
         actions.add(
-          BotGroupAction(kind: kind, task: _requiredText(action['task_id'])),
+          BotGroupAction(
+            kind: kind,
+            task: _requiredText(action['task_id']),
+            member: _requiredText(action['member_id']),
+            generation: generation,
+          ),
         );
       } else if (kind == 'approval') {
         final approval = _map(action['approval']);
@@ -1385,6 +1452,20 @@ class BotsRepository {
       working: status['working'] == true,
       blocked: status['blocked'] == true,
       actions: actions,
+      memberActivity: [
+        for (final activity in _rows(status['member_activity'] ?? const []))
+          if (const {
+            'queued',
+            'running',
+            'stopping',
+          }.contains(activity['status']))
+            BotGroupMemberActivity(
+              memberId: _requiredText(activity['member_id']),
+              status: _requiredText(activity['status']),
+            )
+          else
+            throw const FormatException('Invalid group member activity'),
+      ],
     );
   }
 
@@ -1408,7 +1489,31 @@ class BotsRepository {
     void Function() onDispatched,
   ) async {
     _ownsGroup(group);
-    if (action.kind == 'approval') {
+    if (action.kind == 'retry') {
+      if (action.member.isEmpty ||
+          action.task.isEmpty ||
+          action.generation < 1) {
+        throw ArgumentError('Invalid group retry attempt');
+      }
+      final result = await _command(
+        'default',
+        'groups.retry',
+        {
+          'room_id': group.id,
+          'task_id': action.task,
+          'member_id': action.member,
+          'execution_generation': action.generation,
+        },
+        canDispatch,
+        onDispatched,
+      );
+      final task = _map(result['task']);
+      if (result['retried'] != true ||
+          task['room_id'] != group.id ||
+          task['task_id'] != action.task) {
+        throw const FormatException('Group retry was not confirmed');
+      }
+    } else if (action.kind == 'approval') {
       if (!action.choices.contains(choice)) {
         throw ArgumentError('Unavailable group approval choice');
       }
