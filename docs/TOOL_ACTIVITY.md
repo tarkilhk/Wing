@@ -19,8 +19,9 @@ When their parent turn ends, completed subagents leave this drawer immediately.
 Their saved results remain in that turn's Activity → Agents tab. Running and
 queued background agents remain available until they finish.
 
-Swipe up on either bar zone to open that category near full screen. Swipe anywhere
-in an open drawer upward to expand or downward to close. Diagonal swipes follow
+Swipe up on either bar zone to open that category at its compact height. Swipe
+up again on its open bar to maximize. Swipe anywhere in an open drawer upward to
+expand or downward to close. Diagonal swipes follow
 the larger horizontal or vertical movement. At full height, rows scroll while the
 summary stays fixed; scroll back to the top and continue down to close. Tapping
 the smaller top handle toggles height. Reopening by tap starts compact. Both Tasks

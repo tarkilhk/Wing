@@ -40,9 +40,10 @@ Create a chat, choose a profile and send a message. Replies stream into the conv
 While a reply streams, Activity contains tool calls. Reasoning appears directly
 in the conversation between tool runs. The compact bar above your draft shows
 subagents and completed/total tasks. Tap either side to open its drawer, then
-swipe left or right to switch. Swiping up on either bar opens its category
-maximized. Swipe anywhere in the panel up to expand or down to close; at full
-height, rows scroll back to their top before a downward swipe closes it. Diagonal
+swipe left or right to switch. Swiping up on either bar opens its category at
+compact height; swipe up again to maximize. Swipe anywhere in the panel up to
+expand or down to close; at full height, rows scroll back to their top before a
+downward swipe closes it. Diagonal
 swipes follow the larger horizontal or vertical movement. Tapping the selected
 tab or outside also closes it.
 Your draft stays in place. Past answers keep their existing Activity layout.

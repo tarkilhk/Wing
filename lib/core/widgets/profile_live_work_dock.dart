@@ -229,8 +229,12 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
     return distance.abs() >= 56 ? distance.sign.toInt() : 0;
   }
 
-  void _expandTab(int index) {
-    if (!_open || _selected != index) _select(index);
+  void _openOrExpandTab(int index) {
+    if (!_open) {
+      _select(index);
+      return;
+    }
+    if (_selected != index) _select(index);
     setState(() {
       _instantHeight = false;
       _expanded = true;
@@ -254,7 +258,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
         if (distance == null || distance.dy.abs() <= distance.dx.abs()) return;
         if (_swipeDirection(distance.dy, details.velocity.pixelsPerSecond.dy) <
             0) {
-          _expandTab(index);
+          _openOrExpandTab(index);
         }
       },
       onPanCancel: () => _barDistance = null,

@@ -371,6 +371,14 @@ void main() {
             tester.widget<PageView>(find.byType(PageView)).controller!.page,
             category,
           );
+          expect(tester.getSize(panel).height, lessThanOrEqualTo(320));
+          expect(tester.getRect(panel).top, greaterThan(8));
+          await picture(
+            tester,
+            '${brightness.name}-$scale-$category-zone-compact',
+          );
+          await tester.fling(tab(category), const Offset(35, -70), 1000);
+          await tester.pumpAndSettle();
           expect(tester.getRect(panel).top, closeTo(8, 1));
           expect(tester.getRect(find.byKey(const ValueKey('draft'))), composer);
           await picture(
@@ -481,6 +489,8 @@ void main() {
   ) async {
     await show(tester);
     await tester.fling(tab(1, overlay: false), const Offset(30, -100), 1000);
+    await tester.pumpAndSettle();
+    await tester.fling(tab(1), const Offset(30, -100), 1000);
     await tester.pumpAndSettle();
     final panel = find.byKey(const ValueKey('live-work-panel'));
     final expanded = tester.getRect(panel);
@@ -683,6 +693,15 @@ void main() {
         await tester.pumpAndSettle();
         final panel = find.byKey(const ValueKey('live-work-panel'));
         final originalHeight = tester.getSize(panel).height;
+        await tester.tap(tab(first));
+        await tester.pumpAndSettle();
+        await tester.fling(
+          tab(first, overlay: false),
+          const Offset(30, -100),
+          1000,
+        );
+        await tester.pumpAndSettle();
+        expect(tester.getSize(panel).height, originalHeight);
         final bottom = tester.getRect(tab(first)).bottom;
         update(() {
           agents = 1;

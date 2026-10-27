@@ -3,8 +3,9 @@
 While Hermes works, tap **Subagents** above your draft to inspect known children.
 Only populated categories appear; swipe between Subagents and Tasks when both
 are available. The drawer keeps its summary visible while longer lists scroll.
-Swipe up on the Subagents bar to open it near full screen. Swipe anywhere in the
-drawer up to expand or down to close; at full height, scroll rows back to their
+Swipe up on the Subagents bar to open it at its compact height, then swipe up
+again to maximize. Swipe anywhere in the drawer up to expand or down to close;
+at full height, scroll rows back to their
 top before continuing downward to close. Diagonal swipes follow their larger
 component, switching categories when mostly sideways. The smaller top handle
 toggles height on tap. Reopening by tap starts compact. Tap the selected tab,

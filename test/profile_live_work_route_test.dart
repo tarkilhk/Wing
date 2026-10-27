@@ -735,6 +735,13 @@ void main() {
         );
         await settle();
         expect(
+          tester.getSize(find.byKey(const ValueKey('live-work-panel'))).height,
+          lessThanOrEqualTo(320),
+        );
+        await picture('agents-zone-compact');
+        await tester.fling(tab(0), const Offset(40, -100), 1000);
+        await settle();
+        expect(
           tester.getRect(find.byKey(const ValueKey('live-work-panel'))).top,
           closeTo(8, 1),
         );
@@ -768,6 +775,13 @@ void main() {
           const Offset(-40, -100),
           1000,
         );
+        await settle();
+        expect(
+          tester.getSize(find.byKey(const ValueKey('live-work-panel'))).height,
+          lessThanOrEqualTo(320),
+        );
+        await picture('tasks-zone-compact');
+        await tester.fling(tab(1), const Offset(-40, -100), 1000);
         await settle();
         expect(
           tester.getRect(find.byKey(const ValueKey('live-work-panel'))).top,
