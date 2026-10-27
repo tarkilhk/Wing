@@ -22,6 +22,16 @@ final class ServerFilesRepository {
   final ServerFilesRead read;
   final ServerFilesWrite? write;
 
+  Future<String> defaultDirectory() async {
+    final response = await read('fs/default-cwd', const {});
+    final path = response['cwd'];
+    if (path is! String) {
+      throw const FormatException('Invalid profile default directory.');
+    }
+    ServerReferencePath.admit(path);
+    return path;
+  }
+
   Future<ServerReferenceDirectory> directory(String? requested) async {
     if (requested != null) ServerReferencePath.admit(requested);
     final response = await read('files', {'path': ?requested});

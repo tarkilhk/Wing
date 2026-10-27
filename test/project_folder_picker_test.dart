@@ -43,6 +43,7 @@ class _ProjectScreenHost {
       };
     },
     get: (path, query) async {
+      if (path == 'fs/default-cwd') return {'cwd': '/srv', 'branch': null};
       if (path == 'files') return directory(query['path'] ?? '/srv');
       if (path != 'sessions') throw StateError('Unexpected read $path');
       return {
@@ -491,10 +492,7 @@ void main() {
     await tester.tap(find.text('New project'));
     await tester.pumpAndSettle();
     await tester.enterText(
-      find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextField),
-      ),
+      find.byKey(const ValueKey('project-name-field')),
       'New workspace',
     );
     await tester.pump();

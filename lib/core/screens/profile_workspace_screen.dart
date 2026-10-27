@@ -3802,12 +3802,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   );
 
   Future<void> _projectDialog(ChatBrowserData browser) => browser.createProject(
-    showEditor: (createFolders, create) {
+    showEditor: (createFolders, loadDefaultFolder, create) {
       if (!mounted) return Future.value();
       return showDialog<void>(
         context: context,
         barrierDismissible: false,
         builder: (_) => ProjectEditorDialog.create(
+          loadDefaultFolder: loadDefaultFolder,
           createFolders: createFolders,
           save: create,
         ),

@@ -363,6 +363,212 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  Future<void> openNewProject(WidgetTester tester) async {
+    await tester.longPress(find.byKey(const ValueKey('workspace-new-chat')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('workspace-new-project')));
+    await tester.pumpAndSettle();
+  }
+
+  String folderLocation(WidgetTester tester) => tester
+      .widget<TextField>(find.byKey(const ValueKey('project-folder-field')))
+      .controller!
+      .text;
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'New project suggests profile kebab-case location ${brightness.name} $scale',
+        (tester) async {
+          final host = await useMutationHost();
+          await showActions(tester, brightness: brightness, scale: scale);
+          await openNewProject(tester);
+          expect(host.defaultFolderProfiles, ['work']);
+          expect(folderLocation(tester), '/work');
+          for (final entry in {
+            'Initial Project': '/work/initial-project',
+            '  My__APIProject / 2026!  ': '/work/my-api-project-2026',
+            'Projet Été': '/work/projet-été',
+            '': '/work',
+            'My New Project': '/work/my-new-project',
+          }.entries) {
+            await tester.enterText(
+              find.byKey(const ValueKey('project-name-field')),
+              entry.key,
+            );
+            expect(folderLocation(tester), entry.value);
+          }
+          await tester.pumpAndSettle();
+          await actionCapture(
+            tester,
+            'project-default-normal-${brightness.name}-$scale',
+          );
+          tester.view.viewInsets = FakeViewPadding(
+            bottom: 260 * tester.view.devicePixelRatio,
+          );
+          addTearDown(tester.view.resetViewInsets);
+          await tester.pumpAndSettle();
+          final create = find.byKey(const ValueKey('project-create-confirm'));
+          expect(create.hitTestable(), findsOneWidget);
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('project-folder-field')),
+          );
+          await actionCapture(
+            tester,
+            'project-default-${brightness.name}-$scale',
+          );
+          await tester.tap(create);
+          await tester.pumpAndSettle();
+          expect(host.folderCreates.single.$2['path'], '/work/my-new-project');
+          expect(
+            host.projectChanges['work/created']?['path'],
+            '/work/my-new-project',
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'manual location wins over delayed default and later name edits',
+    (tester) async {
+      final host = await useMutationHost();
+      host.defaultFolderGate = Completer<void>();
+      addTearDown(() {
+        if (!host.defaultFolderGate!.isCompleted) {
+          host.defaultFolderGate!.complete();
+        }
+      });
+      await showActions(tester);
+      await openNewProject(tester);
+      expect(find.text('New project'), findsWidgets);
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      await actionCapture(tester, 'project-default-pending');
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Typed before load',
+      );
+      await tester.enterText(
+        find.byKey(const ValueKey('project-folder-field')),
+        '/custom/location',
+      );
+      host.defaultFolderGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(folderLocation(tester), '/custom/location');
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Changed after load',
+      );
+      expect(folderLocation(tester), '/custom/location');
+      await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
+      await tester.pumpAndSettle();
+      expect(host.folderCreates.single.$2['path'], '/custom/location');
+      expect(
+        host.projectChanges['work/created']?['label'],
+        'Changed after load',
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'default failure retries using the latest name and cancel retires a read',
+    (tester) async {
+      final host = await useMutationHost();
+      host.defaultFolderGate = Completer<void>();
+      addTearDown(() {
+        if (!host.defaultFolderGate!.isCompleted) {
+          host.defaultFolderGate!.complete();
+        }
+      });
+      host.failDefaultFolder = true;
+      await showActions(tester);
+      await openNewProject(tester);
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Name before default',
+      );
+      host.defaultFolderGate!.complete();
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Could not load the profile folder'),
+        findsOneWidget,
+      );
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      await actionCapture(tester, 'project-default-failed');
+      host.failDefaultFolder = false;
+      host.defaultFolderGate = Completer<void>();
+      await tester.ensureVisible(find.byTooltip('Retry profile folder'));
+      await tester.tap(find.byTooltip('Retry profile folder'));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Latest Project',
+      );
+      host.defaultFolderGate!.complete();
+      await tester.pumpAndSettle();
+      expect(folderLocation(tester), '/work/latest-project');
+      expect(
+        find.textContaining('Could not load the profile folder'),
+        findsNothing,
+      );
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+      host.defaultFolderGate = Completer<void>();
+      await openNewProject(tester);
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+      host.defaultFolderGate!.complete();
+      await tester.pumpAndSettle();
+      expect(host.folderCreates, isEmpty);
+      expect(host.projectChanges, isEmpty);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets('profile change rejects a late default directory', (
+    tester,
+  ) async {
+    final host = await useMutationHost();
+    host.defaultFolderGate = Completer<void>();
+    addTearDown(() {
+      if (!host.defaultFolderGate!.isCompleted) {
+        host.defaultFolderGate!.complete();
+      }
+    });
+    await showActions(tester);
+    await openNewProject(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('project-name-field')),
+      'Captured work',
+    );
+    await controller.switchProfile('personal');
+    host.defaultFolderGate!.complete();
+    await tester.pumpAndSettle();
+    expect(folderLocation(tester), isEmpty);
+    expect(host.defaultFolderProfiles, ['work']);
+    expect(
+      find.textContaining('Could not load the profile folder'),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('project-folder-field')),
+      '/manual/path',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Profile changed.'), findsOneWidget);
+    expect(host.folderCreates, isEmpty);
+    expect(host.projectChanges, isEmpty);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets(
     'New project FAB keeps its captured profile and chosen appearance',
     (tester) async {
@@ -413,6 +619,15 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
       await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Another name',
+      );
+      expect(folderLocation(tester), '/work/new');
+      await tester.enterText(
+        find.byKey(const ValueKey('project-name-field')),
+        'Created work project',
+      );
       await tester.tap(find.byKey(const ValueKey('project-create-confirm')));
       await tester.pumpAndSettle();
       expect(host.projectChanges['work/created']?['color'], 'hsl(210 68% 58%)');
@@ -693,7 +908,7 @@ void main() {
               await tester.tap(choice);
               await tester.pumpAndSettle();
               await tester.enterText(
-                find.byType(TextField).last,
+                find.byKey(const ValueKey('project-name-field')),
                 'Bangkok Oct26',
               );
               tester.view.viewInsets = FakeViewPadding(

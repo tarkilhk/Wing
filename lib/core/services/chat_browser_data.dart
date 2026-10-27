@@ -656,6 +656,7 @@ final class ChatBrowserData extends ChangeNotifier {
   Future<void> createProject({
     required Future<void> Function(
       ServerFilesBrowser Function(),
+      Future<String> Function(),
       Future<void> Function(ProjectDraft),
     )
     showEditor,
@@ -669,6 +670,16 @@ final class ChatBrowserData extends ChangeNotifier {
     await showEditor(
       () =>
           ServerFilesBrowser(files: resource.gateway.files, isCurrent: active),
+      () async {
+        if (!active()) {
+          throw StateError('Profile changed. Open the project dialog again.');
+        }
+        final path = await resource.gateway.files.defaultDirectory();
+        if (!active()) {
+          throw StateError('Profile changed. Open the project dialog again.');
+        }
+        return path;
+      },
       (draft) async {
         if (!active()) {
           throw StateError('Profile changed. Open the project dialog again.');
