@@ -171,6 +171,7 @@ void main() {
                       await showDialog<void>(
                         context: context,
                         builder: (_) => ProjectEditorDialog.create(
+                          loadDefaultFolder: () async => '/work',
                           createFolders: () => throw StateError(
                             'Folders are outside this icon-only journey',
                           ),

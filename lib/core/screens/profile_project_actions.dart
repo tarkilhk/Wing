@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import '../models/server_reference.dart';
 import '../widgets/selection_viewport.dart';
 import '../widgets/studio_form_actions.dart';
 import '../models/project_icon.dart';
@@ -273,6 +276,7 @@ class ProjectEditorDialog extends StatefulWidget {
     super.key,
     required this.createFolders,
     required this.save,
+    required Future<String> Function() this.loadDefaultFolder,
   }) : project = null;
 
   const ProjectEditorDialog.edit({
@@ -280,8 +284,9 @@ class ProjectEditorDialog extends StatefulWidget {
     required BrowserProject this.project,
     required this.createFolders,
     required this.save,
-  });
+  }) : loadDefaultFolder = null;
 
+  final Future<String> Function()? loadDefaultFolder;
   final BrowserProject? project;
   final ServerFilesBrowser Function() createFolders;
   final Future<void> Function(ProjectDraft) save;
@@ -293,7 +298,14 @@ class ProjectEditorDialog extends StatefulWidget {
 class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
   late final _name = TextEditingController(text: widget.project?.name ?? '');
   final _errorScroll = ScrollController();
-  late String _path = widget.project?.directory ?? '';
+  late final _location = TextEditingController(
+    text: widget.project?.directory ?? '',
+  );
+  String get _path => _location.text.trim();
+  String? _defaultFolder;
+  bool _customFolder = false;
+  bool _loadingFolder = false;
+  String? _folderFailure;
   late String _color = widget.project?.color ?? '';
   late String _icon = widget.project?.icon ?? 'folder-library';
   bool get _editing => widget.project != null;
@@ -301,8 +313,59 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
   String? _failure;
 
   @override
+  void initState() {
+    super.initState();
+    if (!_editing) unawaited(_loadDefaultFolder());
+  }
+
+  Future<void> _loadDefaultFolder() async {
+    setState(() {
+      _loadingFolder = true;
+      _folderFailure = null;
+    });
+    try {
+      final folder = await widget.loadDefaultFolder!();
+      if (!mounted) return;
+      setState(() {
+        _defaultFolder = folder;
+        _suggestFolder();
+      });
+    } catch (_) {
+      if (mounted && !_customFolder) {
+        setState(() {
+          _folderFailure =
+              'Could not load the profile folder. Retry or choose a location.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loadingFolder = false);
+    }
+  }
+
+  void _suggestFolder() {
+    final base = _defaultFolder;
+    if (_editing || _customFolder || base == null) return;
+    final folderName = _name.text
+        .replaceAllMapped(
+          RegExp(r'([a-z0-9])([A-Z])'),
+          (m) => '${m[1]}-${m[2]}',
+        )
+        .replaceAllMapped(
+          RegExp(r'([A-Z])([A-Z][a-z])'),
+          (m) => '${m[1]}-${m[2]}',
+        )
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}]+', unicode: true), '-')
+        .replaceAll(RegExp(r'^-+|-+$'), '');
+    _location.text = folderName.isEmpty
+        ? base
+        : ServerReferencePath.pathContext.join(base, folderName);
+  }
+
+  @override
   void dispose() {
     _name.dispose();
+    _location.dispose();
     _errorScroll.dispose();
     super.dispose();
   }
@@ -312,11 +375,17 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
       context: context,
       builder: (_) => ProjectFolderPickerDialog(
         createBrowser: widget.createFolders,
-        initialPath: _path.isEmpty ? null : _path,
+        initialPath: _editing || _customFolder
+            ? (_path.isEmpty ? null : _path)
+            : _defaultFolder,
       ),
     );
     if (!mounted || path == null) return;
-    setState(() => _path = path);
+    setState(() {
+      _customFolder = true;
+      _location.text = path;
+      _folderFailure = null;
+    });
   }
 
   Future<void> _save() async {
@@ -379,7 +448,7 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
                       controller: _name,
                       enabled: !_pending,
                       maxLength: 200,
-                      onChanged: (_) => setState(() {}),
+                      onChanged: (_) => setState(_suggestFolder),
                       decoration: const InputDecoration(
                         labelText: 'Project name',
                         counterText: '',
@@ -393,13 +462,39 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    _path.isEmpty ? 'Choose a folder on Hermes' : _path,
-                    key: const ValueKey('project-chosen-folder'),
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
+                  child: _editing
+                      ? Text(
+                          _path,
+                          key: const ValueKey('project-chosen-folder'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        )
+                      : viewportSelection(
+                          TextField(
+                            key: const ValueKey('project-folder-field'),
+                            controller: _location,
+                            enabled: !_pending,
+                            onChanged: (_) => setState(() {
+                              _customFolder = true;
+                              _folderFailure = null;
+                            }),
+                            decoration: const InputDecoration(
+                              labelText: 'Folder location',
+                            ),
+                          ),
+                        ),
                 ),
                 const SizedBox(width: 8),
+                if (_loadingFolder)
+                  SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(
+                      value: MediaQuery.disableAnimationsOf(context)
+                          ? .75
+                          : null,
+                      strokeWidth: 2,
+                      semanticsLabel: 'Loading profile folder',
+                    ),
+                  ),
                 StudioButtonPress(
                   child: IconButton.outlined(
                     key: const ValueKey('project-choose-folder'),
@@ -412,6 +507,21 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
                 ),
               ],
             ),
+            if (_folderFailure case final failure?)
+              Row(
+                children: [
+                  Expanded(child: StudioError(failure)),
+                  StudioButtonPress(
+                    child: IconButton(
+                      tooltip: 'Retry profile folder',
+                      onPressed: _loadingFolder || _pending
+                          ? null
+                          : () => unawaited(_loadDefaultFolder()),
+                      icon: const Icon(Icons.refresh),
+                    ),
+                  ),
+                ],
+              ),
             if (_editing) ...[
               const SizedBox(height: 4),
               Text(

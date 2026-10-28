@@ -24,6 +24,9 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
   final folderCreates = <(String, Map<String, dynamic>)>[];
   Completer<void>? folderCreateGate;
   bool failFolderCreate = false;
+  Completer<void>? defaultFolderGate;
+  bool failDefaultFolder = false;
+  final defaultFolderProfiles = <String>[];
   bool failProjectUpdate = false;
   bool failPrimaryFolder = false;
   final resumeRuntimeIds = <String, String>{};
@@ -94,6 +97,12 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
       },
       get: (endpoint, query) async {
         final path = Uri.parse(endpoint).path;
+        if (path == 'fs/default-cwd') {
+          defaultFolderProfiles.add(scope.profileName);
+          await defaultFolderGate?.future;
+          if (failDefaultFolder) throw StateError('Default folder unavailable');
+          return {'cwd': '/${scope.profileName}', 'branch': null};
+        }
         if (path == 'files') {
           final location = query['path'] ?? '/work';
           return {

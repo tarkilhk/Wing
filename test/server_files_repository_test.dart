@@ -5,6 +5,28 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/server_files_repository.dart';
 
 void main() {
+  test('default directory uses the profile terminal cwd endpoint', () async {
+    final files = ServerFilesRepository(
+      read: (endpoint, query) async {
+        expect(endpoint, 'fs/default-cwd');
+        expect(query, isEmpty);
+        return {'cwd': '/workspace/team', 'branch': null};
+      },
+      write: null,
+    );
+    expect(await files.defaultDirectory(), '/workspace/team');
+  });
+
+  for (final cwd in [null, 42, '', 'relative', '/work/../other']) {
+    test('default directory rejects invalid cwd $cwd', () async {
+      final files = ServerFilesRepository(
+        read: (_, _) async => {'cwd': cwd},
+        write: null,
+      );
+      await expectLater(files.defaultDirectory(), throwsFormatException);
+    });
+  }
+
   test(
     'directory keeps canonical folders and omits broken or secret links',
     () async {
