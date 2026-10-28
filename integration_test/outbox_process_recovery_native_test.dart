@@ -281,13 +281,14 @@ void main() {
       expect(settled.queuedPrompts, isEmpty);
       expect(settled.text, _draft);
       expect(tester.takeException(), isNull);
+      await until(
+        () => !File(attachment.cachedPath).existsSync(),
+        'Composer releases the accepted attachment cache',
+      );
       await tester.pumpWidget(const SizedBox.shrink());
       controller.dispose();
       owner.dispose();
       disposed = true;
-      if (await File(attachment.cachedPath).exists()) {
-        await File(attachment.cachedPath).delete();
-      }
       await serverFile.delete();
       await store.write(
         profileName: 'a',
