@@ -1,4 +1,6 @@
 import 'package:wing/core/models/model_catalog.dart';
+import 'package:wing/core/models/canonical_session.dart';
+import 'package:uuid/uuid.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -58,7 +60,7 @@ class LunaTurnCancellation {
   }
 }
 
-/// Explicitly staged, opt-in QA against stock Hermes f42f579cf8bac4918ac9599bece71618afadd846.
+/// Explicitly staged, opt-in QA against stock Hermes e5ea5fd9ccdf2913c0b21b24eb3d22b321d2e2a6.
 /// PREPARE_WARMUP creates one empty Luna draft and sends one tiny Luna turn on
 /// the same socket, making it discoverable in the phone's normal Chats list. OBSERVE
 /// attaches to that exact chat and measures a turn sent through the phone UI.
@@ -213,15 +215,20 @@ void main() {
         state['creation_attempted'] = true;
         await saveState();
         final created = await gateway.call('session.create', {
-          'source': 'desktop',
-          'close_on_disconnect': false,
+          'request_id': const Uuid().v4(),
+          'source': 'gui',
           'cwd_explicit': false,
           'title': title,
           'model': model,
           'provider': provider,
-          'reasoning_effort': 'low',
-          'fast': false,
+          'reasoning': 'low',
+          'service_tier': 'normal',
         });
+        if (!gateway.canonical.snapshot(created)) {
+          throw StateError(
+            'Creation did not return a current canonical snapshot.',
+          );
+        }
         state['runtime_id'] = created['session_id'];
         state['stored_id'] = created['stored_session_id'];
         await saveState();
@@ -255,17 +262,13 @@ void main() {
             'The owned chat needs its successful explicit warmup.',
           );
         }
-        // Stock resume attaches to this durable chat's current runtime fanout.
-        // Runtime IDs may change when the phone opens the same stored chat.
-        final resumed = await gateway.call('session.resume', {
-          'session_id': stored,
-          'omit_messages': true,
-        });
+        // Resume records the owner's current fences before observing the phone.
+        final resumed = await gateway.resume(stored);
         verifyInfo(resumed['info']);
         final resumedRuntime = resumed['session_id'];
         if (resumedRuntime is! String ||
             resumedRuntime.isEmpty ||
-            resumed['session_key'] != stored) {
+            gateway.resumeDurableId(resumed) != stored) {
           throw StateError('Hermes did not confirm the owned durable QA chat.');
         }
         runtime = resumedRuntime;
@@ -273,10 +276,8 @@ void main() {
           throw StateError('Attach before the phone starts its measured turn.');
         }
       }
-      final named = await gateway.call('session.title', {
-        'session_id': runtime,
-      });
-      if (named['session_key'] != stored || named['title'] != title) {
+      final named = await gateway.call('session.info', {'session_id': runtime});
+      if (named['title'] != title) {
         throw StateError(
           'The server did not confirm the exact owned QA title.',
         );
@@ -330,6 +331,17 @@ void main() {
       };
       gateway.onEvent = (event) {
         if (event.sessionId != runtime) return;
+        if (!gateway.canonical.event(event)) {
+          if (gateway.canonical.needsSnapshot(runtime as String) &&
+              !terminal.isCompleted) {
+            terminal.completeError(
+              StateError(
+                'QA observation needs a fresh owner snapshot; no automatic retry.',
+              ),
+            );
+          }
+          return;
+        }
         if (event.type == 'session.info') {
           try {
             verifyInfo(event.data);
@@ -430,6 +442,7 @@ void main() {
       try {
         if (stage == 'PREPARE_WARMUP') {
           state['warmup_attempted'] = true;
+          state['warmup_submission_id'] = const Uuid().v4();
           await saveState();
           if (await cancelFile.exists()) await turnCancellation.request();
           if (!turnCancellation.beginDispatch()) {
@@ -437,13 +450,24 @@ void main() {
           }
           final accepted = await gateway.call('prompt.submit', {
             'session_id': runtime,
+            'submission_id': state['warmup_submission_id'],
             'text':
                 'Phone streaming QA warmup. Do not use tools or memories. '
                 'Reply only: Luna phone QA ready.',
           });
-          if (accepted['status'] != 'streaming') {
-            throw StateError('Warmup was not accepted as a fresh turn.');
+          final receipt = CanonicalAdmission.fromJson(accepted);
+          if (receipt.sessionId != runtime ||
+              !const {
+                'queued',
+                'started',
+                'terminal',
+              }.contains(receipt.status)) {
+            throw StateError(
+              'Warmup did not return an owned admission receipt.',
+            );
           }
+          state['warmup_admission_id'] = receipt.id;
+          await saveState();
           await turnCancellation.dispatchAccepted();
         }
         await terminal.future.timeout(Duration(seconds: waitSeconds));

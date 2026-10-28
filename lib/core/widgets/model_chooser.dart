@@ -202,6 +202,19 @@ class _ModelChooserState extends State<ModelChooser> {
                                 color: tokens.muted,
                               ),
                             ),
+                          if (choice.allowanceLabel != null ||
+                              choice.recommended ||
+                              choice.planLimitLabel != null)
+                            Text(
+                              [
+                                ?choice.allowanceLabel,
+                                if (choice.recommended) 'Recommended',
+                                ?choice.planLimitLabel,
+                              ].join(' · '),
+                              style: tokens.typography.label.copyWith(
+                                color: tokens.muted,
+                              ),
+                            ),
                           if (enlarged && (input != null || output != null))
                             Text(
                               [

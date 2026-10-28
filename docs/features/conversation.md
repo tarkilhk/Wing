@@ -11,6 +11,8 @@ Feature ID: `conversation`.
 - `conversation.reading-mode` — Use a table’s full-screen icon to hide the composer and portrait context row without leaving the conversation. The same icon or Android Back restores it; drafts remain intact. Landscape puts title and scope in one header row.
 - `conversation.search` — Find and open older content.
 - `conversation.position` — Page and return without losing reading position.
+- `conversation.recovery` — Read the structured reason for a failed turn, inspect its details and use a supplied model or provider recovery action. Selecting a model preserves the draft and never resends the failed turn.
+- `conversation.git-review` — Open Chat actions → Git review for a reported local terminal workspace. Read changed files, All changes (working tree versus HEAD) and Staged (index versus HEAD), then copy an exact changed-line or hunk reference.
 
 ## How to get to it (user POV)
 
@@ -39,6 +41,13 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```
 
 ## Gotchas
+
+Git review uses read-only stock Hermes endpoints. It does not stage, revert,
+commit or push. SSH, Modal and per-session container paths are not treated as
+host paths. An empty response says no changed files were reported, rather than
+claiming the workspace is a clean Git repository. The host suites
+`git_review_test.dart` and `git_review_screen_test.dart` cover read ownership,
+late replies, comparisons, copy references, pending feedback and recovery.
 
 Opening or tapping Latest does not mark a message read. Saved reading positions last until Wing restarts. Long-history host tests cover paging beyond the small Android fixture.
 

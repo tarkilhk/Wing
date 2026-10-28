@@ -1,3 +1,5 @@
+import 'support/composer_fixture.dart' show emitChatEvent;
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -39,6 +41,7 @@ Future<void> _waitUntil(bool Function() condition) async {
 }
 
 class AnswerHost {
+  final revisions = <String, int>{};
   final gateways = <String, ProfileGateway>{};
   final histories = <String, List<Map<String, dynamic>>>{};
   final parents = <String, String>{};
@@ -51,7 +54,16 @@ class AnswerHost {
   List<Map<String, dynamic>>? branchReplyMessages;
   Completer<void>? submitDelay;
   Completer<void>? resumeDelay;
+  Completer<void>? interruptRequested;
+  bool running = false;
+  int executionGeneration = 0;
+  String? resumedRuntimeOverride;
+  int historyReads = 0;
+  void Function(int count)? beforeHistoryRead;
   Object? submitError;
+  Object? mutationError;
+  Completer<void>? mutationDelay;
+  final admissionReceipts = <String, Map<String, dynamic>>{};
   bool submitErrorAfterAcceptance = false;
   int busySubmissions = 0;
   bool omitRowIds = false;
@@ -165,7 +177,11 @@ class AnswerHost {
           '',
         );
         Map<String, dynamic> session(String child) => {
-          'session_id': 'runtime-$child',
+          ...canonicalSnapshotFields,
+          'revision': revisions['$profile/runtime-$child'] ?? 0,
+          'session_id': resumedRuntimeOverride ?? 'runtime-$child',
+          'running': running,
+          'execution_generation': executionGeneration,
           'stored_session_id': child,
           if (clearSessionParent)
             'parent_session_id': null
@@ -197,7 +213,20 @@ class AnswerHost {
           case 'session.resume':
             await resumeDelay?.future;
             return session(id);
+          case 'session.interrupt':
+            if (params['execution_generation'] is! int) {
+              throw const FormatException('Missing interrupt generation');
+            }
+            if (interruptRequested case final signal?
+                when !signal.isCompleted) {
+              signal.complete();
+            }
+            return {
+              'execution_state': running ? 'running' : 'idle',
+              'execution_generation': executionGeneration,
+            };
           case 'session.history':
+            beforeHistoryRead?.call(++historyReads);
             return {
               'messages': history(profile, id)
                   .where(shown)
@@ -210,13 +239,53 @@ class AnswerHost {
                   )
                   .toList(),
             };
-          case 'session.branch':
+          case 'session.mutate':
+            await mutationDelay?.future;
+            final payload = params['payload'] as Map;
+            if (mutationError != null) throw mutationError!;
+            if (busySubmissions > 0) {
+              busySubmissions--;
+              throw JsonRpcError(
+                'session.mutate',
+                'Session is busy',
+                reason: 'session_busy',
+              );
+            }
+            revisions['$profile/${params['session_id']}'] =
+                (params['expected_revision'] as int) + 1;
+            final result = <String, dynamic>{
+              'session_id': params['session_id'],
+              'revision': (params['expected_revision'] as int) + 1,
+              'execution_generation': params['expected_generation'],
+              'operation': params['operation'],
+            };
+            if (params['operation'] == 'rewind') {
+              final rows = history(profile, id);
+              final index = rows.indexWhere(
+                (row) => row['row_id'] == payload['target_message_id'],
+              );
+              if (index < 0) {
+                throw JsonRpcError(
+                  'session.mutate',
+                  'Target changed',
+                  reason: 'revision_conflict',
+                );
+              }
+              rows.removeRange(index, rows.length);
+              return result;
+            }
+            if (params['operation'] != 'branch') return result;
             await branchDelay?.future;
             if (branchError != null) throw branchError!;
             final child = 'child-${++next}';
-            histories['$profile/$child'] = history(profile, id)
+            final source = history(profile, id);
+            final boundary = source.indexWhere(
+              (row) => row['row_id'] == payload['through_message_id'],
+            );
+            if (boundary < 0) throw StateError('Missing branch boundary');
+            histories['$profile/$child'] = source
+                .take(boundary + 1)
                 .where(isBranchMessage)
-                .take(params['count'] as int)
                 .map((m) => Map<String, dynamic>.from(m))
                 .toList();
             for (var i = 0; i < histories['$profile/$child']!.length; i++) {
@@ -224,30 +293,17 @@ class AnswerHost {
             }
             parents[child] = id;
             alterBranch?.call(histories['$profile/$child']!);
-            return {
-              ...session(child),
-              'parent': id,
-              if (branchReplyMessages != null) 'messages': branchReplyMessages,
-            };
+            return {...result, 'branched_session_id': child};
           case 'prompt.submit':
-            if (busySubmissions > 0) {
-              busySubmissions--;
-              throw JsonRpcError(
-                'prompt.submit',
-                'Session is busy',
-                code: 4009,
-              );
+            final input = '$profile:$id:${params['submission_id']}';
+            if (admissionReceipts.containsKey(input)) {
+              return admissionReceipts[input]!;
             }
             await submitDelay?.future;
             if (submitError != null && !submitErrorAfterAcceptance) {
               throw submitError!;
             }
             final rows = history(profile, id);
-            final cut = params['truncate_before_row_id'];
-            if (cut != null) {
-              final index = rows.indexWhere((m) => m['row_id'] == cut);
-              rows.removeRange(index, rows.length);
-            }
             rows.add({
               'role': 'user',
               'text': params['text'],
@@ -258,8 +314,13 @@ class AnswerHost {
               'text': 'New answer $next',
               'row_id': nextRow++,
             });
+            final receipt = canonicalReceipt(
+              params,
+              admissionId: 'admission-${admissionReceipts.length + 1}',
+            );
+            admissionReceipts[input] = receipt;
             if (submitError != null) throw submitError!;
-            return {'status': 'streaming'};
+            return receipt;
         }
         return {};
       },
@@ -339,66 +400,29 @@ void main() {
   );
 
   void event(String type, [Map<String, dynamic> data = const {}]) {
-    host.gateways['a']!.onEvent!(
-      StreamEvent(
-        type: type,
-        sessionId: original.runtime.runtimeId,
-        data: data,
-      ),
-    );
+    emitChatEvent(controller, original, type, data);
   }
 
   test(
-    'fork older answer preserves a running source through completion',
+    'canonical fork waits for the running source without interrupting it',
     () async {
       event('message.start');
       event('tool.start', {'tool_id': 'live-tool', 'name': 'terminal'});
       final activity = original.runtime.mainToolActivity;
-      final history = original.reading.messages.toList();
       await controller.updateDraft(original, 'Keep this draft');
-      host.branchDelay = Completer<void>();
-      final pending = controller.branchAnswer(original, 2);
-      await Future<void>.delayed(Duration.zero);
-      expect(
-        host.calls.where((call) => call.$1 == 'session.branch'),
-        hasLength(1),
-      );
-      expect(original.runtime.execution, ChatExecution.running);
-      expect(original.runtime.mainActivity, ChatMainActivity.tool);
-      expect(original.runtime.mainToolActivity, same(activity));
-      expect(original.runtime.changingAnswer, isFalse);
+      expect(controller.canBranchAnswer(original), isFalse);
       expect(await controller.branchAnswer(original, 2), isNull);
-      expect(
-        await controller.branchAnswer(original, 2, regenerate: true),
-        isNull,
-      );
-      expect(original.reading.messages, history);
+      expect(original.runtime.mainToolActivity, same(activity));
       expect(original.composer.observation.text, 'Keep this draft');
-
-      event('tool.complete', {
-        'tool_id': 'live-tool',
-        'result': 'Still working',
-      });
-      event('reasoning.chunk', {'text': 'Continue the original work'});
-      host.branchDelay!.complete();
-      final child = await pending;
-      expect(child, isNotNull);
-      expect(controller.current!.chat, same(child));
-      expect(child!.reading.messages.map(answerMessageText), [
-        'Original prompt',
-        'Original answer',
-      ]);
-      expect(original.runtime.execution, ChatExecution.running);
-      expect(original.composer.observation.text, 'Keep this draft');
+      expect(host.calls.where((call) => call.$1 == 'session.mutate'), isEmpty);
       event('message.complete');
       await Future<void>.delayed(Duration.zero);
-      expect(original.runtime.execution, ChatExecution.completed);
-      expect(child.runtime.execution, ChatExecution.idle);
+      expect(controller.canBranchAnswer(original), isTrue);
+      final child = await controller.branchAnswer(original, 2);
+      expect(child, isNotNull);
+      expect(original.composer.observation.text, 'Keep this draft');
       expect(
-        host.calls.where(
-          (call) =>
-              call.$1 == 'session.interrupt' || call.$1 == 'prompt.submit',
-        ),
+        host.calls.where((call) => call.$1 == 'session.interrupt'),
         isEmpty,
       );
     },
@@ -407,7 +431,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'fork older answer while running shows failure and retry ${brightness.name} $scale',
+        'fork saved answer shows failure and retry ${brightness.name} $scale',
         (tester) async {
           tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
           tester.view.devicePixelRatio = 1;
@@ -455,7 +479,6 @@ void main() {
           }
 
           await tester.pumpAndSettle();
-          event('message.start');
           await tester.pump(const Duration(milliseconds: 300));
           await tester.settleMarkdown();
           final actions = find.byKey(const ValueKey('answer-actions-3'));
@@ -466,7 +489,7 @@ void main() {
             matching: find.byTooltip('Branch in new session'),
           );
           expect(tester.widget<AnswerActions>(actions).onBranch, isNotNull);
-          expect(tester.widget<AnswerActions>(actions).onRegenerate, isNull);
+          expect(tester.widget<AnswerActions>(actions).onRegenerate, isNotNull);
           await picture('available');
           host.branchDelay = Completer<void>();
           host.branchError = StateError('Fork failed; try again');
@@ -484,7 +507,7 @@ void main() {
             find.byKey(const Key('profile-message-composer')),
             findsNothing,
           );
-          expect(original.runtime.execution, ChatExecution.running);
+          expect(original.runtime.execution, ChatExecution.idle);
           final header = find.byKey(const ValueKey('studio-loading-slot'));
           expect(
             find.descendant(of: header, matching: forkLoading()),
@@ -506,7 +529,11 @@ void main() {
           );
           await picture('pending');
           expect(
-            host.calls.where((call) => call.$1 == 'session.branch'),
+            host.calls.where(
+              (call) =>
+                  call.$1 == 'session.mutate' &&
+                  call.$2['operation'] == 'branch',
+            ),
             isEmpty,
           );
           await tester.runAsync(() async {
@@ -515,7 +542,11 @@ void main() {
           });
           await tester.pump();
           expect(
-            host.calls.where((call) => call.$1 == 'session.branch'),
+            host.calls.where(
+              (call) =>
+                  call.$1 == 'session.mutate' &&
+                  call.$2['operation'] == 'branch',
+            ),
             hasLength(1),
           );
           expect(original.branchingAnswer, isTrue);
@@ -531,7 +562,7 @@ void main() {
           expect(original.branchingAnswer, isFalse);
           expect(find.byTooltip('Retry').hitTestable(), findsOneWidget);
           expect(forkLoading(), findsNothing);
-          expect(original.runtime.execution, ChatExecution.running);
+          expect(original.runtime.execution, ChatExecution.idle);
           await picture('failed');
           host.branchError = null;
           host.branchReadDelay = Completer<void>();
@@ -553,7 +584,7 @@ void main() {
           });
           await tester.pump();
           expect(controller.current!.chat, isNot(same(original)));
-          expect(original.runtime.execution, ChatExecution.running);
+          expect(original.runtime.execution, ChatExecution.idle);
           await tester.pump(const Duration(milliseconds: 300));
           expect(forkLoading(), findsNothing);
           expect(
@@ -580,7 +611,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    event('message.start');
     await tester.pump(const Duration(milliseconds: 300));
     final actions = find.byKey(const ValueKey('answer-actions-3'));
     await tester.ensureVisible(actions);
@@ -606,7 +636,7 @@ void main() {
     expect(controller.current!.chat, isNull);
     expect(forkLoading(), findsNothing);
     expect(original.branchingAnswer, isFalse);
-    expect(original.runtime.execution, ChatExecution.running);
+    expect(original.runtime.execution, ChatExecution.idle);
     expect(original.composer.observation.text, 'Keep this draft');
     expect(
       controller.current!.sessions.any((row) => row['id'] == 'child-1'),
@@ -616,24 +646,18 @@ void main() {
   });
 
   for (final command in ['branch', 'fork']) {
-    test('$command command copies saved answers during a live reply', () async {
+    test('$command refuses while a reply is running', () async {
       event('message.start');
-      event('message.delta', {'text': 'Unfinished response'});
       await controller.updateDraft(original, '/$command');
       await controller.send(original);
-      final child = controller.current!.chat!;
-      expect(child, isNot(same(original)));
-      expect(child.reading.messages.last['text'], 'Later answer');
+      expect(controller.current!.chat, same(original));
+      expect(host.calls.where((call) => call.$1 == 'session.mutate'), isEmpty);
       expect(original.runtime.execution, ChatExecution.running);
-      expect(
-        host.calls.lastWhere((call) => call.$1 == 'session.branch').$2['count'],
-        4,
-      );
     });
   }
 
   for (final pendingInput in ['approval', 'clarify']) {
-    test('fork keeps pending $pendingInput on the source chat', () async {
+    test('fork remains unavailable during pending $pendingInput', () async {
       event('message.start');
       event(
         pendingInput,
@@ -652,9 +676,8 @@ void main() {
       );
       expect(original.runtime.needsInput, isTrue);
       final child = await controller.branchAnswer(original, 2);
-      expect(child, isNotNull);
+      expect(child, isNull);
       expect(original.runtime.needsInput, isTrue);
-      expect(child!.runtime.needsInput, isFalse);
       expect(
         host.calls.where(
           (call) => {
@@ -672,10 +695,10 @@ void main() {
   test(
     'source completion during a fork is not reset by branch settlement',
     () async {
-      event('message.start');
       host.branchDelay = Completer<void>();
       final pending = controller.branchAnswer(original, 2);
       await Future<void>.delayed(Duration.zero);
+      event('message.start');
       event('message.complete');
       expect(original.runtime.execution, ChatExecution.completed);
       host.branchDelay!.complete();
@@ -886,7 +909,11 @@ void main() {}
       ['Original prompt', 'Original answer'],
     );
     expect(
-      host.calls.lastWhere((c) => c.$1 == 'session.branch').$2['count'],
+      host.calls
+          .lastWhere(
+            (c) => c.$1 == 'session.mutate' && c.$2['operation'] == 'branch',
+          )
+          .$2['payload']['through_message_id'],
       3,
     );
     expect(host.history('a', 'original').length, 6);
@@ -1013,8 +1040,12 @@ void main() {}
         ['Original prompt', 'Original answer'],
       );
       expect(
-        host.calls.lastWhere((c) => c.$1 == 'session.branch').$2['count'],
-        507,
+        host.calls
+            .lastWhere(
+              (c) => c.$1 == 'session.mutate' && c.$2['operation'] == 'branch',
+            )
+            .$2['payload']['through_message_id'],
+        3,
       );
     },
   );
@@ -1022,7 +1053,12 @@ void main() {}
   test('a missing saved answer refuses before creating a child', () async {
     host.history('a', 'original')[2].remove('row_id');
     await expectLater(controller.branchAnswer(original, 2), throwsStateError);
-    expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
+    expect(
+      host.calls.where(
+        (c) => c.$1 == 'session.mutate' && c.$2['operation'] == 'branch',
+      ),
+      isEmpty,
+    );
   });
 
   testWidgets(
@@ -1097,11 +1133,14 @@ void main() {}
       );
       expect(original.reading.messages.length, 5);
       expect(controller.current!.chat, same(child));
-      expect(host.calls.lastWhere((c) => c.$1 == 'session.branch').$2, {
-        'session_id': 'runtime-original',
-        'count': 2,
-        'profile': 'a',
-      });
+      expect(
+        host.calls
+            .lastWhere(
+              (c) => c.$1 == 'session.mutate' && c.$2['operation'] == 'branch',
+            )
+            .$2,
+        containsPair('payload', {'through_message_id': 3}),
+      );
       expect(host.calls.where((c) => c.$1 == 'prompt.submit'), isEmpty);
     },
   );
@@ -1115,14 +1154,17 @@ void main() {}
     ))!;
     await host.complete(regenerated);
     final submit = host.calls.lastWhere((c) => c.$1 == 'prompt.submit').$2;
-    expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
+    expect(
+      host.calls.where(
+        (c) => c.$1 == 'session.mutate' && c.$2['operation'] == 'branch',
+      ),
+      isEmpty,
+    );
     expect(submit, {
       'session_id': original.runtime.runtimeId,
       'profile': 'a',
       'text': 'Original prompt',
-      'truncate_before_row_id': 1,
-      'confirm_truncate': true,
-      'confirm_empty_truncate': true,
+      'submission_id': submit['submission_id'],
     });
     expect(
       regenerated.reading.messages
@@ -1172,7 +1214,12 @@ fixture-value-amber-729
       final submit = host.calls.lastWhere((call) => call.$1 == 'prompt.submit');
       expect(regenerated, same(original));
       expect(submit.$2['session_id'], original.runtime.runtimeId);
-      expect(submit.$2['truncate_before_row_id'], 1);
+      expect(
+        host.calls
+            .lastWhere((call) => call.$1 == 'session.mutate')
+            .$2['payload'],
+        {'target_message_id': 1},
+      );
       final prepared = PreparedComposerMessage.parse(submit.$2['text'])!;
       expect(prepared.message, visible);
       expect(prepared.context, contains('Fresh source at replay'));
@@ -1220,15 +1267,25 @@ fixture-value-amber-729
           await Future<void>.delayed(Duration.zero);
         }
       }).timeout(const Duration(seconds: 10));
-      expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
+      expect(
+        host.calls.where(
+          (c) => c.$1 == 'session.mutate' && c.$2['operation'] == 'branch',
+        ),
+        isEmpty,
+      );
       final submissions = host.calls
           .where((call) => call.$1 == 'prompt.submit')
           .toList();
       expect(submissions, hasLength(2));
-      expect(submissions.first.$2['truncate_before_row_id'], 1);
+      expect(
+        host.calls
+            .lastWhere((call) => call.$1 == 'session.mutate')
+            .$2['payload'],
+        {'target_message_id': 1},
+      );
       expect(submissions.first.$2['text'], 'Original prompt');
       expect(submissions.last.$2['text'], 'Queued follow-up');
-      expect(submissions.last.$2['queued'], isTrue);
+      expect(submissions.last.$2.containsKey('queued'), isFalse);
       expect(
         submissions.last.$2.containsKey('truncate_before_row_id'),
         isFalse,
@@ -1294,7 +1351,12 @@ fixture-value-amber-729
       ...original.reading.messages.skip(3),
     ]);
     await expectLater(controller.branchAnswer(original, 2), throwsStateError);
-    expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
+    expect(
+      host.calls.where(
+        (c) => c.$1 == 'session.mutate' && c.$2['operation'] == 'branch',
+      ),
+      isEmpty,
+    );
     expect(original.runtime.changingAnswer, isFalse);
   });
 
@@ -1310,15 +1372,20 @@ fixture-value-amber-729
         regenerate: true,
       ))!;
       await host.complete(regenerated);
-      expect(host.calls.where((c) => c.$1 == 'session.branch'), isEmpty);
+      expect(
+        host.calls.where(
+          (c) => c.$1 == 'session.mutate' && c.$2['operation'] == 'branch',
+        ),
+        isEmpty,
+      );
       expect(
         host.calls.lastWhere((c) => c.$1 == 'prompt.submit').$2['text'],
         'Follow-up',
       );
       expect(
         host.calls
-            .lastWhere((c) => c.$1 == 'prompt.submit')
-            .$2['truncate_before_row_id'],
+            .lastWhere((c) => c.$1 == 'session.mutate')
+            .$2['payload']['target_message_id'],
         4,
       );
       expect(
@@ -1430,10 +1497,10 @@ fixture-value-amber-729
       regenerate: true,
     ))!;
     await host.complete(regenerated);
-    host.submitError = JsonRpcError(
-      'prompt.submit',
+    host.mutationError = JsonRpcError(
+      'session.mutate',
       'Session busy',
-      code: 4009,
+      reason: 'session_busy',
     );
     await expectLater(
       controller.branchAnswer(original, 1, regenerate: true),
@@ -1450,10 +1517,10 @@ fixture-value-amber-729
   test(
     'stale saved prompt rejection stays actionable and hides RPC text',
     () async {
-      host.submitError = JsonRpcError(
-        'prompt.submit',
+      host.mutationError = JsonRpcError(
+        'session.mutate',
         'target user message is no longer in session history',
-        code: 4018,
+        reason: 'revision_conflict',
       );
 
       await expectLater(
@@ -1464,7 +1531,7 @@ fixture-value-amber-729
       expect(original.runtime.execution, ChatExecution.failed);
       expect(
         original.runtime.error,
-        'Hermes could not match this saved prompt. The conversation is unchanged. Send a new message to continue.',
+        'Hermes did not accept the regeneration. The conversation is unchanged.',
       );
       expect(original.runtime.error, isNot(contains('JsonRpcError')));
       expect(controller.current!.chat, same(original));
@@ -1505,14 +1572,13 @@ fixture-value-amber-729
       expect(original.runtime.reconnecting, isTrue);
       expect(original.parentSessionId, isNull);
       await controller.reconnect(original.key.workspace);
-      expect(host.calls.where((c) => c.$1 == 'prompt.submit').length, 1);
-      expect(original.reading.messages.map(answerMessageText), [
-        'Original prompt',
-        'Tool output',
-        'Original answer',
-        'Follow-up',
-        'Later answer',
-      ]);
+      final attempts = host.calls
+          .where((c) => c.$1 == 'prompt.submit')
+          .toList();
+      expect(attempts, hasLength(2));
+      expect(attempts.last.$2, attempts.first.$2);
+      expect(host.history('a', 'original'), isEmpty);
+      expect(original.composer.hasRecoverableSubmissions, isTrue);
     },
   );
 
@@ -1562,12 +1628,17 @@ fixture-value-amber-729
         ]);
         expect(original.composer.observation.text, 'New draft during recovery');
         expect(original.runtime.execution, ChatExecution.completed);
+        final attempts = host.calls
+            .where((call) => call.$1 == 'prompt.submit')
+            .toList();
+        expect(attempts, hasLength(2));
+        expect(attempts.last.$2, attempts.first.$2);
+        expect(host.admissionReceipts, hasLength(1));
         expect(
-          host.calls.where((call) => call.$1 == 'prompt.submit'),
-          hasLength(1),
-        );
-        expect(
-          host.calls.where((call) => call.$1 == 'session.branch'),
+          host.calls.where(
+            (call) =>
+                call.$1 == 'session.mutate' && call.$2['operation'] == 'branch',
+          ),
           isEmpty,
         );
       },
@@ -1594,6 +1665,9 @@ fixture-value-amber-729
           matching: find.byTooltip('Regenerate response'),
         ),
       );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 later user turn'), findsOneWidget);
+      await tester.tap(find.byTooltip('Regenerate and remove later turns'));
       await tester.runAsync(() async {
         for (var i = 0; i < 100; i++) {
           if (controller.current!.chat!.runtime.execution ==
@@ -1682,8 +1756,13 @@ fixture-value-amber-729
     );
     await tester.pumpAndSettle();
     expect(
-      host.calls.lastWhere((call) => call.$1 == 'session.branch').$2['count'],
-      2,
+      host.calls
+          .lastWhere(
+            (call) =>
+                call.$1 == 'session.mutate' && call.$2['operation'] == 'branch',
+          )
+          .$2['payload']['through_message_id'],
+      3,
     );
     expect(
       controller.current!.chat!.reading.messages.last['text'],

@@ -233,7 +233,7 @@ class BotGroup {
   final List<BotGroupMember> members;
   final bool working, blocked;
 
-  /// Members of a room observed working in this read, not individual writers.
+  /// Profiles with exact queued, running or stopping tasks in this observation.
   /// Retained room details never carry this positive activity into a failed read.
   final Set<String> activeMemberProfiles;
 
@@ -349,11 +349,11 @@ class BotGroup {
       preview: preview,
       working: working,
       blocked: blocked,
-      activeMemberProfiles: runtimeAvailable && working
-          ? (retainIdentity ? members : observed.members).map(
-              (member) => member.profile,
-            )
-          : const [],
+      activeMemberProfiles: activeMemberProfiles.where(
+        (profile) => (retainIdentity ? members : observed.members).any(
+          (member) => member.profile == profile,
+        ),
+      ),
       lastMessageAt: lastMessageAt,
       lastMessageSequence: lastMessageSequence,
       lastAnswerSequence: lastAnswerSequence,
@@ -451,12 +451,22 @@ final class BotGroupState {
     this.runtimeAvailable = false,
     this.working = false,
     this.blocked = false,
+    this.memberActivity = const [],
   });
+  final List<BotGroupMemberActivity> memberActivity;
   final BotGroup room;
   final bool roomAvailable, runtimeAvailable, working, blocked;
   final int? latestSequence;
-  Set<String> get activeMemberProfiles => runtimeAvailable && working
-      ? Set.unmodifiable(room.members.map((member) => member.profile))
+  Set<String> get activeMemberProfiles => runtimeAvailable
+      ? Set.unmodifiable(
+          room.members
+              .where(
+                (member) => memberActivity.any(
+                  (activity) => activity.memberId == member.id,
+                ),
+              )
+              .map((member) => member.profile),
+        )
       : const {};
 
   /// Replace runtime and incidentally read identity, retaining confirmed messages.
@@ -496,6 +506,60 @@ class BotGroupEditConflict implements Exception {
   String toString() => message;
 }
 
+/// Canonical room manifest. Storage paths and upload receipts never enter Send.
+@immutable
+final class BotGroupAttachment {
+  const BotGroupAttachment({
+    required this.id,
+    required this.kind,
+    required this.name,
+    required this.mime,
+    required this.size,
+  });
+  final String id, kind, name, mime;
+  final int size;
+  bool get isImage => kind == 'image';
+  Map<String, dynamic> toJson() => {
+    'attachment_id': id,
+    'kind': kind,
+    'name': name,
+    'mime': mime,
+    'size': size,
+  };
+  factory BotGroupAttachment.fromJson(Map<String, dynamic> value) {
+    final id = value['attachment_id'];
+    final name = value['name'];
+    final mime = value['mime'];
+    final size = value['size'];
+    final kind = value['kind'];
+    if (id is! String ||
+        id.isEmpty ||
+        name is! String ||
+        name.isEmpty ||
+        name.contains(RegExp(r'[/\\\n\r]')) ||
+        name == '.' ||
+        name == '..' ||
+        mime is! String ||
+        mime.isEmpty ||
+        size is! int ||
+        size < 1 ||
+        size > 15000000 ||
+        !const {'image', 'pdf', 'file'}.contains(kind)) {
+      throw const FormatException('Invalid group attachment');
+    }
+    return BotGroupAttachment(
+      id: id,
+      kind: kind as String,
+      name: name,
+      mime: mime,
+      size: size,
+    );
+  }
+  String target(String eventId) => Uri(
+    pathSegments: ['', 'group-attachments', eventId, id, name],
+  ).toString();
+}
+
 @immutable
 class BotGroupEvent {
   const BotGroupEvent({
@@ -508,6 +572,7 @@ class BotGroupEvent {
     required this.timestamp,
     required this.text,
     this.passedMemberId,
+    this.attachments = const [],
   });
   final int sequence;
   final String eventId, kind, actor, actorId, actorName, text;
@@ -515,6 +580,7 @@ class BotGroupEvent {
 
   /// Passed turns are gateway-authored; their speaker lives in the payload.
   final String? passedMemberId;
+  final List<BotGroupAttachment> attachments;
   bool get isMessage => kind == 'message.user' || kind == 'message.member';
   bool get isPass => kind == 'turn.settled' && passedMemberId != null;
   bool get isTranscriptEntry => isMessage || isPass;
@@ -557,14 +623,24 @@ class BotGroupAction {
 }
 
 @immutable
+final class BotGroupMemberActivity {
+  const BotGroupMemberActivity({required this.memberId, required this.status});
+  final String memberId;
+  final String status;
+}
+
+@immutable
 class BotGroupRuntime {
   BotGroupRuntime({
     required this.working,
     required this.blocked,
     required Iterable<BotGroupAction> actions,
-  }) : actions = List.unmodifiable(actions);
+    Iterable<BotGroupMemberActivity> memberActivity = const [],
+  }) : actions = List.unmodifiable(actions),
+       memberActivity = List.unmodifiable(memberActivity);
   final bool working, blocked;
   final List<BotGroupAction> actions;
+  final List<BotGroupMemberActivity> memberActivity;
 }
 
 @immutable

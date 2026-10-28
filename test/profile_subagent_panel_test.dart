@@ -79,20 +79,26 @@ class _SubagentFixture extends ProfileActionsFixture {
         requests.add((method, params));
         if (method == 'session.resume' &&
             params['session_id'] == 'child-session') {
-          expect(params['lazy'], isTrue);
+          expect(params['display_projection'], isTrue);
+          expect(params.containsKey('lazy'), isFalse);
+          expect(params.containsKey('omit_messages'), isFalse);
           return {
-            'session_id': 'child-watch',
-            'resumed': 'child-session',
+            'session_id': 'child-session',
+            'stored_session_id': 'child-session',
+            'replay_epoch': 'child-epoch',
+            'last_sequence': childEvents.length,
             'running': true,
           };
         }
         if (method == 'session.events.since' &&
-            params['session_id'] == 'child-watch') {
+            params['session_id'] == 'child-session') {
+          expect(params['replay_epoch'], 'child-epoch');
           return {
-            'epoch': 'child-epoch',
+            'replay_epoch': 'child-epoch',
             'events': [
               for (final event in childEvents)
-                if ((event['seq'] as int) > (params['last_seen'] as int)) event,
+                if ((event['seq'] as int) > (params['last_sequence'] as int))
+                  event,
             ],
             'latest_seq': childEvents.fold<int>(
               0,
@@ -100,6 +106,7 @@ class _SubagentFixture extends ProfileActionsFixture {
                   (event['seq'] as int) > latest ? event['seq'] as int : latest,
             ),
             'truncated': false,
+            'snapshot_required': false,
           };
         }
         switch (method) {
@@ -133,6 +140,7 @@ class _SubagentFixture extends ProfileActionsFixture {
               'available': tailAvailable,
               'text': tailAvailable ? 'latest child output' : '',
               'truncated': false,
+              'snapshot_required': false,
             };
           case 'subagent.steer':
             if (failSteer) throw StateError('Steering transport failed');
@@ -369,9 +377,9 @@ void main() {
         },
     ];
     fixture.childEvents.addAll([
-      {'session_id': 'child-watch', 'seq': 1, 'type': 'message.start'},
+      {'session_id': 'child-session', 'seq': 1, 'type': 'message.start'},
       {
-        'session_id': 'child-watch',
+        'session_id': 'child-session',
         'seq': 2,
         'type': 'tool.start',
         'payload': {
@@ -405,7 +413,7 @@ void main() {
     );
     expect(find.byType(ProfileActivitySection), findsOneWidget);
     fixture.childEvents.add({
-      'session_id': 'child-watch',
+      'session_id': 'child-session',
       'seq': 3,
       'type': 'message.complete',
       'payload': {'text': 'Final reply awaiting persistence'},

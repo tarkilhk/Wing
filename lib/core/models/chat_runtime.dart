@@ -1,4 +1,5 @@
 import 'hermes_question.dart';
+import 'turn_failure.dart';
 import 'gateway_activity.dart';
 import 'gateway_approval.dart';
 import 'gateway_clarify.dart';
@@ -70,6 +71,7 @@ class ChatApproval {
     required this.serverRequestId,
     required GatewayApprovalRequest request,
     required this.eventId,
+    this.nativeGeneration,
   }) : request = GatewayApprovalRequest(
          command: request.command,
          description: request.description,
@@ -82,6 +84,9 @@ class ChatApproval {
   final String? serverRequestId;
   final GatewayApprovalRequest request;
   final String? eventId;
+
+  /// Null identifies a current server-to-client request, not a native waiter.
+  final int? nativeGeneration;
 }
 
 class ChatQuestions {
@@ -90,6 +95,7 @@ class ChatQuestions {
     required Iterable<GatewayClarifyRequest> questions,
     required Iterable<String> answeredIds,
     required Map<String, String> lockedAnswers,
+    this.nativeGeneration,
   }) : questions = List.unmodifiable(
          questions.map(
            (q) => GatewayClarifyRequest(
@@ -104,6 +110,7 @@ class ChatQuestions {
        answeredIds = Set.unmodifiable(answeredIds),
        lockedAnswers = Map.unmodifiable(lockedAnswers);
   final Object correlation;
+  final int? nativeGeneration;
   final List<GatewayClarifyRequest> questions;
   final Set<String> answeredIds;
   final Map<String, String> lockedAnswers;
@@ -142,6 +149,7 @@ class ChatRuntimeObservation {
     required this.error,
     required this.decisionError,
     required this.decisionErrorRequestId,
+    this.failure,
   }) : activityEntries = List.unmodifiable(activityEntries),
        toolActivities = List.unmodifiable(toolActivities),
        approvals = List.unmodifiable(approvals);
@@ -171,6 +179,7 @@ class ChatRuntimeObservation {
   final String? error;
   final String? decisionError;
   final String? decisionErrorRequestId;
+  final TurnFailure? failure;
   ChatApproval? get approval => approvals.firstOrNull;
   GatewayClarifyRequest? get pendingQuestion => questions?.pending;
   String? get tool => mainToolActivity?.name;

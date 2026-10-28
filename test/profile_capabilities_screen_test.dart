@@ -1,5 +1,7 @@
 import 'package:wing/core/widgets/activity/skill_document_viewer.dart';
 import 'package:wing/core/services/profile_capabilities_session.dart';
+import 'package:wing/core/models/profile_capabilities.dart';
+import 'package:wing/core/widgets/studio_select.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -42,9 +44,11 @@ Future<void> _show(WidgetTester tester, ProfileGateway gateway) async {
     MaterialApp(
       home: ProfileCapabilitiesScreen(
         onToolSetup: (_) async {},
-        onLibrary: () {},
-        onHub: () {},
-        onPlugins: () {},
+        onLibrary: () async {},
+        onHub: () async {},
+        onPlugins: () async {},
+        onConnectedApps: () async {},
+        onMcpConnectors: () async {},
         createSession: () => ProfileCapabilitiesSession(gateway),
         connectionLabel: 'Server A',
       ),
@@ -56,6 +60,64 @@ Future<void> _show(WidgetTester tester, ProfileGateway gateway) async {
 }
 
 void main() {
+  testWidgets(
+    'readiness filter is display-only and library return refreshes inventory',
+    (tester) async {
+      var reads = 0;
+      var libraryOpened = false;
+      final gateway = _gateway(
+        skillsOnly: false,
+        get: (path, _) async {
+          if (path != 'tools/toolsets') throw StateError(path);
+          reads++;
+          return {
+            'data': [
+              {'name': 'ready', 'enabled': true, 'configured': true},
+              {'name': 'missing', 'enabled': false, 'configured': false},
+              if (libraryOpened)
+                {'name': 'new-tool', 'enabled': true, 'configured': true},
+            ],
+          };
+        },
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ProfileCapabilitiesScreen(
+            connectionLabel: 'Server A',
+            createSession: () => ProfileCapabilitiesSession(gateway),
+            onToolSetup: (_) async {},
+            onLibrary: () async {
+              libraryOpened = true;
+            },
+            onHub: () async {},
+            onPlugins: () async {},
+            onConnectedApps: () async {},
+            onMcpConnectors: () async {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(StudioSelect<ProfileCapabilityFilter>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Needs setup').last);
+      await tester.pumpAndSettle();
+      expect(find.text('missing'), findsOneWidget);
+      expect(find.text('ready'), findsNothing);
+      expect(reads, 1);
+      await tester.tap(find.byType(StudioSelect<ProfileCapabilityFilter>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('All capabilities').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Manage capabilities'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Skill library'));
+      await tester.pumpAndSettle();
+      expect(reads, 2);
+      expect(find.text('new-tool'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'skill toggle stays on captured profile and refreshes server state',
     (tester) async {
@@ -132,9 +194,11 @@ void main() {
         MaterialApp(
           home: ProfileCapabilitiesScreen(
             onToolSetup: (_) async {},
-            onLibrary: () {},
-            onHub: () {},
-            onPlugins: () {},
+            onLibrary: () async {},
+            onHub: () async {},
+            onPlugins: () async {},
+            onConnectedApps: () async {},
+            onMcpConnectors: () async {},
             connectionLabel: 'Server A',
             createSession: () => ProfileCapabilitiesSession(
               _gateway(

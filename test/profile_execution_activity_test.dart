@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -55,6 +56,14 @@ void main() {
   late AppPreferences appPreferences;
   late ProfileChat chat;
 
+  ProfileGateway attachTiming(ProfileGateway gateway) {
+    gateway.canonical.snapshot({
+      ...canonicalSnapshotFields,
+      'session_id': chat.runtime.runtimeId,
+    });
+    return gateway;
+  }
+
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     host = Host();
@@ -104,6 +113,7 @@ void main() {
         },
       ];
       host.notificationReplay = {
+        'replay_epoch': 'fixture-epoch',
         'events': [
           {
             'type': 'tool.complete',
@@ -143,67 +153,67 @@ void main() {
     },
   );
 
-  test(
-    'partial replay enriches only matching completed calls without reviving work',
-    () async {
-      const ids = ['measured', 'missing', 'zero', 'wrong-runtime', 'running'];
-      host.historyMessages = [
-        for (final (index, id) in ids.indexed)
-          {
-            'id': 21 + index,
-            'role': 'tool',
-            'tool_call_id': id,
-            'tool_name': 'read_file',
-            'content': 'File contents',
-          },
-      ];
-      Map<String, dynamic> event(
-        String id,
-        Object? seconds, {
-        String type = 'tool.complete',
-        String? runtime,
-      }) => {
-        'type': type,
-        'session_id': runtime ?? chat.runtime.runtimeId,
-        'payload': {'tool_id': id, 'name': 'read_file', 'duration_s': seconds},
-      };
-      host.notificationReplay = {
-        'events': [
-          event('measured', 0.1),
-          event('measured', 0.195),
-          event('missing', -1),
-          event('missing', '0.2'),
-          event('zero', 0),
-          event('wrong-runtime', 99, runtime: 'b-runtime'),
-          event('running', 99, type: 'tool.start'),
-          event('not-in-history', 99),
-          {
-            'type': 'turn.end',
-            'session_id': chat.runtime.runtimeId,
-            'payload': {},
-          },
-        ],
-        'truncated': true,
-      };
-      final execution = chat.runtime.execution;
-      await controller.refreshHistory(chat);
-      await Future<void>.delayed(Duration.zero);
-      expect(chat.reading.messages, hasLength(5));
-      expect(chat.reading.messages.map((row) => row['duration_s']).toList(), [
-        0.195,
-        null,
-        0,
-        null,
-        null,
-      ]);
-      expect(chat.runtime.toolActivities, isEmpty);
-      expect(chat.runtime.execution, execution);
-      expect(
-        host.calls.lastWhere((call) => call.$2 == 'session.events.since').$3,
-        {'session_id': chat.runtime.runtimeId, 'last_seen': 0, 'profile': 'a'},
-      );
-    },
-  );
+  test('truncated replay cannot invent timing or revive work', () async {
+    const ids = ['measured', 'missing', 'zero', 'wrong-runtime', 'running'];
+    host.historyMessages = [
+      for (final (index, id) in ids.indexed)
+        {
+          'id': 21 + index,
+          'role': 'tool',
+          'tool_call_id': id,
+          'tool_name': 'read_file',
+          'content': 'File contents',
+        },
+    ];
+    Map<String, dynamic> event(
+      String id,
+      Object? seconds, {
+      String type = 'tool.complete',
+      String? runtime,
+    }) => {
+      'type': type,
+      'session_id': runtime ?? chat.runtime.runtimeId,
+      'payload': {'tool_id': id, 'name': 'read_file', 'duration_s': seconds},
+    };
+    host.notificationReplay = {
+      'replay_epoch': 'fixture-epoch',
+      'events': [
+        event('measured', 0.1),
+        event('measured', 0.195),
+        event('missing', -1),
+        event('missing', '0.2'),
+        event('zero', 0),
+        event('wrong-runtime', 99, runtime: 'b-runtime'),
+        event('running', 99, type: 'tool.start'),
+        event('not-in-history', 99),
+        {
+          'type': 'turn.end',
+          'session_id': chat.runtime.runtimeId,
+          'payload': {},
+        },
+      ],
+      'truncated': true,
+    };
+    final execution = chat.runtime.execution;
+    await controller.refreshHistory(chat);
+    await Future<void>.delayed(Duration.zero);
+    expect(chat.reading.messages, hasLength(5));
+    expect(
+      chat.reading.messages.map((row) => row['duration_s']),
+      everyElement(isNull),
+    );
+    expect(chat.runtime.toolActivities, isEmpty);
+    expect(chat.runtime.execution, execution);
+    expect(
+      host.calls.lastWhere((call) => call.$2 == 'session.events.since').$3,
+      {
+        'session_id': chat.runtime.runtimeId,
+        'replay_epoch': 'fixture-epoch',
+        'last_sequence': 0,
+        'profile': 'a',
+      },
+    );
+  });
 
   test(
     'bounded recovery retains newest durations in a full replay ring',
@@ -218,6 +228,7 @@ void main() {
           },
       ];
       host.notificationReplay = {
+        'replay_epoch': 'fixture-epoch',
         'events': [
           for (var id = 0; id < 512; id++)
             {
@@ -249,16 +260,18 @@ void main() {
     ];
     final base = host.gateway(chat.key.workspace);
     final reading = TranscriptReading(
-      gateway: ProfileGateway(
-        scope: chat.key.workspace,
-        discover: base.discover,
-        get: base.read,
-        rpc: (method, params) async {
-          if (method == 'session.events.since') {
-            throw StateError('Connection lost');
-          }
-          return base.call(method, params);
-        },
+      gateway: attachTiming(
+        ProfileGateway(
+          scope: chat.key.workspace,
+          discover: base.discover,
+          get: base.read,
+          rpc: (method, params) async {
+            if (method == 'session.events.since') {
+              throw StateError('Connection lost');
+            }
+            return base.call(method, params);
+          },
+        ),
       ),
     );
     addTearDown(reading.dispose);
@@ -292,22 +305,26 @@ void main() {
       final enriched = Completer<void>();
       final base = host.gateway(chat.key.workspace);
       final reading = TranscriptReading(
-        gateway: ProfileGateway(
-          scope: chat.key.workspace,
-          discover: base.discover,
-          get: base.read,
-          rpc: (method, params) async {
-            if (method == 'session.events.since') {
-              started.complete();
-              return held.future;
-            }
-            return base.call(method, params);
-          },
+        gateway: attachTiming(
+          ProfileGateway(
+            scope: chat.key.workspace,
+            discover: base.discover,
+            get: base.read,
+            rpc: (method, params) async {
+              if (method == 'session.events.since') {
+                started.complete();
+                return held.future;
+              }
+              return base.call(method, params);
+            },
+          ),
         ),
       );
       addTearDown(() {
         reading.dispose();
-        if (!held.isCompleted) held.complete({'events': []});
+        if (!held.isCompleted) {
+          held.complete({'replay_epoch': 'fixture-epoch', 'events': []});
+        }
       });
       final refresh = reading.refresh(
         sessionId: chat.key.sessionId,
@@ -329,6 +346,7 @@ void main() {
         reading.messages.single,
       );
       held.complete({
+        'replay_epoch': 'fixture-epoch',
         'events': [
           {
             'type': 'tool.complete',
@@ -373,29 +391,33 @@ void main() {
       gatewayFactory: (scope) {
         final base = host.gateway(scope);
         late final ProfileGateway gateway;
-        gateway = ProfileGateway(
-          scope: scope,
-          discover: base.discover,
-          get: base.read,
-          rpc: (method, params) {
-            if (holdReplay && method == 'session.events.since') {
-              return held.future;
-            }
-            return base.call(method, params);
-          },
-          connect: () {
-            base.onEvent = gateway.onEvent;
-            base.onConnectionChanged = gateway.onConnectionChanged;
-            return base.connect();
-          },
-          close: base.close,
-          disconnect: base.disconnect,
+        gateway = attachTiming(
+          ProfileGateway(
+            scope: scope,
+            discover: base.discover,
+            get: base.read,
+            rpc: (method, params) {
+              if (holdReplay && method == 'session.events.since') {
+                return held.future;
+              }
+              return base.call(method, params);
+            },
+            connect: () {
+              base.onEvent = gateway.onEvent;
+              base.onConnectionChanged = gateway.onConnectionChanged;
+              return base.connect();
+            },
+            close: base.close,
+            disconnect: base.disconnect,
+          ),
         );
         return gateway;
       },
     );
     addTearDown(() {
-      if (!held.isCompleted) held.complete({'events': []});
+      if (!held.isCompleted) {
+        held.complete({'replay_epoch': 'fixture-epoch', 'events': []});
+      }
     });
     await controller.initialize();
     chat = await controller.createChat(canDispatch: () => true);
@@ -417,6 +439,7 @@ void main() {
     expect(chat.reading.historyLoading, isFalse);
     expect(chat.reading.messages.last['duration_s'], isNull);
     held.complete({
+      'replay_epoch': 'fixture-epoch',
       'events': [
         {
           'type': 'tool.complete',
@@ -635,19 +658,23 @@ void main() {
     final held = Completer<Map<String, dynamic>>();
     final base = host.gateway(chat.key.workspace);
     final reading = TranscriptReading(
-      gateway: ProfileGateway(
-        scope: chat.key.workspace,
-        discover: base.discover,
-        get: base.read,
-        rpc: (method, params) async {
-          if (method == 'session.events.since') return held.future;
-          return base.call(method, params);
-        },
+      gateway: attachTiming(
+        ProfileGateway(
+          scope: chat.key.workspace,
+          discover: base.discover,
+          get: base.read,
+          rpc: (method, params) async {
+            if (method == 'session.events.since') return held.future;
+            return base.call(method, params);
+          },
+        ),
       ),
     );
     addTearDown(() {
       reading.dispose();
-      if (!held.isCompleted) held.complete({'events': []});
+      if (!held.isCompleted) {
+        held.complete({'replay_epoch': 'fixture-epoch', 'events': []});
+      }
     });
     var publications = 0;
     expect(
@@ -682,19 +709,23 @@ void main() {
       final held = Completer<Map<String, dynamic>>();
       final base = host.gateway(chat.key.workspace);
       final reading = TranscriptReading(
-        gateway: ProfileGateway(
-          scope: chat.key.workspace,
-          discover: base.discover,
-          get: base.read,
-          rpc: (method, params) async {
-            if (method == 'session.events.since') return held.future;
-            return base.call(method, params);
-          },
+        gateway: attachTiming(
+          ProfileGateway(
+            scope: chat.key.workspace,
+            discover: base.discover,
+            get: base.read,
+            rpc: (method, params) async {
+              if (method == 'session.events.since') return held.future;
+              return base.call(method, params);
+            },
+          ),
         ),
       );
       addTearDown(() {
         reading.dispose();
-        if (!held.isCompleted) held.complete({'events': []});
+        if (!held.isCompleted) {
+          held.complete({'replay_epoch': 'fixture-epoch', 'events': []});
+        }
       });
       var publications = 0;
       expect(
@@ -715,6 +746,7 @@ void main() {
       );
       final published = publications;
       held.complete({
+        'replay_epoch': 'fixture-epoch',
         'events': [
           {
             'type': 'tool.complete',
@@ -754,22 +786,26 @@ void main() {
         final base = host.gateway(chat.key.workspace);
         var replayReads = 0;
         final reading = TranscriptReading(
-          gateway: ProfileGateway(
-            scope: chat.key.workspace,
-            discover: base.discover,
-            get: base.read,
-            rpc: (method, params) async {
-              if (method == 'session.events.since') {
-                if (replayReads++ == 0) return held.future;
-                return {'events': []};
-              }
-              return base.call(method, params);
-            },
+          gateway: attachTiming(
+            ProfileGateway(
+              scope: chat.key.workspace,
+              discover: base.discover,
+              get: base.read,
+              rpc: (method, params) async {
+                if (method == 'session.events.since') {
+                  if (replayReads++ == 0) return held.future;
+                  return {'replay_epoch': 'fixture-epoch', 'events': []};
+                }
+                return base.call(method, params);
+              },
+            ),
           ),
         );
         addTearDown(() {
           reading.dispose();
-          if (!held.isCompleted) held.complete({'events': []});
+          if (!held.isCompleted) {
+            held.complete({'replay_epoch': 'fixture-epoch', 'events': []});
+          }
         });
         var current = true;
         var publications = 0;
@@ -794,6 +830,7 @@ void main() {
         }
         final published = publications;
         held.complete({
+          'replay_epoch': 'fixture-epoch',
           'events': [
             {
               'type': 'tool.complete',

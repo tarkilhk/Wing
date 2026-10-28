@@ -105,6 +105,13 @@ class ProfileToolCall extends StatelessWidget {
         ),
       ),
       lines: [
+        if (call.progress case final progress?)
+          Text(
+            progress.label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12, height: 1.5, color: colors.muted),
+          ),
         if (call.notice == null && call.filenameTarget != null)
           ResourceFilename(
             target: call.filenameTarget!,

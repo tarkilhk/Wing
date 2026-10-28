@@ -291,10 +291,21 @@ extension ProfileNotificationState on ProfileWorkspaceController {
         )) {
           continue;
         }
-        final snapshot = await resource.gateway.call('session.events.since', {
-          'session_id': runtime,
-          'last_seen': _notificationReplayCursors[runtime] ?? 0,
-        });
+        if (resource.gateway.canonical.session(runtime) == null) {
+          await _recoverCanonicalSnapshot(chat);
+          continue;
+        }
+        final cursor = resource.gateway.canonical.replay(runtime);
+        final snapshot = await resource.gateway.call(
+          'session.events.since',
+          cursor,
+        );
+        if (snapshot['snapshot_required'] == true ||
+            snapshot['truncated'] == true ||
+            snapshot['replay_epoch'] != cursor['replay_epoch']) {
+          await _recoverCanonicalSnapshot(chat);
+          continue;
+        }
         if (_closed ||
             !read.current() ||
             chat.runtime.runtimeId != runtime ||
@@ -305,10 +316,13 @@ extension ProfileNotificationState on ProfileWorkspaceController {
                 )) {
           continue;
         }
-        final sequence = snapshot['latest_seq'];
-        if (sequence is int && sequence >= 0) {
-          _notificationReplayCursors[runtime] = sequence;
+        for (final row in ProfileGateway.records(snapshot['events'])) {
+          final event = WsClient.parseGatewayEvent(row);
+          if (event != null && event.sessionId == runtime) {
+            _event(resource, event);
+          }
         }
+        if (resource.gateway.canonical.needsSnapshot(runtime)) continue;
         chat._runtime.reconcileOpenRequests(snapshot['open_requests']);
         await _refreshApprovals(chat, notifyNew: true);
         _publishNotificationInputs(chat, confirmedSnapshot: true);

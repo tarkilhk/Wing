@@ -1080,7 +1080,7 @@ void main() {
             expect(statuses, ['This approval is no longer pending.']);
           } else {
             expect(decisions, hasLength(1));
-            expect(decisions.single.$3['request_id'], 'cold-approval');
+            expect(decisions.single.$3['prompt_id'], 'cold-approval');
             expect(decisions.single.$3['choice'], choice);
           }
         }

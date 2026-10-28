@@ -2,6 +2,8 @@ enum ProfileCapabilityKind { skills, tools }
 
 enum ProfileCapabilityGroup { needsSetup, enabled, disabled }
 
+enum ProfileCapabilityFilter { all, enabled, needsSetup }
+
 enum ProfileCapabilitiesOperation { idle, confirming, saving }
 
 /// A detached observation of one stock skill or toolset; no response map escapes.
@@ -51,6 +53,12 @@ class ProfileCapability {
 
   bool matches(String query) =>
       '$name $title $description'.toLowerCase().contains(query.toLowerCase());
+
+  bool matchesFilter(ProfileCapabilityFilter filter) => switch (filter) {
+    ProfileCapabilityFilter.all => true,
+    ProfileCapabilityFilter.enabled => enabled,
+    ProfileCapabilityFilter.needsSetup => configured == false,
+  };
 
   ProfileCapability withEnabled(bool value) => ProfileCapability(
     name: name,

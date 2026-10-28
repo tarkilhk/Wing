@@ -1,3 +1,4 @@
+import 'canonical_gateway_fixture.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'dart:async';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -9,20 +10,22 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
   final deletes = <(String, Map<String, String>)>[];
   final deleteAttempts = <(String, Map<String, String>)>[];
   final moves = <(String, Map<String, dynamic>)>[];
-  final closes = <(String, Map<String, dynamic>)>[];
   final changes = <String, Map<String, Map<String, dynamic>>>{};
   final removed = <String, Set<String>>{};
   bool failMutation = false;
   bool active = false;
   String activeSessionKey = 'newest';
   String? activeStatus = 'idle';
-  String? statusAfterResume;
   String? resumeProfile;
   String resumeSessionId = 'newest';
-  bool reuseLiveResume = false;
+  bool lazyResume = false;
   Map<String, dynamic> resumeOverrides = {};
-  bool failClose = false;
-  bool acknowledgeClose = true;
+  int mutationRevision = 0;
+  int mutationGeneration = 0;
+  Map<String, dynamic> mutationSnapshotOverrides = {};
+  bool claimAfterSnapshot = false;
+  bool invalidateRevisionAfterSnapshot = false;
+  Completer<void>? snapshotDelay;
   bool foreignActive = false;
   Completer<void>? mutationDelay;
   Completer<void>? mutationStarted;
@@ -30,6 +33,14 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
   String? suggestedTitle = 'Conversation list improvements';
   bool failTitle = false;
   final titleRequests = <Map<String, dynamic>>[];
+  void _verifyMutationFence(Map<String, dynamic> params) {
+    if (params['expected_revision'] != mutationRevision ||
+        params['expected_generation'] != mutationGeneration) {
+      throw StateError('Mutation conflict');
+    }
+    if (active && activeStatus != 'idle') throw StateError('Session busy');
+  }
+
   @override
   List<Map<String, dynamic>> sessions(String profile) => [
     for (final row in super.sessions(profile))
@@ -54,6 +65,24 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
       discover: base.discover,
       get: (endpoint, query) async {
         final path = Uri.parse(endpoint).path;
+        if (path.endsWith('/mutation-snapshot')) {
+          reads.add((path, query));
+          await snapshotDelay?.future;
+          final snapshot = {
+            'session_id': Uri.decodeComponent(path.split('/')[1]),
+            'exists': true,
+            'runtime_revision': mutationRevision,
+            'runtime_generation': mutationGeneration,
+            ...mutationSnapshotOverrides,
+          };
+          if (claimAfterSnapshot) {
+            active = true;
+            activeStatus = 'working';
+            mutationGeneration++;
+          }
+          if (invalidateRevisionAfterSnapshot) mutationRevision++;
+          return snapshot;
+        }
         if (path != 'sessions/search' &&
             path.startsWith('sessions/') &&
             path.split('/').length == 2) {
@@ -75,27 +104,70 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
           }
           return {'text': suggestedTitle};
         }
-        if (method == 'session.title') {
+        if (method == 'session.mutate' && params['operation'] == 'rename') {
+          calls.add((scope.profileName, method, params));
           final id = active ? activeSessionKey : 'new-chat';
-          final title = params['title'];
+          final title = (params['payload'] as Map)['title'];
           changes.putIfAbsent(scope.profileName, () => {})[id] = {
             'title': title,
           };
-          return {'session_key': id, 'title': title, 'pending': !active};
+          final revision = (params['expected_revision'] as int) + 1;
+          canonicalRevisions['${scope.profileName}:${params['session_id']}'] =
+              revision;
+          return {
+            'session_id': params['session_id'],
+            'operation': 'rename',
+            'revision': revision,
+            'execution_generation': params['expected_generation'],
+            'status': 'applied',
+            'title': title,
+          };
         }
-        if (method == 'session.workspace.move') {
+        if (method == 'session.workspace.move' || method == 'session.close') {
+          throw StateError('Unknown canonical method: $method');
+        }
+        if (method == 'session.mutate' && params['operation'] == 'workspace') {
+          if (params.keys.toSet().difference({
+                'profile',
+                'session_id',
+                'request_id',
+                'expected_revision',
+                'expected_generation',
+                'operation',
+                'payload',
+              }).isNotEmpty ||
+              params.length != 7 ||
+              params['profile'] != scope.profileName ||
+              params['request_id'] is! String ||
+              (params['request_id'] as String).isEmpty ||
+              params['payload'] is! Map ||
+              (params['payload'] as Map).keys.single != 'cwd') {
+            throw StateError('Invalid canonical workspace mutation');
+          }
+          _verifyMutationFence(params);
           moves.add((scope.profileName, params));
           await mutationDelay?.future;
           if (failMutation) throw StateError('Move rejected');
-          final id = params['session_key'] as String;
+          _verifyMutationFence(params);
+          final id = params['session_id'] as String;
+          final cwd = (params['payload'] as Map)['cwd'];
           final profile = changes.putIfAbsent(scope.profileName, () => {});
           profile[id] = {
             ...?profile[id],
-            'cwd': params['cwd'],
+            'cwd': cwd,
             'git_branch': null,
             'git_repo_root': null,
           };
-          return {'cwd': params['cwd'], 'branch': null, 'git_repo_root': null};
+          mutationRevision++;
+          return {
+            'session_id': id,
+            'operation': 'workspace',
+            'revision': mutationRevision,
+            'execution_generation': mutationGeneration,
+            'cwd': cwd,
+            'branch': null,
+            'git_repo_root': null,
+          };
         }
         if (method == 'session.active_list') {
           return {
@@ -118,25 +190,17 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
         if (method == 'session.resume' &&
             params['session_id'] == activeSessionKey) {
           active = true;
-          activeStatus = statusAfterResume ?? activeStatus;
           return {
+            ...canonicalSnapshotFields,
             'session_id': 'runtime',
-            if (reuseLiveResume) ...{
-              'session_key': resumeSessionId,
-              'resumed': resumeSessionId,
-              'status': activeStatus,
-            } else
-              'stored_session_id': resumeSessionId,
+            'stored_session_id': resumeSessionId,
             'messages': [],
-            'info': {'profile_name': resumeProfile ?? scope.profileName},
+            'info': {
+              'profile_name': resumeProfile ?? scope.profileName,
+              if (lazyResume) 'lazy': true,
+            },
             ...resumeOverrides,
           };
-        }
-        if (method == 'session.close') {
-          closes.add((scope.profileName, params));
-          if (failClose) throw StateError('Close rejected');
-          if (acknowledgeClose) active = false;
-          return {'closed': acknowledgeClose};
         }
         return base.call(method, params);
       },
@@ -169,7 +233,20 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
 
         deleteAttempts.add((endpoint, Map.unmodifiable(query)));
         if (failMutation) throw StateError('Delete rejected');
-        if (active) throw StateError('Runtime must be closed before deletion');
+        if (parameters.keys.toSet().difference({
+              'profile',
+              'request_id',
+              'expected_revision',
+              'expected_generation',
+            }).isNotEmpty ||
+            parameters.length != 4 ||
+            parameters['profile'] != scope.profileName ||
+            parameters['request_id'] is! String ||
+            (parameters['request_id'] as String).isEmpty) {
+          throw StateError('Invalid canonical delete identity');
+        }
+        _verifyMutationFence(parameters);
+        active = false;
         deletes.add((endpoint, query));
         removed
             .putIfAbsent(scope.profileName, () => {})

@@ -48,3 +48,9 @@ Output discovery is not proof that a viewer loaded its bytes. Preview budgets
 are independent of saving; an oversized HTML file can still be saved or shared.
 PDF and external OS handlers have separate prerequisites. Retiring a viewer must
 prevent late publication into another route.
+
+The isolated Mermaid renderer handles line-break and nonbreaking-space labels;
+`scripts/test-diagram-preview.mjs` covers those cases alongside blocked links,
+configuration overrides, script execution, external assets and HTML isolation.
+Inline images retain their phone-width envelope; video content opens through
+explicit viewer navigation rather than eager transcript loading.

@@ -99,6 +99,13 @@ final class TranscriptMessage {
                     ? event.actorName
                     : event.actor),
       senderHandle: user ? null : member?.handle,
+      attachments: event.attachments.map(
+        (attachment) => UserMessageAttachment(
+          name: attachment.name,
+          target: attachment.target(event.eventId),
+          isImage: attachment.isImage,
+        ),
+      ),
     );
   }
 

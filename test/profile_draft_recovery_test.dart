@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -23,8 +24,9 @@ class _ColdDraftHost {
   int creates = 0;
   Object resumeError = JsonRpcError(
     'session.resume',
-    'session not found',
-    code: 4007,
+    'Session does not exist',
+    code: 4001,
+    reason: 'not_found',
   );
   Completer<void>? resumeStarted;
   Completer<void>? resumeDelay;
@@ -80,6 +82,7 @@ class _ColdDraftHost {
               ? 'replacement-draft'
               : 'unexpected-replacement-$creates';
           return {
+            ...canonicalSnapshotFields,
             'session_id': 'runtime-$storedId',
             'stored_session_id': storedId,
             'messages': <Map<String, dynamic>>[],

@@ -59,6 +59,34 @@ class ModelChoice {
 
   String get label =>
       displayName?.trim().isNotEmpty == true ? displayName!.trim() : model;
+
+  String? get allowanceLabel => switch (providerInfo?.planUsage == null
+      ? null
+      : providerInfo?.usageLevels[model]) {
+    'top_tier' => 'Large',
+    'free' => 'Free',
+    _ => null,
+  };
+  bool get recommended =>
+      providerInfo?.planUsage?.featuredModelIds.contains(model) == true;
+
+  /// Allowances for this exact route, never inferred from the model's name.
+  Iterable<PlanUsageGauge> get allowanceGauges {
+    final plan = providerInfo?.planUsage;
+    if (plan == null || allowanceLabel == 'Free') return const [];
+    final large =
+        allowanceLabel == 'Large' || plan.topTierModelIds.contains(model);
+    return plan.gauges.where(
+      (gauge) => gauge.scope == 'all' || (gauge.scope == 'top_tier' && large),
+    );
+  }
+
+  String? get planLimitLabel =>
+      allowanceGauges.any((gauge) => gauge.leftFraction <= 0)
+      ? providerInfo?.planUsage?.creditsPay == true
+            ? 'Uses credits'
+            : 'Allowance used up'
+      : null;
 }
 
 enum ModelSpecialChoice { automatic, profileDefault }

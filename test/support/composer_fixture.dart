@@ -1,3 +1,4 @@
+import 'package:wing/core/models/gateway_approval.dart';
 import 'package:wing/core/services/chat_runtime.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -153,6 +154,21 @@ void emitChatEvent(
   final deliver = gateway.onEvent;
   if (deliver == null) {
     throw StateError('The fixture gateway is not connected.');
+  }
+  if (type == 'approval' && data['server_request_id'] == null) {
+    final generation = gateway.canonical
+        .session(chat.runtime.runtimeId)!
+        .generation;
+    type = 'approval.request';
+    data = {
+      ...data,
+      'kind': 'approval',
+      'prompt_id': data['request_id'],
+      'execution_generation': generation,
+      'choices': GatewayApprovalRequest.fromEventData(
+        data,
+      ).choices.map((choice) => choice.wireValue).toList(),
+    }..remove('request_id');
   }
   deliver(
     StreamEvent(type: type, data: data, sessionId: chat.runtime.runtimeId),

@@ -19,6 +19,7 @@ import '../administration/admin_profiles_page.dart';
 import 'bot_profile_editor.dart';
 import 'bots_create_screen.dart';
 import '../administration/admin_defaults_page.dart';
+import '../administration/admin_hosted_connector_accounts_page.dart';
 import '../administration/admin_connector_routes.dart';
 import '../administration/admin_identity_page.dart';
 import '../administration/admin_plugins_page.dart';
@@ -108,6 +109,9 @@ class _BotSettingsScreenState extends State<BotSettingsScreen> {
   Widget _capabilities(BuildContext context) => ProfileCapabilitiesScreen(
     createSession: () => ProfileCapabilitiesSession(profile.gateway),
     connectionLabel: profile.server.connectionLabel,
+    onConnectedApps: () =>
+        _push(context, AdminHostedConnectorAccountsPage(profile: profile)),
+    onMcpConnectors: () => _push(context, profileConnectorsPage(profile)),
     onToolSetup: (name) => _push(
       context,
       name == 'tts'

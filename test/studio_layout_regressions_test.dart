@@ -267,9 +267,11 @@ void main() {
           app(
             ProfileCapabilitiesScreen(
               onToolSetup: (_) async {},
-              onLibrary: () {},
-              onHub: () {},
-              onPlugins: () {},
+              onLibrary: () async {},
+              onHub: () async {},
+              onPlugins: () async {},
+              onConnectedApps: () async {},
+              onMcpConnectors: () async {},
               createSession: () => ProfileCapabilitiesSession(gateway),
               connectionLabel: 'Development server with a long display name',
             ),

@@ -268,13 +268,17 @@ void main() {
     host.promptSubmitDelay = Completer<void>();
     final recovery = controller.resumeConnection();
     await host.promptSubmitStarted!.future;
-    // An accepted prompt occupies the server until its actual completion.
+    // Both inputs can be admitted while the server executes the first.
     host.running = true;
     host.promptSubmitDelay!.complete();
     await recovery;
     host.promptSubmitStarted = null;
     host.promptSubmitDelay = null;
-    expect(_submitted(host), ['first waiting message']);
+    expect(_submitted(host), [
+      'first waiting message',
+      'second waiting message',
+    ]);
+    expect(host.canonicalAdmissions, hasLength(2));
     expect(restored.composer.observation.queue.map((item) => item.text), [
       'second waiting message',
     ]);
@@ -350,15 +354,15 @@ void main() {
         connectionIdentity: 'outbox-test',
       ).read(profileName: 'a', sessionId: chat.key.sessionId);
       expect(storedAfterAck!.text, 'fresh editable thought');
-      expect(storedAfterAck.queuedPrompts.map((item) => item.text), [
-        'second',
-        'third',
-      ]);
+      expect(storedAfterAck.queuedPrompts, isEmpty);
+      expect(_submitted(host), ['first', 'second', 'third']);
+      expect(host.canonicalAdmissions, hasLength(3));
       host.event('a', 'message.complete', {'text': 'First answer'});
       await _until(
         controller,
         () =>
-            _submitted(host).length == 2 && !chat.composer.observation.sending,
+            chat.composer.observation.queue.length == 1 &&
+            !chat.composer.observation.sending,
       );
       host.event('a', 'message.complete', {'text': 'Second answer'});
       await _until(
@@ -372,6 +376,7 @@ void main() {
       expect(
         host.calls
             .where((call) => call.$2 == 'prompt.submit')
+            .skip(1)
             .every((call) => call.$3['queued'] == true),
         isTrue,
       );
@@ -655,7 +660,7 @@ void main() {
   );
 
   test(
-    'lost ACK retains uncertain head and never resends on reconnect',
+    'lost ACK recovers the original receipt without executing twice',
     () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
@@ -673,32 +678,34 @@ void main() {
       await controller.updateDraft(chat, 'delivery unknown');
       host.promptSubmitFails = true;
       await controller.send(chat);
-      expect(chat.composer.observation.text, isEmpty);
-      expect(chat.composer.observation.queue.single.text, 'delivery unknown');
       expect(
         chat.composer.observation.queue.single.submissionUncertain,
         isTrue,
       );
-      expect(chat.composer.observation.paused, isTrue);
       await controller.updateDraft(chat, 'later message');
       await controller.send(chat);
       await controller.updateDraft(chat, 'independent composer');
       host.promptSubmitFails = false;
+      host.running = true;
       await controller.reconnect(chat.key.workspace);
-      expect(_submitted(host), ['delivery unknown']);
-      expect(chat.composer.observation.queue.map((item) => item.text), [
-        'delivery unknown',
-        'later message',
-      ]);
+      final attempts = host.calls
+          .where((call) => call.$2 == 'prompt.submit')
+          .toList();
+      expect(attempts, hasLength(2));
+      expect(attempts[1].$3, attempts[0].$3);
+      expect(host.canonicalAdmissions, hasLength(1));
+      expect(chat.composer.observation.queue.single.text, 'later message');
       expect(chat.composer.observation.text, 'independent composer');
-      await expectLater(controller.resumeQueue(chat), throwsStateError);
+      await controller.resumeQueue(chat);
+      expect(host.canonicalAdmissions, hasLength(2));
+      expect(chat.composer.observation.queue.single.serverOwned, isTrue);
       final stored = await ComposerDraftStore(
         preferences,
         connectionIdentity: 'outbox-test',
       ).read(profileName: 'a', sessionId: chat.key.sessionId);
       expect(stored!.text, 'independent composer');
-      expect(stored.queuedPrompts.first.submissionUncertain, isTrue);
-      expect(stored.queuePaused, isTrue);
+      expect(stored.queuedPrompts, isEmpty);
+      final key = chat.key;
       controller.dispose();
       controller = _controller(
         preferences,
@@ -706,18 +713,15 @@ void main() {
         appPreferences: appPreferences,
       );
       await controller.initialize();
-      final restarted = controller.current!.chats[chat.key.sessionId]!;
+      final restarted = (await controller.openSession(key))!;
       expect(restarted.composer.observation.text, 'independent composer');
-      expect(restarted.composer.observation.queue.map((item) => item.text), [
-        'delivery unknown',
-        'later message',
-      ]);
+      expect(restarted.composer.observation.queue.single.text, 'later message');
+      expect(restarted.composer.observation.queue.single.serverOwned, isTrue);
       expect(
-        restarted.composer.observation.queue.first.submissionUncertain,
-        isTrue,
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(3),
       );
-      expect(restarted.composer.observation.paused, isTrue);
-      expect(_submitted(host), ['delivery unknown']);
+      expect(host.canonicalAdmissions, hasLength(2));
     },
   );
 }

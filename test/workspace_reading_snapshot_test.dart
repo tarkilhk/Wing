@@ -74,7 +74,13 @@ void main() {
           'role': 'user',
           'content': 'Hidden context',
           'display_kind': 'hidden',
-          'pending_approval': {'request_id': 'excluded'},
+          'prompts': [
+            {
+              'kind': 'approval',
+              'prompt_id': 'excluded',
+              'execution_generation': 0,
+            },
+          ],
         },
         {
           'id': 2,

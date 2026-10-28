@@ -493,7 +493,12 @@ void main() {
         'payload': {'text': 'The evidence is ready.'},
         'created_at': 1791756000.0,
       });
-      fixture.pending.add({'kind': 'retry', 'task_id': 'task-1'});
+      fixture.pending.add({
+        'kind': 'retry',
+        'task_id': 'task-1',
+        'member_id': 'atlas',
+        'execution_generation': 4,
+      });
       now = now.add(const Duration(seconds: 30));
       await session.refresh();
       final before = session.state.groups.single;

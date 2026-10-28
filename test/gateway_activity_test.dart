@@ -1,7 +1,91 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/gateway_activity.dart';
+import 'package:wing/core/services/chat_runtime.dart';
 
 void main() {
+  test('authoritative idle and resume snapshots retire ephemeral progress', () {
+    for (final resume in [false, true]) {
+      final runtime = ChatRuntime(runtimeId: 'progress');
+      runtime.beginTurn(submitting: false);
+      runtime.observeTool('tool.start', {
+        'tool_id': 'call',
+        'name': 'mcp_search',
+      });
+      runtime.observeTool('tool.progress', {
+        'tool_id': 'call',
+        'name': 'mcp_search',
+        'progress': 1,
+      });
+      expect(runtime.observation.toolActivities.single.progress, isNotNull);
+      if (resume) {
+        runtime.installResume({
+          'session_id': 'progress',
+          'running': false,
+          'messages': [],
+          'open_requests': [],
+        });
+      } else {
+        runtime.observeExecutionSnapshot({'running': false});
+      }
+      expect(runtime.observation.toolActivities.single.progress, isNull);
+    }
+  });
+  test('MCP progress is exact, transient and cannot revive or create work', () {
+    final runtime = ChatRuntime(runtimeId: 'progress');
+    runtime.beginTurn(submitting: false);
+    for (final id in ['one', 'two']) {
+      runtime.observeTool('tool.start', {'tool_id': id, 'name': 'mcp_search'});
+    }
+    Map<String, dynamic> progress(String id) => {
+      'tool_id': id,
+      'name': 'mcp_search',
+      'progress': 4.0,
+      'total': 10.0,
+      'percent': 40,
+      'message': 'Indexed four folders',
+    };
+    runtime.observeTool('tool.progress', progress('missing'));
+    expect(runtime.observation.toolActivities, hasLength(2));
+    runtime.observeTool('tool.progress', progress('one'));
+    expect(
+      runtime.observation.toolActivities.first.progress?.label,
+      '40% · Indexed four folders',
+    );
+    expect(runtime.observation.toolActivities.last.progress, isNull);
+    runtime.observeTool('tool.complete', {
+      'tool_id': 'one',
+      'name': 'mcp_search',
+    });
+    runtime.observeTool('tool.progress', progress('one'));
+    expect(runtime.observation.toolActivities.first.progress, isNull);
+    expect(runtime.observation.toolActivities.first.isTerminal, isTrue);
+    runtime.observeTool('tool.progress', progress('two'), live: false);
+    expect(runtime.observation.toolActivities.last.progress, isNull);
+    runtime.observeTool('tool.progress', progress('two'));
+    runtime.beginRecovery();
+    expect(runtime.observation.toolActivities.last.progress, isNull);
+    runtime.recovered();
+    runtime.observeTool('tool.progress', progress('two'));
+    runtime.completeTurn(failed: true, cancelled: false, error: 'Disconnected');
+    runtime.observeTool('tool.progress', progress('two'));
+    expect(runtime.observation.toolActivities.last.progress, isNull);
+  });
+
+  test(
+    'MCP progress rejects malformed values without manufacturing a percentage',
+    () {
+      expect(GatewayToolProgress.parse({'progress': double.nan}), isNull);
+      expect(GatewayToolProgress.parse({'progress': -1}), isNull);
+      final progress = GatewayToolProgress.parse({
+        'progress': 4,
+        'total': 0,
+        'percent': 101,
+        'message': 'Still working',
+      })!;
+      expect(progress.label, '4 · Still working');
+      expect(progress.percent, isNull);
+    },
+  );
   group('GatewayToolActivity', () {
     test('parses the official tool.start contract', () {
       final activity = GatewayToolActivity.fromGatewayEvent('tool.start', {

@@ -215,6 +215,13 @@ final compressionFields = List<AdminField>.unmodifiable([
     help: 'Number of recent messages kept during compression.',
     minimum: 0,
   ),
+  AdminField(
+    'compression.prepare_ahead',
+    'Prepare compression ahead',
+    AdminFieldKind.toggle,
+    help:
+        'Prepare a summary while Hermes works to reduce compression pauses. Off by default. A summary may use tokens even if it is not used.',
+  ),
 ]);
 final reachFields = List<AdminField>.unmodifiable([
   AdminField(

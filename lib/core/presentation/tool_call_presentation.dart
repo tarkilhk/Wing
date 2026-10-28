@@ -30,6 +30,7 @@ final class ToolCallPresentation {
     this.summary,
     this.durationSeconds,
     this.startedAt,
+    this.progress,
     this.filenameTarget,
     this.exchangeReceipts = const [],
   });
@@ -56,6 +57,7 @@ final class ToolCallPresentation {
   final List<ToolCallLabel> labels;
   final double? durationSeconds;
   final Duration? startedAt;
+  final GatewayToolProgress? progress;
 
   /// One compact input fact; raw targets and inputs remain unmodified.
   final String subtitle;
@@ -102,6 +104,7 @@ final class ToolCallPresentation {
     startedAt: activity.startedAt,
     context: activity.context,
     summary: activity.summary,
+    progress: activity.isTerminal ? null : activity.progress,
   );
 
   factory ToolCallPresentation.saved(TranscriptToolResult result) => _project(
@@ -156,6 +159,7 @@ final class ToolCallPresentation {
     Duration? startedAt,
     String? context,
     String? summary,
+    GatewayToolProgress? progress,
     List<BotExchangeReceipt> exchangeReceipts = const [],
   }) {
     final input = decodeToolPayload(arguments);
@@ -258,6 +262,7 @@ final class ToolCallPresentation {
         ? resourceFileName(suppliedPath!)
         : '${inputSummary.substring(0, inputSummary.length - suppliedPath!.length)}${resourceFileName(suppliedPath)}';
     return ToolCallPresentation._(
+      progress: progress,
       name: name,
       callId: callId,
       context: context,

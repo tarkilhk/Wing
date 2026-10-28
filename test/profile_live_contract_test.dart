@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -8,25 +9,38 @@ import 'package:wing/core/services/profiles_repository.dart';
 /// Opt-in, no model calls. Uses existing disposable profiles on the unmodified
 /// local Desktop-managed server. Authentication is fetched, never logged/saved.
 void main() {
-  // Closed SessionCreateParams from upstream f42f579cf8bac4918ac9599bece71618afadd846.
-  // Model the server's extra="forbid" boundary, not an app-defined permissive mock.
+  // Canonical gateway/session_policy.py CREATE_FIELDS at e5ea5fd9, plus
+  // profile routing and title/hidden consumed by session_controls.create.
   const createFields = {
     'profile',
-    'cols',
+    'title',
+    'hidden',
+    'request_id',
     'source',
     'cwd',
-    'cwd_explicit',
-    'messages',
-    'parent_session_id',
-    'title',
     'model',
+    'toolsets',
     'provider',
-    'reasoning_effort',
-    'fast',
-    'close_on_disconnect',
-    'hidden',
-    'room_plumbing',
+    'base_url',
+    'reasoning',
+    'max_turns',
+    'ignore_rules',
+    'api_key',
+    'editor',
+    'yolo',
+    'safe_mode',
+    'ignore_user_config',
+    'skills',
+    'checkpoints',
+    'accept_hooks',
+    'pass_session_id',
     'follow_profile_config',
+    'service_tier',
+    'cwd_explicit',
+    'run_budget',
+    'verbose',
+    'row_cwd',
+    'client_env',
   };
   for (final project in [false, true]) {
     test(
@@ -53,9 +67,19 @@ void main() {
             }
             creates++;
             expect(params['profile'], 'default');
+            expect(params['source'], 'gui');
+            expect(
+              params['request_id'],
+              isA<String>().having(
+                (value) => value.isNotEmpty,
+                'nonempty creation identity',
+                isTrue,
+              ),
+            );
             expect(params.containsKey('cwd'), project);
             expect(params['cwd_explicit'], project);
             return {
+              ...canonicalSnapshotFields,
               'session_id': 'owned-runtime',
               'stored_session_id': 'owned-stored',
               'messages': <Map<String, dynamic>>[],

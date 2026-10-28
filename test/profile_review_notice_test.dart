@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'dart:io';
@@ -28,7 +29,7 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_history_fixture.dart';
 
 class _ReviewFixture extends ProfileHistoryFixture {
-  int _sequence = 0;
+  final _sequences = <(String, String), int>{};
   final gateways = <String, ProfileGateway>{};
   final runtimeOverrides = <String, String>{};
 
@@ -48,8 +49,11 @@ class _ReviewFixture extends ProfileHistoryFixture {
       rpc: (method, params) async {
         if (method == 'session.resume') {
           final sessionId = params['session_id'] as String;
+          final runtime = runtimeOverrides[sessionId] ?? '$sessionId-runtime';
           return {
-            'session_id': runtimeOverrides[sessionId] ?? '$sessionId-runtime',
+            ...canonicalSnapshotFields,
+            'last_sequence': _sequences[(scope.profileName, runtime)] ?? 0,
+            'session_id': runtime,
             'stored_session_id': sessionId,
             'messages': const [],
             'info': {'profile_name': scope.profileName},
@@ -67,12 +71,22 @@ class _ReviewFixture extends ProfileHistoryFixture {
     Map<String, dynamic> data, {
     int? sequence,
   }) {
+    final key = (profile, sessionId);
+    final nextSequence = sequence ?? (_sequences[key] ?? 0) + 1;
+    if (nextSequence > (_sequences[key] ?? 0)) {
+      _sequences[key] = nextSequence;
+    }
     gateways[profile]!.onEvent!(
       StreamEvent(
         type: 'review.summary',
         data: data,
         sessionId: sessionId,
-        envelope: {'seq': sequence ?? ++_sequence},
+        envelope: {
+          'seq': nextSequence,
+          'replay_epoch': canonicalSnapshotFields['replay_epoch'],
+          'authority_epoch': canonicalSnapshotFields['authority_epoch'],
+          'execution_generation': 0,
+        },
       ),
     );
   }
@@ -237,10 +251,10 @@ void main() {
       final chat = controller.current!.chat!;
       fixture.event('personal', chat.runtime.runtimeId, {
         'text': 'Memory updated',
-      }, sequence: 99);
+      }, sequence: 1);
       fixture.event('personal', chat.runtime.runtimeId, {
         'text': 'Memory updated',
-      }, sequence: 99);
+      }, sequence: 1);
       expect(chat.reviewNotices, hasLength(1));
       expect(chat.reading.messages.where(isLocalReviewMessage), hasLength(1));
     },

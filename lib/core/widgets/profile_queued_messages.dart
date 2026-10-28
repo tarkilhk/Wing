@@ -42,12 +42,20 @@ class ProfileQueuedMessages extends StatelessWidget {
             shrinkWrap: true,
             padding: EdgeInsets.zero,
             children: [
-              if (work.paused && !work.saving)
+              if (work.paused &&
+                  !work.saving &&
+                  work.queue.any((row) => !row.serverOwned))
                 Text('Queue paused', style: style),
               for (final prompt in work.queue)
                 Semantics(
                   label: identical(prompt.id, work.editing)
                       ? 'Editing queued message'
+                      : prompt.pendingSteering
+                      ? 'Steering the current turn'
+                      : prompt.unknownOutcome
+                      ? 'Unknown execution outcome'
+                      : prompt.serverOwned
+                      ? 'Queued on Hermes'
                       : work.paused
                       ? 'Queued message, paused'
                       : 'Queued message',
@@ -79,6 +87,10 @@ class ProfileQueuedMessages extends StatelessWidget {
                                 Expanded(
                                   child: Text(
                                     [
+                                          if (prompt.pendingSteering)
+                                            'Steering',
+                                          if (prompt.unknownOutcome)
+                                            'Outcome unknown',
                                           prompt.text,
                                           prompt.attachments
                                               .map((file) => file.name)

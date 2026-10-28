@@ -246,6 +246,18 @@ Future<void> main() async {
   final chatGateway = host.gateways['a']!;
   final otherGateway = otherHost.gateways['b']!;
   void event(ProfileChat target, String type, Map<String, dynamic> data) {
+    final gateway = identical(target, chat) ? chatGateway : otherGateway;
+    if (type == 'approval') {
+      type = 'approval.request';
+      data = {
+        ...data,
+        'kind': 'approval',
+        'prompt_id': data['request_id'],
+        'execution_generation': gateway.canonical
+            .session(target.runtime.runtimeId)!
+            .generation,
+      }..remove('request_id');
+    }
     (identical(target, chat) ? chatGateway : otherGateway).onEvent!(
       StreamEvent(type: type, sessionId: target.runtime.runtimeId, data: data),
     );

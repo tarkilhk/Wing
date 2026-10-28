@@ -1,3 +1,5 @@
+import 'package:wing/core/models/gateway_approval.dart';
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/chat_intelligence.dart';
@@ -179,6 +181,9 @@ class PhotoPickerFixture extends FilePickerPlatform {
 class _SocketHttpOverrides extends HttpOverrides {}
 
 class Host {
+  final canonicalRevisions = <String, int>{};
+  final canonicalAdmissions = <String, Map<String, dynamic>>{};
+  final canonicalPayloads = <String, Map<String, dynamic>>{};
   ScopedOwnedPost? ownedPatch;
   final gateways = <String, ProfileGateway>{};
   final calls = <(String, String, Map<String, dynamic>)>[];
@@ -200,10 +205,13 @@ class Host {
     'path': '/profile/images/upload.png',
   };
   bool approvalFails = false;
-  int approvalResolved = 1;
+  bool approvalAlreadyResolved = false;
   List<Map<String, dynamic>> notificationActiveSessions = [];
   Map<String, dynamic>? notificationReplay;
   List<Map<String, dynamic>>? pendingApprovals;
+  final nativePrompts = <(String, String), Map<String, dynamic>>{};
+  final _nativeObservers = <ProfileGateway>{};
+  final nativeGenerations = <(String, String), int>{};
   List<Map<String, dynamic>> approvalOpenRequests = [];
   Completer<void>? pendingApprovalDelay;
   Completer<void>? approvalDelay;
@@ -293,6 +301,30 @@ class Host {
       connect: () async {
         if (gateway.onEvent != null) {
           gateways[name] = gateway;
+          if (_nativeObservers.add(gateway)) {
+            final receive = gateway.onEvent!;
+            gateway.onEvent = (event) {
+              if ({
+                'approval.request',
+                'clarify.request',
+              }.contains(event.type)) {
+                nativeGenerations[(name, event.sessionId!)] =
+                    event.data['execution_generation'] as int;
+                nativePrompts[(name, event.data['prompt_id'] as String)] =
+                    Map.of(event.data);
+              } else if ({
+                'approval.settled',
+                'clarify.settled',
+              }.contains(event.type)) {
+                final key = (name, event.data['prompt_id'] as String);
+                if (nativePrompts[key]?['execution_generation'] ==
+                    event.data['execution_generation']) {
+                  nativePrompts.remove(key);
+                }
+              }
+              receive(event);
+            };
+          }
           connectCalls++;
           connectsByProfile.update(
             name,
@@ -397,7 +429,15 @@ class Host {
           await activeListDelay?.future;
           return {'sessions': notificationActiveSessions};
         }
-        if (method == 'session.events.since') return notificationReplay ?? {};
+        if (method == 'session.events.since') {
+          return {
+            'replay_epoch': params['replay_epoch'],
+            'latest_seq': params['last_sequence'],
+            'events': <Map<String, dynamic>>[],
+            'open_requests': approvalOpenRequests,
+            ...?notificationReplay,
+          };
+        }
         if (method == 'file.attach') {
           if (fileAttachStarted case final started? when !started.isCompleted) {
             started.complete();
@@ -408,29 +448,155 @@ class Host {
         }
         if (method == 'image.attach_bytes') return imageAttachResult;
         if (method == 'prompt.submit') {
-          promptSubmitStarted?.complete();
+          if (params['submission_id'] is! String) {
+            throw const FormatException('Missing canonical submission ID');
+          }
+          final input =
+              '$name:${params['session_id']}:${params['submission_id']}';
+          final receipt = canonicalAdmissions.putIfAbsent(
+            input,
+            () => canonicalReceipt(
+              params,
+              admissionId: 'admission-${canonicalAdmissions.length + 1}',
+              sequence: canonicalAdmissions.length + 1,
+            ),
+          );
+          canonicalPayloads.putIfAbsent(
+            input,
+            () => Map<String, dynamic>.from(params),
+          );
+          if (promptSubmitStarted case final started?
+              when !started.isCompleted) {
+            started.complete();
+          }
           await promptSubmitDelay?.future;
+          if (promptSubmitFails) {
+            throw TimeoutException('Prompt acknowledgement was lost');
+          }
+          return receipt;
         }
-        if (method == 'prompt.submit' && promptSubmitFails) {
-          throw TimeoutException('Prompt acknowledgement was lost');
+        if (method == 'prompt.receipt') {
+          return canonicalAdmissions.values.firstWhere(
+            (row) => row['admission_id'] == params['admission_id'],
+          );
+        }
+        if (method == 'prompt.cancel' ||
+            method == 'prompt.resolve_unknown' ||
+            method == 'prompt.steer_queued') {
+          final row = canonicalAdmissions.values.firstWhere(
+            (row) => row['admission_id'] == params['admission_id'],
+          );
+          row['status'] = method == 'prompt.steer_queued'
+              ? 'started'
+              : 'terminal';
+          row['outcome'] = method == 'prompt.steer_queued' ? null : 'cancelled';
+          if (method == 'prompt.steer_queued') row['steering'] = true;
+          return row;
+        }
+        if (method == 'prompt.replace_queued') {
+          final row = canonicalAdmissions.values.firstWhere(
+            (row) => row['admission_id'] == params['admission_id'],
+          );
+          if (row['status'] != 'queued') {
+            throw JsonRpcError(
+              method,
+              'already claimed',
+              reason: 'admission_started',
+            );
+          }
+          row['status'] = 'terminal';
+          row['outcome'] = 'cancelled';
+          final replacement = canonicalReceipt(
+            {...params, 'queued': true},
+            admissionId: 'admission-${canonicalAdmissions.length + 1}',
+            sequence: canonicalAdmissions.length + 1,
+          );
+          canonicalAdmissions['$name:${params['session_id']}:${params['submission_id']}'] =
+              replacement;
+          return replacement;
+        }
+        if (method == 'session.mutate') {
+          canonicalRevisions['$name:${params['session_id']}'] =
+              (params['expected_revision'] as int) + 1;
+          return {
+            'session_id': params['session_id'],
+            'operation': params['operation'],
+            if (params['operation'] == 'rename')
+              'title': (params['payload'] as Map)['title'],
+            'revision': (params['expected_revision'] as int) + 1,
+            'execution_generation': params['expected_generation'],
+            'status': 'applied',
+          };
         }
         if (method == 'approval.pending') {
-          final pending = pendingApprovals
-              ?.map(Map<String, dynamic>.of)
-              .toList();
+          final pending =
+              (pendingApprovals ??
+                      [
+                        for (final entry in nativePrompts.entries)
+                          if (entry.key.$1 == name &&
+                              entry.value['kind'] == 'approval')
+                            {
+                              ...entry.value,
+                              'request_id': entry.value['prompt_id'],
+                            },
+                      ])
+                  .map(
+                    (row) => Map<String, dynamic>.of(row)
+                      ..remove('execution_generation')
+                      ..remove('prompt_id')
+                      ..remove('kind'),
+                  )
+                  .toList();
           await pendingApprovalDelay?.future;
-          return {'approvals': ?pending};
+          return {'approvals': pending};
         }
         if (method == 'approval.respond') {
+          if (params.keys.toSet().difference({
+                'session_id',
+                'profile',
+                'prompt_id',
+                'execution_generation',
+                'choice',
+              }).isNotEmpty ||
+              params['prompt_id'] is! String ||
+              params['execution_generation'] is! int ||
+              params['choice'] is! String) {
+            throw JsonRpcError(
+              method,
+              'Invalid canonical approval response',
+              reason: 'invalid_params',
+            );
+          }
           await approvalDelay?.future;
           if (approvalFails) throw TimeoutException('Approval failed');
-          pendingApprovals?.removeWhere(
-            (r) => r['request_id'] == params['request_id'],
-          );
+          if ((nativeGenerations[(name, params['session_id'] as String)] ??
+                  0) ==
+              params['execution_generation']) {
+            pendingApprovals?.removeWhere(
+              (r) => r['request_id'] == params['prompt_id'],
+            );
+          }
+          final promptKey = (name, params['prompt_id'] as String);
+          if (nativePrompts[promptKey]?['execution_generation'] ==
+              params['execution_generation']) {
+            nativePrompts.remove(promptKey);
+          }
           await onApprovalResponse?.call();
-          return {'resolved': approvalResolved};
+          return {
+            'status': approvalAlreadyResolved ? 'already_resolved' : 'resolved',
+            'prompt_id': params['prompt_id'],
+          };
         }
-        if (method == 'session.steer') return steerResult;
+        if (method == 'session.steer') {
+          if (params['execution_generation'] is! int) {
+            throw JsonRpcError(
+              method,
+              'Missing generation',
+              reason: 'invalid_params',
+            );
+          }
+          return steerResult;
+        }
         if (method == 'session.resume' && resumeFailures > 0) {
           resumeFailures--;
           throw TimeoutException('Session resume temporarily unavailable');
@@ -443,7 +609,12 @@ class Host {
             expiredResumeStarted?.complete();
             await expiredResumeDelay!.future;
           }
-          throw JsonRpcError('session.resume', 'session not found', code: 4007);
+          throw JsonRpcError(
+            'session.resume',
+            'Session does not exist',
+            code: 4001,
+            reason: 'not_found',
+          );
         }
         if (method == 'clarify.lock' || method == 'request.answer') {
           // Hermes contracts/prompt_voice.py uses Params, not SessionParams:
@@ -509,6 +680,14 @@ class Host {
             await replacementCreateDelay?.future;
           }
           final response = <String, dynamic>{
+            ...canonicalSnapshotFields,
+            'pending': canonicalAdmissions.values
+                .where(
+                  (row) =>
+                      (row['ref'] as Map)['profile_id'] == '/fixture/$name' &&
+                      row['status'] != 'terminal',
+                )
+                .toList(),
             'session_id':
                 method == 'session.resume' && runtimeForResume.containsKey(name)
                 ? runtimeForResume[name]
@@ -521,6 +700,21 @@ class Host {
             'running': method == 'session.resume' && running,
             'inflight': inflight,
             'open_requests': approvalOpenRequests,
+            'prompts': [
+              for (final entry in nativePrompts.entries)
+                if (entry.key.$1 == name &&
+                    (pendingApprovals == null ||
+                        entry.value['kind'] != 'approval'))
+                  entry.value,
+              for (final row
+                  in pendingApprovals ?? const <Map<String, dynamic>>[])
+                {
+                  ...row,
+                  'kind': 'approval',
+                  'prompt_id': row['request_id'],
+                  'execution_generation': 0,
+                },
+            ],
             'todo_state': todoState,
             'info': {
               'profile_name': name,
@@ -533,6 +727,16 @@ class Host {
                         : '/$name/profile-default'),
             },
           };
+          response['revision'] =
+              canonicalRevisions['$name:${response['session_id']}'] ?? 0;
+          response['pending'] = canonicalAdmissions.values
+              .where(
+                (row) =>
+                    (row['ref'] as Map)['session_id'] ==
+                        response['session_id'] &&
+                    row['status'] != 'terminal',
+              )
+              .toList();
           if (method == 'session.resume' && resumeDelay != null) {
             final delay = resumeDelay!;
             resumeDelay = null;
@@ -561,9 +765,54 @@ class Host {
     String type, [
     Map<String, dynamic> data = const {},
   ]) {
+    if (type == 'approval' && data['server_request_id'] == null) {
+      final generation = nativeGenerations[(profile, '$profile-runtime')] ?? 0;
+      type = 'approval.request';
+      data = {
+        ...data,
+        'kind': 'approval',
+        'prompt_id': data['request_id'],
+        'execution_generation': generation,
+        'choices': GatewayApprovalRequest.fromEventData(
+          data,
+        ).choices.map((choice) => choice.wireValue).toList(),
+      }..remove('request_id');
+    }
+    if ({'approval.request', 'clarify.request'}.contains(type)) {
+      nativePrompts[(profile, data['prompt_id'] as String)] = Map.of(data);
+    } else if ({'approval.settled', 'clarify.settled'}.contains(type)) {
+      final key = (profile, data['prompt_id'] as String);
+      if (nativePrompts[key]?['execution_generation'] ==
+          data['execution_generation']) {
+        nativePrompts.remove(key);
+      }
+    }
     gateways[profile]!.onEvent!(
       StreamEvent(type: type, data: data, sessionId: '$profile-runtime'),
     );
+    if (type == 'turn.end' || type == 'message.complete') {
+      final rows = canonicalAdmissions.values
+          .where(
+            (row) => (row['ref'] as Map)['session_id'] == '$profile-runtime',
+          )
+          .toList();
+      for (final row in rows.where((row) => row['status'] == 'started')) {
+        row['status'] = 'terminal';
+      }
+      final next = rows.where((row) => row['status'] == 'queued').firstOrNull;
+      if (next != null) next['status'] = 'started';
+      gateways[profile]!.onEvent!(
+        StreamEvent(
+          type: 'session.info',
+          sessionId: '$profile-runtime',
+          data: {
+            'pending': rows
+                .where((row) => row['status'] != 'terminal')
+                .toList(),
+          },
+        ),
+      );
+    }
   }
 }
 
@@ -1023,7 +1272,7 @@ void main() {
       if (outcome == 'recovered' || outcome == 'joined') {
         expect(failure, isNull);
         expect(decisions, hasLength(1));
-        expect(decisions.single.$3['request_id'], 'notification-original');
+        expect(decisions.single.$3['prompt_id'], 'notification-original');
       } else {
         expect(failure, isNotNull);
         expect(decisions, isEmpty);
@@ -1174,11 +1423,13 @@ void main() {
         isTrue,
       );
       await expectLater(controller.resumeQueue(chat), throwsStateError);
-      expect(chat.runtime.error, contains('uncertain'));
-      expect(
-        host.calls.where((call) => call.$2 == 'prompt.submit'),
-        hasLength(1),
-      );
+      expect(chat.runtime.error, contains('not confirmed'));
+      final attempts = host.calls
+          .where((call) => call.$2 == 'prompt.submit')
+          .toList();
+      expect(attempts, hasLength(2));
+      expect(attempts[1].$3, attempts[0].$3);
+      expect(host.canonicalAdmissions, hasLength(1));
     },
   );
 
@@ -1297,7 +1548,7 @@ void main() {
             .skip(replacementCallStart)
             .where((call) => call.$2 == 'config.set')
             .map((call) => call.$3['key']),
-        containsAll(['model', 'reasoning', 'yolo']),
+        containsAll(['fast', 'yolo']),
       );
     },
   );
@@ -2189,54 +2440,52 @@ void main() {
     },
   );
 
-  test(
-    'profile traffic is scoped and GUI timing logs stay process-wide',
-    () async {
-      await controller.createProject(
-        'Test',
-        '/a',
-        color: '#112233',
-        icon: 'folder',
-        canDispatch: () => true,
-      );
-      final chat = await controller.createChat(canDispatch: () => true);
-      chat.composer.editText('hello');
-      await controller.send(chat);
-      emitChatEvent(controller, chat, 'approval', {
-        'request_id': 'once',
-        'choices': ['once', 'deny'],
-      });
-      await controller.approve(
-        chat,
-        'once',
-        requestId: chat.runtime.approval!.requestId,
-      );
-      await controller.stop(chat);
-      expect(host.calls.every((c) => c.$3['profile'] == c.$1), isTrue);
-      final profileReads = host.reads.where((r) => r.$1 != 'logs');
-      expect(profileReads, isNotEmpty);
-      expect(profileReads.every((r) => r.$2['profile'] == 'a'), isTrue);
-      final logReads = host.reads.where((r) => r.$1 == 'logs');
-      expect(logReads, isNotEmpty);
-      for (final (_, query) in logReads) {
-        expect(query, {
-          'file': 'gui',
-          'search': chat.key.sessionId,
-          'lines': '500',
-        });
-      }
-      expect(
-        host.calls.map((c) => c.$2),
-        containsAll([
-          'projects.create',
-          'session.create',
-          'prompt.submit',
-          'approval.respond',
-          'session.interrupt',
-        ]),
-      );
-    },
-  );
+  test('profile traffic and canonical timing replay stay scoped', () async {
+    await controller.createProject(
+      'Test',
+      '/a',
+      color: '#112233',
+      icon: 'folder',
+      canDispatch: () => true,
+    );
+    final chat = await controller.createChat(canDispatch: () => true);
+    chat.composer.editText('hello');
+    await controller.send(chat);
+    emitChatEvent(controller, chat, 'approval', {
+      'request_id': 'once',
+      'choices': ['once', 'deny'],
+    });
+    await controller.approve(
+      chat,
+      'once',
+      requestId: chat.runtime.approval!.requestId,
+    );
+    await controller.stop(chat);
+    expect(host.calls.every((c) => c.$3['profile'] == c.$1), isTrue);
+    final profileReads = host.reads.where((r) => r.$1 != 'logs');
+    expect(profileReads, isNotEmpty);
+    expect(profileReads.every((r) => r.$2['profile'] == 'a'), isTrue);
+    expect(host.reads.where((r) => r.$1 == 'logs'), isEmpty);
+    final replay = host.calls.where(
+      (call) => call.$2 == 'session.events.since',
+    );
+    expect(replay, isNotEmpty);
+    for (final (_, _, params) in replay) {
+      expect(params['replay_epoch'], 'fixture-epoch');
+      expect(params['last_sequence'], 0);
+      expect(params.containsKey('last_seen'), isFalse);
+    }
+    expect(
+      host.calls.map((c) => c.$2),
+      containsAll([
+        'projects.create',
+        'session.create',
+        'prompt.submit',
+        'approval.respond',
+        'session.interrupt',
+      ]),
+    );
+  });
 
   test(
     'steer preserves ownership and reports accepted or rejected status',
@@ -2249,12 +2498,43 @@ void main() {
       expect(host.calls.last.$3, {
         'session_id': 'a-runtime',
         'text': 'focus on the error',
+        'execution_generation': 0,
         'profile': 'a',
       });
 
       host.steerResult = {'status': 'rejected'};
       expect(await controller.steer(chat, 'keep this draft'), isFalse);
       expect(chat.runtime.runtimeId, 'a-runtime');
+    },
+  );
+
+  test(
+    'steering seals earlier assistant text before the steering marker',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      await controller.updateDraft(chat, 'Investigate');
+      await controller.send(chat);
+      host.event('a', 'tool.start', {
+        'tool_id': 'active-tool',
+        'name': 'terminal',
+      });
+      host.event('a', 'message.delta', {'text': 'Before steering'});
+      expect(await controller.steer(chat, 'Focus on the failing test'), isTrue);
+      host.event('a', 'message.delta', {'text': 'After steering'});
+      final content = chat.reading.messages
+          .map((row) => row['content'])
+          .toList();
+      expect(content.skip(content.length - 3), [
+        'Investigate',
+        'Before steering',
+        'Focus on the failing test',
+      ]);
+      expect(chat.reading.streaming, 'After steering');
+      expect(chat.runtime.toolActivities.map((tool) => tool.toolId), [
+        'active-tool',
+      ]);
+      expect(chat.runtime.toolActivities.single.isTerminal, isFalse);
+      expect(chat.runtime.execution, ChatExecution.running);
     },
   );
 
@@ -2322,7 +2602,7 @@ void main() {
     expect(chat.runtime.approval?.requestId, 'new-request');
     expect(chat.runtime.approvalResponding, isFalse);
     expect(
-      host.calls.lastWhere((c) => c.$2 == 'approval.respond').$3['request_id'],
+      host.calls.lastWhere((c) => c.$2 == 'approval.respond').$3['prompt_id'],
       'old-request',
     );
   });
@@ -2778,7 +3058,10 @@ void main() {
     host.activeListDelay!.complete();
     await Future<void>.delayed(Duration.zero);
     expect(chat.runtime.execution, ChatExecution.running);
-    expect(host.calls.where((call) => call.$2 == 'session.resume'), isEmpty);
+    expect(
+      host.calls.where((call) => call.$2 == 'session.resume'),
+      hasLength(1),
+    );
   });
 
   test(
@@ -3129,7 +3412,7 @@ void main() {
     expect(resume.$3, {
       'session_id': 'same',
       'profile': 'a',
-      'omit_messages': true,
+      'display_projection': true,
     });
     expect(a.runtime.execution, ChatExecution.running);
   });
@@ -3365,8 +3648,9 @@ void main() {
     () async {
       final chat = await controller.createChat(canDispatch: () => true);
       emitChatEvent(controller, chat, 'message.start');
+      await chat.composer.pause();
       await controller.queuePrompt(chat, 'Keep missing session work');
-      expect(chat.composer.observation.paused, isFalse);
+      expect(chat.composer.observation.paused, isTrue);
       expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
       host.expireUnsubmittedResume = true;
 
@@ -3766,7 +4050,8 @@ void main() {
     );
     expect(host.calls.lastWhere((c) => c.$2 == 'approval.respond').$3, {
       'session_id': 'a-runtime',
-      'request_id': 'dummy',
+      'prompt_id': 'dummy',
+      'execution_generation': 0,
       'choice': 'deny',
       'profile': 'a',
     });
@@ -4103,6 +4388,80 @@ void main() {
       expect(chat.runtime.questions, isNull);
       expect(chat.runtime.execution, ChatExecution.running);
       expect(controller.current!.scope.profileName, 'b');
+    },
+  );
+
+  test(
+    'composer clarification captures its exact draft and profile request',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      host.event('a', 'message.start');
+      host.event('a', 'clarify', {
+        'request_id': 'single',
+        'question': 'Which marker?',
+      });
+      await controller.updateDraft(chat, 'Blue');
+      host.onClarifyResponse = () async {
+        expect(chat.answeringQuestion, isTrue);
+        await controller.updateDraft(chat, 'Keep this newer draft');
+      };
+      expect(controller.canAnswerWithComposer(chat), isTrue);
+      await controller.answerWithComposer(chat);
+      final answer = host.calls.lastWhere(
+        (call) => call.$2 == 'request.answer',
+      );
+      expect(answer.$1, 'a');
+      expect(answer.$3, {
+        'id': 'single',
+        'result': {'answer': 'Blue'},
+        'profile': 'a',
+      });
+      expect(chat.composer.observation.text, 'Keep this newer draft');
+      expect(chat.answeringQuestion, isFalse);
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+    },
+  );
+
+  test(
+    'composer clarification rejects slash commands without consuming them',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      host.event('a', 'clarify', {
+        'request_id': 'single',
+        'question': 'Which?',
+      });
+      await controller.updateDraft(chat, '/status');
+      expect(controller.canAnswerWithComposer(chat), isFalse);
+      await controller.answerWithComposer(chat);
+      expect(chat.composer.observation.text, '/status');
+      expect(host.calls.where((call) => call.$2 == 'request.answer'), isEmpty);
+    },
+  );
+
+  test(
+    'task plan gauge preserves sparse context updates and clears complete omissions',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      host.event('a', 'session.info', {
+        'usage': {
+          'calls': 1,
+          'plan_gauge': {
+            'id': 'task',
+            'label': 'Session',
+            'used_bp': 4250,
+            'resets_at_ms': 1900000000000,
+          },
+        },
+      });
+      expect(chat.planGauge?.usedBasisPoints, 4250);
+      host.event('a', 'session.info', {
+        'usage': {'context_used': 10},
+      });
+      expect(chat.planGauge?.id, 'task');
+      host.event('a', 'session.info', {
+        'usage': {'calls': 2},
+      });
+      expect(chat.planGauge, isNull);
     },
   );
 

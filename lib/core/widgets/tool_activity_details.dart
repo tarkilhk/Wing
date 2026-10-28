@@ -219,6 +219,8 @@ class ToolActivityDetailsView extends StatelessWidget {
     final showResource = resource != null && !groupedSearch;
     return ActivityDetailsCard(
       children: [
+        if (call.progress case final progress?)
+          ActivityDetailFacts(facts: [progress.label]),
         if (skill != null)
           _SkillActivityContent(
             skill: skill,

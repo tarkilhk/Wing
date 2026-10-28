@@ -107,10 +107,15 @@ class BotsPreferences {
   String _messageDraftKey(String identity, String roomId) =>
       'bots_group_message_draft:${jsonEncode([identity, roomId])}';
 
-  ({String text, List<ComposerReference> references})? messageDraft(
-    String identity,
-    String roomId,
-  ) {
+  ({
+    String text,
+    List<ComposerReference> references,
+    List<BotGroupAttachment> attachments,
+    String? pendingEventId,
+    String? pendingWireText,
+    String? pendingText,
+  })?
+  messageDraft(String identity, String roomId) {
     final key = _messageDraftKey(identity, roomId);
     final saved = _writes.pending.containsKey(key)
         ? _writes.pending[key]
@@ -123,6 +128,34 @@ class BotsPreferences {
     return (
       text: record['text'] as String,
       references: ComposerReference.decode(record['references']),
+      attachments: [
+        for (final value in (record['attachments'] as List? ?? const []))
+          BotGroupAttachment.fromJson(Map<String, dynamic>.from(value as Map)),
+      ],
+      pendingEventId: record['pending_event_id'] as String?,
+      pendingWireText: record['pending_wire_text'] as String?,
+      pendingText: record['pending_text'] as String?,
+    );
+  }
+
+  Future<void> acknowledgeMessageDraft(
+    String identity,
+    String roomId,
+    String eventId,
+    String text,
+    Iterable<String> attachmentIds,
+  ) async {
+    final current = messageDraft(identity, roomId);
+    if (current == null || current.pendingEventId != eventId) return;
+    final remainingText = current.text.trim() == text ? '' : current.text;
+    await writeMessageDraft(
+      identity,
+      roomId,
+      remainingText,
+      retainComposerReferences(remainingText, current.references),
+      attachments: current.attachments
+          .where((item) => !attachmentIds.contains(item.id))
+          .toList(),
     );
   }
 
@@ -133,14 +166,23 @@ class BotsPreferences {
     String identity,
     String roomId,
     String text,
-    List<ComposerReference> references,
-  ) {
+    List<ComposerReference> references, {
+    List<BotGroupAttachment> attachments = const [],
+    String? pendingEventId,
+    String? pendingWireText,
+    String? pendingText,
+  }) {
     final key = _messageDraftKey(identity, roomId);
-    final encoded = text.isEmpty
+    final encoded =
+        text.isEmpty && attachments.isEmpty && pendingEventId == null
         ? null
         : jsonEncode({
             'text': text,
             'references': references.map((ref) => ref.toJson()).toList(),
+            'attachments': attachments.map((item) => item.toJson()).toList(),
+            'pending_event_id': ?pendingEventId,
+            'pending_wire_text': ?pendingWireText,
+            'pending_text': ?pendingText,
           });
     final writes = _writes;
     writes.pending[key] = encoded;

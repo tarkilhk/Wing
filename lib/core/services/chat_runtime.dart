@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../models/turn_failure.dart';
 import '../models/hermes_question.dart';
 import '../models/chat_runtime.dart';
 import '../models/gateway_activity.dart';
@@ -93,7 +94,7 @@ class ChatRuntimeAnswer {
   final String runtimeId;
   final Object _request;
   final int _turn, _events;
-  String? _approvalChoice;
+  String? _approvalChoice, _questionHistoryId;
   bool get current => _owner._ownsAnswer(this);
 }
 
@@ -114,7 +115,9 @@ class ChatRuntime {
 
   void closeQuestion(String requestId) {
     _settleQuestionRequest(requestId, HermesQuestionStatus.closed);
-    if (_questions?.pending?.requestId == requestId) _questions = null;
+    if (_serverQuestions?.pending?.requestId == requestId) {
+      _serverQuestions = null;
+    }
   }
 
   bool _closed = false;
@@ -122,6 +125,7 @@ class ChatRuntime {
   ChatExecution _execution = ChatExecution.idle;
   ChatRecovery _recovery = ChatRecovery.ready;
   String? _openingError, _error, _commandError;
+  TurnFailure? _failure;
   ChatMainActivity _main = ChatMainActivity.working;
   bool _compacting = false;
   GatewayToolActivity? _mainTool;
@@ -132,7 +136,35 @@ class ChatRuntime {
   final _approvalCorrelations = <String, Object>{};
   bool _approvalResponding = false;
   Object? _answeringApproval;
-  ChatQuestions? _questions;
+  ChatQuestions? _serverQuestions;
+  final _nativeClarifications = <String, ChatQuestions>{};
+  ChatQuestions? get _nativeQuestions =>
+      _nativeClarifications.values.firstOrNull;
+  set _nativeQuestions(ChatQuestions? value) {
+    if (value == null) {
+      _nativeClarifications.remove(_nativeQuestions?.pending?.requestId);
+    } else {
+      _nativeClarifications[value.pending!.requestId] = value;
+    }
+  }
+
+  int? _nativeGeneration;
+  final _settledNativePrompts = <(String, String, int)>{};
+  ChatQuestions? get _questions => _nativeQuestions ?? _serverQuestions;
+  set _questions(ChatQuestions? value) {
+    if (value?.nativeGeneration != null ||
+        value == null && _nativeQuestions != null) {
+      _nativeQuestions = value;
+    } else {
+      _serverQuestions = value;
+    }
+  }
+
+  Set<String> get _activeClarificationIds => {
+    for (final lane in [..._nativeClarifications.values, _serverQuestions])
+      for (final q in lane?.questions ?? const <GatewayClarifyRequest>[])
+        _clarifyHistoryId(q, lane?.nativeGeneration),
+  };
   GatewaySensitivePromptRequest? _secure;
   bool _secureResponding = false;
   bool _commandRunning = false,
@@ -150,6 +182,7 @@ class ChatRuntime {
       Object.new,
     ),
     requestId: raw['request_id'] as String,
+    nativeGeneration: raw['execution_generation'] as int?,
     serverRequestId: raw['server_request_id'] is String
         ? raw['server_request_id'] as String
         : null,
@@ -181,6 +214,7 @@ class ChatRuntime {
     error: _error ?? _commandError,
     decisionError: _decisionError,
     decisionErrorRequestId: _decisionErrorRequestId,
+    failure: _error == null ? null : _failure,
   );
   int get turnRevision => _turn;
   int get resumeRevision => _resume;
@@ -242,6 +276,7 @@ class ChatRuntime {
     _approvals.requests,
     _approvals.total,
     _approvalResponding,
+    _questions?.nativeGeneration,
     _questions?.questions
         .map(
           (q) => [
@@ -270,19 +305,24 @@ class ChatRuntime {
   Map<String, dynamic> _approvalWire(Map<String, dynamic> raw) {
     final id = raw['request_id'];
     final previous = _approvals.requests
-        .where((r) => r['request_id'] == id)
+        .where(
+          (r) =>
+              r['request_id'] == id &&
+              r['execution_generation'] == raw['execution_generation'],
+        )
         .firstOrNull;
     final combined = {...?previous, ...raw};
     final parsed = GatewayApprovalRequest.fromEventData(combined);
     return {
       'request_id': id,
+      'prompt_id': combined['prompt_id'],
+      'execution_generation': combined['execution_generation'],
       'command': parsed.command,
       'description': parsed.description,
       'allow_permanent': parsed.allowPermanent,
       'smart_denied': parsed.smartDenied,
       'choices': parsed.choices.map((v) => v.wireValue).toList(growable: false),
-      if (combined['server_request_id'] is String)
-        'server_request_id': combined['server_request_id'],
+      'server_request_id': combined['server_request_id'],
       if (combined['mobile_push_event_id'] is String)
         'mobile_push_event_id': combined['mobile_push_event_id'],
     };
@@ -350,6 +390,7 @@ class ChatRuntime {
     final relevant = switch (type) {
       'session.info' => const [
         'open_requests',
+        'prompts',
         'side_tasks',
         'model',
         'provider',
@@ -371,6 +412,10 @@ class ChatRuntime {
       'todo.updated' ||
       'btw.complete' ||
       'background.complete' ||
+      'approval.request' ||
+      'approval.settled' ||
+      'clarify.request' ||
+      'clarify.settled' ||
       'approval' ||
       'clarify' ||
       'request.cancel' ||
@@ -482,21 +527,26 @@ class ChatRuntime {
       _mainTool = capture._tool;
     }
     _error = error;
+    _failure = null;
   }
 
   void deliveryUncertain(String error) {
     if (!_closed) {
+      _retireToolProgress();
       _recovery = ChatRecovery.reconnecting;
       _error = error;
+      _failure = null;
     }
   }
 
   void failTurn(String error) {
     if (!_closed) {
+      _retireToolProgress();
       _sealReasoning();
       _compacting = false;
       _execution = ChatExecution.failed;
       _error = error;
+      _failure = null;
     }
   }
 
@@ -504,8 +554,10 @@ class ChatRuntime {
     required bool failed,
     required bool cancelled,
     required String? error,
+    TurnFailure? failure,
   }) {
     if (_closed) return;
+    _retireToolProgress();
     _sealReasoning();
     _compacting = false;
     _execution = failed
@@ -517,10 +569,14 @@ class ChatRuntime {
     _secureResponding = false;
     _commandPreflight = null;
     _error = error;
+    _failure = failure;
   }
 
   void reportError(String? error) {
-    if (!_closed) _error = error;
+    if (!_closed) {
+      _error = error;
+      _failure = null;
+    }
   }
 
   void reportCommandError(String error) {
@@ -641,6 +697,27 @@ class ChatRuntime {
       receivedAt: live ? receivedAt ?? toolActivityNow() : null,
     );
     if (update == null) return null;
+    if (type == 'tool.progress') {
+      // Progress cannot invent a call, reorder reasoning or revive settled work.
+      if (!live ||
+          _recovery != ChatRecovery.ready ||
+          !observation.executionActive ||
+          update.progress == null) {
+        return null;
+      }
+      final index = _tools.indexWhere((a) => a.toolId == update.toolId);
+      if (index < 0 || _tools[index].isTerminal) return null;
+      final previous = _tools[index];
+      final merged = previous.merge(update);
+      _tools[index] = merged;
+      final position = _activity.indexWhere(
+        (entry) =>
+            entry is ChatToolEntry && entry.activity.toolId == merged.toolId,
+      );
+      if (position >= 0) _activity[position] = ChatToolEntry(merged);
+      if (identical(_mainTool, previous)) _mainTool = merged;
+      return merged;
+    }
     _sealReasoning();
     // Argument generation announces a name, not a call identity or a start.
     if (type == 'tool.generating') {
@@ -684,6 +761,7 @@ class ChatRuntime {
     if (data['running'] == true) {
       _execution = ChatExecution.running;
     } else {
+      _retireToolProgress();
       _sealReasoning();
       _compacting = false;
       if (observation.executionActive) _execution = ChatExecution.completed;
@@ -692,9 +770,25 @@ class ChatRuntime {
 
   void beginRecovery() {
     if (!_closed) {
+      _retireToolProgress();
       _revokeCommandPrompt();
       _recovery = ChatRecovery.reconnecting;
       _secureResponding = false;
+    }
+  }
+
+  void _retireToolProgress() {
+    for (var i = 0; i < _tools.length; i++) {
+      if (_tools[i].progress == null) continue;
+      final previous = _tools[i];
+      final next = previous.withoutProgress();
+      _tools[i] = next;
+      if (identical(_mainTool, previous)) _mainTool = next;
+      final position = _activity.indexWhere(
+        (entry) =>
+            entry is ChatToolEntry && entry.activity.toolId == next.toolId,
+      );
+      if (position >= 0) _activity[position] = ChatToolEntry(next);
     }
   }
 
@@ -783,7 +877,10 @@ class ChatRuntime {
     _error = null;
     _approvals.clear();
     _approvalCorrelations.clear();
-    _questions = null;
+    _serverQuestions = null;
+    _nativeClarifications.clear();
+    _nativeGeneration = null;
+    _settledNativePrompts.clear();
     _secure = null;
     _approvalResponding = false;
     _answeringApproval = null;
@@ -791,6 +888,195 @@ class ChatRuntime {
     _commandPreflight = null;
     _mainTool = null;
     finishActivity();
+  }
+
+  /// Native waiters are generation-bound and independent of JSON-RPC requests.
+  bool receiveNativePrompt(Map<String, dynamic> prompt) {
+    final kind = prompt['kind'], id = prompt['prompt_id'];
+    final generation = prompt['execution_generation'];
+    if (_closed ||
+        id is! String ||
+        id.isEmpty ||
+        generation is! int ||
+        generation < 0 ||
+        !{'approval', 'clarify'}.contains(kind) ||
+        generation < (_nativeGeneration ?? generation) ||
+        _settledNativePrompts.contains((kind as String, id, generation))) {
+      return false;
+    }
+    if (_nativeGeneration != generation) {
+      reconcileNativePrompts(const [], generation);
+    }
+    if (kind == 'approval') {
+      if (_approvals.requests.any(
+        (r) => r['request_id'] == id && r['server_request_id'] is String,
+      )) {
+        return false;
+      }
+      if (_questionHistory['native/$generation/approval/$id']
+              ?.status
+              .isPending ==
+          false) {
+        return false;
+      }
+      return receiveApproval({...prompt, 'request_id': id});
+    }
+    receiveQuestions({
+      ...prompt,
+      'request_id': id,
+    }, nativeGeneration: generation);
+    return true;
+  }
+
+  void settleNativePrompt(String kind, String id, int generation) {
+    if (_closed) return;
+    _settledNativePrompts.add((kind, id, generation));
+    if (kind == 'approval') {
+      final raw = _approvals.requests
+          .where(
+            (r) =>
+                r['request_id'] == id &&
+                r['execution_generation'] == generation,
+          )
+          .firstOrNull;
+      if (raw == null) return;
+      _settleQuestion(_approvalHistoryId(raw), HermesQuestionStatus.closed);
+      final correlation = _approvalCorrelations.remove(id);
+      _approvals.remove(id);
+      if (identical(_answeringApproval, correlation)) {
+        _approvalResponding = false;
+        _answeringApproval = null;
+      }
+    } else if (kind == 'clarify' &&
+        _nativeClarifications[id]?.nativeGeneration == generation) {
+      for (final q in _nativeClarifications[id]!.questions) {
+        _settleQuestion(
+          _clarifyHistoryId(q, generation),
+          HermesQuestionStatus.closed,
+        );
+      }
+      _nativeClarifications.remove(id);
+    }
+  }
+
+  /// A full canonical native snapshot retires only native controls.
+  void reconcileNativePrompts(Object? value, int generation) {
+    if (_closed ||
+        value is! List ||
+        generation < 0 ||
+        generation < (_nativeGeneration ?? generation)) {
+      return;
+    }
+    final prompts = value
+        .whereType<Map>()
+        .where(
+          (p) =>
+              p['execution_generation'] == generation &&
+              p['prompt_id'] is String &&
+              {'approval', 'clarify'}.contains(p['kind']),
+        )
+        .map((p) => Map<String, dynamic>.from(p))
+        .toList();
+    final ids = {for (final p in prompts) (p['kind'], p['prompt_id'])};
+    for (final raw
+        in _approvals.requests
+            .where((r) => r['execution_generation'] is int)
+            .toList()) {
+      if (raw['execution_generation'] != generation ||
+          !ids.contains(('approval', raw['prompt_id']))) {
+        settleNativePrompt(
+          'approval',
+          raw['request_id'] as String,
+          raw['execution_generation'] as int,
+        );
+      }
+    }
+    for (final previous in _nativeClarifications.values.toList()) {
+      if (previous.nativeGeneration == generation &&
+          ids.contains(('clarify', previous.pending?.requestId))) {
+        continue;
+      }
+      settleNativePrompt(
+        'clarify',
+        previous.pending!.requestId,
+        previous.nativeGeneration!,
+      );
+    }
+    _nativeGeneration = generation;
+    for (final prompt in prompts) {
+      receiveNativePrompt(prompt);
+    }
+    _reconcileQuestionHistory(
+      HermesQuestionKind.clarification,
+      _activeClarificationIds,
+    );
+  }
+
+  /// approval.pending is native-only; its read owner supplies the captured
+  /// canonical generation because that endpoint deliberately omits it.
+  bool reconcileNativeApprovals(
+    ChatRuntimeApprovalRead capture,
+    List<Map<String, dynamic>> rows,
+    int generation,
+  ) {
+    if (_closed ||
+        !identical(capture._owner, this) ||
+        capture.runtimeId != _runtimeId ||
+        capture._read != _approvalRead ||
+        capture._revision != _approvals.revision ||
+        generation < 0 ||
+        generation < (_nativeGeneration ?? generation)) {
+      return false;
+    }
+    final wire = <Map<String, dynamic>>[
+      ..._approvals.requests.where((r) => r['execution_generation'] == null),
+      for (final row in rows)
+        if (row['request_id'] is String &&
+            !_approvals.requests.any(
+              (r) =>
+                  r['request_id'] == row['request_id'] &&
+                  r['server_request_id'] is String,
+            ) &&
+            !_settledNativePrompts.contains((
+              'approval',
+              row['request_id'] as String,
+              generation,
+            )))
+          {
+            ...row,
+            'kind': 'approval',
+            'prompt_id': row['request_id'],
+            'execution_generation': generation,
+          },
+    ];
+    final previousNative = _approvals.requests
+        .where((r) => r['execution_generation'] is int)
+        .toList();
+    if (!reconcileApprovals(capture, wire)) return false;
+    for (final previous in previousNative) {
+      if (!wire.any(
+        (r) =>
+            r['request_id'] == previous['request_id'] &&
+            r['execution_generation'] == previous['execution_generation'],
+      )) {
+        _settledNativePrompts.add((
+          'approval',
+          previous['request_id'] as String,
+          previous['execution_generation'] as int,
+        ));
+      }
+    }
+    for (final previous in _nativeClarifications.values.toList()) {
+      if (previous.nativeGeneration != generation) {
+        settleNativePrompt(
+          'clarify',
+          previous.pending!.requestId,
+          previous.nativeGeneration!,
+        );
+      }
+    }
+    _nativeGeneration = generation;
+    return true;
   }
 
   bool receiveApproval(Map<String, dynamic> request) {
@@ -833,18 +1119,25 @@ class ChatRuntime {
     final wire = requests.map(_approvalWire).toList();
     if (wire.isNotEmpty) _revokeCommandPrompt();
     _approvals.reconcile(wire);
-    for (final request in wire) {
+    for (final request in _approvals.requests) {
       _rememberApproval(request);
     }
     _reconcileQuestionHistory(
       HermesQuestionKind.approval,
-      wire.map((request) => 'approval/${request['request_id']}').toSet(),
+      _approvals.requests.map(_approvalHistoryId).toSet(),
     );
     final ids = _approvals.requests.map((r) => r['request_id']).toSet();
     _approvalCorrelations.removeWhere((id, _) => !ids.contains(id));
     for (final raw in _approvals.requests) {
       final id = raw['request_id'] as String;
       if (before[id] != jsonEncode(raw)) _approvalCorrelations[id] = Object();
+    }
+    if (_approvalResponding &&
+        !_approvalCorrelations.values.any(
+          (value) => identical(value, _answeringApproval),
+        )) {
+      _approvalResponding = false;
+      _answeringApproval = null;
     }
     if (_recovery == ChatRecovery.reconnecting) _recovery = ChatRecovery.ready;
     return true;
@@ -867,12 +1160,16 @@ class ChatRuntime {
     _answeringApproval = request.correlation;
     _decisionError = null;
     return ChatRuntimeAnswer._(
-      this,
-      _runtimeId,
-      request.correlation,
-      _turn,
-      _events,
-    ).._approvalChoice = choice;
+        this,
+        _runtimeId,
+        request.correlation,
+        _turn,
+        _events,
+      )
+      .._approvalChoice = choice
+      .._questionHistoryId = _approvalHistoryId(
+        _approvals.requests.firstWhere((r) => r['request_id'] == id),
+      );
   }
 
   bool _ownsAnswer(ChatRuntimeAnswer capture) =>
@@ -893,9 +1190,11 @@ class ChatRuntime {
     String? error,
   }) {
     if (!_answerCurrent(capture)) return;
-    if (accepted && capture._approvalChoice != null) {
+    if (accepted &&
+        capture._approvalChoice != null &&
+        capture._questionHistoryId != null) {
       _settleQuestion(
-        'approval/$id',
+        capture._questionHistoryId!,
         HermesQuestionStatus.decision(capture._approvalChoice!),
       );
     }
@@ -921,12 +1220,12 @@ class ChatRuntime {
     }
   }
 
-  void receiveQuestions(Map<String, dynamic> data) {
+  void receiveQuestions(Map<String, dynamic> data, {int? nativeGeneration}) {
     if (_closed) return;
     final parsed = GatewayClarifyRequest.fromEventDataList(data);
-    _rememberQuestions(parsed);
+    _rememberQuestions(parsed, nativeGeneration: nativeGeneration);
     bool settled(GatewayClarifyRequest question) =>
-        _questionHistory['clarify/${question.requestId}/${question.questionId ?? ''}']
+        _questionHistory[_clarifyHistoryId(question, nativeGeneration)]
             ?.status
             .isPending ==
         false;
@@ -945,20 +1244,25 @@ class ChatRuntime {
           (q) => q.questionId == null || !answeredIds.contains(q.questionId),
         )
         .firstOrNull;
-    final previous = _questions?.pending;
+    final lane = nativeGeneration == null
+        ? _serverQuestions
+        : _nativeClarifications[parsed.firstOrNull?.requestId];
+    final previous = lane?.pending;
     // A repeated server snapshot does not replace the pending question's
     // response authority. Advancing to another question does.
     final correlation =
         pending != null &&
             previous != null &&
             pending.requestId == previous.requestId &&
-            pending.questionId == previous.questionId
-        ? _questions!.correlation
+            pending.questionId == previous.questionId &&
+            lane?.nativeGeneration == nativeGeneration
+        ? lane!.correlation
         : Object();
-    _questions = pending == null
+    final next = pending == null
         ? null
         : ChatQuestions(
             correlation: correlation,
+            nativeGeneration: nativeGeneration,
             questions: parsed,
             answeredIds: answeredIds,
             lockedAnswers: data['answers'] is Map
@@ -969,19 +1273,24 @@ class ChatRuntime {
                   }
                 : const {},
           );
+    if (nativeGeneration == null) {
+      _serverQuestions = next;
+    } else if (next != null) {
+      _nativeQuestions = next;
+    }
     for (final question in parsed) {
       if (data['answers'] is Map &&
           (data['answers'] as Map).containsKey(question.questionId)) {
         _settleQuestion(
-          'clarify/${question.requestId}/${question.questionId ?? ''}',
+          _clarifyHistoryId(question, nativeGeneration),
           HermesQuestionStatus.answered,
         );
       }
     }
-    _reconcileQuestionHistory(HermesQuestionKind.clarification, {
-      for (final question in parsed)
-        'clarify/${question.requestId}/${question.questionId ?? ''}',
-    });
+    _reconcileQuestionHistory(
+      HermesQuestionKind.clarification,
+      _activeClarificationIds,
+    );
   }
 
   ChatRuntimeAnswer? beginQuestionAnswer(ChatQuestions? expected) {
@@ -992,12 +1301,16 @@ class ChatRuntime {
     }
     if (_questions?.pending == null) return null;
     return ChatRuntimeAnswer._(
-      this,
-      _runtimeId,
-      _questions!.correlation,
-      _turn,
-      _events,
-    );
+        this,
+        _runtimeId,
+        _questions!.correlation,
+        _turn,
+        _events,
+      )
+      .._questionHistoryId = _clarifyHistoryId(
+        _questions!.pending!,
+        _questions!.nativeGeneration,
+      );
   }
 
   void finishQuestionAnswer(
@@ -1005,15 +1318,21 @@ class ChatRuntime {
     required String answer,
     required List<String>? remaining,
   }) {
-    if (!_answerCurrent(capture) ||
-        !identical(_questions?.correlation, capture._request)) {
-      return;
+    if (!_answerCurrent(capture)) return;
+    // Native settlement is published before its response ACK. That ACK can
+    // confirm the captured history without consuming a newer pending prompt.
+    if (capture._questionHistoryId?.startsWith('native/') == true) {
+      _settleQuestion(
+        capture._questionHistoryId!,
+        HermesQuestionStatus.answered,
+      );
     }
+    if (!identical(_questions?.correlation, capture._request)) return;
     final questions = _questions!;
     final pending = questions.pending;
     if (pending != null) {
       _settleQuestion(
-        'clarify/${pending.requestId}/${pending.questionId ?? ''}',
+        _clarifyHistoryId(pending, questions.nativeGeneration),
         HermesQuestionStatus.answered,
       );
     }
@@ -1022,6 +1341,7 @@ class ChatRuntime {
     } else {
       _questions = ChatQuestions(
         correlation: Object(),
+        nativeGeneration: questions.nativeGeneration,
         questions: questions.questions,
         answeredIds: questions.questions
             .map((q) => q.questionId)
@@ -1120,8 +1440,8 @@ class ChatRuntime {
         _approvalCorrelations.remove(rid);
       }
     }
-    if (method == 'clarify' && _questions?.pending?.requestId == id) {
-      _questions = null;
+    if (method == 'clarify' && _serverQuestions?.pending?.requestId == id) {
+      _serverQuestions = null;
     }
     if (_secure?.requestId == id &&
         GatewaySensitivePromptRequest.kindForMethod(
@@ -1142,6 +1462,19 @@ class ChatRuntime {
           (r) => r['params'] is Map && r['params']['session_id'] == _runtimeId,
         )
         .toList();
+    final serverApprovals = <Map<String, dynamic>>[
+      for (final frame in frames)
+        if (frame['method'] == 'approval' &&
+            frame['params']['request_id'] is String)
+          {
+            ...Map<String, dynamic>.from(frame['params'] as Map),
+            'server_request_id': frame['id'],
+          },
+    ];
+    reconcileApprovals(captureApprovalRead(), [
+      ..._approvals.requests.where((r) => r['execution_generation'] is int),
+      ...serverApprovals,
+    ]);
     GatewaySensitivePromptRequest? next;
     for (final frame in frames) {
       next = GatewaySensitivePromptRequest.fromServerRequest(frame);
@@ -1160,17 +1493,17 @@ class ChatRuntime {
         .where((r) => r['method'] == 'clarify')
         .firstOrNull;
     if (questionFrame == null) {
-      _questions = null;
+      _serverQuestions = null;
     } else {
       receiveQuestions({
         ...Map<String, dynamic>.from(questionFrame['params'] as Map),
         'request_id': questionFrame['id'],
       });
     }
-    _reconcileQuestionHistory(HermesQuestionKind.clarification, {
-      for (final q in _questions?.questions ?? const <GatewayClarifyRequest>[])
-        'clarify/${q.requestId}/${q.questionId ?? ''}',
-    });
+    _reconcileQuestionHistory(
+      HermesQuestionKind.clarification,
+      _activeClarificationIds,
+    );
     _reconcileQuestionHistory(HermesQuestionKind.secureInput, {
       if (next != null) 'secure/${next.kind.name}/${next.requestId}',
     });
@@ -1179,6 +1512,7 @@ class ChatRuntime {
   /// Called only after the coordinator accepts a captured current resume read.
   bool installResume(Map<String, dynamic> result) {
     if (_closed) return false;
+    _retireToolProgress();
     final runtime = result['session_id'] as String;
     final changed = runtime != _runtimeId;
     final wasActive = observation.executionActive;
@@ -1200,25 +1534,13 @@ class ChatRuntime {
         : _execution == ChatExecution.submitting
         ? ChatExecution.idle
         : _execution;
-    _error = failed ? (inflight?['error']?.toString() ?? 'Turn failed') : null;
-    final pending = result['pending_approval'];
-    if (pending is Map) receiveApproval(Map<String, dynamic>.from(pending));
-    if (result['open_requests'] is List) {
-      for (final raw in (result['open_requests'] as List).whereType<Map>()) {
-        if (raw['method'] != 'approval' ||
-            raw['params'] is! Map ||
-            raw['params']['session_id'] != runtime) {
-          continue;
-        }
-        final params = Map<String, dynamic>.from(raw['params'] as Map);
-        final id = params['request_id'];
-        if (id is! String || id.isEmpty) continue;
-        receiveApproval({
-          ...params,
-          'request_id': id,
-          'server_request_id': raw['id'],
-        });
-      }
+    _failure = failed
+        ? TurnFailure.fromCompletion(Map<String, dynamic>.from(inflight!))
+        : null;
+    _error = _failure?.message;
+    final generation = result['execution_generation'];
+    if (generation is int) {
+      reconcileNativePrompts(result['prompts'], generation);
     }
     reconcileOpenRequests(result['open_requests']);
     return changed;

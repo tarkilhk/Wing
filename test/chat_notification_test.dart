@@ -192,7 +192,7 @@ token=not-for-alerts
         expect(
           host.calls
               .where((c) => c.$2 == 'approval.respond')
-              .map((c) => c.$3['request_id']),
+              .map((c) => c.$3['prompt_id']),
           ['first', 'second'],
         );
       },
@@ -328,7 +328,7 @@ token=not-for-alerts
         );
         expect(
           alerts.single.content.status,
-          status == 'error' ? 'Failed' : 'Stopped',
+          status == 'error' ? 'Turn failed' : 'Stopped',
         );
         expect(
           alerts.single.content.preview,

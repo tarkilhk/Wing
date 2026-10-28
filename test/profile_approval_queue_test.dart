@@ -79,11 +79,22 @@ void main() {
         {'id': chat.runtime.runtimeId, 'session_key': chat.key.sessionId},
       ];
       host.notificationReplay = {'open_requests': [], 'latest_seq': 1};
+      // A lost reply retires canonical authority until a fresh resume arrives.
+      expect(inputSnapshots.last.inputs, hasLength(2));
+      await controller.reconnect(chat.key.workspace);
       await controller.reconcileNotificationRequests({chat.key});
       await Future<void>.delayed(Duration.zero);
       expect(inputSnapshots.last.inputs, hasLength(1));
       expect(inputSnapshots.last.inputs.single.focus.id, 'two');
       expect(inputSnapshots.last.inputs.single.error, isNull);
+      expect(
+        host.calls.where((call) => call.$2 == 'approval.respond'),
+        hasLength(1),
+      );
+      expect(
+        host.calls.where((call) => call.$2 == 'session.resume'),
+        isNotEmpty,
+      );
     },
   );
 
@@ -300,16 +311,20 @@ void main() {
     },
   );
 
-  test('zero resolved is not an accepted approval', () async {
-    host.event('a', 'approval', approval('one'));
-    host.approvalResolved = 0;
-    await expectLater(
-      controller.approve(chat, 'once', requestId: 'one'),
-      throwsStateError,
-    );
-    expect(chat.runtime.approval?.requestId, 'one');
-    expect(chat.runtime.decisionError, contains('not confirmed'));
-  });
+  test(
+    'already resolved closes the prompt without claiming this decision',
+    () async {
+      host.event('a', 'approval', approval('one'));
+      host.approvalAlreadyResolved = true;
+      await controller.approve(chat, 'once', requestId: 'one');
+      expect(chat.runtime.approval, isNull);
+      expect(chat.runtime.decisionError, isNull);
+      expect(
+        chat.reading.questionHistory!.question('native/0/approval/one')!.status,
+        HermesQuestionStatus.closed,
+      );
+    },
+  );
 
   test(
     'reconciliation clears a desktop decision with a corroborated runtime',

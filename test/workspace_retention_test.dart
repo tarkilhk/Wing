@@ -62,13 +62,7 @@ class RetentionFixture extends ProfilePagingFixture {
           ).any((row) => row['id'] == durableId)) {
             throw StateError('Unknown authored retention session');
           }
-          final response = await wire.call(method, params);
-          return {
-            ...response..remove('stored_session_id'),
-            'session_key': durableId,
-            'resumed': durableId,
-            'status': 'idle',
-          };
+          return wire.call(method, params);
         }
         if (method == 'subagent.list') {
           return {'subagents': <Map<String, dynamic>>[]};

@@ -1,4 +1,10 @@
+import 'package:url_launcher/url_launcher.dart';
+import 'administration/admin_hosted_connector_accounts_page.dart';
+import '../widgets/hosted_connection_request_panel.dart';
 import '../widgets/conversation_page.dart';
+import '../widgets/turn_failure_view.dart';
+import '../services/git_review_session.dart';
+import 'git_review_screen.dart';
 import '../widgets/conversation_composer.dart';
 import '../widgets/conversation_reading_scope.dart';
 import '../widgets/selection_viewport.dart';
@@ -134,6 +140,8 @@ class ProfileWorkspaceScreen extends StatefulWidget {
   onSelectConnection;
   final VoidCallback? onPreferencesChanged;
   final Future<void> Function(ProfileSessionKey)? onCapturePhoto;
+  final Future<void> Function(BotGroup)? onCaptureGroupPhoto;
+  final BotGroup? initialGroup;
   final AppDestination initialDestination;
   final VoiceDevice? voiceDevice;
   final BotsSession Function()? createBotsSession;
@@ -156,6 +164,8 @@ class ProfileWorkspaceScreen extends StatefulWidget {
     this.onSelectConnection,
     this.onPreferencesChanged,
     this.onCapturePhoto,
+    this.onCaptureGroupPhoto,
+    this.initialGroup,
     this.initialDestination = AppDestination.chats,
     this.voiceDevice,
     this.createBotsSession,
@@ -711,6 +721,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               voiceDevice: widget.voiceDevice,
               stopVoicePlayback: _voiceOutput.stop,
               createSession: () => _bots.openGroup(group),
+              onCapturePhoto: widget.onCaptureGroupPhoto == null
+                  ? null
+                  : () => widget.onCaptureGroupPhoto!(group),
               onEdit: (group) => openGroupEditor(
                 groupContext,
                 _bots,
@@ -886,6 +899,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       _pendingChatScope = request.owner;
       _pendingChatLoadingLabel = 'Opening investigation chat';
     }
+    if (widget.initialGroup case final group?) {
+      _destination = AppDestination.chats;
+      _pendingChatTitle = group.name;
+      _pendingChatScope = group.scope;
+      _pendingChatLoadingLabel = 'Opening group';
+      _retryChatEntry = () => _openInitialGroup(group);
+    }
     if (widget.initialBot case final bot?) {
       _destination = AppDestination.chats;
       _chatOrigin = AppDestination.bots;
@@ -909,6 +929,31 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     });
   }
 
+  Future<void> _openInitialGroup(BotGroup group) async {
+    if (!mounted || _pendingChatTitle == null) return;
+    setState(() => _pendingChatError = null);
+    try {
+      await _bots.refresh();
+      if (!mounted || _pendingChatTitle == null) return;
+      final current = _bots.groupForKey(group.key);
+      if (current == null) {
+        throw StateError(
+          'The group could not be opened. Refresh and try again.',
+        );
+      }
+      setState(() {
+        _pendingChatTitle = null;
+        _pendingChatScope = null;
+        _retryChatEntry = null;
+      });
+      await _openRecentGroup(current);
+    } catch (error) {
+      if (mounted && _pendingChatTitle != null) {
+        setState(() => _pendingChatError = workspaceFailureMessage(error));
+      }
+    }
+  }
+
   Future<void> _enter() async {
     if (widget.initialInvestigation case final request?) {
       await openTaskInvestigation(request);
@@ -918,6 +963,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       await controller.initialize();
     }
     if (!mounted || controller.current == null) return;
+    if (widget.initialGroup case final group?) {
+      await _openInitialGroup(group);
+      return;
+    }
     if (widget.initialBot case final bot?) {
       await _openBot(bot, origin: AppDestination.chats);
       return;
@@ -1605,6 +1654,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 unawaited(_openFind(chat));
               } else if (action == 'outputs') {
                 unawaited(_run(() => _openOutputs(chat)));
+              } else if (action == 'git') {
+                final review = GitReviewSession(
+                  server: controller.administration(),
+                  resolveWorkspace: () => controller.reviewWorkspacePath(chat),
+                );
+                final scope = chat.title;
+                unawaited(
+                  Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          GitReviewScreen(session: review, scope: scope),
+                    ),
+                  ),
+                );
               } else if (action == 'screen') {
                 unawaited(_run(() => _openScreen(chat)));
               } else if (action == 'parent') {
@@ -1623,6 +1686,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               const StudioPopupMenuItem(
                 value: 'find',
                 child: Text('Find in chat'),
+              ),
+              const StudioPopupMenuItem(
+                value: 'git',
+                child: Text('Git review'),
               ),
               if (parentSessionId != null)
                 const StudioPopupMenuItem(
@@ -1937,13 +2004,42 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final payload = chat.runtime.questions!;
     final question = payload.pending!;
     final index = payload.pendingNumber - 1;
-    return GatewayClarifyDialog(
-      key: ValueKey((chat.key, question.requestId, question.questionId)),
-      request: question,
-      number: index + 1,
-      total: payload.questions.length,
-      onRespond: (answer) =>
-          controller.clarify(chat, answer, expectedRequest: payload),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GatewayClarifyDialog(
+          key: ValueKey((chat.key, question.requestId, question.questionId)),
+          request: question,
+          number: index + 1,
+          total: payload.questions.length,
+          onRespond: (answer) =>
+              controller.clarify(chat, answer, expectedRequest: payload),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: ListenableBuilder(
+            listenable: Listenable.merge([
+              controller.composerChanges,
+              controller,
+            ]),
+            builder: (context, _) => StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Answer with composer text',
+                onPressed: controller.canAnswerWithComposer(chat)
+                    ? () => _run(() => controller.answerWithComposer(chat))
+                    : null,
+                icon: chat.answeringQuestion
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.keyboard_return),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1982,6 +2078,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final savedPrompt = allowSavedActions && entry.editablePrompt;
     final savedAnswer = allowSavedActions && entry.branchAnswer;
     final enabled =
+        chat.readOnlyReason == null &&
         !chat.runtime.opening &&
         !chat.runtime.offline &&
         !controller.recovering &&
@@ -2063,14 +2160,68 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             )
           : null,
       onRegenerate: enabled
-          ? () => _run(() async {
-              await controller.branchAnswer(
-                chat,
-                chat.reading.messages.indexOf(message),
-                regenerate: true,
-              );
-            })
+          ? () => _regenerateSavedAnswer(chat, message)
           : null,
+    );
+  }
+
+  int _laterUserTurns(ProfileChat chat, Map<String, dynamic> message) {
+    final index = chat.reading.messages.indexWhere(
+      (row) => answerMessageId(row) == answerMessageId(message),
+    );
+    if (index < 0) return 0;
+    return chat.reading.messages
+        .skip(index + 1)
+        .where(isHumanAnswerPrompt)
+        .length;
+  }
+
+  String _revisionImpact(int turns) {
+    return turns == 0
+        ? 'This answer is replaced and the prompt runs again.'
+        : 'This removes $turns later user ${turns == 1 ? 'turn' : 'turns'} and their answers, then runs this prompt again.';
+  }
+
+  Future<void> _regenerateSavedAnswer(
+    ProfileChat chat,
+    Map<String, dynamic> message,
+  ) async {
+    final laterTurns = _laterUserTurns(chat, message);
+    if (laterTurns > 0) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => StudioDialog(
+          title: const Text('Replace this answer and later work?'),
+          content: Text(_revisionImpact(laterTurns)),
+          actions: [
+            StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Cancel regeneration',
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context, false),
+              ),
+            ),
+            StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Regenerate and remove later turns',
+                icon: const Icon(Icons.refresh),
+                onPressed: () => Navigator.pop(context, true),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    await _run(
+      () => controller.branchAnswer(
+        chat,
+        chat.reading.messages.indexWhere(
+          (row) => answerMessageId(row) == answerMessageId(message),
+        ),
+        regenerate: true,
+        expectedLaterTurns: laterTurns,
+      ),
     );
   }
 
@@ -2078,43 +2229,50 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ProfileChat chat,
     Map<String, dynamic> message,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showDialog<int>(
       context: context,
       builder: (context) => ListenableBuilder(
         listenable: controller,
-        builder: (context, _) => StudioDialog(
-          insetPadding: const EdgeInsets.all(WingSpacing.lg),
-          titleTextStyle: Theme.of(context).textTheme.titleMedium,
-          title: const Text('Restore to this checkpoint?'),
-          scrollable: true,
-          content: const Text(
-            'Everything after this prompt is removed from the conversation, and the prompt runs again from here.',
-          ),
-          actions: [
-            StudioButtonPress(
-              child: IconButton(
-                key: const ValueKey('restore-message-cancel'),
-                tooltip: 'Cancel restore',
-                onPressed: () => Navigator.pop(context, false),
-                icon: const Icon(Icons.close),
+        builder: (context, _) {
+          final laterTurns = _laterUserTurns(chat, message);
+          return StudioDialog(
+            insetPadding: const EdgeInsets.all(WingSpacing.lg),
+            titleTextStyle: Theme.of(context).textTheme.titleMedium,
+            title: const Text('Restore to this checkpoint?'),
+            scrollable: true,
+            content: Text(_revisionImpact(laterTurns)),
+            actions: [
+              StudioButtonPress(
+                child: IconButton(
+                  key: const ValueKey('restore-message-cancel'),
+                  tooltip: 'Cancel restore',
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
               ),
-            ),
-            StudioButtonPress(
-              child: IconButton(
-                key: const ValueKey('restore-message-confirm'),
-                tooltip: 'Restore and rerun',
-                onPressed: controller.canRestoreSavedPrompt(chat, message)
-                    ? () => Navigator.pop(context, true)
-                    : null,
-                icon: const Icon(Icons.undo),
+              StudioButtonPress(
+                child: IconButton(
+                  key: const ValueKey('restore-message-confirm'),
+                  tooltip: 'Restore and rerun',
+                  onPressed: controller.canRestoreSavedPrompt(chat, message)
+                      ? () => Navigator.pop(context, laterTurns)
+                      : null,
+                  icon: const Icon(Icons.undo),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
-    if (confirmed == true && mounted) {
-      await _run(() => controller.restoreSavedPrompt(chat, message));
+    if (confirmed != null && mounted) {
+      await _run(
+        () => controller.restoreSavedPrompt(
+          chat,
+          message,
+          expectedLaterTurns: confirmed,
+        ),
+      );
     }
   }
 
@@ -2132,6 +2290,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         builder: (context, setDialogState) => ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
+            final laterTurns = _laterUserTurns(chat, message);
             final theme = Theme.of(context);
             final tokens = WingTokens.of(context);
             final canSubmit =
@@ -2157,7 +2316,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'Resending replaces this message and all later history in this chat.',
+                        'Resending replaces this message. ${_revisionImpact(laterTurns)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: tokens.muted,
                         ),
@@ -2213,6 +2372,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                 chat,
                                 message,
                                 input,
+                                expectedLaterTurns: laterTurns,
                               );
                             } catch (_) {}
                             if (!dialogContext.mounted) return;
@@ -2407,9 +2567,59 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                       chat,
                       'status',
                       chat.reading.notificationReadTarget!.id,
-                      StudioError(chat.runtime.error!),
+                      _failureView(chat),
                     )
-                  : StudioError(chat.runtime.error!),
+                  : _failureView(chat),
+            if (chat.connectionOperation case final operation?)
+              HostedConnectionRequestPanel(
+                key: ValueKey((chat.key, chat.runtime.runtimeId, operation.id)),
+                operation: operation,
+                canContinue: controller.canContinueConnectionOperation(
+                  chat,
+                  operation,
+                ),
+                canRefresh: controller.canRefreshConnectionOperation(
+                  chat,
+                  operation,
+                ),
+                working: chat.connectionOperationWorking,
+                onContinue: () =>
+                    controller.continueConnectionOperation(chat, operation),
+                onRefresh: () =>
+                    controller.refreshConnectionOperation(chat, operation),
+                onAuthorize: (target) async {
+                  if (!controller.canContinueConnectionOperation(
+                        chat,
+                        operation,
+                      ) ||
+                      !target.needsAuthorization) {
+                    return;
+                  }
+                  if (!await launchUrl(
+                    target.connectUrl!,
+                    mode: LaunchMode.externalApplication,
+                  )) {
+                    throw StateError('Authorization could not open.');
+                  }
+                },
+                onOpenAccounts: () async {
+                  if (!controller.canContinueConnectionOperation(
+                    chat,
+                    operation,
+                  )) {
+                    return;
+                  }
+                  final profile = controller.administration().profile(
+                    chat.key.workspace.profileName,
+                  );
+                  await Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          AdminHostedConnectorAccountsPage(profile: profile),
+                    ),
+                  );
+                },
+              ),
             if (chat.runtime.approval != null)
               Builder(
                 builder: (context) {
@@ -2602,7 +2812,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         !runtime.opening &&
         !runtime.offline &&
         !controller.recovering &&
-        !runtime.blocksTurnAdmission &&
+        !runtime.reconnecting &&
+        chat.readOnlyReason == null &&
         !runtime.changingAnswer &&
         !runtime.commandRunning &&
         !controller.switching &&
@@ -2616,11 +2827,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       observation,
       chat.fastMode,
       chat.reasoningEffort,
+      chat.pendingIntelligence,
       enabled,
     );
     if (_intelligenceButtonInputs == inputs) return _intelligenceButton!;
     _intelligenceButtonInputs = inputs;
-    return _intelligenceButton = ChatIntelligenceButton(
+    final controls = ChatIntelligenceButton(
       key: ValueKey(('chat-intelligence', chat.key)),
       model: chat.model ?? 'Model',
       observation: observation,
@@ -2634,6 +2846,20 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           ? () => _run(() => _chooseIntelligence(chat, context))
           : null,
     );
+    final pending = chat.pendingIntelligence;
+    return _intelligenceButton = pending == null
+        ? controls
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              controls,
+              Text(
+                'Next turn: ${pending.choice.model} · ${pending.reasoningEffort}',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+            ],
+          );
   }
 
   Object? _composerFieldInputs;
@@ -2815,6 +3041,19 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ConversationComposer(
                 dock: _showLiveWorkDock(chat) ? _composerWorkDock(chat) : null,
                 beforeField: [
+                  if (chat.planGauge case final gauge?)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+                      child: Tooltip(
+                        message: gauge.resetsAt == null
+                            ? gauge.label
+                            : '${gauge.label} · Resets ${MaterialLocalizations.of(context).formatShortDate(gauge.resetsAt!.toLocal())} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(gauge.resetsAt!.toLocal()))}',
+                        child: Text(
+                          '${gauge.label} · ${gauge.usedLabel}',
+                          style: Theme.of(context).textTheme.labelSmall,
+                        ),
+                      ),
+                    ),
                   if (chat.composer.observation.editingEntry != null)
                     Row(
                       children: [
@@ -3050,6 +3289,47 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     },
   );
 
+  Widget _failureView(ProfileChat chat) {
+    final failure = chat.runtime.failure;
+    if (failure == null) return StudioError(chat.runtime.error!);
+    return TurnFailureView(
+      key: ValueKey(('failure', chat.key, failure)),
+      failure: failure,
+      onChooseModel: () => _chooseIntelligence(chat, context),
+      onReviewProvider: () => openProfileProviderAccess(
+        context,
+        profile: controller.administration().profile(
+          chat.key.workspace.profileName,
+        ),
+        connectionStatus: controller.connectionStatus,
+      ),
+      onSelectModel: chat.fastMode == null || chat.reasoningEffort == null
+          ? null
+          : (suggestion) async {
+              if (controller.current?.chat != chat ||
+                  !identical(chat.runtime.failure, failure)) {
+                throw StateError(
+                  'This failure belongs to another turn. Review the current chat.',
+                );
+              }
+              return controller.setIntelligence(
+                chat,
+                ChatIntelligenceSelection(
+                  choice: ModelChoice(
+                    provider: suggestion.provider,
+                    model: suggestion.model,
+                  ),
+                  reasoningEffort: chat.reasoningEffort!,
+                  fastMode: chat.fastMode!,
+                ),
+                confirmModelChange: (message) async => mounted
+                    ? showChatModelConfirmation(context, message: message)
+                    : false,
+              );
+            },
+    );
+  }
+
   Future<void> _chooseIntelligence(
     ProfileChat chat,
     BuildContext context,
@@ -3081,8 +3361,11 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       await showChatIntelligencePicker(
         context: context,
         choices: options.choices,
-        initialChoice: initial,
-        initialReasoningEffort: chat.reasoningEffort ?? 'medium',
+        initialChoice: chat.pendingIntelligence?.choice ?? initial,
+        initialReasoningEffort:
+            chat.pendingIntelligence?.reasoningEffort ??
+            chat.reasoningEffort ??
+            'medium',
         initialFastMode: chat.fastMode!,
         defaultModel: options.defaultModel,
         defaultProvider: options.defaultProvider,
@@ -3134,6 +3417,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   Map<ComposerAction, String?> _composerActionLabels(ProfileChat chat) {
+    if (chat.readOnlyReason != null) {
+      return {
+        for (final action in ComposerAction.values)
+          action: 'This history is read-only. Start a new chat to continue.',
+      };
+    }
     return _voiceInput
         .composerAvailability(chat.composer.actions())
         .map(
@@ -3320,6 +3609,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               padding: const EdgeInsets.only(bottom: 6),
               child: StudioError(error),
             ),
+          if (prompt.serverOwned)
+            const Text(
+              'Saving a replacement moves it to the end of the queue.',
+            ),
           StudioFormActions(
             busy: saving,
             onCancel: () => _run(() => controller.cancelQueuedPromptEdit(chat)),
@@ -3363,11 +3656,17 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => StudioDialog(
-        title: const Text('Delete queued instruction?'),
+        title: Text(
+          prompt.unknownOutcome
+              ? 'Acknowledge unknown outcome?'
+              : 'Delete queued instruction?',
+        ),
         scrollable: true,
         content: Text(
           [
-            'Are you sure you want to delete this instruction?',
+            prompt.unknownOutcome
+                ? 'Hermes cannot determine whether this ran. Acknowledging it releases the queue without running it again.'
+                : 'Are you sure you want to delete this instruction?',
             prompt.text,
             ...prompt.attachments.map((attachment) => attachment.name),
           ].where((part) => part.isNotEmpty).join('\n\n'),
@@ -3376,7 +3675,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           StudioFormActions(
             onCancel: () => Navigator.pop(context, false),
             onConfirm: () => Navigator.pop(context, true),
-            confirmLabel: 'Delete queued message',
+            confirmLabel: prompt.unknownOutcome
+                ? 'Acknowledge unknown outcome'
+                : 'Delete queued message',
             confirmIcon: Icons.delete_outline,
             destructive: true,
           ),

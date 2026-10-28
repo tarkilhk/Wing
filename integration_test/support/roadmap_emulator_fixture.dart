@@ -1,3 +1,4 @@
+import '../../test/support/canonical_gateway_fixture.dart';
 import 'dart:async';
 
 import 'package:wing/core/models/hermes_profile.dart';
@@ -7,6 +8,7 @@ import 'package:wing/core/services/ws_client.dart';
 
 import '../../test/support/profile_history_fixture.dart';
 import '../../test/support/backend_update_channel_fixture.dart';
+import '../../test/support/git_review_fixture.dart';
 
 /// In-memory gateway data for the roadmap emulator suite.
 ///
@@ -15,6 +17,7 @@ import '../../test/support/backend_update_channel_fixture.dart';
 /// host or submit work to a model.
 class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   final updateSource = BackendUpdateChannelFixture();
+  final gitReview = GitReviewFixture();
   Completer<void>? branchGate;
   Completer<void>? branchEntered;
   final gateways = <String, Set<ProfileGateway>>{};
@@ -26,6 +29,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   };
   int approvalSequence = 0;
   final approvalResponses = <Map<String, dynamic>>[];
+  final clarificationResponses = <Map<String, dynamic>>[];
+  Completer<void>? clarificationGate;
   final commandDispatches = <Map<String, dynamic>>[];
   final projectCreates = <Map<String, dynamic>>[];
   final projectUpdates = <Map<String, dynamic>>[];
@@ -198,6 +203,27 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
                     model: {'reasoning': true, 'fast': true},
                 },
               },
+              {
+                'slug': 'nous',
+                'name': 'Nous',
+                'models': ['large-demo', 'free-demo'],
+                'usage_levels': {'large-demo': 'top_tier', 'free-demo': 'free'},
+                'plan_usage': {
+                  'kind': 'usage_window',
+                  'plan': 'Fixture plan',
+                  'credits_pay': false,
+                  'featured_model_ids': ['free-demo'],
+                  'gauges': [
+                    {
+                      'label': 'day',
+                      'scope': 'all',
+                      'left_fraction': 0,
+                      'style': 'red',
+                      'resets_at_ms': 1893456000000,
+                    },
+                  ],
+                },
+              },
             ],
           };
         }
@@ -281,6 +307,74 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
                 'Unexpected intelligence key: ${params['key']}',
               ),
             };
+          case 'session.mutate':
+            canonicalRevisions['${scope.profileName}:${params['session_id']}'] =
+                (params['expected_revision'] as int) + 1;
+            final operation = params['operation'];
+            final payload = Map<String, dynamic>.from(params['payload'] as Map);
+            if (operation == 'model' || operation == 'reasoning') {
+              if (operation == 'model') {
+                intelligenceConfig['model'] =
+                    '${payload['provider']}:${payload['model']}';
+                intelligenceConfig['reasoning'] =
+                    payload['reasoning'] as String;
+              } else {
+                intelligenceConfig['reasoning'] = payload['effort'] as String;
+              }
+              configWrites.add(Map<String, dynamic>.from(params));
+            } else if (operation == 'branch' && answerActionsEnabled) {
+              answerActionRequests.add((
+                method,
+                Map<String, dynamic>.from(params),
+              ));
+              if (branchGate != null) {
+                branchEntered!.complete();
+                await branchGate!.future;
+              }
+              final source = answerRuntimes[params['session_id']]!;
+              final child = 'roadmap-branch-${++_nextAnswerChild}';
+              final rows = _answerHistory(scope.profileName, source);
+              final through = rows.indexWhere(
+                (row) => row['id'] == payload['through_message_id'],
+              );
+              if (through < 0) throw StateError('Missing branch boundary');
+              final copied = rows
+                  .take(through + 1)
+                  .map((row) => {...row, 'id': ++_nextAnswerRow})
+                  .toList();
+              answerHistories['${scope.profileName}/$child'] = copied;
+              answerParents[child] = source;
+              answerRuntimes['runtime-$child'] = child;
+              return {
+                'session_id': params['session_id'],
+                'operation': operation,
+                'status': 'applied',
+                'branched_session_id': child,
+                'revision': (params['expected_revision'] as int) + 1,
+                'execution_generation': params['expected_generation'],
+              };
+            } else if (operation == 'rewind' && answerActionsEnabled) {
+              answerActionRequests.add((
+                method,
+                Map<String, dynamic>.from(params),
+              ));
+              final id = answerRuntimes[params['session_id']]!;
+              final rows = _answerHistory(scope.profileName, id);
+              final index = rows.indexWhere(
+                (row) => row['id'] == payload['target_message_id'],
+              );
+              if (index < 0) throw StateError('Missing rewind target');
+              rows.removeRange(index, rows.length);
+            } else {
+              return base.call(method, params);
+            }
+            return {
+              'session_id': params['session_id'],
+              'operation': operation,
+              'status': 'applied',
+              'revision': (params['expected_revision'] as int) + 1,
+              'execution_generation': params['expected_generation'],
+            };
           case 'config.set':
             final key = params['key'] as String;
             if (!intelligenceConfig.containsKey(key)) {
@@ -288,7 +382,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             }
             intelligenceConfig[key] = params['value'] as String;
             configWrites.add(Map<String, dynamic>.from(params));
-            return {'status': 'ok'};
+            return {'status': 'ok', 'value': params['value']};
           case 'commands.catalog':
             return {
               'pairs': [
@@ -312,9 +406,26 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               'type': 'exec',
               'output': 'Roadmap fixture command complete',
             };
+          case 'clarify.respond':
+            if (params['prompt_id'] is! String ||
+                params['execution_generation'] is! int ||
+                params['answer'] is! String ||
+                params.containsKey('request_id')) {
+              throw StateError(
+                'Expected a generation-bound clarification response',
+              );
+            }
+            clarificationResponses.add(Map.of(params));
+            await clarificationGate?.future;
+            return {'status': 'resolved', 'prompt_id': params['prompt_id']};
           case 'approval.respond':
+            if (params['prompt_id'] is! String ||
+                params['execution_generation'] is! int ||
+                params.containsKey('request_id')) {
+              throw StateError('Expected a generation-bound approval response');
+            }
             approvalResponses.add(Map<String, dynamic>.from(params));
-            return {'resolved': 1};
+            return {'status': 'resolved', 'prompt_id': params['prompt_id']};
           case 'projects.discover_repos':
             return {
               'repos': const [
@@ -443,37 +554,6 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             ));
             runningProcess = false;
             return {'status': 'killed', 'session_id': params['process_id']};
-          case 'session.branch' when answerActionsEnabled:
-            answerActionRequests.add((
-              method,
-              Map<String, dynamic>.from(params),
-            ));
-            if (branchGate != null) {
-              branchEntered!.complete();
-              await branchGate!.future;
-            }
-            final source = answerRuntimes[params['session_id']]!;
-            final child = 'roadmap-branch-${++_nextAnswerChild}';
-            final copied = _answerHistory(scope.profileName, source)
-                .take(params['count'] as int)
-                .map((row) => Map<String, dynamic>.from(row))
-                .toList();
-            for (final row in copied) {
-              row['id'] = ++_nextAnswerRow;
-            }
-            answerHistories['${scope.profileName}/$child'] = copied;
-            answerParents[child] = source;
-            final runtime = 'runtime-$child';
-            answerRuntimes[runtime] = child;
-            return {
-              'session_id': runtime,
-              'stored_session_id': child,
-              'parent': source,
-              'parent_session_id': source,
-              'title': 'Roadmap branch $_nextAnswerChild',
-              'messages': _answerRpcRows(copied),
-              'info': {'profile_name': scope.profileName},
-            };
           case 'session.history' when answerActionsEnabled:
             final id = answerRuntimes[params['session_id']]!;
             return {
@@ -486,13 +566,6 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             ));
             final id = answerRuntimes[params['session_id']]!;
             final rows = _answerHistory(scope.profileName, id);
-            final truncateBefore = params['truncate_before_row_id'];
-            if (truncateBefore != null) {
-              final index = rows.indexWhere(
-                (row) => row['id'] == truncateBefore,
-              );
-              rows.removeRange(index, rows.length);
-            }
             rows.add({
               'id': ++_nextAnswerRow,
               'role': 'user',
@@ -505,7 +578,10 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               'content': 'Acknowledged ${params['text']}',
               'display_content': 'Acknowledged ${params['text']}',
             });
-            return {'status': 'streaming'};
+            return canonicalReceipt(
+              params,
+              admissionId: 'roadmap-${params['submission_id']}',
+            );
           case 'session.resume':
           case 'session.create':
             if (answerActionsEnabled && method == 'session.resume') {
@@ -513,6 +589,9 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               final runtime = 'runtime-$id';
               answerRuntimes[runtime] = id;
               return {
+                ...canonicalSnapshotFields,
+                'revision':
+                    canonicalRevisions['${scope.profileName}:runtime-$id'] ?? 0,
                 'session_id': runtime,
                 'stored_session_id': id,
                 if (answerParents.containsKey(id))
@@ -543,6 +622,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
                 'model': 'gpt-6-astra',
                 'provider': 'openai-codex',
                 'reasoning_effort': 'high',
+                'terminal_backend': 'local',
+                'cwd': '/srv/wing',
               },
             };
           default:
@@ -646,7 +727,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             'last_fired_at': 2,
             'next_due_at': 1893456000,
             'awaiting_response': false,
-            'deferred_by_goal': true,
+            'deferred_by_goal': goalStatus == 'active',
           },
           'heartbeat': const {
             'prompt': 'Report emulator health',
@@ -664,10 +745,12 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
     _emit(
       profile,
       StreamEvent(
-        type: 'approval',
+        type: 'approval.request',
         sessionId: runtimeId,
         data: {
-          'request_id': 'roadmap-approval-${++approvalSequence}',
+          'kind': 'approval',
+          'execution_generation': 0,
+          'prompt_id': 'roadmap-approval-${++approvalSequence}',
           'command': 'echo isolated-roadmap-check',
           'choices': ['once', 'session', 'deny'],
         },

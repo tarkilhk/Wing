@@ -45,6 +45,68 @@ class _MemoryCredentialStore implements CredentialStore {
 }
 
 void main() {
+  test(
+    'session mutation preserves structured refusal without retrying the write',
+    () async {
+      var calls = 0;
+      final client = DashboardClient(
+        host: 'hermes.example',
+        port: 443,
+        useHttps: true,
+        proxied: true,
+        httpClient: MockClient((request) async {
+          calls++;
+          expect(request.method, 'PATCH');
+          return http.Response(
+            jsonEncode({
+              'detail': {
+                'code': 'owner_unavailable',
+                'message': 'The session owner is restarting.',
+                'generation': 7,
+              },
+            }),
+            503,
+          );
+        }),
+      );
+      addTearDown(client.close);
+      try {
+        await client.apiPatch('sessions/exact', body: {'title': 'Keep draft'});
+        fail('Expected a refusal');
+      } on DashboardHttpException catch (error) {
+        expect(error.statusCode, 503);
+        expect(error.endpoint, 'sessions/exact');
+        expect(error.serverCode, 'owner_unavailable');
+        expect(error.serverMessage, 'The session owner is restarting.');
+        expect((error.responseDetail as Map)['generation'], 7);
+        expect(
+          () => (error.responseDetail as Map)['code'] = 'changed',
+          throwsUnsupportedError,
+        );
+        expect(error.toString(), contains('owner is restarting'));
+      }
+      expect(calls, 1);
+    },
+  );
+
+  test(
+    'HTTP failure displays stock string detail but never an HTML error body',
+    () {
+      final stock = DashboardHttpException.response(
+        http.Response(
+          '{"detail":"owner_unavailable: profile is not served"}',
+          503,
+        ),
+        'sessions/one',
+      );
+      expect(stock.toString(), contains('profile is not served'));
+      final proxy = DashboardHttpException.response(
+        http.Response('<html>proxy debug data</html>', 502),
+        'sessions/one',
+      );
+      expect(proxy.toString(), 'HTTP 502');
+    },
+  );
   group('SavedConnection', () {
     test('normalizes bare HTTP gateway hosts with fallback port', () {
       final normalized = SavedConnection.normalizeHostAndPort(

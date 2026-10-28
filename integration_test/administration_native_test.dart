@@ -1,3 +1,6 @@
+import '../test/support/hosted_connection_request_scenarios.dart';
+import 'dart:convert';
+import 'dart:io';
 import 'package:wing/core/services/profile_capabilities_session.dart';
 import 'package:wing/core/screens/administration/provider_recovery_routes.dart';
 import 'package:wing/core/models/settings_edit.dart';
@@ -16,10 +19,40 @@ import 'package:wing/core/theme/wing_theme.dart';
 import '../test/support/administration_design_fixture.dart';
 import 'package:wing/core/widgets/compact_switch.dart';
 import 'package:wing/core/widgets/studio_form_actions.dart';
+import '../test/support/upstream_capabilities_scenarios.dart';
+
+/// Hold the real Android viewport, including its IME, for the disposable driver.
+Future<void> _captureAdministration(
+  WidgetTester tester,
+  String name,
+  bool keyboard,
+) async {
+  if (!const bool.fromEnvironment('ADMINISTRATION_NATIVE_CAPTURE')) return;
+  final directory = Directory.systemTemp.path;
+  final token = '$name-${DateTime.now().microsecondsSinceEpoch}';
+  await File('$directory/wing-administration-stage.json').writeAsString(
+    jsonEncode({'name': name, 'token': token, 'keyboard': keyboard}),
+  );
+  final ack = File('$directory/wing-administration-ack');
+  final deadline = DateTime.now().add(const Duration(seconds: 30));
+  while (DateTime.now().isBefore(deadline)) {
+    await tester.pump(const Duration(milliseconds: 100));
+    if (await ack.exists() && await ack.readAsString() == token) return;
+  }
+  throw StateError('Native Android capture did not complete $name');
+}
 
 /// Production widgets on disposable Android with in-memory observations only.
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  registerConnectionRequestScenarios(
+    native: true,
+    nativeCapture: _captureAdministration,
+  );
+  registerUpstreamCapabilitiesScenarios(
+    native: true,
+    nativeCapture: _captureAdministration,
+  );
   testWidgets('Android runtime findings survive reviewing the same operation', (
     tester,
   ) async {
@@ -288,6 +321,8 @@ void main() {
             onLibrary: () async {},
             onHub: () async {},
             onPlugins: () async {},
+            onConnectedApps: () async {},
+            onMcpConnectors: () async {},
           ),
         ),
       );
@@ -304,19 +339,41 @@ void main() {
             )
             .first,
       );
-      await tester.tap(find.text('Web search and research'));
       await tester.pumpAndSettle();
+      final capabilityTitle = find.text('Web search and research');
+      await Scrollable.ensureVisible(
+        tester.element(capabilityTitle),
+        alignment: .5,
+      );
+      await tester.pumpAndSettle();
+      expect(capabilityTitle.hitTestable(), findsOneWidget);
+      await tester.tap(capabilityTitle);
+      await tester.pumpAndSettle();
+      expect(
+        find.byTooltip('Setup and providers for Web search and research'),
+        findsOneWidget,
+      );
       expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
       final toggle = find.byType(CompactSwitch);
+      await Scrollable.ensureVisible(tester.element(toggle), alignment: .5);
+      await tester.pumpAndSettle();
+      expect(toggle.hitTestable(), findsOneWidget);
       expect(tester.getSize(toggle).width, greaterThanOrEqualTo(48));
       expect(tester.getSize(toggle).height, greaterThanOrEqualTo(48));
       await tester.tapAt(tester.getTopLeft(toggle) + const Offset(3, 3));
       await tester.pumpAndSettle();
       expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
-      expect(find.text('Setup and providers'), findsOneWidget);
-      await tester.ensureVisible(find.text('Setup and providers'));
+      expect(
+        find.byTooltip('Setup and providers for Web search and research'),
+        findsOneWidget,
+      );
+      await tester.ensureVisible(
+        find.byTooltip('Setup and providers for Web search and research'),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Setup and providers'));
+      await tester.tap(
+        find.byTooltip('Setup and providers for Web search and research'),
+      );
       await tester.pumpAndSettle();
       expect(setup, isTrue);
       expect(tester.takeException(), isNull);

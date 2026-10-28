@@ -1,3 +1,4 @@
+import 'support/canonical_gateway_fixture.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -126,9 +127,9 @@ class _ProjectHost {
           };
         case 'session.resume':
           return {
+            ...canonicalSnapshotFields,
             'session_id': '${scope.profileName}-runtime',
-            'session_key': params['session_id'],
-            'resumed': params['session_id'],
+            'stored_session_id': params['session_id'],
             'status': 'idle',
             'messages':
                 history[params['session_id']] ?? <Map<String, dynamic>>[],

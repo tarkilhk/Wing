@@ -1,3 +1,4 @@
+import 'canonical_gateway_fixture.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -11,6 +12,7 @@ import 'package:wing/core/services/bots_session.dart';
 
 /// Authored UI data, never used by the production application or a live server.
 class ProfileBrowserFixture {
+  final canonicalRevisions = <String, int>{};
   final now = DateTime.now().millisecondsSinceEpoch / 1000;
   final delays = <String, Completer<void>>{};
   final calls = <(String, String, Map<String, dynamic>)>[];
@@ -379,20 +381,44 @@ class ProfileBrowserFixture {
           },
         };
       }
+      if (method == 'prompt.submit') {
+        if (params['submission_id'] is! String) {
+          throw const FormatException('Missing submission identity');
+        }
+        return canonicalReceipt(
+          params,
+          admissionId: 'fixture-${params['submission_id']}',
+        );
+      }
+      if (method == 'session.mutate') {
+        canonicalRevisions['${scope.profileName}:${params['session_id']}'] =
+            (params['expected_revision'] as int) + 1;
+        return {
+          'session_id': params['session_id'],
+          'operation': params['operation'],
+          'revision': (params['expected_revision'] as int) + 1,
+          'execution_generation': params['expected_generation'],
+          'status': 'applied',
+        };
+      }
       if (method == 'session.resume' || method == 'session.create') {
         final stored = [
           ...sessions(scope.profileName),
           ...?hiddenSessions[scope.profileName],
         ].where((row) => row['id'] == params['session_id']).firstOrNull;
+        final runtimeId = method == 'session.create'
+            ? 'runtime'
+            : (liveSessions[scope.profileName] ?? [])
+                      .where(
+                        (row) => row['session_key'] == params['session_id'],
+                      )
+                      .firstOrNull?['id'] ??
+                  'runtime-${params['session_id']}';
         return {
-          'session_id': method == 'session.create'
-              ? 'runtime'
-              : (liveSessions[scope.profileName] ?? [])
-                        .where(
-                          (row) => row['session_key'] == params['session_id'],
-                        )
-                        .firstOrNull?['id'] ??
-                    'runtime-${params['session_id']}',
+          ...canonicalSnapshotFields,
+          'revision':
+              canonicalRevisions['${scope.profileName}:$runtimeId'] ?? 0,
+          'session_id': runtimeId,
           'stored_session_id': method == 'session.create'
               ? 'new-chat'
               : params['session_id'],

@@ -108,6 +108,12 @@ void main() {
                 'working': working,
                 'blocked': false,
                 'counts': working ? {'running': 1} : {'completed': 1},
+                'member_activity': [
+                  if (working) ...[
+                    {'member_id': 'atlas', 'status': 'running'},
+                    {'member_id': 'mira', 'status': 'queued'},
+                  ],
+                ],
                 'pending_actions': [],
               },
             },

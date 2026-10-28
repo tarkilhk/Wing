@@ -175,18 +175,27 @@ void main() {
               ],
             };
           }
+          if (method == 'session.resume') {
+            return BotsFixture.passiveSnapshot(
+              params,
+              epoch: 'entry-test',
+              sequence: events.length,
+            );
+          }
           if (method == 'session.events.since') {
+            expect(params['replay_epoch'], 'entry-test');
             replayStarted = true;
             await replay.future;
             return {
               'events': events
                   .where(
-                    (e) => (e['seq'] as int) > (params['last_seen'] as int),
+                    (e) => (e['seq'] as int) > (params['last_sequence'] as int),
                   )
                   .toList(),
               'latest_seq': events.length,
               'truncated': false,
-              'epoch': 'entry-test',
+              'snapshot_required': false,
+              'replay_epoch': 'entry-test',
               'open_requests': [],
             };
           }
@@ -554,19 +563,19 @@ void main() {
           final childEvents = [
             {
               'seq': 1,
-              'session_id': 'child-watch',
+              'session_id': 'child-session',
               'type': 'message.start',
               'payload': <String, dynamic>{},
             },
             {
               'seq': 2,
-              'session_id': 'child-watch',
+              'session_id': 'child-session',
               'type': 'reasoning.delta',
               'payload': {'text': 'Checking child tool events'},
             },
             {
               'seq': 3,
-              'session_id': 'child-watch',
+              'session_id': 'child-session',
               'type': 'tool.start',
               'payload': {
                 'tool_id': 'submirror:child:1',
@@ -580,24 +589,29 @@ void main() {
           fixture.readHook = (profile, method, params) async {
             if (method == 'session.resume' &&
                 params['session_id'] == 'child-session') {
-              expect(params['lazy'], isTrue);
-              expect(params['omit_messages'], isTrue);
+              expect(params, {
+                'session_id': 'child-session',
+                'display_projection': true,
+              });
               await childMount.future;
               return {
-                'session_id': 'child-watch',
-                'resumed': 'child-session',
+                'session_id': 'child-session',
+                'stored_session_id': 'child-session',
+                'replay_epoch': 'child-epoch',
+                'last_sequence': childEvents.length,
                 'running': true,
               };
             }
             if (method == 'session.events.since' &&
-                params['session_id'] == 'child-watch') {
+                params['session_id'] == 'child-session') {
               childReads++;
               if (failChildReplay) throw StateError('Child disconnected');
               return {
-                'epoch': 'child-epoch',
+                'replay_epoch': 'child-epoch',
                 'events': childEvents,
                 'latest_seq': childEvents.length,
                 'truncated': false,
+                'snapshot_required': false,
                 'open_requests': [],
               };
             }
@@ -615,12 +629,14 @@ void main() {
               'session.events.since' => {
                 'events': events
                     .where(
-                      (e) => (e['seq'] as int) > (params['last_seen'] as int),
+                      (e) =>
+                          (e['seq'] as int) > (params['last_sequence'] as int),
                     )
                     .toList(),
                 'latest_seq': events.length,
                 'truncated': false,
-                'epoch': 'test',
+                'snapshot_required': false,
+                'replay_epoch': 'test',
                 'open_requests': [],
               },
               _ => null,

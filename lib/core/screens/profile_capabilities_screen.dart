@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../models/profile_capabilities.dart';
 import '../services/profile_capabilities_session.dart';
 import '../widgets/compact_switch.dart';
+import '../widgets/studio_select.dart';
 import '../presentation/skill_document.dart';
 
 /// Controls the capabilities of the captured server profile, never a chat override.
@@ -21,15 +22,19 @@ class ProfileCapabilitiesScreen extends StatefulWidget {
     required this.onLibrary,
     required this.onHub,
     required this.onPlugins,
+    required this.onConnectedApps,
+    required this.onMcpConnectors,
     super.key,
   });
 
   final ProfileCapabilitiesSession Function() createSession;
   final String connectionLabel;
   final Future<void> Function(String name) onToolSetup;
-  final VoidCallback onLibrary;
-  final VoidCallback onHub;
-  final VoidCallback onPlugins;
+  final Future<void> Function() onLibrary;
+  final Future<void> Function() onHub;
+  final Future<void> Function() onPlugins;
+  final Future<void> Function() onConnectedApps;
+  final Future<void> Function() onMcpConnectors;
 
   @override
   State<ProfileCapabilitiesScreen> createState() =>
@@ -40,6 +45,7 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
   late final _session = widget.createSession();
   ProfileCapabilityKind _kind = ProfileCapabilityKind.tools;
   String _query = '';
+  ProfileCapabilityFilter _filter = ProfileCapabilityFilter.all;
   ProfileCapabilitiesState get _state => _session.state;
   bool get _skills => _kind == ProfileCapabilityKind.skills;
 
@@ -119,7 +125,12 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
       letterSpacing: 0,
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final rows = _state.rows.where((row) => row.matches(_query)).toList();
+    final rows = _state.rows
+        .where(
+          (row) =>
+              row.matches(_query) && (_skills || row.matchesFilter(_filter)),
+        )
+        .toList();
     return Scaffold(
       appBar: WingAppBar(
         context: context,
@@ -128,16 +139,21 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
         actions: [
           StudioButtonPress(
             child: PopupMenuButton<String>(
-              tooltip: 'Browse and manage skills',
-              onSelected: (value) {
+              tooltip: 'Manage capabilities',
+              onSelected: (value) async {
                 switch (value) {
                   case 'discover':
-                    widget.onHub();
+                    await widget.onHub();
                   case 'library':
-                    widget.onLibrary();
+                    await widget.onLibrary();
                   case 'plugins':
-                    widget.onPlugins();
+                    await widget.onPlugins();
+                  case 'apps':
+                    await widget.onConnectedApps();
+                  case 'mcp':
+                    await widget.onMcpConnectors();
                 }
+                if (mounted) await _session.load(_kind);
               },
               itemBuilder: (_) => const [
                 StudioPopupMenuItem(
@@ -151,6 +167,14 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                 StudioPopupMenuItem(
                   value: 'plugins',
                   child: Text('Agent plugins'),
+                ),
+                StudioPopupMenuItem(
+                  value: 'apps',
+                  child: Text('Connected apps'),
+                ),
+                StudioPopupMenuItem(
+                  value: 'mcp',
+                  child: Text('MCP connectors'),
                 ),
               ],
             ),
@@ -169,9 +193,8 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
-            child: StudioLoadingRegion(
-              available: _state.hasObservation,
-              busy: _state.loading || _state.saving,
+            child: StudioPageLoading(
+              active: _state.loading || _state.saving,
               label: 'Loading capabilities',
               child: Column(
                 children: [
@@ -233,6 +256,32 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                                 setState(() => _query = value),
                           ),
                         ),
+                        if (!_skills) ...[
+                          const SizedBox(height: 12),
+                          StudioSelect<ProfileCapabilityFilter>(
+                            value: _filter,
+                            label: 'Show capabilities',
+                            options: const [
+                              (
+                                value: ProfileCapabilityFilter.all,
+                                label: 'All capabilities',
+                              ),
+                              (
+                                value: ProfileCapabilityFilter.enabled,
+                                label: 'Enabled',
+                              ),
+                              (
+                                value: ProfileCapabilityFilter.needsSetup,
+                                label: 'Needs setup',
+                              ),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _filter = value);
+                              }
+                            },
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -267,7 +316,8 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
               hasScrollBody: false,
               child: Center(
                 child: Text(
-                  _query.isEmpty
+                  _query.isEmpty &&
+                          (_skills || _filter == ProfileCapabilityFilter.all)
                       ? 'No ${_skills ? 'skills' : 'tools'} returned by this profile.'
                       : 'No matching capabilities.',
                 ),
@@ -341,7 +391,8 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                         Text(row.description),
                         if (!_skills)
                           StudioButtonPress(
-                            child: TextButton.icon(
+                            child: IconButton(
+                              tooltip: 'Setup and providers for $title',
                               onPressed: _state.busy
                                   ? null
                                   : () => _session.reviewSetup(
@@ -349,7 +400,6 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                                       widget.onToolSetup,
                                     ),
                               icon: const Icon(Icons.tune, size: 18),
-                              label: const Text('Setup and providers'),
                             ),
                           ),
                         if (!_skills && row.hasTools) ...[

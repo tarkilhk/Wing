@@ -580,7 +580,7 @@ void main() {
       host.changed();
       await waitForReads(host, reads + 1);
       await until(() => owner.hasActiveChats);
-      expect(host.resumeCalls.single['omit_messages'], isTrue);
+      expect(host.resumeCalls.single['display_projection'], isTrue);
       expect(chat.runtime.execution, ChatExecution.running);
       host.changed();
       await waitForReads(host, reads + 2);

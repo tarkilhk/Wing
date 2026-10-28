@@ -38,4 +38,4 @@ read failure/retry, cancellation, and the existing folder and edit journeys.
 
 ## Gotchas
 
-Bot chats are hidden from the ordinary list unless Show automated chats is enabled. A completed row mutation and a successful background refresh are separate observations.
+Bot chats are hidden from the ordinary list unless Show automated chats is enabled. A completed row mutation and a successful background refresh are separate observations. Move and delete use a fresh owner-issued revision and execution generation; a concurrent turn or edit can refuse the action without changing the row. Delete retires the runtime through the same stock owner transaction that removes its history.

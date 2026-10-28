@@ -590,7 +590,9 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun validatedCameraTarget(raw: Map<*, *>?): Map<String, String> {
-        val keys = listOf("connection", "connection_identity", "profile", "session")
+        val keys = if (raw?.containsKey("room") == true)
+            listOf("connection", "connection_identity", "room")
+        else listOf("connection", "connection_identity", "profile", "session")
         if (raw == null || raw.keys.any { it !in keys }) {
             throw CameraCaptureException("camera_invalid_target", invalidCameraTargetError)
         }

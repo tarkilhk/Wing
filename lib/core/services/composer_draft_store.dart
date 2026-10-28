@@ -325,6 +325,9 @@ class ComposerDraftStore {
 
   Map<String, dynamic> _encodeQueuedPrompt(QueuedPromptDraft prompt) => {
     'text': prompt.text,
+    if (prompt.submissionId != null) 'submission_id': prompt.submissionId,
+    if (prompt.submissionPayload != null)
+      'submission_payload': prompt.submissionPayload,
     'references': prompt.references.map((r) => r.toJson()).toList(),
     'attachments': prompt.attachments.map(_encodeAttachment).toList(),
     if (prompt.submissionUncertain) 'submission_uncertain': true,
@@ -359,6 +362,12 @@ class ComposerDraftStore {
               references: ComposerReference.decode(record['references']),
               attachments: attachments,
               submissionUncertain: submissionUncertain == true,
+              submissionId: record['submission_id'] as String?,
+              submissionPayload: record['submission_payload'] is Map
+                  ? Map<String, dynamic>.from(
+                      record['submission_payload'] as Map,
+                    )
+                  : null,
             ),
           );
         }

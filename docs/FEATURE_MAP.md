@@ -120,7 +120,7 @@ Use the order below for a broad pass; finish with [connected journeys](features/
 
 <a id="administration-connectors"></a>
 
-- [Configure MCP connectors](features/administration-connectors.md) — `administration-connectors`.
+- [Connect apps and configure MCP connectors](features/administration-connectors.md) — `administration-connectors`.
 
 <a id="administration-behavior"></a>
 

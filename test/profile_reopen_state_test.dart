@@ -28,6 +28,19 @@ class ReopenHost extends Host {
       get: base.read,
       rpc: (method, params) async {
         final result = await base.call(method, params);
+        if (method == 'approval.pending' && pending['prompts'] is List) {
+          return {
+            'approvals': [
+              for (final prompt
+                  in (pending['prompts'] as List).whereType<Map>())
+                if (prompt['kind'] == 'approval')
+                  {...prompt, 'request_id': prompt['prompt_id']}
+                    ..remove('prompt_id')
+                    ..remove('kind')
+                    ..remove('execution_generation'),
+            ],
+          };
+        }
         if (method == 'prompt.submit' && loseSubmitAcknowledgement) {
           throw TimeoutException('Acknowledgement lost');
         }
@@ -77,10 +90,15 @@ void main() {
       chat.composer.editText('An unsent follow-up');
       controller.showList();
       host.pending = {
-        'pending_approval': {
-          'request_id': 'reopened-approval',
-          'command': 'example',
-        },
+        'prompts': [
+          {
+            'kind': 'approval',
+            'prompt_id': 'reopened-approval',
+            'execution_generation': 0,
+            'command': 'example',
+            'choices': ['once', 'deny'],
+          },
+        ],
       };
       await controller.openSession(chat.key);
       expect(chat.runtime.needsInput, isTrue);
@@ -130,16 +148,23 @@ void main() {
   );
 
   test(
-    'a lost submit acknowledgement is reconciled without resending',
+    'a lost submit acknowledgement replays one identity without duplicate admission',
     () async {
       final chat = await controller.createChat(canDispatch: () => true);
       chat.composer.editText('Send this once');
       host.loseSubmitAcknowledgement = true;
       await controller.send(chat);
       expect(chat.runtime.reconnecting, isTrue);
+      host.loseSubmitAcknowledgement = false;
       await controller.reconnect(chat.key.workspace);
       expect(chat.runtime.execution, ChatExecution.running);
-      expect(host.calls.where((c) => c.$2 == 'prompt.submit'), hasLength(1));
+      final submissions = host.calls
+          .where((c) => c.$2 == 'prompt.submit')
+          .toList();
+      expect(submissions, hasLength(2));
+      expect(submissions.last.$3, submissions.first.$3);
+      expect(host.canonicalAdmissions, hasLength(1));
+      expect(chat.composer.observation.submissionUncertain, isFalse);
     },
   );
 

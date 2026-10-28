@@ -1,4 +1,5 @@
 import '../models/hermes_question.dart';
+import '../models/canonical_session.dart';
 import 'dart:async';
 import '../models/transcript_position.dart';
 
@@ -15,7 +16,7 @@ import 'chat_transcript_events.dart';
 import 'profile_gateway.dart';
 import 'transcript_reading.dart';
 
-/// A child-only reading visit. Lazy resume mounts Hermes's watch mirror; it
+/// A child-only reading visit. Canonical resume mounts a read-only subscription; it
 /// never submits a prompt, changes the selected chat or claims child controls.
 final class SubagentTimelineSession extends ChangeNotifier
     implements SubagentTimelineReader {
@@ -145,19 +146,21 @@ final class SubagentTimelineSession extends ChangeNotifier
     }
   }
 
-  Future<void> _mount() async {
+  Future<void> _mount({String? expectedEpoch, bool skipMissing = false}) async {
     final response = await _read('session.resume', {
       'session_id': sessionId,
-      'lazy': true,
-      'omit_messages': true,
+      'display_projection': true,
     });
     if (!_current) return;
-    final id = response['session_id'];
-    if (id is! String || id.isEmpty || response['resumed'] != sessionId) {
-      throw const FormatException('Invalid child watch identity');
-    }
-    _watch = id;
-    _runtime.replaceRuntime(id);
+    final cursor = CanonicalReplayCursor.fromSnapshot(
+      response,
+      expectedSessionId: sessionId,
+      expectedEpoch: expectedEpoch,
+    );
+    _watch = cursor.sessionId;
+    _epoch = cursor.epoch;
+    _sequence = skipMissing ? cursor.sequence : 0;
+    _runtime.replaceRuntime(cursor.sessionId);
     _runtime.observeExecutionSnapshot(response);
   }
 
@@ -210,36 +213,53 @@ final class SubagentTimelineSession extends ChangeNotifier
   }
 
   Future<void> _replay() async {
-    var replay = await _read('session.events.since', {
+    Future<Map<String, dynamic>> readReplay() => _read('session.events.since', {
       'session_id': _watch,
-      'last_seen': _sequence,
+      'replay_epoch': _epoch,
+      'last_sequence': _sequence,
     });
+    var replay = await readReplay();
     if (!_current) return;
-    if (replay['epoch'] is! String || (replay['epoch'] as String).isEmpty) {
+    final epoch = replay['replay_epoch'];
+    if (epoch is! String || epoch.isEmpty) {
       throw const FormatException('Missing child replay epoch');
     }
-    if (_epoch != null && replay['epoch'] != _epoch) {
-      _sequence = 0;
-      _epoch = null;
-      _watch = null;
+    if (epoch != _epoch) {
       _partial = true;
+      _reconcile = false;
       _agents.clear();
       _taskState = GatewayTodoState();
-      await _mount();
+      await _mount(expectedEpoch: epoch);
       if (!_current) return;
       _reading.updateStreaming('');
-      replay = await _read('session.events.since', {
-        'session_id': _watch,
-        'last_seen': 0,
-      });
+      await _loadPage(0);
       if (!_current) return;
+      replay = await readReplay();
+      if (!_current) return;
+    }
+    if (replay['replay_epoch'] != _epoch) {
+      throw const FormatException('Child replay changed during refresh');
+    }
+    if (replay['snapshot_required'] is! bool || replay['truncated'] is! bool) {
+      throw const FormatException('Missing canonical replay continuity');
+    }
+    if (replay['snapshot_required'] == true || replay['truncated'] == true) {
+      _partial = true;
+      _reconcile = false;
+      _agents.clear();
+      _taskState = GatewayTodoState();
+      await _mount(expectedEpoch: _epoch, skipMissing: true);
+      if (!_current) return;
+      _reading.updateStreaming('');
+      await _loadPage(0);
+      return;
     }
     final events = replay['events'];
     final latest = replay['latest_seq'];
     if (events is! List ||
         latest is! int ||
         latest < _sequence ||
-        replay['epoch'] is! String ||
+        replay['replay_epoch'] is! String ||
         replay['truncated'] is! bool) {
       throw const FormatException('Invalid child replay');
     }
@@ -292,6 +312,7 @@ final class SubagentTimelineSession extends ChangeNotifier
           reading: _reading,
           type: type,
           data: data,
+          live: false,
         );
       }
       if (type == 'message.complete' || type == 'turn.end') {
@@ -313,7 +334,7 @@ final class SubagentTimelineSession extends ChangeNotifier
         _runtime.observeExecutionSnapshot(data);
       }
     }
-    _epoch = replay['epoch'] as String;
+    _epoch = replay['replay_epoch'] as String;
     _sequence = latest;
     if (_reconcile) await _loadPage(0);
   }

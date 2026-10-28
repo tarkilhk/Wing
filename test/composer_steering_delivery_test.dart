@@ -1,3 +1,4 @@
+import 'package:wing/core/models/canonical_session.dart';
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -97,6 +98,129 @@ void main() {
     await composer.restore();
   });
   tearDown(() => composer.dispose());
+
+  CanonicalAdmission admission(
+    String id, {
+    String status = 'queued',
+    List<String> controls = const ['steer', 'replace'],
+  }) => CanonicalAdmission(
+    id: id,
+    inputId: 'input-$id',
+    sessionId: 'runtime',
+    sequence: 1,
+    status: status,
+    text: 'Identical text',
+    generation: 2,
+    controls: controls,
+  );
+
+  test(
+    'accepted identical rows retain separate identity and server controls',
+    () async {
+      composer.observePending([
+        admission('one'),
+        admission('two', controls: []),
+      ]);
+      final rows = composer.observation.queue;
+      expect(rows, hasLength(2));
+      expect(rows.every((row) => row.serverOwned), isTrue);
+      expect(rows.first.id, isNot(same(rows.last.id)));
+      expect(composer.queueActions(rows.first.id).canEdit, isTrue);
+      expect(composer.queueActions(rows.last.id).canEdit, isFalse);
+      await expectLater(composer.beginEdit(rows.last.id), throwsStateError);
+      composer.observePending([admission('two', controls: [])]);
+      expect(composer.observation.queue.single.id, same(rows.last.id));
+      var dispatches = 0;
+      await composer.drain((_) async {
+        dispatches++;
+        return true;
+      });
+      expect(dispatches, 0);
+    },
+  );
+
+  test(
+    'unknown acceptance offers acknowledgment but cannot edit or steer',
+    () async {
+      composer.observePending([
+        admission('unknown', status: 'unknown', controls: []),
+      ]);
+      final row = composer.observation.queue.single;
+      expect(row.unknownOutcome, isTrue);
+      expect(composer.queueActions(row.id), (
+        canEdit: false,
+        canSteer: false,
+        canDelete: true,
+      ));
+    },
+  );
+
+  test(
+    'a claimed steering transfer remains visible without queue controls until settled',
+    () async {
+      final transferred = CanonicalAdmission.fromJson({
+        'admission_id': 'one',
+        'input_id': 'input-one',
+        'ref': {'session_id': 'runtime', 'profile_id': '/profile'},
+        'sequence': 1,
+        'status': 'started',
+        'text': 'Identical text',
+        'execution_generation': 2,
+        'steering': true,
+        'controls': [],
+      });
+      composer.observePending([admission('one')]);
+      final id = composer.observation.queue.single.id;
+      composer.observePending([transferred]);
+      expect(composer.observation.queue.single.id, same(id));
+      expect(composer.observation.queue.single.pendingSteering, isTrue);
+      expect(composer.queueActions(id), (
+        canEdit: false,
+        canSteer: false,
+        canDelete: false,
+      ));
+      composer.observePending([admission('one')]);
+      expect(composer.observation.queue.single.id, same(id));
+      expect(composer.queueActions(id).canEdit, isTrue);
+      composer.observePending([]);
+      expect(composer.observation.queue, isEmpty);
+    },
+  );
+
+  test(
+    'process recovery replays exact durable payload and ID, preserving newer draft',
+    () async {
+      await composer.editText('Original');
+      final ticket = await composer.beginSubmission();
+      final payload = <String, dynamic>{
+        'session_id': 'runtime',
+        'submission_id': ticket.submissionId,
+        'text': 'Expanded skill instructions',
+        'attachments': [
+          {'path': '/cache/upload.png', 'mime': 'image/png'},
+        ],
+      };
+      await composer.prepareDispatch(ticket, payload: payload);
+      await composer.settle(ticket, ComposerDelivery.uncertain);
+      composer.dispose();
+      composer = create();
+      await composer.restore();
+      await composer.editText('Newer draft');
+      var dispatches = 0;
+      await composer.reconcileSubmissions((wire) async {
+        dispatches++;
+        expect(wire, payload);
+        return admission('accepted', status: 'started');
+      });
+      expect(dispatches, 1);
+      expect(composer.observation.text, 'Newer draft');
+      expect(composer.observation.queue, isEmpty);
+      await composer.reconcileSubmissions((_) async {
+        fail('Retired input replayed twice');
+      });
+      expect((await saved()).queuedPrompts, isEmpty);
+    },
+  );
 
   test(
     'direct steering captures the selected entry and its references',

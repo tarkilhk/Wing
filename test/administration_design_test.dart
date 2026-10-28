@@ -137,6 +137,8 @@ void main() {
             onLibrary: () async {},
             onHub: () async {},
             onPlugins: () async {},
+            onConnectedApps: () async {},
+            onMcpConnectors: () async {},
           ),
           'compression' => AdminSettingsPage(
             profile: profile,

@@ -77,12 +77,64 @@ class CredentialStorageException implements Exception {
 class DashboardHttpException implements Exception {
   final int statusCode;
   final String endpoint;
+  final Object? responseDetail;
 
-  const DashboardHttpException(this.statusCode, this.endpoint);
+  const DashboardHttpException(
+    this.statusCode,
+    this.endpoint, {
+    this.responseDetail,
+  });
+
+  factory DashboardHttpException.response(
+    http.Response response,
+    String endpoint,
+  ) {
+    Object? detail;
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map) detail = _immutableErrorDetail(body['detail']);
+    } on FormatException {
+      // HTML and malformed bodies are not actionable server descriptors.
+    }
+    return DashboardHttpException(
+      response.statusCode,
+      endpoint,
+      responseDetail: detail,
+    );
+  }
+
+  String? get serverCode => responseDetail is Map
+      ? _errorText((responseDetail as Map)['code'])
+      : null;
+  String? get serverMessage => responseDetail is String
+      ? _errorText(responseDetail)
+      : responseDetail is Map
+      ? _errorText((responseDetail as Map)['message'])
+      : null;
 
   @override
-  String toString() => 'HTTP $statusCode';
+  String toString() => [
+    'HTTP $statusCode',
+    ?serverMessage,
+    if (serverCode case final code?) '($code)',
+  ].join(' · ');
 }
+
+String? _errorText(Object? value) => value is String && value.trim().isNotEmpty
+    ? value.replaceAll(RegExp(r'[\x00-\x08\x0b-\x1f]'), '').trim()
+    : null;
+Object? _immutableErrorDetail(Object? value) => switch (value) {
+  final Map map => Map<String, Object?>.unmodifiable({
+    for (final entry in map.entries)
+      if (entry.key is String)
+        entry.key as String: _immutableErrorDetail(entry.value),
+  }),
+  final List list => List<Object?>.unmodifiable(
+    list.map(_immutableErrorDetail),
+  ),
+  String() || num() || bool() || null => value,
+  _ => null,
+};
 
 /// Exact stock session-detail absence, distinct from a missing profile or route.
 /// No server prose or response payload is retained in this failure.
@@ -1259,7 +1311,7 @@ class DashboardClient {
             // An invalid response never establishes session absence.
           }
         }
-        throw DashboardHttpException(res.statusCode, endpoint);
+        throw DashboardHttpException.response(res, endpoint);
       }
       stage = 'decode';
       return _decodeMapResponse(res);
@@ -1312,7 +1364,7 @@ class DashboardClient {
       );
     }
     if (res.statusCode != 200) {
-      throw DashboardHttpException(res.statusCode, endpoint);
+      throw DashboardHttpException.response(res, endpoint);
     }
     return res;
   }
@@ -1345,7 +1397,7 @@ class DashboardClient {
       return apiPost(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw DashboardHttpException(res.statusCode, endpoint);
+      throw DashboardHttpException.response(res, endpoint);
     }
     return _decodeMapResponse(res);
   }
@@ -1367,7 +1419,7 @@ class DashboardClient {
       return apiDeleteResult(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('HTTP ${res.statusCode}');
+      throw DashboardHttpException.response(res, endpoint);
     }
     return _decodeMapResponse(res);
   }
@@ -1389,7 +1441,7 @@ class DashboardClient {
       return apiPatch(endpoint, body: body, retried: true);
     }
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('HTTP ${res.statusCode}');
+      throw DashboardHttpException.response(res, endpoint);
     }
     return _decodeMapResponse(res);
   }
@@ -1486,7 +1538,7 @@ class DashboardClient {
           'http_status': res.statusCode,
         },
       );
-      throw Exception('HTTP ${res.statusCode}');
+      throw DashboardHttpException.response(res, endpoint);
     }
     return _decodeMapResponse(res);
   }

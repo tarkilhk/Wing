@@ -42,6 +42,7 @@ import 'admin_tool_setup_page.dart';
 import 'admin_voice_routes.dart';
 import '../../services/android_voice.dart';
 import 'admin_skills_page.dart';
+import 'admin_hosted_connector_accounts_page.dart';
 import 'admin_logs_page.dart';
 import 'admin_scheduled_tasks_page.dart';
 
@@ -450,6 +451,17 @@ class _HermesAdministrationContentState
                         profile,
                         (context, profile) =>
                             AdminProvidersPage(profile: profile),
+                      ),
+                    ),
+                    AdminRow(
+                      title: 'Connected apps',
+                      subtitle: 'Named work and personal app accounts',
+                      icon: Icons.apps_outlined,
+                      onTap: () => adminPushProfile(
+                        context,
+                        profile,
+                        (_, profile) =>
+                            AdminHostedConnectorAccountsPage(profile: profile),
                       ),
                     ),
                     AdminRow(
@@ -904,6 +916,16 @@ Widget profileCapabilitiesPage(
 ) => ProfileCapabilitiesScreen(
   createSession: () => ProfileCapabilitiesSession(profile.gateway),
   connectionLabel: profile.server.connectionLabel,
+  onConnectedApps: () => adminPushProfile(
+    context,
+    profile,
+    (_, profile) => AdminHostedConnectorAccountsPage(profile: profile),
+  ),
+  onMcpConnectors: () => adminPushProfile(
+    context,
+    profile,
+    (_, profile) => profileConnectorsPage(profile),
+  ),
   onToolSetup: (name) => adminPushProfile(
     context,
     profile,

@@ -670,6 +670,12 @@ void main() {
             'driver_status': {
               'working': fixture.events.length >= 3,
               'blocked': fixture.events.length >= 4,
+              'member_activity': [
+                if (fixture.events.length >= 3) ...[
+                  {'member_id': 'atlas', 'status': 'running'},
+                  {'member_id': 'mira', 'status': 'queued'},
+                ],
+              ],
               'pending_actions': <Map<String, dynamic>>[],
             },
           };

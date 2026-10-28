@@ -84,8 +84,8 @@ void main() {
                   if (method == 'session.create') ...{
                     'model': luna!.model,
                     'provider': luna.provider,
-                    'reasoning_effort': 'low',
-                    'fast': false,
+                    'reasoning': 'low',
+                    'service_tier': 'normal',
                     'title': 'Wing approval queue device QA',
                   },
                 });

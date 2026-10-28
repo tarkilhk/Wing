@@ -60,11 +60,16 @@ class SettingsEditSession extends ChangeNotifier {
     this.profile, {
     required Iterable<AdminField> fields,
     this.expectedModel,
-  }) : _requested = List.unmodifiable(fields) {
+    Iterable<String> invariantKeys = const [],
+  }) : _requested = List.unmodifiable(fields),
+       _invariantKeys = Set.unmodifiable(invariantKeys) {
     if (_requested.map((field) => field.key).toSet().length !=
             _requested.length ||
         _requested.any((field) => field.modelCapability) &&
-            expectedModel == null) {
+            expectedModel == null ||
+        _invariantKeys.any(
+          (key) => !_requested.any((field) => field.key == key),
+        )) {
       throw ArgumentError(
         'Settings fields require unique keys and captured model capability ownership',
       );
@@ -75,6 +80,7 @@ class SettingsEditSession extends ChangeNotifier {
   final ProfileAdministration profile;
   final ConfiguredModel? expectedModel;
   final List<AdminField> _requested;
+  final Set<String> _invariantKeys;
   List<AdminField> _fields = const [];
   Map<String, Object?>? _baseline;
   final _values = <String, Object?>{};
@@ -278,6 +284,7 @@ class SettingsEditSession extends ChangeNotifier {
     }
     final intent = SettingsEditIntent(
       baseline: _baseline!,
+      invariants: _invariantKeys,
       desired: {
         for (final field in _fields.where(_changed))
           field.key: _values[field.key],
