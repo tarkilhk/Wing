@@ -51,4 +51,11 @@ attachment and presentation identity survive the start event:
 flutter test --no-pub test/profile_composer_actions_test.dart test/profile_message_presentation_test.dart
 ```
 
+Successful acceptance uses the receipt and live queue updates without an extra
+conversation refresh. A newer processing event must not become a false
+"Remaining unsent work could not be saved" warning or pause the queue. The same
+Send cases exercise this race; `profile_composer_queue_test.dart` also verifies
+that a genuine local save failure still reports the problem without resending
+accepted work.
+
 A lost acknowledgment retains the original submission ID and exact prepared payload before dispatch. Recovery may query that same idempotent input by replaying its exact request; it never creates a fresh input from matching text. Unknown execution requires explicit acknowledgment of that admission and generation, without rerunning it. Server-accepted work survives phone process death. Local upload and unsent draft preparation remain on the phone. Secret input must not enter durable draft/history storage. Provider generation needs separately authorized disposable QA state.

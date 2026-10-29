@@ -7535,12 +7535,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
         observedSequence: observedSequence,
       );
       _observeCanonicalPending(chat);
-      try {
-        await chat.composer.settle(ticket, ComposerDelivery.accepted);
-      } finally {
-        // The server owns accepted work even if local journal cleanup fails.
-        await _refreshCanonicalPending(chat);
-      }
+      // The receipt and live pending events already establish acceptance.
+      // Resuming here races those events with an older snapshot and can turn
+      // successful delivery into a false local-save failure.
+      await chat.composer.settle(ticket, ComposerDelivery.accepted);
     } catch (error) {
       final rejected =
           error is JsonRpcError &&

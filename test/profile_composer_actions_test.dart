@@ -37,6 +37,8 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
   Completer<Map<String, dynamic>>? steerReply;
   Completer<Map<String, dynamic>>? submitReply;
   Map<String, dynamic>? heldSubmission;
+  bool stalePostSubmitResume = false;
+  int postSubmitResumes = 0;
   List<Map<String, dynamic>> transcript = [];
 
   @override
@@ -51,6 +53,15 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
       discover: base.discover,
       get: base.read,
       rpc: (method, params) => switch (method) {
+        'session.resume' when stalePostSubmitResume && heldSubmission != null =>
+          () async {
+            postSubmitResumes++;
+            return {
+              ...await base.call(method, params),
+              // Same owner, but a snapshot taken before the live start event.
+              'session_id': params['session_id'],
+            };
+          }(),
         'prompt.submit' when submitReply != null => () {
           heldSubmission = Map.of(params);
           calls.add((scope.profileName, method, Map.of(params)));
@@ -357,6 +368,7 @@ void main() {
             true,
           );
           final reply = fixture.submitReply = Completer<Map<String, dynamic>>();
+          fixture.stalePostSubmitResume = true;
           await pumpFrames(tester);
           await tester.tap(find.byTooltip('Send'));
           await tester.runAsync(() async {
@@ -415,6 +427,17 @@ void main() {
           expect(find.byTooltip('Stop'), findsOneWidget);
           if (startBeforeAck) reply.complete(receipt);
           await pumpFrames(tester);
+          expect(chat.runtime.error, isNull);
+          expect(chat.composer.observation.error, isNull);
+          expect(chat.composer.observation.paused, isFalse);
+          expect(fixture.postSubmitResumes, 0);
+          expect(
+            find.text(
+              'The message was accepted. Remaining unsent work could not be saved.',
+            ),
+            findsNothing,
+          );
+          expect(find.byTooltip('Stop'), findsOneWidget);
           fixture.transcript = [
             {
               'id': 1,
