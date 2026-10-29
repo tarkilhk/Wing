@@ -1194,6 +1194,10 @@ class ComposerSession {
       ),
     );
     _saving = true;
+    if (fromSend && _queue.isEmpty && _serverQueue.isEmpty && !uncertain) {
+      // An empty outbox has no earlier work for its pause to protect.
+      _paused = false;
+    }
     _queue.add(item);
     if (moved) {
       _textRevision++;
@@ -1729,8 +1733,9 @@ class ComposerSession {
     } catch (_) {
       return;
     }
+    // Failure pauses the work present at that event in recordRuntimeFailure.
+    // A previous turn's terminal status must not veto newly authored work.
     if (!runtime.historyAvailable ||
-        runtime.failedOrCancelled ||
         _uncertain ||
         _queue.any((v) => v.value.submissionUncertain)) {
       await pause();
