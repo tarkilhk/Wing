@@ -18,8 +18,11 @@ import 'attachment_image_worker.dart';
 import 'composer_draft_store.dart';
 
 class _QueueEntry {
-  _QueueEntry(this.value) : id = ComposerQueueId();
+  _QueueEntry(this.value, {this.authoredAfterFailure = false})
+    : id = ComposerQueueId();
   final ComposerQueueId id;
+  // Captured ordering for this live Send; restored work still needs recovery.
+  final bool authoredAfterFailure;
   QueuedPromptDraft value;
   CanonicalAdmission? admission;
 }
@@ -1182,6 +1185,8 @@ class ComposerSession {
     if (text.isEmpty && files.isEmpty) {
       throw StateError('Queue a message or attachment, not a slash command.');
     }
+    final freshSend =
+        fromSend && _queue.isEmpty && _serverQueue.isEmpty && !uncertain;
     final item = _QueueEntry(
       QueuedPromptDraft(
         text: fromSend ? rawText : text,
@@ -1192,9 +1197,10 @@ class ComposerSession {
         attachments: files,
         submissionUncertain: moved && uncertain,
       ),
+      authoredAfterFailure: freshSend && _runtime().failedOrCancelled,
     );
     _saving = true;
-    if (fromSend && _queue.isEmpty && _serverQueue.isEmpty && !uncertain) {
+    if (freshSend) {
       // An empty outbox has no earlier work for its pause to protect.
       _paused = false;
     }
@@ -1733,9 +1739,8 @@ class ComposerSession {
     } catch (_) {
       return;
     }
-    // Failure pauses the work present at that event in recordRuntimeFailure.
-    // A previous turn's terminal status must not veto newly authored work.
     if (!runtime.historyAvailable ||
+        (runtime.failedOrCancelled && !_queue.first.authoredAfterFailure) ||
         _uncertain ||
         _queue.any((v) => v.value.submissionUncertain)) {
       await pause();

@@ -44,7 +44,8 @@ A fresh Send with an empty outbox proceeds after a stopped or failed reply,
 even if an earlier empty queue was paused. Older paused or uncertain messages
 stay held. Tap a queued row and use **Resume queued messages** to continue them.
 The `fresh Send after` host cases cover terminal replies and removing the last
-paused item; `fresh Send after interruption shows delivery feedback` drives the
+paused item. Resume-only failure and direct-error cases keep older work durably
+paused until explicit Resume. `fresh Send after interruption shows delivery feedback` drives the
 actual Send button with held acceptance in both themes at normal/enlarged text:
 
 ```sh
