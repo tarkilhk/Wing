@@ -88,19 +88,24 @@ class ProfileTranscript extends StatefulWidget {
   State<ProfileTranscript> createState() => _ProfileTranscriptState();
 }
 
-class _ProfileTranscriptState extends State<ProfileTranscript> {
+class _ProfileTranscriptState extends State<ProfileTranscript>
+    with WidgetsBindingObserver {
   late final _scroll = ExpansionScrollController(
     preserveViewportPosition: () => !widget.presentation.needsInput,
   );
   TranscriptBookmark? _resume;
-  int? _centerMessage;
+  Object? _centerMessage;
+  TranscriptBookmark? _departureBookmark;
+  bool _presentationVisible = false;
+  bool _appActive = true;
+  bool _restoreOnReturn = false;
   bool _positionChosen = false;
   bool _restoringMarkdown = false;
   bool _placingResume = false;
   bool _readingFrameScheduled = false;
   bool _userScrolling = false;
   bool _readScrollPending = false;
-  final _mountedRows = <TranscriptAnchorBox, ({int id, bool readable})>{};
+  final _mountedRows = <TranscriptAnchorBox, ({Object id, int? readId})>{};
   final _mountedAnchors = <TranscriptAnchorBox>{};
   final _centerSliver = GlobalKey();
 
@@ -148,11 +153,12 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         // through that same gesture is its terminal equivalent.
         final passed =
             end <= top + .5 || _latestDistance <= .5 && end <= bottom + .5;
+        final readId = entry.value.readId;
         if (scrolledPast &&
-            entry.value.readable &&
+            readId != null &&
             passed &&
-            (read == null || entry.value.id > read)) {
-          read = entry.value.id;
+            (read == null || readId > read)) {
+          read = readId;
         }
         if (end <= top || y >= bottom) continue;
         if (firstTop == null || y < firstTop) {
@@ -165,6 +171,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
         }
       }
       if (bookmark == null && _latestDistance > 24 && read == null) return;
+      _departureBookmark = bookmark;
       if (widget.openingContent != null ||
           widget.presentation.history.loading ||
           widget.presentation.history.error != null) {
@@ -245,6 +252,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _appActive =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     widget.controller?._state = this;
     _newestId = widget.presentation.timeline.entries
         .where((entry) => !entry.streaming)
@@ -264,6 +275,74 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
       }
       _finishMarkdownRestoration();
     });
+  }
+
+  Object _anchorId(timeline_facts.TranscriptTimelineEntry entry) =>
+      entry.id ?? entry.presentationId;
+
+  bool _matchesAnchor(
+    timeline_facts.TranscriptTimelineEntry entry,
+    Object? id,
+  ) => id != null && (entry.id == id || entry.presentationId == id);
+
+  void _rememberDeparture() {
+    if (!_presentationVisible ||
+        !_appActive ||
+        _restoreOnReturn ||
+        _capturing ||
+        _jumping ||
+        widget.focusedMessageId != null) {
+      return;
+    }
+    // A pending prompt is the boundary before its unread reply. Local prompts
+    // already have presentation identity, even before history supplies an ID.
+    final last = widget.presentation.timeline.entries.lastOrNull;
+    final bookmark = _restoringMarkdown
+        ? _resume
+        : _latestDistance <= 24 && last?.role == 'user'
+        ? TranscriptBookmark(messageId: _anchorId(last!), fraction: 1)
+        : _departureBookmark;
+    _departureBookmark = bookmark;
+    if (bookmark != null) widget.presentation.recordReading(bookmark);
+    _restoreOnReturn = true;
+  }
+
+  void _restoreDeparture() {
+    if (!_restoreOnReturn || !_presentationVisible || !_appActive) return;
+    _restoreOnReturn = false;
+    _resume = _departureBookmark;
+    _centerMessage = _resume?.messageId;
+    _restoringMarkdown = _resume != null;
+    _positionChosen = true;
+    _readingThrough = null;
+    _scroll.releaseExpansionAnchor();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final visible =
+        (ModalRoute.of(context)?.isCurrent ?? true) &&
+        TickerMode.valuesOf(context).enabled &&
+        (ConversationPresentationScope.maybeOf(context)?.visible ?? true);
+    if (!visible) _rememberDeparture();
+    _presentationVisible = visible;
+    _restoreDeparture();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _rememberDeparture();
+    _appActive = state == AppLifecycleState.resumed;
+    if (_appActive && _restoreOnReturn) {
+      setState(_restoreDeparture);
+    }
+  }
+
+  @override
+  void deactivate() {
+    _rememberDeparture();
+    super.deactivate();
   }
 
   // Scroll-end can be delivered during viewport layout. Owner commands may
@@ -649,6 +728,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     if (widget.controller?._state == this) widget.controller?._state = null;
     _scroll.dispose();
     _jumpLabel.dispose();
@@ -751,8 +831,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
     var centerRow = _centerMessage == null
         ? -1
         : rows.indexWhere(
-            (section) =>
-                section.messages.any((entry) => entry.id == _centerMessage),
+            (section) => section.messages.any(
+              (entry) => _matchesAnchor(entry, _centerMessage),
+            ),
           );
     if (_restoringMarkdown && centerRow < 0) {
       if (presentation.history.hasOlder &&
@@ -1037,24 +1118,28 @@ class _ProfileTranscriptState extends State<ProfileTranscript> {
                     },
                     onHeightChanged: (box, height) {
                       _recordRowHeight(keys[rowIndex], box, height);
-                      final id =
-                          section.messages
-                              .where((entry) => entry.id == _centerMessage)
-                              .firstOrNull
-                              ?.id ??
-                          row.id;
-                      if (id is int && id >= 0) {
-                        _mountedRows[box] = (
-                          id: id,
-                          readable:
-                              !section.isActivity &&
-                              !row.streaming &&
-                              (row.message.kind ==
-                                      TranscriptMessageKind.dialogue ||
-                                  row.message.kind ==
-                                      TranscriptMessageKind.discussion),
-                        );
-                      }
+                      final centered = section.messages
+                          .where(
+                            (entry) => _matchesAnchor(entry, _centerMessage),
+                          )
+                          .firstOrNull;
+                      final anchored = centered ?? row;
+                      _mountedRows[box] = (
+                        id: centered == null
+                            ? _anchorId(anchored)
+                            : _centerMessage!,
+                        readId:
+                            !section.isActivity &&
+                                !row.streaming &&
+                                anchored.id is int &&
+                                (anchored.id! as int) >= 0 &&
+                                (row.message.kind ==
+                                        TranscriptMessageKind.dialogue ||
+                                    row.message.kind ==
+                                        TranscriptMessageKind.discussion)
+                            ? anchored.id! as int
+                            : null,
+                      );
                       _scheduleReadingObservation();
                       if (_restoringMarkdown) {
                         WidgetsBinding.instance.addPostFrameCallback(

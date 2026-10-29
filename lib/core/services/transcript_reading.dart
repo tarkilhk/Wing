@@ -560,33 +560,69 @@ final class TranscriptReading implements TranscriptReader {
         _messagePresentations[row] = previousToken;
       }
     }
-    // Some current-stock completions have no persistence receipt. Only bind
-    // provisional rows when the entire visible suffix after a known durable
-    // boundary agrees in order and content. Never match repeated text globally.
+    // Bind local rows only within the ordered suffix after the same saved
+    // boundary (or the whole transcript for its first turn), never by a global
+    // text search. The reading bookmark may precede an unseen saved reply.
     final boundary = _messages.lastIndexWhere((row) => row['id'] != null);
-    if (boundary >= 0) {
-      final nextBoundary = refreshed.indexWhere(
-        (row) => row['id'] == _messages[boundary]['id'],
-      );
-      if (nextBoundary >= 0) {
-        bool visible(Map<String, dynamic> row) =>
-            isBranchMessage(row) && !isHiddenAnswerMessage(row);
-        final pending = _messages.skip(boundary + 1).where(visible).toList();
-        final saved = refreshed.skip(nextBoundary + 1).where(visible).toList();
-        if (pending.isNotEmpty &&
-            pending.length == saved.length &&
-            pending.indexed.every(
-              (entry) =>
-                  entry.$2['role'] == saved[entry.$1]['role'] &&
-                  entry.$2['display_kind'] == saved[entry.$1]['display_kind'] &&
-                  answerMessageDisplayText(entry.$2) ==
-                      answerMessageDisplayText(saved[entry.$1]),
-            )) {
-          for (var i = 0; i < pending.length; i++) {
-            final token = _messagePresentations[pending[i]];
-            if (token != null) _messagePresentations[saved[i]] = token;
-          }
-        }
+    final nextBoundary = boundary < 0
+        ? -1
+        : refreshed.indexWhere((row) => row['id'] == _messages[boundary]['id']);
+    if (boundary < 0 || nextBoundary >= 0) {
+      bool visible(Map<String, dynamic> row) =>
+          isBranchMessage(row) && !isHiddenAnswerMessage(row);
+      final pending = _messages.skip(boundary + 1).where(visible).toList();
+      final saved = refreshed.skip(nextBoundary + 1).where(visible).toList();
+      bool matchesPrefix(int length) =>
+          length > 0 &&
+          saved.length >= length &&
+          (boundary >= 0 || pending.firstOrNull?['role'] == 'user') &&
+          pending
+              .take(length)
+              .indexed
+              .every(
+                (entry) =>
+                    entry.$2['role'] == saved[entry.$1]['role'] &&
+                    entry.$2['display_kind'] ==
+                        saved[entry.$1]['display_kind'] &&
+                    answerMessageDisplayText(entry.$2) ==
+                        answerMessageDisplayText(saved[entry.$1]),
+              );
+      final bookmark = readingPosition.resume;
+      final bookmarkIndex = bookmark == null
+          ? -1
+          : pending.indexWhere(
+              (row) => _messagePresentations[row] == bookmark.messageId,
+            );
+      final retainCount =
+          boundary >= 0 &&
+              pending.length == saved.length &&
+              matchesPrefix(pending.length)
+          ? pending.length
+          : matchesPrefix(bookmarkIndex + 1)
+          ? bookmarkIndex + 1
+          : 0;
+      for (var i = 0; i < retainCount; i++) {
+        final token = _messagePresentations[pending[i]];
+        if (token != null) _messagePresentations[saved[i]] = token;
+      }
+    }
+    final bookmark = readingPosition.resume;
+    if (bookmark != null) {
+      final saved = refreshed
+          .where(
+            (row) =>
+                row['id'] is int &&
+                _messagePresentations[row] == bookmark.messageId,
+          )
+          .firstOrNull;
+      if (saved != null) {
+        readingMemory.record(
+          TranscriptBookmark(
+            messageId: saved['id'] as int,
+            fraction: bookmark.fraction,
+            alignment: bookmark.alignment,
+          ),
+        );
       }
     }
     final interim = _lastInterimMessage;

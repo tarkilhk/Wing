@@ -1,6 +1,7 @@
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'support/canonical_gateway_fixture.dart';
+import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'support/composer_fixture.dart';
@@ -505,6 +506,78 @@ void main() {
       hasLength(1),
     );
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('Send then app return shows reply beginning '
+          '${brightness.name} $scale', (tester) async {
+        final chat = await show(
+          tester,
+          brightness: brightness,
+          scale: scale,
+          draft: 'Explain the next steps.',
+        );
+        controller.connectionStatus.accessAvailable();
+        controller.connectionStatus.liveChanged(
+          chat.key.workspace.profileName,
+          true,
+        );
+        await pumpFrames(tester);
+        await tester.tap(find.byTooltip('Send'));
+        await tester.runAsync(() async {
+          await chat.composer.admittedWrites;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await pumpFrames(tester);
+        expect(
+          fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+          hasLength(1),
+        );
+        expect(find.byTooltip('Stop'), findsOneWidget);
+        for (final state in [
+          AppLifecycleState.inactive,
+          AppLifecycleState.hidden,
+          AppLifecycleState.paused,
+        ]) {
+          tester.binding.handleAppLifecycleStateChanged(state);
+        }
+        final steps = List.generate(
+          30,
+          (i) => 'Step $i: Read this reply at your own pace.',
+        ).join('\n\n');
+        final answer = 'Start here.\n\n$steps';
+        try {
+          emitChatEvent(controller, chat, 'message.start');
+          emitChatEvent(controller, chat, 'message.delta', {'text': answer});
+          await pumpFrames(tester);
+        } finally {
+          for (final state in [
+            AppLifecycleState.hidden,
+            AppLifecycleState.inactive,
+            AppLifecycleState.resumed,
+          ]) {
+            tester.binding.handleAppLifecycleStateChanged(state);
+          }
+        }
+        await pumpFrames(tester);
+        await tester.settleMarkdown();
+        await pumpFrames(tester);
+        final reply = find.byWidgetPredicate(
+          (widget) => widget is ProfileMessage && widget.message.text == answer,
+        );
+        expect(reply, findsOneWidget);
+        final viewport = tester.getRect(
+          find.byKey(const ValueKey('profile-transcript')),
+        );
+        final top = tester.getTopLeft(reply).dy;
+        expect(top, greaterThanOrEqualTo(viewport.top - 1));
+        expect(top, lessThan(viewport.bottom));
+        expect(chat.reading.readingPosition.readThrough, isNull);
+        await capture(tester, 'reply-return-${brightness.name}-$scale');
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 
   for (final action in [ComposerAction.queue, ComposerAction.stop]) {
     testWidgets(

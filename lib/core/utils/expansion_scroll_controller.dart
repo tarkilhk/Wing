@@ -309,6 +309,14 @@ class TranscriptAnchorBox extends RenderProxyBox {
   bool get contentPending => _pendingContent.isNotEmpty;
 
   @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    // A keyed row can move between the latest and bookmarked slivers without
+    // changing constraints. Re-register its geometry after detach retired it.
+    markNeedsLayout();
+  }
+
+  @override
   void detach() {
     onDetached?.call(this);
     super.detach();

@@ -41,6 +41,11 @@ The host `flutter test --no-pub test/conversation_assembly_test.dart` recipe als
 
 Phone reading is covered by the `transcript-expansion` family: enter table reading mode, rotate, return to the retained draft, reveal composer controls and use Back without leaving the chat.
 
+For `journeys.conversation`, the host Send-and-return recipe in
+[conversation](conversation.md) checks that a reply arriving while Wing is in the
+background opens at its beginning. Reading-position tests also cover leaving a
+thread and returning after new saved history arrives.
+
 ## Gotchas
 
 Fixture native journeys, stock transport and deployed-provider acceptance prove different boundaries. Android owner recreation is not process death; require the separate process-recovery verdict. Keep each failed aggregate failed even when a focused recovery passes. Do not sum overlapping case counts. Run families serially on this workspace; retain artifacts after the owned emulator and backend are retired.
