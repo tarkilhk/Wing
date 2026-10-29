@@ -1,3 +1,5 @@
+import 'package:wing/core/widgets/studio_loading.dart';
+import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'support/canonical_gateway_fixture.dart';
@@ -264,6 +266,69 @@ void main() {
       debugDisableShadows = previousShadows;
       repaintShadows();
       await tester.pump();
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('fresh Send after interruption shows delivery feedback '
+          '${brightness.name} $scale', (tester) async {
+        const text = 'A fresh request after stopping';
+        final chat = await show(
+          tester,
+          brightness: brightness,
+          scale: scale,
+          status: ChatExecution.running,
+          draft: text,
+          paused: true,
+        );
+        emitChatEvent(controller, chat, 'turn.end', {'status': 'interrupted'});
+        controller.connectionStatus.accessAvailable();
+        controller.connectionStatus.liveChanged(
+          chat.key.workspace.profileName,
+          true,
+        );
+        await pumpFrames(tester);
+        expect(chat.runtime.execution, ChatExecution.cancelled);
+        final reply = fixture.submitReply = Completer<Map<String, dynamic>>();
+        await tester.tap(find.byTooltip('Send'));
+        await tester.pump();
+        expect(find.text(text), findsOneWidget);
+        expect(find.text('Queue paused'), findsNothing);
+        await tester.runAsync(() async {
+          await chat.composer.admittedWrites;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await pumpFrames(tester);
+        expect(fixture.heldSubmission, isNotNull);
+        expect(find.byType(ProfileMessage), findsOneWidget);
+        expect(find.byType(StudioLoading), findsWidgets);
+        expect(
+          tester
+              .getRect(find.byType(StudioLoading).first)
+              .overlaps(const Rect.fromLTWH(0, 0, 360, 760)),
+          isTrue,
+        );
+        expect(find.byTooltip('Stop'), findsOneWidget);
+        await capture(tester, 'fresh-send-${brightness.name}-$scale-pending');
+        reply.complete(
+          canonicalReceipt(
+            fixture.heldSubmission!,
+            admissionId: 'fresh-send',
+            status: 'started',
+          ),
+        );
+        await pumpFrames(tester);
+        expect(chat.composer.observation.queue, isEmpty);
+        emitChatEvent(controller, chat, 'turn.end', {
+          'status': 'completed',
+          'text': 'Fresh request completed',
+        });
+        await pumpFrames(tester);
+        expect(find.byType(StudioLoading), findsNothing);
+        expect(find.text('Queue paused'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
     }
   }
 

@@ -145,6 +145,99 @@ void main() {
     );
   }
 
+  for (final restart in [false, true]) {
+    test('resume-only failure holds older work restart=$restart', () async {
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: prefs,
+        queuedPrompts: [QueuedPromptDraft(text: 'Older queued request')],
+        paused: false,
+      );
+      host.running = false;
+      host.inflight = {'status': 'error', 'error': 'Provider stopped'};
+      if (restart) {
+        final key = chat.key;
+        controller.dispose();
+        controller = makeController();
+        await controller.initialize();
+        chat = (await controller.openSession(key))!;
+      } else {
+        await controller.reconnect(chat.key.workspace);
+      }
+      expect(sends(), 0);
+      expect(chat.composer.observation.paused, isTrue);
+      expect(queuedTexts(), ['Older queued request']);
+      expect((await saved())!.queuePaused, isTrue);
+      await controller.resumeQueue(chat);
+      expect(sends(), 1);
+      expect(chat.composer.observation.paused, isFalse);
+    });
+  }
+
+  for (final status in ['completed', 'interrupted', 'error']) {
+    test('fresh Send after $status reaches Hermes', () async {
+      await controller.resumeQueue(chat);
+      host.event('a', 'turn.end', {'status': status});
+      await until(() => !chat.runtime.blocksTurnAdmission);
+      await controller.updateDraft(chat, 'A fresh request');
+      await controller.send(chat);
+      expect(sends(), 1);
+      expect(chat.composer.observation.paused, isFalse);
+    });
+  }
+
+  test(
+    'fresh Send after removing the last paused item reaches Hermes',
+    () async {
+      await controller.queuePrompt(chat, 'Discard this');
+      await controller.removeQueuedPrompt(
+        chat,
+        chat.composer.observation.queue.single.id,
+      );
+      finish();
+      await until(() => !chat.runtime.blocksTurnAdmission);
+      await controller.updateDraft(chat, 'A fresh request');
+      await controller.send(chat);
+      expect(sends(), 1);
+      expect(chat.composer.observation.paused, isFalse);
+    },
+  );
+
+  test('fresh Send preserves older paused work', () async {
+    await controller.queuePrompt(chat, 'Older paused request');
+    finish();
+    await until(() => !chat.runtime.blocksTurnAdmission);
+    await controller.updateDraft(chat, 'New request');
+    await controller.send(chat);
+    expect(sends(), 0);
+    expect(queuedTexts(), ['Older paused request', 'New request']);
+    expect(chat.composer.observation.paused, isTrue);
+  });
+
+  for (final errorEvent in [false, true]) {
+    test(
+      'failure pauses work waiting at that moment errorEvent=$errorEvent',
+      () async {
+        await controller.resumeQueue(chat);
+        final delay = Completer<void>();
+        draftStore.delayNextWrite = delay;
+        final queuing = controller.queuePrompt(chat, 'Already waiting');
+        if (errorEvent) {
+          host.event('a', 'turn.error', {'message': 'Provider stopped'});
+        } else {
+          host.event('a', 'turn.end', {'status': 'interrupted'});
+        }
+        await until(() => !chat.runtime.blocksTurnAdmission);
+        delay.complete();
+        await queuing;
+        expect(sends(), 0);
+        expect(queuedTexts(), ['Already waiting']);
+        expect(chat.composer.observation.paused, isTrue);
+        expect((await saved())!.queuePaused, isTrue);
+      },
+    );
+  }
+
   test(
     'screen handoff queues identical text without consuming the chat draft or attachments',
     () async {

@@ -46,6 +46,9 @@ For `journeys.conversation`, the host Send-and-return recipe in
 background opens at its beginning. Reading-position tests also cover leaving a
 thread and returning after new saved history arrives.
 
+For `journeys.conversation`, the [fresh Send recipe](chat-inputs.md#gotchas) checks
+that a stopped reply or an empty paused queue does not strand the next message.
+
 ## Gotchas
 
 Fixture native journeys, stock transport and deployed-provider acceptance prove different boundaries. Android owner recreation is not process death; require the separate process-recovery verdict. Keep each failed aggregate failed even when a focused recovery passes. Do not sum overlapping case counts. Run families serially on this workspace; retain artifacts after the owned emulator and backend are retired.
