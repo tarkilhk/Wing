@@ -2980,6 +2980,7 @@ void main() {
             await tester.longPress(
               find.byKey(ValueKey('chat-profile-$profile')),
             );
+            await tester.settleTranscript();
             await tester.pumpAndSettle();
             expect(find.text('Bot profile is unavailable'), findsNothing);
             expect(controller.current!.chat, isNotNull);
@@ -3037,6 +3038,7 @@ void main() {
           );
           browser.failHistory = false;
           await tester.tap(find.byTooltip('Retry'));
+          await tester.settleTranscript();
           await tester.pumpAndSettle();
           expect(
             controller.current!.chat!.key.workspace.profileName,
@@ -3233,6 +3235,7 @@ void main() {
           );
           browser.failHistory = false;
           await tester.tap(find.byTooltip('Retry'));
+          await tester.settleTranscript();
           await tester.pumpAndSettle();
           await tester.binding.handlePopRoute();
           await tester.pumpAndSettle();
@@ -3677,6 +3680,7 @@ void main() {
       await tester.pumpAndSettle();
       bots.profiles.single['ui_meta']['hermes-bots']['shape'] = 'triangle';
       await tester.tap(find.text('Atlas').last);
+      await tester.settleTranscript();
       await tester.pumpAndSettle();
       expect(find.byType(BotAvatar), findsNWidgets(2));
       expect(
@@ -3999,6 +4003,7 @@ void main() {
           await controller.openSession(
             ProfileSessionKey(scope, 'canonical-root'),
           );
+          await tester.settleTranscript();
           await tester.pumpAndSettle();
           // The root and tip share the same confirmed bot identity.
           expect(find.text(botName), findsNWidgets(2));
@@ -4022,6 +4027,7 @@ void main() {
           await controller.openSession(
             ProfileSessionKey(scope, 'canonical-root'),
           );
+          await tester.settleTranscript();
           await tester.pumpAndSettle();
           final questionChat = controller.current!.chat!;
           final question = {
@@ -4032,6 +4038,20 @@ void main() {
           };
           emitChatEvent(controller, questionChat, 'clarify', question);
           await tester.pump();
+          await tester.pump();
+          // Reopening preserves the reading point. Follow the attention
+          // control to the new question without an automatic reading jump.
+          final attention = find.byKey(const ValueKey('jump-to-latest'));
+          expect(
+            find.descendant(
+              of: attention,
+              matching: find.byTooltip('Input needed'),
+            ),
+            findsOneWidget,
+          );
+          await tester.tap(attention);
+          await tester.settleTranscript();
+          await tester.pumpAndSettle();
           expect(find.byType(GatewayClarifyDialog), findsOneWidget);
           browser.clarificationResult = {'status': 'expired'};
           await tester.ensureVisible(find.byKey(const Key('clarify-skip')));
@@ -4668,6 +4688,7 @@ void main() {
             isNull,
           );
           retryHistory.complete();
+          await tester.settleTranscript();
           await tester.pumpAndSettle();
           expect(find.byType(StudioLoading), findsNothing);
           await tester.binding.handlePopRoute();

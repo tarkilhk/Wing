@@ -2,8 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/widgets/background_markdown_content.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 
 extension PumpMarkdownWidget on WidgetTester {
+  /// Reopened lazy rows can start another Markdown worker during restoration.
+  /// Let real worker I/O complete while the rendered history state is pending.
+  Future<void> settleTranscript() async {
+    for (var attempt = 0; attempt < 200; attempt++) {
+      await pump(const Duration(milliseconds: 16));
+      final pending = stateList<BackgroundMarkdownContentState>(
+        find.byType(BackgroundMarkdownContent, skipOffstage: false),
+      ).any((state) => state.pending);
+      final loading = widgetList<StudioPageLoading>(
+        find.byType(StudioPageLoading),
+      ).any((widget) => widget.active && widget.label == 'Loading history');
+      if (!pending && !loading) return;
+      await runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 10)),
+      );
+    }
+    fail('Conversation history and Markdown restoration did not settle.');
+  }
+
   Future<void> pumpMarkdownWidget(Widget widget) async {
     await pumpWidget(widget);
     await settleMarkdown();

@@ -99,6 +99,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
   bool _presentationVisible = false;
   bool _appActive = true;
   bool _restoreOnReturn = false;
+  bool? _detachedAtLatest;
   bool _positionChosen = false;
   bool _restoringMarkdown = false;
   bool _placingResume = false;
@@ -299,7 +300,7 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
     final last = widget.presentation.timeline.entries.lastOrNull;
     final bookmark = _restoringMarkdown
         ? _resume
-        : _latestDistance <= 24 && last?.role == 'user'
+        : (_detachedAtLatest ?? (_latestDistance <= 24)) && last?.role == 'user'
         ? TranscriptBookmark(messageId: _anchorId(last!), fraction: 1)
         : _departureBookmark;
     _departureBookmark = bookmark;
@@ -321,8 +322,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Non-opaque menus and dialogs keep the conversation mounted and visible.
+    // Restore only after its presentation is hidden, not after every popup.
     final visible =
-        (ModalRoute.of(context)?.isCurrent ?? true) &&
         TickerMode.valuesOf(context).enabled &&
         (ConversationPresentationScope.maybeOf(context)?.visible ?? true);
     if (!visible) _rememberDeparture();
@@ -341,8 +343,14 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
 
   @override
   void deactivate() {
-    _rememberDeparture();
+    _detachedAtLatest = _latestDistance <= 24;
     super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _detachedAtLatest = null;
   }
 
   // Scroll-end can be delivered during viewport layout. Owner commands may
@@ -728,6 +736,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
 
   @override
   void dispose() {
+    // Deactivation can be a same-frame reparenting. Persist departure only
+    // after this presentation actually leaves the tree.
+    _rememberDeparture();
     WidgetsBinding.instance.removeObserver(this);
     if (widget.controller?._state == this) widget.controller?._state = null;
     _scroll.dispose();

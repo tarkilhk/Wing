@@ -7462,13 +7462,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
               'mime': ticket.attachments[index].mediaType,
             },
       ];
+      final submittedText = promptText.isEmpty && images.isNotEmpty
+          ? 'What do you see in this image?'
+          : promptText;
       final payload = <String, dynamic>{
         'session_id': runtime,
         'submission_id': ticket.submissionId,
         if (admittingQueue) 'queued': true,
-        'text': promptText.isEmpty && images.isNotEmpty
-            ? 'What do you see in this image?'
-            : promptText,
+        'text': submittedText,
         if (images.isNotEmpty) 'attachments': images,
       };
       await chat.composer.prepareDispatch(ticket, payload: payload);
@@ -7531,7 +7532,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.gateway.canonical.admission(
         receipt,
         inputId: ticket.submissionId,
-        text: ticket.text,
+        text: submittedText,
         observedSequence: observedSequence,
       );
       _observeCanonicalPending(chat);

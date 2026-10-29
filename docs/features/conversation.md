@@ -10,7 +10,7 @@ Feature ID: `conversation`.
 - Normal chats, canonical Bot Chats, group discussions and bot working histories share the conversation frame and reading layout. Passive Recents cards use the same frame and composer presentation.
 - `conversation.reading-mode` — Use a table’s full-screen icon to hide the composer and portrait context row without leaving the conversation. The same icon or Android Back restores it; drafts remain intact. Landscape puts title and scope in one header row.
 - `conversation.search` — Find and open older content.
-- `conversation.position` — Page and return without losing reading position. Leaving for another thread or app keeps the current reading location, including at Latest. After sending and leaving before the reply, return to the sent message and the beginning of the reply.
+- `conversation.position` — Page and return without losing reading position. Leaving for another thread or app keeps the current reading location, including at Latest. After sending and leaving before the reply, return to the sent message and the beginning of the reply. Opening a popup or changing a chat's decoration keeps the current viewport without starting another history restoration.
 - `conversation.recovery` — Read the structured reason for a failed turn, inspect its details and use a supplied model or provider recovery action. Selecting a model preserves the draft and never resends the failed turn.
 - `conversation.git-review` — Open Chat actions → Git review for a reported local terminal workspace. Read changed files, All changes (working tree versus HEAD) and Staged (index versus HEAD), then copy an exact changed-line or hunk reference.
 
@@ -80,6 +80,17 @@ claiming the workspace is a clean Git repository. The host suites
 late replies, comparisons, copy references, pending feedback and recovery.
 
 Opening or tapping Latest does not mark a message read. Saved reading positions last until Wing restarts. Long-history host tests cover paging beyond the small Android fixture.
+
+After reopening, use **Input needed** to reach a new question while preserving
+the reading point until that action. Bot and Recents regressions verify visible
+messages rather than raw scroll offsets, because restoring around a saved row
+changes the scroll origin. The shared `settleTranscript` test helper waits for
+rendered history restoration and real Markdown workers; advancing only the test
+clock cannot complete worker I/O.
+
+```sh
+flutter test --no-pub test/bots_view_test.dart test/bot_group_view_test.dart test/recent_conversation_switcher_test.dart test/saved_message_actions_test.dart test/profile_conversation_ui_test.dart
+```
 
 Automatic read-acknowledgement failures are logged in the phone's diagnostics
 without a conversation warning. Failed acknowledgement still leaves the chat

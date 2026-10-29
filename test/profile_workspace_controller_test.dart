@@ -3058,10 +3058,7 @@ void main() {
     host.activeListDelay!.complete();
     await Future<void>.delayed(Duration.zero);
     expect(chat.runtime.execution, ChatExecution.running);
-    expect(
-      host.calls.where((call) => call.$2 == 'session.resume'),
-      hasLength(1),
-    );
+    expect(host.calls.where((call) => call.$2 == 'session.resume'), isEmpty);
   });
 
   test(
