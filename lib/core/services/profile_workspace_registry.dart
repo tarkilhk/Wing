@@ -111,11 +111,15 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     Iterable<SavedConnection> connections,
   ) async {
     final generation = ++_configurationGeneration;
-    final identities = await Future.wait(
-      connections.map(this.identities.resolve),
-    );
+    final saved = connections.toList();
+    final identities = await Future.wait(saved.map(this.identities.resolve));
     if (_closed || generation != _configurationGeneration) return;
     _configuredIdentities = identities.toSet();
+    for (var index = 0; index < saved.length; index++) {
+      _controllers[identities[index]]?.observeConnectionLabel(
+        saved[index].label,
+      );
+    }
     _retireSettledOwners();
   }
 
@@ -199,6 +203,7 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
       owner.retentionChanges.addListener(_activityChanged);
       return owner;
     });
+    controller.observeConnectionLabel(connection.label);
     _activityChanged();
     return controller;
   }

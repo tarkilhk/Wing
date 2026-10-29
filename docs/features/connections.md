@@ -8,6 +8,9 @@ Feature ID: `connections`.
 
 - `connections.verify` — Validate credentials, the gateway Webapp address and canonical chat authority.
 - `connections.save` — Persist and reopen the selected connection.
+- Saved instance aliases appear in workspace and conversation headers as well as
+  the instance picker. Renaming an instance updates a retained workspace without
+  replacing its open chat, draft or connection.
 - `connections.recover` — Retry authentication or cancel setup safely.
 
 ## How to get to it (user POV)
@@ -29,6 +32,12 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```sh
   python3 scripts/test_nightly_native.py journeys --output build/feature-verification/connections
   ```
+
+For retained-alias and header regressions, run
+`flutter test --no-pub test/profile_workspace_registry_test.dart test/workspace_picker_test.dart`.
+The registry checks rename reconciliation and reuse without reconnecting; the
+picker checks the open conversation and menu in both themes at normal and 200%
+text size.
 
 ## Gotchas
 

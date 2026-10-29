@@ -208,6 +208,39 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'saved alias updates the open chat ${brightness.name} at $scale',
+        (tester) async {
+          controller.observeConnectionLabel('claw.tarkilnetwork');
+          final key = ProfileSessionKey(controller.current!.scope, 'newest');
+          final chat = await controller.openSession(key);
+          await controller.updateDraft(chat!, 'Keep this draft');
+          await show(tester, brightness: brightness, scale: scale);
+          expect(find.text('claw.tarkilnetwork'), findsOneWidget);
+          await screenshot(tester, 'alias-before-${brightness.name}-$scale');
+
+          controller.observeConnectionLabel(first.label);
+          await tester.pumpAndSettle();
+          expect(find.text('claw.tarkilnetwork'), findsNothing);
+          expect(find.text('Claw'), findsOneWidget);
+          expect(find.text('Keep this draft'), findsOneWidget);
+          expect(controller.current!.chat, same(chat));
+          await screenshot(tester, 'alias-after-${brightness.name}-$scale');
+
+          await tester.tap(picker);
+          await tester.pumpAndSettle();
+          expect(find.text('Claw'), findsNWidgets(2));
+          await screenshot(tester, 'alias-picker-${brightness.name}-$scale');
+          await tester.tap(
+            find.byKey(const ValueKey('workspace-connection-claw')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Claw'), findsOneWidget);
+          expect(find.text('Keep this draft'), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        },
+      );
+
       testWidgets('picker renders ${brightness.name} at $scale', (
         tester,
       ) async {

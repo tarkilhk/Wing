@@ -50,6 +50,40 @@ void main() {
     appPreferences.dispose();
   });
 
+  for (final reconcile in [false, true]) {
+    test(
+      'saved alias refreshes retained workspace (reconcile: $reconcile)',
+      () async {
+        final connection = identityTestConnection().copyWith(
+          label: 'claw.tarkilnetwork',
+        );
+        final owner = await registry.forConnection(connection);
+        await owner.initialize();
+        final chat = await owner.createChat(canDispatch: () => true);
+        await owner.updateDraft(chat, 'Keep this draft');
+        final host = hosts[owner.connectionIdentity]!;
+        final connects = host.connectCalls;
+        var observations = 0;
+        owner.addListener(() => observations++);
+        final renamed = connection.copyWith(label: 'Claw');
+
+        if (reconcile) {
+          await registry.reconcileConnections([renamed]);
+        } else {
+          expect(await registry.forConnection(renamed), same(owner));
+        }
+
+        expect(owner.connection.label, 'Claw');
+        expect(observations, greaterThan(0));
+        expect(owner.current!.chat, same(chat));
+        expect(chat.composer.observation.text, 'Keep this draft');
+        expect(host.connectCalls, connects);
+        expect(host.closed, isEmpty);
+        expect(owner.access.connection, same(connection));
+      },
+    );
+  }
+
   test(
     'foreground retries a mounted workspace whose startup stopped',
     () async {

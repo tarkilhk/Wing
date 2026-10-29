@@ -511,7 +511,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
       'Return to Chats and choose Mark as read.';
 
   final ConnectionAccess access;
-  SavedConnection get connection => access.connection;
+  late SavedConnection _connection = access.connection;
+  SavedConnection get connection => _connection;
+
+  /// Saved presentation can change without retargeting this workspace's clients.
+  void observeConnectionLabel(String label) {
+    if (_connection.label == label) return;
+    _connection = _connection.copyWith(label: label);
+    notifyListeners();
+  }
+
   final String connectionIdentity;
   final SharedPreferences preferences;
   final AppPreferences appPreferences;
