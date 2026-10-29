@@ -6,7 +6,7 @@ Feature ID: `chat-inputs`.
 
 ## Sub-features
 
-- `chat-inputs.send` — Submit once and preserve newer unsent text.
+- `chat-inputs.send` — Submit once and preserve newer unsent text. When leaving after Send, [conversation reading position](conversation.md) retains the sent-message boundary so the reply opens at its beginning.
 - `chat-inputs.landscape` — Normal chats, Bot Chats and group discussions use the same responsive composer. Read with a one-row composer on landscape phones. Send/Stop stays visible; expand the controls to reach attachments, context and model options. With the keyboard open, the field and Send/Stop stay on one row; expanding dismisses the keyboard.
 - `chat-inputs.queue` — Hermes owns the accepted FIFO; edits retain authored text and selected references and replace a still-queued message at the tail, steering transfers that exact admission to the current turn, and cancellation names its admission. Unsupported controls remain unavailable. Notes and continuation requests from the remote screen are queued independently and preserve the main draft, references and attachments, even when the text matches.
 - `chat-inputs.revise` — Edit, restore or regenerate using revision-fenced saved row targets. Deep revision explains the number of later user turns removed; harmless last-turn regeneration remains immediate. Fork requires an idle source.

@@ -1,4 +1,4 @@
-/// A stable saved message and the point within it at the viewport's top.
+/// A saved message ID or local presentation identity and the reading point.
 /// Fractions survive changes to typography and viewport size.
 final class TranscriptBookmark {
   const TranscriptBookmark({
@@ -6,7 +6,7 @@ final class TranscriptBookmark {
     this.fraction = 0,
     this.alignment = 0,
   });
-  final int messageId;
+  final Object messageId;
   final double fraction;
   final double alignment;
 }

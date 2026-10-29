@@ -11,6 +11,7 @@ import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/screens/profile_transcript.dart';
 import 'package:wing/core/services/conversation_reading_memory.dart';
 import 'package:wing/core/services/transcript_reading.dart';
+import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/widgets/recent_conversations/conversation_route_scope.dart';
 
 final scope = WorkspaceScope(
@@ -103,7 +104,7 @@ void main() {
 
   late TranscriptReading reader;
   late ConversationTranscriptController navigation;
-  var built = <int>{};
+  var built = <Object>{};
   final read = <int>[];
   setUp(() {
     reader = TranscriptReading.passive(scope: scope);
@@ -120,6 +121,7 @@ void main() {
     WidgetTester tester, {
     double height = 100,
     bool visible = true,
+    Map<Object, double> heights = const {},
   }) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -143,10 +145,13 @@ void main() {
               onReadThrough: read.add,
               tail: const [],
               messageBuilder: (entry) {
-                built.add(entry.id! as int);
+                built.add(entry.id ?? entry.presentationId);
                 return SizedBox(
-                  key: ValueKey<Object>(('message', entry.id)),
-                  height: height,
+                  key: ValueKey<Object>((
+                    'message',
+                    entry.id ?? entry.presentationId,
+                  )),
+                  height: heights[entry.id] ?? height,
                   child: Text(entry.message.text),
                 );
               },
@@ -158,7 +163,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  Finder message(int id) => find.byKey(ValueKey<Object>(('message', id)));
+  Finder message(Object id) => find.byKey(ValueKey<Object>(('message', id)));
   final viewport = find.byKey(const ValueKey('profile-transcript'));
 
   testWidgets('opening latest does not read; actively reaching its end does', (
@@ -386,6 +391,114 @@ void main() {
       expect(paged.readingPosition.readThrough, 8);
     },
   );
+
+  for (final departure in ['thread', 'covered', 'app']) {
+    testWidgets('return after sending keeps reply beginning: $departure', (
+      tester,
+    ) async {
+      reader.installSavedHistory([
+        {'id': 1, 'role': 'assistant', 'content': 'Previous reply'},
+        {'id': 2, 'role': 'user', 'content': 'My latest message'},
+      ]);
+      await mount(tester);
+      if (departure == 'thread') {
+        await tester.pumpWidget(const SizedBox.shrink());
+      } else if (departure == 'covered') {
+        await mount(tester, visible: false);
+      } else {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        await tester.pump();
+      }
+      reader.installSavedHistory([
+        ...reader.messages,
+        {'id': 3, 'role': 'assistant', 'content': 'Beginning of new reply'},
+      ]);
+      if (departure == 'app') {
+        await mount(tester, heights: {3: 2000});
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+      }
+      if (departure == 'covered') {
+        await mount(tester, heights: {3: 2000}, visible: false);
+      }
+      await mount(tester, heights: {3: 2000});
+      final replyTop = tester.getTopLeft(message(3)).dy;
+      final view = tester.getRect(viewport);
+      expect(replyTop, greaterThanOrEqualTo(view.top - 1));
+      expect(replyTop, lessThan(view.bottom));
+      expect(read, isEmpty);
+    });
+  }
+
+  for (final existingHistory in [false, true]) {
+    for (final bufferedReply in [false, true]) {
+      testWidgets('local sent prompt survives saved reconciliation: '
+          'existing history=$existingHistory buffered reply=$bufferedReply', (
+        tester,
+      ) async {
+        if (existingHistory) install(1);
+        reader.appendPrompt(text: 'My latest message');
+        await mount(tester);
+        await tester.pumpWidget(const SizedBox.shrink());
+        if (bufferedReply) {
+          reader.appendAssistant(
+            'Beginning of new reply',
+            turnGeneration: 1,
+            reasoning: '',
+            responseReused: false,
+          );
+        }
+        reader.installSavedPage(
+          ProfileHistoryPage(
+            'chat',
+            [
+              if (existingHistory)
+                {'id': 1, 'role': 'assistant', 'content': 'Message 1'},
+              {'id': 2, 'role': 'user', 'content': 'My latest message'},
+              {
+                'id': 3,
+                'role': 'assistant',
+                'content': 'Beginning of new reply',
+              },
+            ],
+            0,
+            50,
+          ),
+        );
+        expect(reader.readingPosition.resume?.messageId, 2);
+        await mount(tester, heights: {3: 2000});
+        final replyTop = tester.getTopLeft(message(3)).dy;
+        final view = tester.getRect(viewport);
+        expect(replyTop, greaterThanOrEqualTo(view.top - 1));
+        expect(replyTop, lessThan(view.bottom));
+        expect(read, isEmpty);
+      });
+    }
+  }
+
+  testWidgets('different saved prompt cannot acquire the local bookmark', (
+    tester,
+  ) async {
+    install(1);
+    reader.appendPrompt(text: 'My latest message');
+    await mount(tester);
+    await tester.pumpWidget(const SizedBox.shrink());
+    final before = reader.readingPosition.resume;
+    reader.installSavedPage(
+      const ProfileHistoryPage(
+        'chat',
+        [
+          {'id': 1, 'role': 'assistant', 'content': 'Message 1'},
+          {'id': 2, 'role': 'user', 'content': 'A different prompt'},
+          {'id': 3, 'role': 'user', 'content': 'My latest message'},
+        ],
+        0,
+        50,
+      ),
+    );
+    expect(reader.readingPosition.resume, same(before));
+  });
 
   testWidgets('a removed bookmark opens latest', (tester) async {
     install(20);
