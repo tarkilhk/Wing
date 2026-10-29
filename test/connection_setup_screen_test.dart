@@ -1,3 +1,4 @@
+import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_setup_session.dart';
 import 'package:wing/core/services/hermes_cloud.dart';
@@ -28,6 +29,8 @@ Future<void> _tap(WidgetTester tester, String label) async {
   await tester.pumpAndSettle();
   final finder = switch (label) {
     'Save connection icon' ||
+    'Edit gateway address' ||
+    'Edit sign-in or custom setup' ||
     'Cancel' ||
     'Use connection settings' ||
     'Save and open' ||
@@ -161,6 +164,69 @@ void main() {
       await loader.load();
     }
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('wrong endpoint recovery ${brightness.name} $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(320, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        final fixture = ConnectionProbeFixture()..chatGate = Completer<void>();
+        await _pump(
+          tester,
+          fixture: fixture,
+          brightness: brightness,
+          scale: scale,
+        );
+        await _signIn(tester);
+        await _tap(tester, 'Check connection');
+        await tester.pump();
+        expect(find.byType(CircularProgressIndicator), findsWidgets);
+        fixture.chatGate!.completeError(
+          JsonRpcError(
+            'gateway.ready',
+            'Unavailable',
+            reason: 'session_authority_unavailable',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Webapp address'), findsOneWidget);
+        await tester.ensureVisible(find.byTooltip('Edit gateway address'));
+        await tester.pumpAndSettle();
+        await _capture(tester, '${brightness.name}-wrong-endpoint-${scale}x');
+        await _tap(tester, 'Edit gateway address');
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('connection-address')), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const Key('connection-address')),
+          'https://gateway.example.com',
+        );
+        await _tap(tester, 'Continue');
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<TextFormField>(
+                find.byKey(const Key('connection-username')),
+              )
+              .controller!
+              .text,
+          'alex',
+        );
+        expect(
+          tester
+              .widget<TextFormField>(
+                find.byKey(const Key('connection-password')),
+              )
+              .controller!
+              .text,
+          ' secret with spaces ',
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 
   testWidgets(
     'sign-in icon saves an existing connection without verification',

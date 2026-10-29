@@ -50,7 +50,7 @@ class ConnectionGuideScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'You’ll need your Hermes dashboard address and login.',
+                          'You’ll need your Hermes gateway Webapp address and login.',
                           style: textTheme.bodyMedium?.copyWith(
                             color: tokens.muted,
                           ),
@@ -68,11 +68,12 @@ class ConnectionGuideScreen extends StatelessWidget {
                         ),
                         const _GuideStep(
                           number: '2',
-                          title: 'Find your dashboard address',
+                          title: 'Find your gateway Webapp address',
                           children: [
                             Text(
-                              'Start your authenticated Hermes dashboard. Open it '
-                              'in your phone’s browser and check that you can sign in.',
+                              'Enable the Webapp on your Hermes gateway. Open it '
+                              'in your phone’s browser and check that you can sign in. '
+                              'A standalone Dashboard cannot open Wing chats.',
                             ),
                             SizedBox(height: 16),
                             _AddressExamples(),
@@ -80,7 +81,7 @@ class ConnectionGuideScreen extends StatelessWidget {
                             _GuidePoint(
                               lead: 'Keep the full address. ',
                               text:
-                                  'Include any custom port, such as :9119, '
+                                  'Include any custom port, such as :9120, '
                                   'and any path after the hostname.',
                             ),
                             SizedBox(height: 12),
@@ -105,7 +106,7 @@ class ConnectionGuideScreen extends StatelessWidget {
                               lead: 'Connect your agent',
                               text:
                                   ' on the welcome screen starts setup. '
-                                  'Enter your dashboard address, then sign in.',
+                                  'Enter your gateway Webapp address, then sign in.',
                             ),
                             SizedBox(height: 12),
                             _GuidePoint(
@@ -177,7 +178,7 @@ class ConnectionGuideScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 24),
                         StudioButtonPress(
-                          child: OutlinedButton.icon(
+                          child: IconButton.outlined(
                             onPressed: () async {
                               final opened = await openWebPreview(
                                 Uri.parse(
@@ -195,7 +196,7 @@ class ConnectionGuideScreen extends StatelessWidget {
                               }
                             },
                             icon: const Icon(Icons.open_in_new, size: 18),
-                            label: const Text('Full setup instructions'),
+                            tooltip: 'Full setup instructions',
                           ),
                         ),
                       ],
@@ -306,7 +307,7 @@ class _AddressExamples extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final (index, example) in const [
-            ('Private network · example', 'http://hermes.home:9119'),
+            ('Private network · example', 'http://hermes.home:9120'),
             ('HTTPS proxy · example', 'https://hermes.example.com'),
           ].indexed) ...[
             if (index > 0) const Divider(height: 24),

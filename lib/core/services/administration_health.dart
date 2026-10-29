@@ -437,15 +437,20 @@ class AdministrationHealth extends ChangeNotifier {
     final findings = <AdministrationHealthFinding>[];
     final connection = connectionStatus;
     if (connection != null &&
-        (connection.phase == ServerConnectionPhase.unchecked ||
+        (connection.chatEndpointUnsupported ||
+            connection.phase == ServerConnectionPhase.unchecked ||
             connection.phase == ServerConnectionPhase.reconnecting ||
             connection.access == ConnectionAvailability.unavailable ||
             connection.live == ConnectionAvailability.unavailable)) {
       findings.add(
         AdministrationHealthFinding(
           title: 'Connection',
-          detail: connection.description,
-          status: AdministrationHealthStatus.unknown,
+          detail: connection.chatEndpointUnsupported
+              ? connection.problem!
+              : connection.description,
+          status: connection.chatEndpointUnsupported
+              ? AdministrationHealthStatus.failure
+              : AdministrationHealthStatus.unknown,
         ),
       );
     }

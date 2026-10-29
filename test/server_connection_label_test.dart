@@ -42,6 +42,39 @@ void main() {
     });
   }
 
+  testWidgets('unsupported chat endpoint stays red despite healthy HTTP', (
+    tester,
+  ) async {
+    final status = ServerConnectionStatus('Claw')
+      ..observeChatEndpoint(false)
+      ..accessAvailable();
+    addTearDown(status.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.dark),
+        home: Scaffold(
+          body: ServerConnectionLabel(label: 'Claw', status: status),
+        ),
+      ),
+    );
+    final semantics = tester.ensureSemantics();
+    expect(
+      tester
+          .getSemantics(find.byKey(const ValueKey('connection-status-target')))
+          .label,
+      contains('Chat address needs changing'),
+    );
+    semantics.dispose();
+    await tester.tap(find.byKey(const ValueKey('connection-status-target')));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('This address doesn’t support Wing chats.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Open the instance menu'), findsOneWidget);
+    expect(find.textContaining('network returns'), findsNothing);
+  });
+
   for (final brightness in Brightness.values) {
     for (final enlarged in [false, true]) {
       testWidgets(
@@ -81,7 +114,7 @@ void main() {
             find.byKey(const ValueKey('connection-status-target')),
           );
           await tester.pumpAndSettle();
-          final retry = find.byType(OutlinedButton);
+          final retry = find.widgetWithIcon(IconButton, Icons.refresh);
           await tester.ensureVisible(retry);
           await tester.pumpAndSettle();
           final motion = find
@@ -97,7 +130,10 @@ void main() {
               tester.widget<Transform>(motion).transform.entry(0, 0);
           final bounds = tester.getRect(retry);
           expect(bounds.height, greaterThanOrEqualTo(48));
-          expect(find.text('Retry connection'), findsOneWidget);
+          expect(
+            find.widgetWithIcon(IconButton, Icons.refresh),
+            findsOneWidget,
+          );
           await snapshot(tester, '${brightness.name}-$enlarged-ready');
           final gesture = await tester.startGesture(tester.getCenter(retry));
           await tester.pump(const Duration(milliseconds: 100));
@@ -108,7 +144,7 @@ void main() {
           await tester.pump();
           expect(retries, 1);
           expect(find.byIcon(Icons.refresh), findsOneWidget);
-          expect(tester.widget<OutlinedButton>(retry).onPressed, isNull);
+          expect(tester.widget<IconButton>(retry).onPressed, isNull);
           await tester.pump(const Duration(milliseconds: 160));
           expect(scale(), 1);
           expect(tester.getRect(retry), bounds);
@@ -135,7 +171,7 @@ void main() {
           status.failRecovery('chat', 'Could not reconnect. Try again.');
           await tester.pumpAndSettle();
           expect(find.byIcon(Icons.refresh), findsOneWidget);
-          expect(tester.widget<OutlinedButton>(retry).onPressed, isNotNull);
+          expect(tester.widget<IconButton>(retry).onPressed, isNotNull);
           await snapshot(tester, '${brightness.name}-$enlarged-failed');
           expect(tester.takeException(), isNull);
         },
@@ -222,12 +258,14 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('connection-status-target')));
     await tester.pumpAndSettle();
     expect(find.text('Disconnected'), findsOneWidget);
-    await tester.tap(find.text('Retry connection'));
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.refresh));
     await tester.pumpAndSettle();
     expect(retries, 1);
     expect(find.text('Reconnecting'), findsOneWidget);
     expect(
-      tester.widget<OutlinedButton>(find.byType(OutlinedButton)).onPressed,
+      tester
+          .widget<IconButton>(find.widgetWithIcon(IconButton, Icons.refresh))
+          .onPressed,
       isNull,
     );
     status.accessAvailable();
@@ -236,7 +274,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Connected'), findsOneWidget);
     expect(find.text('Available'), findsNWidgets(2));
-    expect(find.text('Retry connection'), findsNothing);
+    expect(find.widgetWithIcon(IconButton, Icons.refresh), findsNothing);
     await tester.tap(find.byTooltip('Close connection details'));
     await tester.pumpAndSettle();
     expect(find.text('Connection details'), findsNothing);

@@ -1150,15 +1150,22 @@ class DashboardClient {
       throw DashboardHttpException(res.statusCode, 'auth/password-login');
     }
     final setCookie = res.headers['set-cookie'] ?? '';
-    // The HTTP package folds Set-Cookie headers, whose expiry dates can also
-    // contain commas. Match the access cookie rather than splitting on commas.
-    final match = RegExp(
-      r'((?:__Host-|__Secure-)?hermes_session_at)=([^;,\s]+)',
-    ).firstMatch(setCookie);
-    if (match == null) {
-      throw Exception('Dashboard login succeeded but no session cookie found');
+    // Match cookie boundaries, not expiry-date commas. Current Hermes Webapp
+    // scopes cookies to its gateway and requires the sign-in binding as well.
+    // Keep only authentication cookies, within this origin's credential owner.
+    final cookies = RegExp(
+      r'(?:^|,\s*)((?:__Host-|__Secure-)?hermes_(?:session_(?:at|rt|provider)|webapp_signin)(?:_[A-Za-z0-9_-]+)?)=("[^";]*"|[^;,\s]+)',
+    ).allMatches(setCookie).toList();
+    if (!cookies.any(
+      (cookie) => RegExp(
+        r'^(?:__Host-|__Secure-)?hermes_session_at(?:_|$)',
+      ).hasMatch(cookie.group(1)!),
+    )) {
+      throw Exception('Hermes login succeeded but no session cookie found');
     }
-    return '${match.group(1)}=${match.group(2)}';
+    return cookies
+        .map((cookie) => '${cookie.group(1)}=${cookie.group(2)}')
+        .join('; ');
   }
 
   Future<String> _getToken() => _authentication.credential(

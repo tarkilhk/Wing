@@ -388,7 +388,10 @@ void main() {
             jsonEncode({
               'jsonrpc': '2.0',
               'method': 'event',
-              'params': {'type': 'gateway.ready', 'payload': {}},
+              'params': {
+                'type': 'gateway.ready',
+                'payload': {'session_authority': true},
+              },
             }),
           );
           return;

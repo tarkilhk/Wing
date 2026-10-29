@@ -199,7 +199,7 @@ void main() {
           await _tap(tester, 'Use an address');
           expect(find.text('Where’s your Hermes?'), findsOneWidget);
           expect(find.text('One address for your agent'), findsOneWidget);
-          expect(find.text('Find my address'), findsOneWidget);
+          expect(find.byTooltip('Find my address'), findsOneWidget);
           expect(find.byType(PlayfulPortrait), findsOneWidget);
           await _capture(tester, '${theme.name}-$scale-address');
           await tester.tap(find.byType(BackButton));

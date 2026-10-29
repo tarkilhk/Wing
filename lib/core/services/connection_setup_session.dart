@@ -18,9 +18,11 @@ class ConnectionSetupCheck {
       error = probe.error,
       httpStatus = probe.httpStatus,
       failedStage = probe.failedStage,
+      chatEndpointUnsupported = probe.chatEndpointUnsupported,
       checkedAt = probe.checkedAt;
   final Map<ConnectionCheck, ConnectionCheckStatus> statuses;
   final bool checking, verified;
+  final bool chatEndpointUnsupported;
   final String? preferredProfileLabel;
   final String? error;
   final int? httpStatus;
@@ -563,6 +565,12 @@ class ConnectionSetupSession extends ChangeNotifier {
     // a borrowed reference never retires the saved registry owner.
     if (_cloudRoute && _probe.error != null) _dropOAuth();
     _go(_cloudRoute ? ConnectionSetupStep.cloud : ConnectionSetupStep.signIn);
+  }
+
+  void reviewAddress() {
+    if (_closed || _saving || _cloudBusy || _cloudRoute) return;
+    _generation++;
+    _go(ConnectionSetupStep.address);
   }
 
   Future<void> save() async {

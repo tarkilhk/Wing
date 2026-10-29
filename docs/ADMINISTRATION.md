@@ -51,6 +51,11 @@ Recent runs starts with 20 records and can expand to the latest 100. Agent runs 
 
 ## Health checks and diagnostics
 
+Connection health includes whether the configured endpoint supports Wing chats.
+A reachable standalone Dashboard produces **Chat address needs changing**; healthy
+HTTP or provider checks do not clear that failure. Open the instance menu →
+**Edit instance** and check the gateway Webapp address.
+
 Health displays **Host**, **Server** and **Profile** separately. Each section has its own refresh and check time; there is no combined healthy verdict.
 
 Host shows the connected machine's CPU, memory, disk, uptime and load when available. Tap the machine row for more details. Disk readings describe the Hermes data volume; process memory describes the API process, rather than all agents. Missing measurements stay unavailable.

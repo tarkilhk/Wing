@@ -517,6 +517,40 @@ void main() {
       },
     );
 
+    for (final prefix in ['', '__Host-', '__Secure-']) {
+      test('Webapp login retains scoped cookies and binding ($prefix)', () async {
+        final client = DashboardClient(
+          host: 'hermes.local',
+          port: 9120,
+          username: 'qa',
+          password: 'secret',
+          httpClient: MockClient((request) async {
+            if (request.url.path == '/auth/password-login') {
+              return http.Response(
+                '{}',
+                200,
+                headers: {
+                  'set-cookie':
+                      '${prefix}hermes_session_at_abc="TOKEN"; Path=/; HttpOnly, '
+                      '${prefix}hermes_session_rt_abc=REFRESH; Expires=Wed, 21 Oct 2030 07:28:00 GMT; Path=/, '
+                      '${prefix}hermes_session_provider_abc=basic; Path=/, '
+                      '${prefix}hermes_webapp_signin_abc=BINDING; Path=/, unrelated=ignore; Path=/',
+                },
+              );
+            }
+            expect(
+              _header(request, 'cookie'),
+              '${prefix}hermes_session_at_abc="TOKEN"; ${prefix}hermes_session_rt_abc=REFRESH; '
+              '${prefix}hermes_session_provider_abc=basic; ${prefix}hermes_webapp_signin_abc=BINDING',
+            );
+            return http.Response('{}', 200);
+          }),
+        );
+        addTearDown(client.close);
+        await client.apiGet('health');
+      });
+    }
+
     test('falls back to homepage token scrape when no credentials', () async {
       final client = DashboardClient(
         host: 'hermes.local',

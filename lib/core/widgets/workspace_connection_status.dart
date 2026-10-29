@@ -33,7 +33,9 @@ class WorkspaceConnectionStatus extends StatelessWidget {
                     child: Text(
                       switch (status.phase) {
                         ServerConnectionPhase.disconnected =>
-                          status.recoveryProblem == null
+                          status.chatEndpointUnsupported
+                              ? 'Chat address needs changing · Tap the status icon.'
+                              : status.recoveryProblem == null
                               ? 'Offline · Tap the status icon to retry.'
                               : 'Chat unavailable · Tap the status icon to retry.',
                         _ => status.description,

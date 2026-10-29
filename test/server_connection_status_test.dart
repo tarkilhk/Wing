@@ -5,6 +5,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/server_connection_status.dart';
 
 void main() {
+  test('HTTP success cannot hide a chat endpoint mismatch', () {
+    final status = ServerConnectionStatus('Claw');
+    addTearDown(status.dispose);
+    status.accessAvailable();
+    status.observeChatEndpoint(false);
+    status.liveChanged('default', true);
+    status.accessAvailable();
+    expect(status.phase, ServerConnectionPhase.disconnected);
+    expect(status.description, 'Chat address needs changing');
+    expect(status.problem, contains('Webapp address'));
+    status.observeChatEndpoint(true);
+    expect(status.phase, ServerConnectionPhase.connected);
+    expect(status.problem, isNull);
+  });
+
   test('a failed recovery stays visible until its owner retries or leaves', () {
     final status = ServerConnectionStatus('Claw');
     addTearDown(status.dispose);
