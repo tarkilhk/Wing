@@ -2,7 +2,6 @@ import 'package:wing/core/widgets/studio_loading.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/services/ws_client.dart';
-import 'support/canonical_gateway_fixture.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/models/chat_runtime.dart';

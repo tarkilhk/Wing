@@ -630,6 +630,18 @@ void main() {
       ),
       findsOneWidget,
     );
+    // Reopening preserves the prior reading point. The failed-file chip is
+    // immediately actionable; use Latest to inspect the transcript's warning.
+    await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
+    await _pumpUntil(
+      tester,
+      () => find
+          .text(
+            'A staged attachment is no longer available. Your draft text was kept.',
+          )
+          .evaluate()
+          .isNotEmpty,
+    );
     expect(
       find.text(
         'A staged attachment is no longer available. Your draft text was kept.',
