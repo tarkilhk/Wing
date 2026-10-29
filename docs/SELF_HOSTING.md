@@ -4,7 +4,7 @@ Wing uses the **Webapp served by the Hermes gateway**. The standalone Dashboard 
 
 ## Make the gateway Webapp reachable
 
-Enable `webapp.enabled` in Hermes and configure its address before restarting the gateway. The default Webapp port is **9120**. For a trusted LAN or VPN, `webapp.host: 0.0.0.0` enables remote access with the dashboard sign-in gate. Behind an HTTPS reverse proxy, keep the loopback bind and set `webapp.public_url` to the public address. Forward WebSocket traffic as well as HTTP to this gateway listener.
+Enable `webapp.enabled` in Hermes and configure its address before restarting the gateway. The default Webapp port is **9120**. For a trusted LAN or VPN, `webapp.host: 0.0.0.0` enables remote access with the dashboard sign-in gate. For an HTTPS reverse proxy on the Hermes host, keep the loopback bind and set `webapp.public_url` to the public address. A proxy on a separate machine, such as pfSense, needs a LAN-reachable listener: use `webapp.host: 0.0.0.0` and target the Hermes host’s LAN address and Webapp port. Forward WebSocket traffic as well as HTTP to this gateway listener.
 
 Use the stock username/password provider on a trusted network or VPN, or the supported OAuth sign-in for an internet-facing deployment. Keep model-provider keys on Hermes. Open the Webapp in your phone’s browser and confirm sign-in works. `localhost` on the phone means the phone itself.
 
