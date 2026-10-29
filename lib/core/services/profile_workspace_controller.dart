@@ -7477,7 +7477,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       chat._replaceableUnsubmittedRuntime = false;
       if (!admittingQueue) {
-        chat.reading.appendPrompt(
+        chat.reading.appendSubmittedPrompt(
+          inputId: ticket.submissionId,
           text: text,
           displayText: displayText,
           attachments: chat.composer.submittedAttachments(ticket),
@@ -8545,7 +8546,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
             .where((row) => row.id == admissionId && row.queued)
             .firstOrNull;
         if (pending != null && pending.text.isNotEmpty) {
-          chat.reading.appendPrompt(text: pending.text);
+          chat.reading.appendSubmittedPrompt(
+            inputId: pending.inputId,
+            text: pending.text,
+          );
         }
         applyChatTranscriptEvent(
           runtime: chat._runtime,

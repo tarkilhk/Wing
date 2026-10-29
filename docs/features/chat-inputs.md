@@ -6,7 +6,7 @@ Feature ID: `chat-inputs`.
 
 ## Sub-features
 
-- `chat-inputs.send` — Submit once and preserve newer unsent text.
+- `chat-inputs.send` — Submit once and preserve newer unsent text. A sent message stays one bubble when Hermes begins processing it, including when processing starts before acknowledgement. Separate submissions with identical text remain separate.
 - `chat-inputs.landscape` — Normal chats, Bot Chats and group discussions use the same responsive composer. Read with a one-row composer on landscape phones. Send/Stop stays visible; expand the controls to reach attachments, context and model options. With the keyboard open, the field and Send/Stop stay on one row; expanding dismisses the keyboard.
 - `chat-inputs.queue` — Hermes owns the accepted FIFO; edits retain authored text and selected references and replace a still-queued message at the tail, steering transfers that exact admission to the current turn, and cancellation names its admission. Unsupported controls remain unavailable. Notes and continuation requests from the remote screen are queued independently and preserve the main draft, references and attachments, even when the text matches.
 - `chat-inputs.revise` — Edit, restore or regenerate using revision-fenced saved row targets. Deep revision explains the number of later user turns removed; harmless last-turn regeneration remains immediate. Fork requires an idle source.
@@ -39,5 +39,16 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```
 
 ## Gotchas
+
+The `one sent bubble through processing start` cases in
+`profile_composer_actions_test.dart` drive Send with a held acknowledgement and
+check both event orders, history replacement and separate identical-text inputs
+in both themes at normal and enlarged text sizes. The attachment case in
+`profile_message_presentation_test.dart` checks that the original authored text,
+attachment and presentation identity survive the start event:
+
+```sh
+flutter test --no-pub test/profile_composer_actions_test.dart test/profile_message_presentation_test.dart
+```
 
 A lost acknowledgment retains the original submission ID and exact prepared payload before dispatch. Recovery may query that same idempotent input by replaying its exact request; it never creates a fresh input from matching text. Unknown execution requires explicit acknowledgment of that admission and generation, without rerunning it. Server-accepted work survives phone process death. Local upload and unsent draft preparation remain on the phone. Secret input must not enter durable draft/history storage. Provider generation needs separately authorized disposable QA state.

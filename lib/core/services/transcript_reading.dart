@@ -67,6 +67,7 @@ final class TranscriptReading implements TranscriptReader {
   Map<String, dynamic>? _lastInterimMessage;
   int _lastInterimTurn = -1;
   final _messagePresentations = Expando<Object>();
+  final _displayedPromptInputs = <String>{};
   final _ownedRows = Expando<bool>();
   final _observedTools = <String, GatewayToolActivity>{};
   // Passive measured facts from this chat's independent timing index. Both the
@@ -248,6 +249,7 @@ final class TranscriptReading implements TranscriptReader {
   void dispose() {
     _closed = true;
     _observedTools.clear();
+    _displayedPromptInputs.clear();
     // Retire read/publication authority immediately, but retain passive facts
     // for the controller's final ordered snapshot. Later chats may be captured
     // only after earlier index writes finish; disposal cannot erase their batch.
@@ -279,6 +281,23 @@ final class TranscriptReading implements TranscriptReader {
   }
 
   void appendStreaming(String text) => updateStreaming('$_streaming$text');
+
+  /// Sending and the later claim event describe the same input. Keep its first
+  /// authored row, including attachments and presentation identity. Remember the
+  /// input across saved-history refreshes so a late start cannot reinsert it.
+  void appendSubmittedPrompt({
+    required String inputId,
+    required String text,
+    String? displayText,
+    Iterable<UserMessageAttachment> attachments = const [],
+  }) {
+    if (_closed || !_displayedPromptInputs.add(inputId)) return;
+    appendPrompt(
+      text: text,
+      displayText: displayText,
+      attachments: attachments,
+    );
+  }
 
   void appendPrompt({
     required String text,
