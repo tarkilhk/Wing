@@ -6,7 +6,7 @@ Feature ID: `connections`.
 
 ## Sub-features
 
-- `connections.verify` — Validate credentials and connection details.
+- `connections.verify` — Validate credentials, the gateway Webapp address and canonical chat authority.
 - `connections.save` — Persist and reopen the selected connection.
 - `connections.recover` — Retry authentication or cancel setup safely.
 
@@ -21,7 +21,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
-  flutter test --no-pub test/connection_setup_session_test.dart test/connection_setup_transport_test.dart test/connection_import_transaction_test.dart test/secure_connection_storage_test.dart test/connection_diagnostics_test.dart
+  flutter test --no-pub test/connection_setup_screen_test.dart test/connection_manager_test.dart test/server_connection_status_test.dart test/live_chat_status_transport_test.dart test/administration_health_test.dart test/connection_setup_session_test.dart test/connection_setup_transport_test.dart test/connection_import_transaction_test.dart test/secure_connection_storage_test.dart test/connection_diagnostics_test.dart
   ```
 
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
@@ -37,3 +37,15 @@ A successful probe does not establish a saved connection. Reopen from Android se
 Rejected HTTP writes record their method, endpoint family and status in phone
 diagnostics. Logs omit authentication values, response bodies and conversation
 content; diagnostics do not change write retry or error behavior.
+
+A standalone Dashboard can pass HTTP profile/history reads but must fail the chat
+check. `ProfileGateway` checks `session_authority` in the `gateway.ready` event payload
+through the stock event envelope before admitting session requests. Setup offers
+**Edit gateway address** and preserves sign-in fields. A known unsupported endpoint
+keeps the shared connection LED and health finding failed even after HTTP success;
+a fresh canonical handshake clears that observation. Webapp password sign-in keeps
+the gateway-scoped session cookies and sign-in binding within the connection’s
+existing origin-bound authentication owner.
+
+For deployed chat readiness, also run the [read-only saved-chat recipe](conversation.md).
+Fixture success does not prove the configured deployment can reopen chats.

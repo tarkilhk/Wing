@@ -40,6 +40,28 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   python3 scripts/test_nightly_native.py transcript-expansion --output build/feature-verification/conversation
   ```
 
+### Read-only saved-chat contract on an existing server
+
+With authorized diagnostic access, supply the gateway Webapp base URL, a private
+username/password JSON file and a profile containing saved messages:
+
+```sh
+WING_HERMES_URL='https://<gateway-webapp-host>' WING_HERMES_LOGIN_FILE=/path/to/private-login.json WING_HERMES_PROFILE='<profile>' flutter test --no-pub test/existing_backend_readonly_live_test.dart
+```
+
+The named `existing saved chats reopen with canonical authority and readable
+history` case reads up to three nonempty chats through production
+`ProfileGateway`, mounts each over a fresh authenticated socket, accepts its
+canonical authority and reads saved history twice. Empty seed data fails. The
+suite reports the running backend commit and reopened count without printing
+transcripts or credentials. It does not send messages, acknowledge reading,
+change settings or update Hermes. This proves the deployed read contract;
+Android navigation and composer behavior remain separate journey checks.
+The gateway case also requires `session_authority == true` in the `gateway.ready` event payload.
+Stock standalone Dashboard can pass login and ping while serving a different
+session API; a current version or accepted subprotocol does not establish
+canonical session support.
+
 ## Gotchas
 
 Git review uses read-only stock Hermes endpoints. It does not stage, revert,

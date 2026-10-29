@@ -438,7 +438,21 @@ class ProfileGateway {
       };
       try {
         await candidate.connect();
-        await candidate.waitForGatewayReady();
+        final ready = await candidate.waitForGatewayReady();
+        requireCurrent();
+        // Stock standalone serve also opens /api/ws, but dispatches a different
+        // session contract. Only the gateway's greeting establishes authority;
+        // version, authentication and WebSocket subprotocol do not.
+        final supported =
+            ready['params']?['payload']?['session_authority'] == true;
+        gateway.connectionStatus?.observeChatEndpoint(supported);
+        if (!supported) {
+          throw JsonRpcError(
+            'gateway.ready',
+            'Canonical session authority is unavailable at this address',
+            reason: 'session_authority_unavailable',
+          );
+        }
         // Stock Hermes creates a fresh profile's store through its gateway
         // owner, not through REST browsing. Complete a bounded scoped read
         // before callers can browse that profile's sessions over HTTP.

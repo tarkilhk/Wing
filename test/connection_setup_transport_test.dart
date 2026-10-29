@@ -10,10 +10,16 @@ import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/connection_setup_probe.dart';
 
 void main() {
-  for (final cancelOpening in [false, true]) {
+  for (final (cancelOpening, authority) in [
+    (false, true),
+    (true, true),
+    (false, false),
+  ]) {
     test(
       cancelOpening
           ? 'cancel closes a socket still waiting for gateway.ready'
+          : !authority
+          ? 'standalone dashboard cannot verify as a usable chat connection'
           : 'real HTTP and WebSocket probe accepts empty history without sending a message',
       () async {
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -53,7 +59,10 @@ void main() {
                 jsonEncode({
                   'jsonrpc': '2.0',
                   'method': 'event',
-                  'params': {'type': 'gateway.ready', 'payload': {}},
+                  'params': {
+                    'type': 'gateway.ready',
+                    'payload': {if (authority) 'session_authority': true},
+                  },
                 }),
               );
             }
@@ -123,10 +132,15 @@ void main() {
           if (cancelOpening) probe.cancel();
           await checking.timeout(const Duration(seconds: 5));
           await closed.future.timeout(const Duration(seconds: 5));
-          expect(probe.verified, !cancelOpening);
+          expect(probe.verified, !cancelOpening && authority);
+          if (!cancelOpening && !authority) {
+            expect(probe.failedStage, ConnectionCheck.chat);
+            expect(probe.error, contains('gateway'));
+            expect(probe.error, contains('address'));
+          }
           expect(
             socketRequests,
-            cancelOpening
+            cancelOpening || !authority
                 ? isEmpty
                 : [
                     {
@@ -135,7 +149,10 @@ void main() {
                     },
                   ],
           );
-          expect(paths.contains('/agent/api/sessions'), !cancelOpening);
+          expect(
+            paths.contains('/agent/api/sessions'),
+            !cancelOpening && authority,
+          );
         } finally {
           probe.dispose();
           await socket?.close();

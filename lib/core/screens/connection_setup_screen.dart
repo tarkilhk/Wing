@@ -21,7 +21,7 @@ import '../widgets/studio_error.dart';
 import '../widgets/wing_wordmark.dart';
 import 'connection_guide_screen.dart';
 
-/// One dashboard address, an explicit sign-in, and a provisional access check.
+/// One gateway Webapp address, an explicit sign-in, and a provisional access check.
 class ConnectionSetupScreen extends StatefulWidget {
   const ConnectionSetupScreen({required this.createSession, super.key});
 
@@ -353,7 +353,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
                 subtitle: Text(
                   cloud
                       ? 'Find your instances with Nous Portal'
-                      : 'Connect with a dashboard address',
+                      : 'Use your gateway’s Webapp address',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _session.chooseSource(cloud: cloud),
@@ -541,14 +541,14 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         if (MediaQuery.viewInsetsOf(context).bottom == 0) _artwork(),
         _heading(
           'Where’s your Hermes?',
-          'Use the dashboard address you open in your phone’s browser.',
+          'Use your Hermes gateway’s Webapp address. A standalone Dashboard address cannot open chats.',
         ),
         viewportSelection(
           TextFormField(
             key: const Key('connection-address'),
             controller: _address,
             decoration: const InputDecoration(
-              labelText: 'Dashboard address',
+              labelText: 'Gateway Webapp address',
               hintText: 'https://hermes.example.com',
               helperText: 'Include the port and any path in this one address.',
               helperMaxLines: 4,
@@ -587,10 +587,10 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
         Align(
           alignment: AlignmentDirectional.centerStart,
           child: StudioButtonPress(
-            child: TextButton.icon(
+            child: IconButton(
               onPressed: _findAddress,
               icon: const Icon(Icons.help_outline, size: 18),
-              label: const Text('Find my address'),
+              tooltip: 'Find my address',
             ),
           ),
         ),
@@ -779,7 +779,8 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
       const SizedBox(height: 16),
       if (_probe.error case final message?) ...[
         StudioError(message),
-        if (_probe.failedStage == ConnectionCheck.chat) ...[
+        if (_probe.failedStage == ConnectionCheck.chat &&
+            !_probe.chatEndpointUnsupported) ...[
           const SizedBox(height: 12),
           Text(
             'If you use a reverse proxy, check WebSocket forwarding for ${_state.chatPath}/api/ws.',
@@ -795,7 +796,7 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
               child: viewportSelection(
                 SelectableText(
                   [
-                    'Dashboard: ${_address.text}',
+                    'Gateway: ${_address.text}',
                     'Live chat: ${_state.chatSocketUrl}',
                     if (_probe.httpStatus != null) 'HTTP ${_probe.httpStatus}',
                     if (_probe.checkedAt != null)
@@ -808,13 +809,19 @@ class _ConnectionSetupScreenState extends State<ConnectionSetupScreen> {
           ],
         ),
         StudioButtonPress(
-          child: TextButton(
-            onPressed: _session.editSignIn,
-            child: Text(
-              _cloudRoute
-                  ? 'Sign in to Hermes Cloud again'
-                  : 'Edit sign-in or custom setup',
-            ),
+          child: IconButton(
+            onPressed:
+                _probe.chatEndpointUnsupported &&
+                    !_cloudRoute &&
+                    _access.chatUrl.isEmpty
+                ? _session.reviewAddress
+                : _session.editSignIn,
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: _cloudRoute
+                ? 'Sign in to Hermes Cloud again'
+                : _probe.chatEndpointUnsupported && _access.chatUrl.isEmpty
+                ? 'Edit gateway address'
+                : 'Edit sign-in or custom setup',
           ),
         ),
       ] else
@@ -1134,7 +1141,7 @@ class _CustomSetupScreenState extends State<_CustomSetupScreen> {
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Use a separate chat address'),
                   subtitle: const Text(
-                    'Normally, live chat uses your dashboard address.',
+                    'Normally, live chat uses your gateway Webapp address.',
                   ),
                   value: _separate,
                   onChanged: (value) => setState(() => _separate = value),

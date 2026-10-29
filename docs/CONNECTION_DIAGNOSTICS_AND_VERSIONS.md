@@ -1,10 +1,12 @@
 # Connections, diagnostics and backend updates
 
-Start with [Getting started](GETTING_STARTED.md) for your first connection and [Self-hosted setup](SELF_HOSTING.md) for dashboard authentication and proxy help. Wing needs the Hermes dashboard and Desktop Gateway, rather than a model-provider API key alone.
+Start with [Getting started](GETTING_STARTED.md) for your first connection and [Self-hosted setup](SELF_HOSTING.md) for dashboard authentication and proxy help. Wing needs the Webapp served by the Hermes gateway. A standalone Dashboard URL cannot open chats.
 
 ## Returning to Wing
 
 Wing attempts to restore the visible workspace connection when you return to the app or open a disconnected workspace. Temporary failures trigger automatic retries; **Retry connection** remains available if recovery fails. Returning also retries a workspace that failed during its initial loading. Recovery preserves drafts and does not automatically resubmit a message whose delivery is uncertain.
+
+A **Chat address needs changing** status means the server is reachable but its endpoint does not support Wing chats. HTTP health alone cannot make this LED green. Open the instance menu → **Edit instance**, enter the gateway Webapp base URL, then check and save. Reconnecting to the same standalone Dashboard cannot fix this mismatch.
 
 Changing a connection's address or credentials replaces its access configuration. Check that you are opening the intended saved instance before sending work.
 
@@ -16,7 +18,7 @@ If recovery fails, tap the connection status icon and choose **Retry connection*
 
 ## Access headers
 
-Authenticated proxies can use **Sign in → Custom setup → Access headers**. Most connections need only the dashboard URL and login. Leave a replacement blank to keep a saved value, enter a replacement explicitly, or remove it. Header names must be unique ignoring case; names and values must be single-line. Managed authentication headers cannot be overridden.
+Authenticated proxies can use **Sign in → Custom setup → Access headers**. Most connections need only the gateway Webapp URL and login. Leave a replacement blank to keep a saved value, enter a replacement explicitly, or remove it. Header names must be unique ignoring case; names and values must be single-line. Managed authentication headers cannot be overridden.
 
 Access secrets use secure device storage. They are included in explicit configuration exports, which can be encrypted with a passphrase. See [Configuration backups](CONFIGURATION_BACKUPS.md).
 

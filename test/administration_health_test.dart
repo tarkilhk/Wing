@@ -534,6 +534,11 @@ void main() {
         finding('Provider configuration').status,
         AdministrationHealthStatus.healthy,
       );
+      connection.observeChatEndpoint(false);
+      connection.accessAvailable();
+      expect(finding('Connection').status, AdministrationHealthStatus.failure);
+      expect(finding('Connection').detail, contains('Webapp address'));
+      connection.observeChatEndpoint(true);
       connection.beginRecovery('workspace');
       expect(finding('Connection').status, AdministrationHealthStatus.unknown);
       expect(health.profileFindings.first.detail, 'Reconnecting');

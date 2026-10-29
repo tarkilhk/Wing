@@ -42,6 +42,23 @@ header geometry and absence of Flutter exceptions do not establish data health.
 Report fixture layout, contract/recovery, live read-only and phone installation
 checks separately. A startup PID or screenshot count is not a live feature journey.
 
+For session API changes, prove existing-chat reopening before claiming delivery
+readiness. Run the [read-only saved-chat recipe](../../../../docs/features/conversation.md)
+through the candidate's production gateway against the intended deployment.
+Require nonempty saved history and accepted canonical session authority, including
+a repeat reopen; record the app revision and the running backend's `/api/health`
+commit and `session_authority == true` in the `gateway.ready` event payload. Current stock standalone
+`serve` and the canonical gateway expose different session contracts at `/api/ws`;
+the version or negotiated WebSocket subprotocol alone cannot distinguish them.
+Login, ping, capability discovery and fixtures cannot substitute for this
+check. An empty dataset, opt-in skip or unavailable deployment leaves this boundary
+unverified. An API refusal fails it, even when every fixture journey passes.
+Do not manufacture missing authority in fixtures to close a deployed failure.
+If a breaking API change needs a different endpoint or server update, report that
+dependency before phone delivery; deployment authorization remains separate. No fallback or backend
+mutation is implied by verification. Reuse this evidence while the relevant app
+inputs and running backend commit are unchanged.
+
 Native journeys with ongoing animation use bounded, state-based waits. Keep live
 rendering enabled across external screenshot waits when observing motion; an
 explicit-pump-only frame policy can discard native timestamps and skip a short

@@ -22,8 +22,12 @@ class ServerConnectionStatus extends ChangeNotifier {
   final Set<String> _recoveries = {};
   final Map<String, String> _failedRecoveries = {};
   String? _accessProblem;
+  bool? _chatEndpointSupported;
+  bool get chatEndpointUnsupported => _chatEndpointSupported == false;
   String? get recoveryProblem => _failedRecoveries.values.lastOrNull;
-  String? get problem => recoveryProblem ?? _accessProblem;
+  String? get problem => chatEndpointUnsupported
+      ? chatEndpointFailureMessage
+      : recoveryProblem ?? _accessProblem;
   Future<void> Function()? retry;
   VoidCallback? onInterruption;
   bool _closed = false;
@@ -41,6 +45,7 @@ class ServerConnectionStatus extends ChangeNotifier {
       _live[owner] == ConnectionAvailability.available;
   ServerConnectionPhase get phase {
     if (_recoveries.isNotEmpty) return ServerConnectionPhase.reconnecting;
+    if (chatEndpointUnsupported) return ServerConnectionPhase.disconnected;
     if (_failedRecoveries.isNotEmpty) return ServerConnectionPhase.disconnected;
     if (access == ConnectionAvailability.available &&
         live == ConnectionAvailability.available) {
@@ -57,21 +62,33 @@ class ServerConnectionStatus extends ChangeNotifier {
     return ServerConnectionPhase.unchecked;
   }
 
-  String get description => switch (phase) {
-    ServerConnectionPhase.unchecked => 'Not checked',
-    ServerConnectionPhase.connected => 'Connected',
-    ServerConnectionPhase.reconnecting => 'Reconnecting',
-    ServerConnectionPhase.limited =>
-      live == ConnectionAvailability.unavailable
-          ? 'Live updates interrupted'
-          : live == ConnectionAvailability.unchecked
-          ? 'Live chat not checked'
-          : 'Server access interrupted',
-    ServerConnectionPhase.disconnected =>
-      recoveryProblem == null ? 'Disconnected' : 'Conversation unavailable',
-  };
+  String get description => chatEndpointUnsupported && _recoveries.isEmpty
+      ? 'Chat address needs changing'
+      : switch (phase) {
+          ServerConnectionPhase.unchecked => 'Not checked',
+          ServerConnectionPhase.connected => 'Connected',
+          ServerConnectionPhase.reconnecting => 'Reconnecting',
+          ServerConnectionPhase.limited =>
+            live == ConnectionAvailability.unavailable
+                ? 'Live updates interrupted'
+                : live == ConnectionAvailability.unchecked
+                ? 'Live chat not checked'
+                : 'Server access interrupted',
+          ServerConnectionPhase.disconnected =>
+            recoveryProblem == null
+                ? 'Disconnected'
+                : 'Conversation unavailable',
+        };
   void _changed() {
     if (!_closed) notifyListeners();
+  }
+
+  /// The exact socket's stock greeting owns endpoint support. HTTP reads and
+  /// auxiliary socket liveness cannot clear a known incompatible chat address.
+  void observeChatEndpoint(bool supported) {
+    if (_closed) return;
+    _chatEndpointSupported = supported;
+    _changed();
   }
 
   void beginRecovery(String owner) {

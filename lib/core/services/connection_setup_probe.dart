@@ -8,6 +8,7 @@ import '../models/hermes_profile.dart';
 import 'connection_manager.dart';
 import 'profile_gateway.dart';
 import 'profiles_repository.dart';
+import 'workspace_connection_failure.dart';
 
 enum ConnectionCheck { profiles, chat, history }
 
@@ -81,6 +82,7 @@ class ConnectionSetupProbe extends ChangeNotifier {
   String? error;
   int? httpStatus;
   ConnectionCheck? failedStage;
+  bool chatEndpointUnsupported = false;
   DateTime? checkedAt;
 
   bool get verified =>
@@ -129,6 +131,7 @@ class ConnectionSetupProbe extends ChangeNotifier {
       if (generation != _generation) return;
       statuses[stage] = ConnectionCheckStatus.failed;
       failedStage = stage;
+      chatEndpointUnsupported = isUnsupportedChatEndpoint(failure);
       httpStatus = failure is DashboardHttpException
           ? failure.statusCode
           : null;
@@ -145,10 +148,11 @@ class ConnectionSetupProbe extends ChangeNotifier {
   }
 
   static String _failureMessage(Object error, ConnectionCheck stage) {
+    if (isUnsupportedChatEndpoint(error)) return chatEndpointFailureMessage;
     if (error is CloudAccessException) return error.message;
     if (error is DashboardHttpException) {
       if ([301, 302, 303, 307, 308].contains(error.statusCode)) {
-        return 'This address redirects. Enter the final dashboard address.';
+        return 'This address redirects. Enter the final gateway Webapp address.';
       }
       if (error.statusCode == 401 && error.endpoint == 'auth/password-login') {
         return 'The dashboard rejected this username or password.';
@@ -158,7 +162,7 @@ class ConnectionSetupProbe extends ChangeNotifier {
       }
       if (stage == ConnectionCheck.profiles &&
           [404, 405].contains(error.statusCode)) {
-        return 'This server doesn’t provide the profile access Wing needs. Check the dashboard address and Connection guide.';
+        return 'This server doesn’t provide the profile access Wing needs. Check the gateway Webapp address and Connection guide.';
       }
     }
     if (error is TimeoutException) {
@@ -167,7 +171,7 @@ class ConnectionSetupProbe extends ChangeNotifier {
     return switch (stage) {
       ConnectionCheck.profiles =>
         error is FormatException
-            ? 'The server returned an unexpected profile response. Check the dashboard address and Connection guide.'
+            ? 'The server returned an unexpected profile response. Check the gateway Webapp address and Connection guide.'
             : 'Couldn’t reach your Hermes profiles. Check the address, sign-in and your phone’s network.',
       ConnectionCheck.chat =>
         'Profiles are available, but live chat couldn’t connect.',
@@ -186,6 +190,7 @@ class ConnectionSetupProbe extends ChangeNotifier {
     error = null;
     httpStatus = null;
     failedStage = null;
+    chatEndpointUnsupported = false;
     checkedAt = null;
     for (final stage in ConnectionCheck.values) {
       statuses[stage] = ConnectionCheckStatus.waiting;

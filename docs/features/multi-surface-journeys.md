@@ -44,3 +44,9 @@ Phone reading is covered by the `transcript-expansion` family: enter table readi
 ## Gotchas
 
 Fixture native journeys, stock transport and deployed-provider acceptance prove different boundaries. Android owner recreation is not process death; require the separate process-recovery verdict. Keep each failed aggregate failed even when a focused recovery passes. Do not sum overlapping case counts. Run families serially on this workspace; retain artifacts after the owned emulator and backend are retired.
+
+For `journeys.conversation`, also use the [read-only saved-chat contract](conversation.md#read-only-saved-chat-contract-on-an-existing-server)
+when session APIs change. The fixture journeys and stock profile/project runner
+do not establish that existing chats reopen on the intended deployment. This
+read check needs no provider turn; sending/queueing still requires its separate
+authorized journey.

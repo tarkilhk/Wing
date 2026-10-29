@@ -487,8 +487,17 @@ class _ConnectionDetails extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 16),
                   child: StudioError(status!.problem!),
                 ),
+              if (status?.chatEndpointUnsupported == true)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: Text(
+                    'Open the instance menu, choose Edit instance and check the gateway Webapp address.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
               if (status?.phase == ServerConnectionPhase.disconnected &&
-                  status?.recoveryProblem == null)
+                  status?.recoveryProblem == null &&
+                  status?.chatEndpointUnsupported != true)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: Text(
@@ -501,13 +510,13 @@ class _ConnectionDetails extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: StudioButtonPress(
-                    child: OutlinedButton.icon(
+                    child: IconButton.outlined(
                       onPressed:
                           status?.phase == ServerConnectionPhase.reconnecting
                           ? null
                           : () => status!.retry!(),
                       icon: const Icon(Icons.refresh),
-                      label: const Text('Retry connection'),
+                      tooltip: 'Retry connection',
                     ),
                   ),
                 ),

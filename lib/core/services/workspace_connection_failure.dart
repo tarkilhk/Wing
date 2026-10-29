@@ -7,6 +7,13 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'connection_manager.dart';
 import 'ws_client.dart';
 
+const chatEndpointFailureMessage =
+    'This address doesn’t support Wing chats. Use '
+    'the Hermes gateway’s Webapp address.';
+
+bool isUnsupportedChatEndpoint(Object error) =>
+    error is JsonRpcError && error.reason == 'session_authority_unavailable';
+
 /// Only failures that can recover without changing settings are retried.
 bool isTemporaryWorkspaceFailure(Object error) {
   if (error is DashboardRequestNotSentException) {
@@ -60,6 +67,7 @@ Future<T> retryTransientRead<T>(
 }
 
 String workspaceFailureMessage(Object error) {
+  if (isUnsupportedChatEndpoint(error)) return chatEndpointFailureMessage;
   if (error is DashboardHttpException) {
     if (error.statusCode == 401) {
       return 'Sign-in was rejected. Check this connection’s sign-in settings.';
@@ -75,6 +83,7 @@ String workspaceFailureMessage(Object error) {
 }
 
 String conversationOpeningFailureMessage(Object error) {
+  if (isUnsupportedChatEndpoint(error)) return chatEndpointFailureMessage;
   if (error is TlsException ||
       error is DashboardHttpException &&
           {401, 403}.contains(error.statusCode)) {
