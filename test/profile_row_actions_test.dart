@@ -104,10 +104,26 @@ void main() {
     expect(host.deleteAttempts, hasLength(attempts));
   }
 
-  Future<void> showWorkspace(WidgetTester tester) async {
+  Future<void> showWorkspace(
+    WidgetTester tester, {
+    Brightness brightness = Brightness.light,
+    double scale = 1,
+    bool capture = false,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: wingTheme(Brightness.light),
+        theme: wingTheme(brightness),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(scale),
+            disableAnimations: capture
+                ? true
+                : MediaQuery.disableAnimationsOf(context),
+          ),
+          child: capture
+              ? RepaintBoundary(key: formFamilyCapture, child: child!)
+              : child!,
+        ),
         home: ProfileWorkspaceScreen(
           controller: controller,
           createBotsSession: () => BotsSession((_) async => const []),
@@ -122,7 +138,11 @@ void main() {
     await filterChatsToProfile(tester, 'personal');
   }
 
-  Future<void> menu(WidgetTester tester, String id) async {
+  Future<void> menu(
+    WidgetTester tester,
+    String id, {
+    bool overflow = false,
+  }) async {
     final row = find.byKey(ValueKey('chat-personal-$id'));
     await tester.scrollUntilVisible(
       row,
@@ -139,7 +159,13 @@ void main() {
     );
     await Scrollable.ensureVisible(tester.element(row), alignment: 0.45);
     await tester.pumpAndSettle();
-    await tester.longPress(row);
+    if (overflow) {
+      await tester.tap(
+        find.descendant(of: row, matching: find.byTooltip('Chat actions')),
+      );
+    } else {
+      await tester.longPress(row);
+    }
     await tester.pumpAndSettle();
   }
 
@@ -1581,6 +1607,49 @@ void main() {
     expect((host.moves.single.$2['payload'] as Map)['cwd'], '/Mobile app');
     expect(tester.takeException(), isNull);
   });
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'move confirmation from Chats overflow keeps icon contrast ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 2 ? 320 : 390, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await showWorkspace(
+            tester,
+            brightness: brightness,
+            scale: scale,
+            capture: true,
+          );
+          await filterChatsToProfile(tester, 'personal');
+          await menu(tester, 'newest', overflow: true);
+          await tester.tap(find.text('Move to project'));
+          await tester.pumpAndSettle();
+          final destination = find.byKey(const ValueKey('move-project-p2'));
+          await tester.ensureVisible(destination);
+          await tester.tap(destination);
+          await tester.pumpAndSettle();
+          final glyph = find.byIcon(Icons.drive_file_move_outlined);
+          final paint = tester.widget<RichText>(
+            find.descendant(of: glyph, matching: find.byType(RichText)),
+          );
+          expect(
+            paint.text.style!.color,
+            Theme.of(tester.element(glyph)).colorScheme.onPrimary,
+          );
+          expect(find.byTooltip('Move chat').hitTestable(), findsOneWidget);
+          await captureFormFamily(
+            tester,
+            'move-overflow-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byTooltip('Cancel'));
+          await tester.pumpAndSettle();
+          expect(host.moves, isEmpty);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
   testWidgets('move from Chats works for an idle open chat', (tester) async {
     host.active = true;
     host.lazyResume = true;
@@ -1625,6 +1694,84 @@ void main() {
     await tester.pumpAndSettle();
     expect(host.moves, isEmpty);
   });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'remove project reports busy refusal and retries after work finishes ${brightness.name} $scale',
+        (tester) async {
+          await tester.runAsync(() => controller.openSession(key()));
+          final chat = controller.current!.chat!;
+          await controller.moveSessionToProject(
+            key(),
+            controller.current!.projects.first,
+            canDispatch: () => true,
+          );
+          host.moves.clear();
+          tester.view.physicalSize = Size(scale == 2 ? 320 : 390, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: true,
+                ),
+                child: RepaintBoundary(key: formFamilyCapture, child: child!),
+              ),
+              home: ProfileWorkspaceScreen(
+                controller: controller,
+                createBotsSession: () => BotsSession((_) async => const []),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          emitChatEvent(controller, chat, 'message.start');
+          expect(chat.runtime.blocksTurnAdmission, isTrue);
+          host.activeStatus = 'working';
+          await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.tap(find.byTooltip('Remove from project'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          await tester.tap(find.byTooltip('Move chat'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+            find.text('Wait for this chat to finish before moving.'),
+            findsOneWidget,
+          );
+          expect(host.moves, isEmpty);
+          expect(host.defaultFolderProfiles, isEmpty);
+          expect(tester.takeException(), isNull);
+          await captureFormFamily(
+            tester,
+            'move-busy-${brightness.name}-$scale',
+          );
+          emitChatEvent(controller, chat, 'turn.end', {'status': 'completed'});
+          host.activeStatus = 'idle';
+          expect(chat.runtime.blocksTurnAdmission, isFalse);
+          await tester.tap(find.byTooltip('Remove from project'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Move chat'));
+          await tester.pumpAndSettle();
+          expect(
+            (host.moves.single.$2['payload'] as Map)['cwd'],
+            '/personal/default',
+          );
+          expect(
+            find.byKey(const ValueKey('chat-project-sheet')),
+            findsNothing,
+          );
+          expect(tester.takeException(), isNull);
+          await tester.pumpWidget(const SizedBox.shrink());
+        },
+      );
+    }
+  }
 
   testWidgets(
     'remove project confirms and shows progress through every move stage',

@@ -18,6 +18,8 @@ To remove a chat from its project, open Move to project from its row actions or
 tap the project in the conversation header. Tap the cross in Current project,
 then confirm. Cancel keeps the assignment. Chats already in the default bucket
 have no removal cross. A failed move keeps the picker open with an error and retry.
+If the chat is still working, confirmation shows why it cannot move. Retry in
+the same picker after the work finishes; admission uses the current chat state.
 Choosing another project and tapping the removal cross use the same Move chat
 confirmation, naming the destination and keeping messages and drafts.
 
@@ -51,6 +53,8 @@ folder read, mutation snapshot and write separately. They cover cancellation,
 read/write failure and retry, immediate membership cleanup, draft preservation,
 and profile retirement. The design suite inspects the assigned card and
 confirmation at normal and enlarged text in both themes.
+The Chats overflow checks enter through the row's trailing action button and
+verify that its inherited icon styling cannot fade the filled confirmation glyph.
 
 ## Gotchas
 

@@ -1877,7 +1877,13 @@ final class BrowserActionSession extends ChangeNotifier {
       );
       return false;
     }
-    if (!choices.any((choice) => choice.action == action && choice.enabled)) {
+    // Move eligibility is rechecked by the workspace owner at dispatch. A menu's
+    // captured busy flag must not silently swallow confirmation or later retry.
+    if (!choices.any(
+      (choice) =>
+          choice.action == action &&
+          (choice.enabled || action == BrowserAction.move),
+    )) {
       return false;
     }
     final trimmed = name.trim();

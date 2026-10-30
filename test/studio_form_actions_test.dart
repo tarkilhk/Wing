@@ -9,6 +9,49 @@ import 'support/form_family_capture.dart';
 void main() {
   setUpAll(loadFormFamilyFonts);
   for (final brightness in Brightness.values) {
+    testWidgets(
+      'filled confirmation keeps contrast when opened from a list row ${brightness.name}',
+      (tester) async {
+        final theme = wingTheme(brightness);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              body: ListTile(
+                title: const Text('Saved chat'),
+                trailing: Builder(
+                  builder: (context) => IconButton(
+                    tooltip: 'Chat actions',
+                    icon: const Icon(Icons.more_horiz),
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (context) => StudioDialog(
+                        title: const Text('Move chat?'),
+                        actions: [
+                          StudioFormActions(
+                            onCancel: () {},
+                            onConfirm: () {},
+                            confirmLabel: 'Move chat',
+                            confirmIcon: Icons.drive_file_move_outlined,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.byTooltip('Chat actions'));
+        await tester.pumpAndSettle();
+        final glyph = find.byIcon(Icons.drive_file_move_outlined);
+        final richText = tester.widget<RichText>(
+          find.descendant(of: glyph, matching: find.byType(RichText)),
+        );
+        expect(richText.text.style!.color, theme.colorScheme.onPrimary);
+      },
+    );
     for (final scale in [1.0, 2.0]) {
       testWidgets(
         'shared form preserves body and keyboard targets ${brightness.name} $scale',
