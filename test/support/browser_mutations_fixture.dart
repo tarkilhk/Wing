@@ -25,8 +25,6 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
   Completer<void>? folderCreateGate;
   bool failFolderCreate = false;
   Completer<void>? defaultFolderGate;
-  bool failDefaultFolder = false;
-  final defaultFolderProfiles = <String>[];
   bool failProjectUpdate = false;
   bool failPrimaryFolder = false;
   final resumeRuntimeIds = <String, String>{};
