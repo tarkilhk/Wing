@@ -35,6 +35,8 @@ The creation-route host checks enter New project through its FAB and menu,
 verify the profile default and generated location, save the proposed path, and
 retain manual locations through name edits and delayed reads. They also cover
 read failure/retry, cancellation, and the existing folder and edit journeys.
+The native creation journey waits for the new project's row menu to become
+reachable after keyboard dismissal before verifying edit and delete actions.
 
 ## Gotchas
 
