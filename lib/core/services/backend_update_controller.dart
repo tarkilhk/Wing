@@ -64,13 +64,18 @@ class BackendUpdateController extends ChangeNotifier {
       channel?.error == null &&
       channel?.targetSha != null;
 
-  bool get canSelectChannel =>
+  bool get canOpenChannelEditor =>
       !checking &&
       !statusLoading &&
       !starting &&
       !channelSaving &&
       !_requestOutstanding &&
       phase != BackendUpdatePhase.running &&
+      check?.canApply != false &&
+      channel?.canSelect != false;
+
+  bool get canSelectChannel =>
+      canOpenChannelEditor &&
       check?.canApply == true &&
       channel?.canSelect == true;
 

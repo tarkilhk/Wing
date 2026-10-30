@@ -112,7 +112,7 @@ class _BackendVersionCardState extends State<BackendVersionCard>
   Future<void> _editChannel() async {
     final controller = _controller;
     final channel = controller.channel;
-    if (!controller.canSelectChannel || channel == null) return;
+    if (!controller.canOpenChannelEditor) return;
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
@@ -252,22 +252,22 @@ class _BackendVersionCardState extends State<BackendVersionCard>
                       color: tokens.muted,
                     ),
                   ),
-                if (channel != null)
+                if (channel != null || check?.canApply != false)
                   Row(
                     children: [
                       Expanded(
                         child: Text(
-                          channel.label,
+                          channel?.label ?? 'Channel unavailable',
                           style: tokens.typography.label.copyWith(
                             color: tokens.muted,
                           ),
                         ),
                       ),
-                      if (channel.canSelect)
+                      if (channel?.canSelect != false)
                         StudioButtonPress(
                           child: IconButton(
                             tooltip: 'Change update channel',
-                            onPressed: controller.canSelectChannel
+                            onPressed: controller.canOpenChannelEditor
                                 ? _editChannel
                                 : null,
                             icon: const Icon(Icons.tune, size: 18),
@@ -516,7 +516,7 @@ class _BackendChannelDialog extends StatefulWidget {
     required this.isCurrent,
   });
   final BackendUpdateController controller;
-  final BackendUpdateChannel initial;
+  final BackendUpdateChannel? initial;
   final String host;
   final bool Function() isCurrent;
   @override
@@ -524,11 +524,59 @@ class _BackendChannelDialog extends StatefulWidget {
 }
 
 class _BackendChannelDialogState extends State<_BackendChannelDialog> {
-  late String _choice = widget.initial.name;
+  late BackendUpdateChannel? _initial = widget.initial;
+  late String? _choice = widget.initial?.name;
   bool _pending = false;
+  bool _loading = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (_initial == null) {
+      _loading = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _readChannel();
+      });
+    }
+  }
+
+  Future<void> _reload() async {
+    if (_loading || _pending || !widget.isCurrent()) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    await _readChannel();
+  }
+
+  Future<void> _readChannel() async {
+    await widget.controller.checkForUpdate();
+    if (!mounted) return;
+    setState(() {
+      _loading = false;
+      if (!widget.isCurrent()) {
+        _error = 'This server is no longer selected. Close this editor.';
+      } else if (widget.controller.canSelectChannel) {
+        _initial = widget.controller.channel;
+        _choice ??= _initial!.name;
+      } else {
+        _error =
+            'The current channel is unavailable. Check again to enable saving.';
+      }
+    });
+  }
+
   Future<void> _save() async {
-    if (_pending || !widget.isCurrent()) return;
+    final initial = _initial;
+    final choice = _choice;
+    if (_pending ||
+        _loading ||
+        initial == null ||
+        choice == null ||
+        !widget.isCurrent()) {
+      return;
+    }
     setState(() {
       _pending = true;
       _error = null;
@@ -546,14 +594,14 @@ class _BackendChannelDialogState extends State<_BackendChannelDialog> {
     final track = owner.channel;
     final sameInstall =
         track != null &&
-        track.installId == widget.initial.installId &&
-        track.installPath == widget.initial.installPath &&
-        track.home == widget.initial.home;
+        track.installId == initial.installId &&
+        track.installPath == initial.installPath &&
+        track.home == initial.home;
     final saved =
         sameInstall &&
-        (_choice == track.name ||
+        (choice == track.name ||
             await owner.selectChannel(
-              _choice,
+              choice,
               track,
               canDispatch: () => mounted && widget.isCurrent(),
             ));
@@ -584,7 +632,9 @@ class _BackendChannelDialogState extends State<_BackendChannelDialog> {
           const SizedBox(height: 16),
           StudioButtonPress(
             child: DropdownButtonFormField<String>(
+              key: ValueKey(_initial?.name),
               initialValue: _choice,
+              hint: const Text('Unavailable'),
               isExpanded: true,
               decoration: const InputDecoration(labelText: 'Channel'),
               items: [
@@ -596,36 +646,65 @@ class _BackendChannelDialogState extends State<_BackendChannelDialog> {
                   value: 'main',
                   child: Text('Main branch'),
                 ),
-                if (!{'stable', 'main'}.contains(widget.initial.name))
+                if (_initial != null &&
+                    !{'stable', 'main'}.contains(_initial!.name))
                   DropdownMenuItem(
-                    value: widget.initial.name,
-                    child: Text(widget.initial.name),
+                    value: _initial!.name,
+                    child: Text(_initial!.name),
                   ),
               ],
-              onChanged: _pending
+              onChanged: _pending || _loading || _initial == null
                   ? null
                   : (value) => setState(() => _choice = value!),
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            _choice == 'main'
-                ? 'Follow commits on main.'
-                : _choice == 'stable'
-                ? 'Follow published releases.'
-                : 'Keep the configured preview channel.',
-          ),
+          if (_choice != null)
+            Text(
+              _choice == 'main'
+                  ? 'Follow commits on main.'
+                  : _choice == 'stable'
+                  ? 'Follow published releases.'
+                  : 'Keep the configured preview channel.',
+            ),
           const Text('Changes the whole server without installing an update.'),
           if (_error != null) StudioError(_error!),
         ],
       ),
       actions: [
-        StudioFormActions(
-          onCancel: () => Navigator.pop(context),
-          onConfirm: _choice == widget.initial.name ? null : _save,
-          confirmLabel: 'Save update channel',
-          busy: _pending,
-          progressLabel: 'Saving update channel',
+        Row(
+          children: [
+            StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Check update channel',
+                onPressed: _loading || _pending ? null : _reload,
+                icon: _loading
+                    ? SizedBox.square(
+                        dimension: 20,
+                        child: CircularProgressIndicator(
+                          value: MediaQuery.disableAnimationsOf(context)
+                              ? 0.75
+                              : null,
+                          strokeWidth: 2,
+                          semanticsLabel: 'Checking update channel',
+                        ),
+                      )
+                    : const Icon(Icons.sync),
+              ),
+            ),
+            Expanded(
+              child: StudioFormActions(
+                onCancel: () => Navigator.pop(context),
+                onConfirm:
+                    _loading || _initial == null || _choice == _initial?.name
+                    ? null
+                    : _save,
+                confirmLabel: 'Save update channel',
+                busy: _pending,
+                progressLabel: 'Saving update channel',
+              ),
+            ),
+          ],
         ),
       ],
     ),

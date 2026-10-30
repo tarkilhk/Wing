@@ -187,6 +187,90 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
+        'channel editor survives failed checks ${brightness.name} $scale',
+        (tester) async {
+          final host = _UpdateHost();
+          host.source.metadataUnavailable = true;
+          tester.view.physicalSize = Size(scale == 2 ? 320 : 390, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: scale == 2,
+                ),
+                child: RepaintBoundary(
+                  key: const ValueKey('channels-capture'),
+                  child: child!,
+                ),
+              ),
+              home: VersionsUpdatesScreen(
+                controllerFactory: (_) =>
+                    VersionsController(gateway: host.gateway),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('The update channel could not be verified.'),
+            findsOneWidget,
+          );
+          expect(find.byTooltip('Change update channel'), findsOneWidget);
+          await snapshot(
+            tester,
+            '${brightness.name}-$scale-channel-unavailable',
+          );
+
+          final held = Completer<Map<String, dynamic>>();
+          host.pendingCheck = held;
+          await tester.tap(find.byTooltip('Change update channel'));
+          await tester.pump();
+          expect(find.text('Update channel'), findsOneWidget);
+          expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          await tester.pump(const Duration(milliseconds: 200));
+          await snapshot(tester, '${brightness.name}-$scale-channel-reloading');
+          held.completeError(StateError('offline'));
+          await tester.pumpAndSettle();
+          expect(find.byTooltip('Change update channel'), findsOneWidget);
+          expect(find.byType(CircularProgressIndicator), findsNothing);
+          expect(find.byTooltip('Check update channel'), findsOneWidget);
+          expect(find.textContaining('Check again'), findsOneWidget);
+          await snapshot(
+            tester,
+            '${brightness.name}-$scale-channel-load-failed',
+          );
+
+          host.source.metadataUnavailable = false;
+          host.pendingCheck = null;
+          await tester.tap(find.byTooltip('Check update channel'));
+          await tester.pumpAndSettle();
+          expect(find.text('Main branch'), findsOneWidget);
+          expect(find.byTooltip('Save update channel'), findsOneWidget);
+          await snapshot(tester, '${brightness.name}-$scale-channel-recovered');
+          expect(host.source.writes, isEmpty);
+          await tester.tap(find.text('Main branch'));
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Stable releases').last);
+          await tester.pumpAndSettle();
+          final save = Completer<void>();
+          host.source.pendingWrite = save;
+          await tester.tap(find.byTooltip('Save update channel'));
+          await tester.pump();
+          expect(find.byType(CircularProgressIndicator), findsOneWidget);
+          save.complete();
+          await tester.pumpAndSettle();
+          expect(find.byType(AlertDialog), findsNothing);
+          expect(find.text('Channel: stable'), findsOneWidget);
+          expect(host.source.writes, hasLength(1));
+          expect(host.posts, isEmpty);
+          expect(tester.takeException(), isNull);
+        },
+      );
+
+      testWidgets(
         'version route ${brightness.name} $scale loading, unknown, retry and success',
         (tester) async {
           final semantics = tester.ensureSemantics();
@@ -858,6 +942,30 @@ void main() {
     await tester.tap(find.byTooltip('Update backend'));
     await tester.pumpAndSettle();
   }
+
+  testWidgets('closing an unverified channel editor retires its held read', (
+    tester,
+  ) async {
+    final host = _UpdateHost();
+    host.source.metadataUnavailable = true;
+    await showCard(tester, host);
+    await tester.pumpAndSettle();
+    final held = Completer<Map<String, dynamic>>();
+    host.pendingCheck = held;
+    await tester.tap(find.byTooltip('Change update channel'));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    await tester.tap(find.byTooltip('Cancel'));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.byType(AlertDialog), findsNothing);
+    host.source.metadataUnavailable = false;
+    held.complete(_available);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(host.source.writes, isEmpty);
+    expect(host.posts, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'named previews are visible and custom branches stay host-owned',

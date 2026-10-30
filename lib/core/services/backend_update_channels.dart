@@ -88,7 +88,7 @@ class BackendUpdateChannels {
         final status = raw['status'];
         if (identity is! Map ||
             status is! Map ||
-            identity['channelProtocol'] != 1 ||
+            identity['channelProtocol'] != 3 ||
             status['supported'] != true ||
             identity['home'] != home ||
             identity['head'] != commit ||

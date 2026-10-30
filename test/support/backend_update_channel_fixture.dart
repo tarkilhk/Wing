@@ -84,7 +84,7 @@ class BackendUpdateChannelFixture {
           'home': home,
           'head': currentSha,
           'channel': channel,
-          'channelProtocol': 1,
+          'channelProtocol': 3,
           ...identityOverrides,
         },
         'status': {

@@ -100,6 +100,47 @@ Future<BackendUpdateController> _started(_UpdateHost host) async {
 
 void main() {
   test(
+    'current stock protocol verifies the channel and exact update target',
+    () async {
+      final host = _UpdateHost();
+      final controller = BackendUpdateController(host.gateway);
+      addTearDown(controller.dispose);
+
+      await controller.checkForUpdate();
+
+      expect(controller.phase, BackendUpdatePhase.ready);
+      expect(controller.message, isNull);
+      expect(controller.channel?.name, 'main');
+      expect(controller.channel?.targetSha, host.source.targetSha);
+      expect(controller.canStart, isTrue);
+      expect(controller.canSelectChannel, isTrue);
+      expect(host.posts, isEmpty);
+      expect(host.source.writes, isEmpty);
+    },
+  );
+
+  for (final protocol in [1, 2, 99]) {
+    test(
+      'unsupported channel protocol $protocol cannot authorize writes',
+      () async {
+        final host = _UpdateHost();
+        host.source.identityOverrides['channelProtocol'] = protocol;
+        final controller = BackendUpdateController(host.gateway);
+        addTearDown(controller.dispose);
+
+        await controller.checkForUpdate();
+
+        expect(controller.channel, isNull);
+        expect(controller.canStart, isFalse);
+        expect(controller.canSelectChannel, isFalse);
+        expect(controller.canOpenChannelEditor, isTrue);
+        expect(host.posts, isEmpty);
+        expect(host.source.writes, isEmpty);
+      },
+    );
+  }
+
+  test(
     'multiple refreshed installations with the same revision remain ambiguous',
     () async {
       final host = _UpdateHost();
