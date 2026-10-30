@@ -8632,6 +8632,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.reading.appendSubmittedPrompt(
             inputId: pending.inputId,
             text: pending.text,
+            displayKind: event.data['display_kind'] is String
+                ? event.data['display_kind'] as String
+                : null,
+            displayMetadata: event.data['display_text'] is String
+                ? {'display_text': event.data['display_text']}
+                : null,
           );
         }
         applyChatTranscriptEvent(

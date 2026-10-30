@@ -10,6 +10,7 @@ Feature ID: `conversation`.
 - Normal chats, canonical Bot Chats, group discussions and bot working histories share the conversation frame and reading layout. Passive Recents cards use the same frame and composer presentation.
 - `conversation.reading-mode` — Use a table’s full-screen icon to hide the composer and portrait context row without leaving the conversation. The same icon or Android Back restores it; drafts remain intact. Landscape puts title and scope in one header row.
 - `conversation.search` — Find and open older content.
+- Async delegation completion flags keep model-facing wake text out of conversation bubbles and Find. Useful completion results remain in Activity and searchable; quoted examples stay readable.
 - `conversation.position` — Page and return without losing reading position. Leaving for another thread or app keeps the current reading location, including at Latest. After sending and leaving before the reply, return to the sent message and the beginning of the reply. Opening a popup or changing a chat's decoration keeps the current viewport without starting another history restoration.
 - `conversation.recovery` — Read the structured reason for a failed turn, inspect its details and use a supplied model or provider recovery action. Selecting a model preserves the draft and never resends the failed turn.
 - `conversation.git-review` — Open Chat actions → Git review for a reported local terminal workspace. Read changed files, All changes (working tree versus HEAD) and Staged (index versus HEAD), then copy an exact changed-line or hunk reference.
@@ -26,6 +27,14 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 
   ```sh
   flutter test --no-pub test/profile_history_search_test.dart test/conversation_routes_test.dart test/conversation_reading_position_test.dart test/conversation_assembly_test.dart test/profile_row_actions_test.dart test/connection_diagnostics_test.dart
+  ```
+
+  Internal-message visibility, saved-history refresh, Find and unchanged raw
+  history identities are covered by:
+
+  ```sh
+  flutter test --no-pub test/internal_message_visibility_test.dart
+  flutter test --no-pub test/profile_composer_actions_test.dart --plain-name 'automation start preserves'
   ```
 
   The reading-position suite covers thread departure, covered conversations,
