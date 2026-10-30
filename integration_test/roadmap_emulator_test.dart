@@ -883,6 +883,12 @@ void main() {
       of: find.byKey(const ValueKey('project-personal-roadmap-created')),
       matching: find.byTooltip('Project actions'),
     );
+    // The keyboard can still move the floating chat button over this row after
+    // the form disappears. Wait for pointer reachability before opening it.
+    await _pumpUntil(
+      tester,
+      () => createdProjectActions.hitTestable().evaluate().isNotEmpty,
+    );
     await tester.tap(createdProjectActions);
     await _settle(tester);
     await tester.tap(find.byKey(const ValueKey('project-action-editProject')));
