@@ -274,6 +274,9 @@ needs a supported Linux host with the Hermes Bot Screen components installed.
 Start/stop controls target the selected bot; stopping is unavailable while a
 human holds control.
 
+The connection dot beside the instance name follows that instance's live status.
+Tap its icon or dot to inspect connection details.
+
 Use the control icon to take control. If another device has control, Wing asks
 before replacing it. Tap where you want to click, double-tap to double-click,
 hold to right-click, or double-tap then hold and move to drag. One finger pans

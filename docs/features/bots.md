@@ -18,6 +18,10 @@ Feature ID: `bots`.
 
 ## How to get to it (user POV)
 
+The screen header's connection dot and details follow the screen's captured
+instance, including live connection and recovery changes, from either the chat
+or roster entry.
+
 Choose Bots in the drawer. Use the Bots and Groups tabs. Tap a name or preview for chat, an avatar for appearance, or the row menu for Bot settings and View screen. Long-press a profile icon in Chats for Bot Chat.
 
 ## Driving it with Wing harnesses
@@ -29,6 +33,11 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```sh
   flutter test --no-pub test/bots_contract_test.dart test/bot_group_attachments_test.dart test/conversation_assembly_test.dart test/bot_group_history_view_test.dart test/gateway_approval_panel_test.dart test/bot_group_view_test.dart test/bot_group_history_test.dart test/bot_display_client_test.dart test/bot_display_viewport_test.dart test/bot_screen_session_test.dart test/bot_screen_view_test.dart test/profile_composer_queue_test.dart
   ```
+
+  For the remote-screen connection dot, run
+  `flutter test --no-pub test/profile_combined_activity_test.dart test/bots_view_test.dart --name 'shared chat menu and screen|bot screen menu opens the captured display lease'`.
+  These production menu paths verify captured-instance status, live LED changes
+  and connection details in both themes at normal and enlarged text.
 
 - **Android `bots`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
 

@@ -1023,7 +1023,7 @@ class _BotScreenViewState extends State<BotScreenView>
                   leading: _action('Close screen', Icons.arrow_back, _leave),
                   contextRow: ServerConnectionLabel(
                     label: _session.bot.instance,
-                    status: ServerConnectionScope.of(context),
+                    status: _session.repository.connectionStatus,
                   ),
                 ),
           body: SafeArea(
