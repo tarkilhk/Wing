@@ -1,5 +1,7 @@
 """Keep the notification regression harness fail-closed at its OS boundary."""
 import importlib.util
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -325,6 +327,23 @@ elif sys.argv[3] == 'forward':
             with self.assertRaises(ValueError):
                 gate.check_on_emulator('emulator-5562')
         command.assert_not_called()
+
+    def test_failure_capture_tolerates_unwritable_evidence_directory(self):
+        with patch.object(Path, 'mkdir', side_effect=OSError('disk full')), \
+             patch.object(gate, 'device') as device, \
+             contextlib.redirect_stderr(io.StringIO()) as errors:
+            gate.capture_failure('emulator-5562', Path('/unwritable'))
+        device.assert_not_called()
+        self.assertIn('disk full', errors.getvalue())
+
+    def test_failure_capture_tolerates_unwritable_error_report(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(gate, 'device', side_effect=OSError('device unavailable')), \
+             patch.object(gate.subprocess, 'run', side_effect=OSError('capture unavailable')), \
+             patch.object(Path, 'write_text', side_effect=OSError('disk full')), \
+             contextlib.redirect_stderr(io.StringIO()) as errors:
+            gate.capture_failure('emulator-5562', Path(directory))
+        self.assertIn('disk full', errors.getvalue())
 
     def test_shade_driver_failure_fails_the_gate(self):
         calls = []

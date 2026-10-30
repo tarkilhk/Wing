@@ -21,8 +21,10 @@ Future<void> revealJourneyControl(
           (route.isCurrent &&
               (route.animation == null ||
                   route.animation!.status == AnimationStatus.completed))) {
-        await Scrollable.ensureVisible(elements.single, alignment: .5);
-        await tester.pump();
+        if (control.hitTestable().evaluate().isEmpty) {
+          await Scrollable.ensureVisible(elements.single, alignment: .5);
+          await tester.pump();
+        }
         reachable = control.hitTestable().evaluate().length == 1;
       }
     }

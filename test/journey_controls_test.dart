@@ -44,6 +44,37 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('a reachable control preserves the existing scroll position', (
+    tester,
+  ) async {
+    final scroll = ScrollController(initialScrollOffset: 100);
+    addTearDown(scroll.dispose);
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            controller: scroll,
+            child: Column(
+              children: [
+                const SizedBox(height: 200),
+                TextButton(
+                  onPressed: () => taps++,
+                  child: const Text('Reachable'),
+                ),
+                const SizedBox(height: 1000),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Reachable').hitTestable(), findsOneWidget);
+    await tapJourneyControl(tester, find.text('Reachable'));
+    expect(taps, 1);
+    expect(scroll.offset, 100);
+  });
+
   testWidgets('an obscured control fails with viewport evidence', (
     tester,
   ) async {

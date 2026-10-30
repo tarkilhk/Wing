@@ -40,7 +40,11 @@ def require_emulator(serial):
 
 def capture_failure(serial, output):
     """Preserve owned-emulator evidence without replacing the original failure."""
-    output.mkdir(parents=True, exist_ok=True)
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        print('Could not create failure evidence directory: ' + str(error), file=sys.stderr)
+        return
     errors = []
     for name, args in {
         'failure-logcat.txt': ('logcat', '-d', '-t', '3000'),
@@ -66,7 +70,10 @@ def capture_failure(serial, output):
     except (OSError, subprocess.SubprocessError) as error:
         errors.append('failure.png: ' + str(error))
     if errors:
-        (output / 'capture-errors.json').write_text(json.dumps(errors, indent=2) + '\n')
+        try:
+            (output / 'capture-errors.json').write_text(json.dumps(errors, indent=2) + '\n')
+        except OSError as error:
+            print('Could not record capture errors: ' + str(error), file=sys.stderr)
 
 
 def check_on_emulator(serial):

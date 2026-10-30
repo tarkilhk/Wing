@@ -143,7 +143,7 @@ def main() -> int:
             result['device'] = device
             for name, target, expected in SUITES:
                 command = ['flutter', 'test', '--no-pub', '--no-uninstall', '-d', device,
-                           '--reporter=json', '--fail-fast', target]
+                           '--reporter=json', target]
                 if args.capture_frames:
                     command.append('--dart-define=CAPTURE_JOURNEYS=true')
                 suite = result['suites'][name] = {'passed': False, 'command': command}
@@ -166,9 +166,13 @@ def main() -> int:
                         raise
                     finally:
                         # Capture before force-stop/onboarding cleanup and AVD retirement.
-                        if not suite['passed']:
-                            android.capture_failure(device, output / (name + '-failure'))
-                        stop_process_group(process)
+                        try:
+                            if not suite['passed']:
+                                android.capture_failure(device, output / (name + '-failure'))
+                        except Exception as error:
+                            suite.setdefault('capture_errors', []).append(str(error))
+                        finally:
+                            stop_process_group(process)
                     captures = output / (name + '-frames')
                     suite['frames'] = []
                     for path in sorted(set(re.findall(r'Journey frame: ([^"\\\s]+\.png)', log_path.read_text()))):

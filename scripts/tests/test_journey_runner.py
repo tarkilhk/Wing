@@ -119,7 +119,7 @@ class AndroidJourneyVerdict(unittest.TestCase):
 
 class RequiredProcessRecovery(unittest.TestCase):
     def exercise(self, recovery, *, ordinary_events=None, roadmap_events=None, recovery_error=None,
-                 environments=None, captures=None, wait_error=None, exports=None, frame_error=None):
+                 environments=None, captures=None, wait_error=None, exports=None, frame_error=None, capture_error=None, retirements=None):
         with tempfile.TemporaryDirectory(prefix='wing-journey-gate-') as temporary:
             output = Path(temporary)
             log = output / 'critical.jsonl'
@@ -132,6 +132,12 @@ class RequiredProcessRecovery(unittest.TestCase):
                 kwargs['stdout'].write('\n'.join(events(expected) if supplied is None else supplied))
                 return Mock(wait=Mock(return_value=0, side_effect=wait_error))
 
+            def capture(device, path):
+                if captures is not None:
+                    captures.append((device, path.name))
+                if capture_error is not None:
+                    raise capture_error
+
             with patch.object(test_journeys.sys, 'argv', [
                     'test_journeys.py', '--device', 'emulator-5562', '--output', temporary]), \
                  patch.object(test_journeys.os, 'chdir'), \
@@ -140,11 +146,12 @@ class RequiredProcessRecovery(unittest.TestCase):
                  patch.object(test_journeys.android, 'require_emulator'), \
                  patch.object(test_journeys.android, 'device', side_effect=lambda serial, *args: 'package:/fixture/base.apk' if args[:2] == ('shell', 'pm') and args[2] == 'path' else ''), \
                  patch.object(test_journeys.subprocess, 'Popen', side_effect=run_flutter), \
-                 patch.object(test_journeys, 'stop_process_group'), \
+                 patch.object(test_journeys, 'stop_process_group',
+                              side_effect=lambda process: retirements.append(process) if retirements is not None else None), \
                  patch.object(test_journeys.subprocess, 'run', side_effect=frame_error) as export, \
                  patch.object(test_journeys.android, 'adb_path', return_value='/owned/sdk/adb'), \
                  patch.object(test_journeys.android, 'capture_failure',
-                              side_effect=lambda device, path: captures.append((device, path.name)) if captures is not None else None), \
+                              side_effect=capture), \
                  patch.object(test_journeys.process_recovery, 'run', return_value=recovery,
                               side_effect=recovery_error) as run, \
                  contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
@@ -174,12 +181,13 @@ class RequiredProcessRecovery(unittest.TestCase):
         self.assertTrue(receipt['suites']['critical']['failed'])
         self.assertEqual(receipt['suites']['critical']['capture_errors'], ['device unavailable'])
 
-    def test_failed_suite_captures_owned_device_and_stops_at_first_failure(self):
+    def test_failed_suite_captures_owned_device_without_running_next_suite(self):
         captures = []
         code, receipt, _ = self.exercise({'passed': True}, ordinary_events=[], captures=captures)
         self.assertEqual(code, 1)
         self.assertEqual(captures, [('emulator-5562', 'critical-failure')])
-        self.assertIn('--fail-fast', receipt['suites']['critical']['command'])
+        # Flutter 3.44 crashes its native LiveTest runner with --fail-fast.
+        self.assertNotIn('--fail-fast', receipt['suites']['critical']['command'])
         self.assertNotIn('roadmap', receipt['suites'])
 
     def test_timeout_keeps_failed_receipt_and_captures_before_retirement(self):
@@ -191,6 +199,18 @@ class RequiredProcessRecovery(unittest.TestCase):
         self.assertIn('timed out', receipt['suites']['critical']['error'])
         self.assertEqual(captures, [('emulator-5562', 'critical-failure')])
         self.assertEqual(calls, [])
+
+    def test_capture_exception_preserves_timeout_and_retires_flutter(self):
+        for error in [OSError('disk full'), RuntimeError('capture failed')]:
+            with self.subTest(error=error):
+                retired = []
+                code, receipt, calls = self.exercise(None, capture_error=error, retirements=retired,
+                    wait_error=test_journeys.subprocess.TimeoutExpired('flutter', 900))
+                self.assertEqual(code, 1)
+                self.assertEqual(len(retired), 1)
+                self.assertIn('timed out', receipt['error'])
+                self.assertEqual(receipt['suites']['critical']['capture_errors'], [str(error)])
+                self.assertEqual(calls, [])
 
     def test_success_requires_completed_process_recovery_on_same_emulator(self):
         code, receipt, calls = self.exercise({'passed': True})
