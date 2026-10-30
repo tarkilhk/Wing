@@ -6717,6 +6717,15 @@
       "source": "internal/docs/TESTING.md; test/native_prompt_runtime_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/journey_controls_test.dart",
+      "kind": "host-test",
+      "path": "test/journey_controls_test.dart",
+      "purpose": "Bounded native journey readiness, delayed route and unreachable-control regressions",
+      "source": "internal/docs/TESTING.md; test/journey_controls_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -15774,6 +15783,16 @@
       "path": "website/workspaces.html",
       "area": "website",
       "provenance": "tracked"
+    },
+    {
+      "path": "test/helpers/journey_controls.dart",
+      "area": "test",
+      "provenance": "tracked"
+    },
+    {
+      "path": "test/journey_controls_test.dart",
+      "area": "test",
+      "provenance": "tracked"
     }
   ],
   "direct_dependencies": {
@@ -16138,6 +16157,7 @@
         "test/growing_markdown_text_test.dart",
         "test/health_alerts_ui_test.dart",
         "test/health_details_design_test.dart",
+        "test/helpers/journey_controls.dart",
         "test/helpers/pump_markdown_widget.dart",
         "test/home_config_restore_test.dart",
         "test/home_group_navigation_test.dart",
@@ -16147,6 +16167,7 @@
         "test/installed_app_version_card_test.dart",
         "test/intelligence_sheet_layout_test.dart",
         "test/internal_message_visibility_test.dart",
+        "test/journey_controls_test.dart",
         "test/large_chat_outputs_test.dart",
         "test/markdown_phone_content_test.dart",
         "test/markdown_render_reuse_test.dart",
@@ -17099,6 +17120,7 @@
         "test/health_alerts_test.dart",
         "test/health_alerts_ui_test.dart",
         "test/health_details_design_test.dart",
+        "test/helpers/journey_controls.dart",
         "test/helpers/pump_markdown_widget.dart",
         "test/hermes_cloud_test.dart",
         "test/hermes_profile_test.dart",
@@ -17113,6 +17135,7 @@
         "test/installed_app_version_card_test.dart",
         "test/intelligence_sheet_layout_test.dart",
         "test/internal_message_visibility_test.dart",
+        "test/journey_controls_test.dart",
         "test/large_chat_outputs_test.dart",
         "test/live_chat_status_transport_test.dart",
         "test/logs_view_dependency_guard_test.dart",

@@ -119,7 +119,7 @@ class AndroidJourneyVerdict(unittest.TestCase):
 
 class RequiredProcessRecovery(unittest.TestCase):
     def exercise(self, recovery, *, ordinary_events=None, roadmap_events=None, recovery_error=None,
-                 environments=None):
+                 environments=None, captures=None, wait_error=None, exports=None, frame_error=None):
         with tempfile.TemporaryDirectory(prefix='wing-journey-gate-') as temporary:
             output = Path(temporary)
             log = output / 'critical.jsonl'
@@ -130,7 +130,7 @@ class RequiredProcessRecovery(unittest.TestCase):
                 expected = ROADMAP if args[0][-1].endswith('roadmap_emulator_test.dart') else CRITICAL
                 supplied = roadmap_events if expected == ROADMAP else ordinary_events
                 kwargs['stdout'].write('\n'.join(events(expected) if supplied is None else supplied))
-                return Mock(wait=Mock(return_value=0))
+                return Mock(wait=Mock(return_value=0, side_effect=wait_error))
 
             with patch.object(test_journeys.sys, 'argv', [
                     'test_journeys.py', '--device', 'emulator-5562', '--output', temporary]), \
@@ -141,12 +141,56 @@ class RequiredProcessRecovery(unittest.TestCase):
                  patch.object(test_journeys.android, 'device', side_effect=lambda serial, *args: 'package:/fixture/base.apk' if args[:2] == ('shell', 'pm') and args[2] == 'path' else ''), \
                  patch.object(test_journeys.subprocess, 'Popen', side_effect=run_flutter), \
                  patch.object(test_journeys, 'stop_process_group'), \
+                 patch.object(test_journeys.subprocess, 'run', side_effect=frame_error) as export, \
+                 patch.object(test_journeys.android, 'adb_path', return_value='/owned/sdk/adb'), \
+                 patch.object(test_journeys.android, 'capture_failure',
+                              side_effect=lambda device, path: captures.append((device, path.name)) if captures is not None else None), \
                  patch.object(test_journeys.process_recovery, 'run', return_value=recovery,
                               side_effect=recovery_error) as run, \
                  contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                 code = test_journeys.main()
+                if exports is not None:
+                    exports.extend(export.call_args_list)
             self.assertTrue(log.exists())
             return code, json.loads((output / 'receipt.json').read_text()), run.call_args_list
+
+    def test_failure_frame_is_exported_without_opt_in_capture_flag(self):
+        exports = []
+        lines = events(failed=sorted(CRITICAL)[0]) + [json.dumps({
+            'type': 'print', 'message': 'Journey frame: /data/user/0/qa/failure.png'})]
+        code, receipt, _ = self.exercise(None, ordinary_events=lines, exports=exports)
+        self.assertEqual(code, 1)
+        self.assertEqual(len(exports), 1)
+        self.assertIn('/data/user/0/qa/failure.png', exports[0].args[0])
+        self.assertEqual(len(receipt['suites']['critical']['frames']), 1)
+        self.assertTrue(receipt['suites']['critical']['failed'])
+
+    def test_frame_export_error_keeps_original_failure(self):
+        lines = events(failed=sorted(CRITICAL)[0]) + [json.dumps({
+            'type': 'print', 'message': 'Journey frame: /data/user/0/qa/failure.png'})]
+        code, receipt, _ = self.exercise(None, ordinary_events=lines,
+            frame_error=OSError('device unavailable'))
+        self.assertEqual(code, 1)
+        self.assertTrue(receipt['suites']['critical']['failed'])
+        self.assertEqual(receipt['suites']['critical']['capture_errors'], ['device unavailable'])
+
+    def test_failed_suite_captures_owned_device_and_stops_at_first_failure(self):
+        captures = []
+        code, receipt, _ = self.exercise({'passed': True}, ordinary_events=[], captures=captures)
+        self.assertEqual(code, 1)
+        self.assertEqual(captures, [('emulator-5562', 'critical-failure')])
+        self.assertIn('--fail-fast', receipt['suites']['critical']['command'])
+        self.assertNotIn('roadmap', receipt['suites'])
+
+    def test_timeout_keeps_failed_receipt_and_captures_before_retirement(self):
+        captures = []
+        code, receipt, calls = self.exercise(None, captures=captures,
+            wait_error=test_journeys.subprocess.TimeoutExpired('flutter', 900))
+        self.assertEqual(code, 1)
+        self.assertFalse(receipt['passed'])
+        self.assertIn('timed out', receipt['suites']['critical']['error'])
+        self.assertEqual(captures, [('emulator-5562', 'critical-failure')])
+        self.assertEqual(calls, [])
 
     def test_success_requires_completed_process_recovery_on_same_emulator(self):
         code, receipt, calls = self.exercise({'passed': True})

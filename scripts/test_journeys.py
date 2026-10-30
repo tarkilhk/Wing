@@ -143,7 +143,7 @@ def main() -> int:
             result['device'] = device
             for name, target, expected in SUITES:
                 command = ['flutter', 'test', '--no-pub', '--no-uninstall', '-d', device,
-                           '--reporter=json', target]
+                           '--reporter=json', '--fail-fast', target]
                 if args.capture_frames:
                     command.append('--dart-define=CAPTURE_JOURNEYS=true')
                 suite = result['suites'][name] = {'passed': False, 'command': command}
@@ -159,21 +159,30 @@ def main() -> int:
                                                     'ORG_GRADLE_PROJECT_wingDevelopment': 'false'})
                     try:
                         code = process.wait(timeout=900)
+                        log.flush()
+                        suite.update(verdict(log_path.read_text().splitlines(), code, expected))
+                    except (OSError, subprocess.SubprocessError) as error:
+                        suite['error'] = str(error)
+                        raise
                     finally:
-                        # Retire descendants even after an interrupted Flutter leader.
+                        # Capture before force-stop/onboarding cleanup and AVD retirement.
+                        if not suite['passed']:
+                            android.capture_failure(device, output / (name + '-failure'))
                         stop_process_group(process)
-                suite.update(verdict(log_path.read_text().splitlines(), code, expected))
-                if args.capture_frames:
                     captures = output / (name + '-frames')
-                    captures.mkdir(exist_ok=True)
                     suite['frames'] = []
                     for path in sorted(set(re.findall(r'Journey frame: ([^"\\\s]+\.png)', log_path.read_text()))):
+                        captures.mkdir(exist_ok=True)
                         destination = captures / Path(path).name
-                        with destination.open('wb') as frame:
-                            subprocess.run([android.adb_path(), '-s', device, 'exec-out',
-                                            'run-as', 'com.tarkilhk.wing.notificationqa', 'cat', path],
-                                           stdout=frame, check=True, timeout=25)
-                        suite['frames'].append(str(destination))
+                        try:
+                            with destination.open('wb') as frame:
+                                subprocess.run([android.adb_path(), '-s', device, 'exec-out',
+                                                'run-as', 'com.tarkilhk.wing.notificationqa', 'cat', path],
+                                               stdout=frame, check=True, timeout=25)
+                            suite['frames'].append(str(destination))
+                        except (OSError, subprocess.SubprocessError) as error:
+                            suite.setdefault('capture_errors', []).append(str(error))
+                            suite['passed'] = False
                 if not suite['passed']:
                     break
             else:

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'helpers/journey_controls.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/profile_identity_edit_session.dart';
@@ -141,6 +143,22 @@ void main() {
       await tester.pump();
     }
   }
+
+  testWidgets(
+    'journey identity field is reachable with retained Android keyboard',
+    (tester) async {
+      await openEditor(tester, size: const Size(393, 698), keyboard: 320);
+      final description = field('profile-description-field');
+      expect(description, findsOneWidget);
+      expect(tester.widget<TextField>(description).enabled, isTrue);
+      expect(description.hitTestable(), findsNothing);
+      await revealJourneyControl(tester, description);
+      expect(description.hitTestable(), findsOneWidget);
+      await tester.enterText(description, 'Recovered keyboard draft');
+      await tapSave(tester);
+      expect(fixture.description, 'Recovered keyboard draft');
+    },
+  );
 
   testWidgets('loads captured scope and writes only the dirty field', (
     tester,

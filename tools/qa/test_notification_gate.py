@@ -338,13 +338,15 @@ elif sys.argv[3] == 'forward':
         with tempfile.TemporaryDirectory() as directory, \
              patch.object(gate, 'OUTPUT', Path(directory)), \
              patch.object(gate, 'device', return_value='1'), \
-             patch.object(gate, 'command', side_effect=command):
+             patch.object(gate, 'command', side_effect=command), \
+             patch.object(gate.subprocess, 'run') as capture:
             with self.assertRaises(subprocess.CalledProcessError):
                 gate.check_on_emulator('emulator-5562')
             self.assertEqual({p.name for p in Path(directory).iterdir()},
-                             {'app.log', 'activity.txt', 'notifications.txt',
-                              'services.txt', 'failure-ui.xml', 'failure.png'})
-        self.assertEqual(calls[-1][-3:], ('exec-out', 'screencap', '-p'))
+                             {'failure-logcat.txt', 'failure-activity.txt', 'failure-notifications.txt',
+                              'failure-services.txt', 'failure-window.txt', 'failure-input-method.txt',
+                              'failure-ui.xml', 'failure.png'})
+        self.assertEqual(capture.call_args.args[0][-3:], ['exec-out', 'screencap', '-p'])
 
 
 class OwnedAndroidBootTest(unittest.TestCase):

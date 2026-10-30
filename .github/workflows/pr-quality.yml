@@ -182,6 +182,7 @@ jobs:
             build/notification-gate/*.log
             build/notification-gate/*.txt
             build/notification-gate/*.png
+            build/notification-gate/*.json
           if-no-files-found: ignore
 
       - name: Check native share provider and queue boundaries
