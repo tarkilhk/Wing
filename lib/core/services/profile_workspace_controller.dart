@@ -5206,9 +5206,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
+  /// A null project returns the chat to its captured profile's default folder.
   Future<bool> moveSessionToProject(
     ProfileSessionKey key,
-    Map<String, dynamic> project, {
+    Map<String, dynamic>? project, {
     required bool Function() canDispatch,
   }) => _retainWorkspaceOperation(
     () => _moveSessionToProject(key, project, canDispatch: canDispatch),
@@ -5216,16 +5217,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<bool> _moveSessionToProject(
     ProfileSessionKey key,
-    Map<String, dynamic> project, {
+    Map<String, dynamic>? project, {
     required bool Function() canDispatch,
   }) async {
     final resource = _writable();
     if (!owns(key) || resource.scope != key.workspace) {
       throw StateError('Profile changed. Open the menu again.');
     }
-    if (!resource._projects.contains(project) ||
-        project['isNoProject'] == true ||
-        ProfileGateway.projectDirectory(project).isEmpty) {
+    if (project != null &&
+        (!resource._projects.contains(project) ||
+            project['isNoProject'] == true ||
+            ProfileGateway.projectDirectory(project).isEmpty)) {
       throw StateError('Project is unavailable. Open the menu again.');
     }
     final id = key.sessionId;
@@ -5236,9 +5238,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
     resource._mutatingSessions.add(id);
     _changed();
     try {
+      final directory = project == null
+          ? await resource.gateway.files.defaultDirectory()
+          : ProfileGateway.projectDirectory(project);
       final updated = await resource.gateway.moveSession(
         id,
-        ProfileGateway.projectDirectory(project),
+        directory,
         canDispatch: () =>
             !_closed && identical(current, resource) && canDispatch(),
       );
@@ -5254,9 +5259,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
         moved(resource._projectSessions),
       );
       _invalidateProjectMembership(resource);
-      resource._chats[id]?._projectId = project['id'] as String;
+      resource._chats[id]?._projectId = project?['id'] as String?;
       // Do not leave a moved row in its old folder while the tree reloads.
-      if (resource._selectedProject?['id'] != project['id']) {
+      if (project == null ||
+          resource._selectedProject?['id'] != project['id']) {
         resource._projectSessions = _readonlyWorkspaceRows([
           for (final row in resource._projectSessions)
             if (row['id'] != id) row,
@@ -5267,7 +5273,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           resource.scope,
           id,
           changes: updated,
-          projectId: project['id'] as String,
+          projectId: project?['id'] as String?,
         ),
       );
       return true;

@@ -288,7 +288,7 @@ Future<void> showChatProjectPicker(
   BrowserActionSession session,
 ) async {
   final messenger = ScaffoldMessenger.of(context);
-  final target = await showModalBottomSheet<BrowserProject>(
+  final message = await showModalBottomSheet<String>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -297,8 +297,8 @@ Future<void> showChatProjectPicker(
     constraints: const BoxConstraints(maxWidth: 640),
     builder: (context) => _ChatProjectSheet(session: session),
   );
-  if (target != null && messenger.mounted) {
-    messenger.showSnackBar(SnackBar(content: Text('Moved to ${target.name}')));
+  if (message != null && messenger.mounted) {
+    messenger.showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -311,7 +311,7 @@ class _ChatProjectSheet extends StatefulWidget {
 
 class _ChatProjectSheetState extends State<_ChatProjectSheet> {
   final search = TextEditingController();
-  BrowserProject? get _moving => widget.session.state.moving;
+  bool get _moving => widget.session.state.submitting;
   String? get _failure => widget.session.state.error;
   @override
   void initState() {
@@ -330,13 +330,41 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
     super.dispose();
   }
 
-  Future<void> move(BrowserProject project) async {
+  Future<void> move(BrowserProject? project) async {
     FocusScope.of(context).unfocus();
+    final destination = project == null
+        ? 'the default project of ${widget.session.scope.profileName}'
+        : '"${project.name}" in ${widget.session.scope.profileName}';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => StudioDialog(
+        title: const Text('Move chat?'),
+        content: Text(
+          'Move this chat to $destination? Its messages will be kept.',
+        ),
+        actions: [
+          StudioFormActions(
+            onCancel: () => Navigator.pop(context, false),
+            onConfirm: () => Navigator.pop(context, true),
+            confirmLabel: 'Move chat',
+            confirmIcon: Icons.drive_file_move_outlined,
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
     final moved = await widget.session.perform(
       BrowserAction.move,
       target: project,
     );
-    if (moved && mounted) Navigator.pop(context, project);
+    if (moved && mounted) {
+      Navigator.pop(
+        context,
+        project == null
+            ? 'Moved to the default project of ${widget.session.scope.profileName}'
+            : 'Moved to ${project.name}',
+      );
+    }
   }
 
   @override
@@ -352,7 +380,7 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
         .toList();
     final current = widget.session.currentProject;
     return PopScope(
-      canPop: _moving == null,
+      canPop: !_moving,
       child: Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.viewInsetsOf(context).bottom,
@@ -421,6 +449,39 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                                       ],
                                     ),
                                   ),
+                                  if (widget.session.canRemoveProject) ...[
+                                    const SizedBox(width: 8),
+                                    StudioButtonPress(
+                                      child: IconButton(
+                                        tooltip: 'Remove from project',
+                                        onPressed: _moving
+                                            ? null
+                                            : () => move(null),
+                                        icon: Stack(
+                                          alignment: Alignment.center,
+                                          children: [
+                                            const Icon(Icons.close),
+                                            if (_moving &&
+                                                widget.session.state.moving ==
+                                                    null)
+                                              SizedBox.square(
+                                                dimension: 32,
+                                                child: CircularProgressIndicator(
+                                                  value:
+                                                      MediaQuery.disableAnimationsOf(
+                                                        context,
+                                                      )
+                                                      ? .75
+                                                      : null,
+                                                  strokeWidth: 2,
+                                                  semanticsLabel: 'Moving chat',
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -436,7 +497,7 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                               TextField(
                                 key: const ValueKey('project-picker-search'),
                                 controller: search,
-                                enabled: _moving == null,
+                                enabled: !_moving,
                                 onChanged: (_) => setState(() {}),
                                 decoration: InputDecoration(
                                   hintText: 'Find a project',
@@ -446,7 +507,7 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                                       : StudioButtonPress(
                                           child: IconButton(
                                             tooltip: 'Clear search',
-                                            onPressed: _moving == null
+                                            onPressed: !_moving
                                                 ? () {
                                                     search.clear();
                                                     setState(() {});
@@ -494,7 +555,7 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                                         key: ValueKey(
                                           'move-project-${projects[i].id}',
                                         ),
-                                        enabled: _moving == null,
+                                        enabled: !_moving,
                                         contentPadding:
                                             const EdgeInsets.symmetric(
                                               horizontal: 12,
@@ -511,7 +572,9 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                                           projects[i].directory,
                                           style: theme.textTheme.bodySmall,
                                         ),
-                                        trailing: _moving == projects[i]
+                                        trailing:
+                                            widget.session.state.moving ==
+                                                projects[i]
                                             ? const SizedBox(
                                                 width: 20,
                                                 height: 20,
@@ -523,7 +586,7 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                                                     ),
                                               )
                                             : null,
-                                        onTap: _moving == null
+                                        onTap: !_moving
                                             ? () => move(projects[i])
                                             : null,
                                       ),
@@ -542,7 +605,7 @@ class _ChatProjectSheetState extends State<_ChatProjectSheet> {
                     child: StudioButtonPress(
                       child: IconButton(
                         tooltip: 'Cancel project selection',
-                        onPressed: _moving == null
+                        onPressed: !_moving
                             ? () => Navigator.pop(context)
                             : null,
                         icon: const Icon(Icons.close),

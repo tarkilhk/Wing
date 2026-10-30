@@ -26,6 +26,9 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
   bool claimAfterSnapshot = false;
   bool invalidateRevisionAfterSnapshot = false;
   Completer<void>? snapshotDelay;
+  Completer<void>? defaultFolderDelay;
+  bool failDefaultFolder = false;
+  final defaultFolderProfiles = <String>[];
   bool foreignActive = false;
   Completer<void>? mutationDelay;
   Completer<void>? mutationStarted;
@@ -65,6 +68,12 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
       discover: base.discover,
       get: (endpoint, query) async {
         final path = Uri.parse(endpoint).path;
+        if (path == 'fs/default-cwd') {
+          defaultFolderProfiles.add(scope.profileName);
+          await defaultFolderDelay?.future;
+          if (failDefaultFolder) throw StateError('Default folder unavailable');
+          return {'cwd': '/${scope.profileName}/default'};
+        }
         if (path.endsWith('/mutation-snapshot')) {
           reads.add((path, query));
           await snapshotDelay?.future;
