@@ -559,7 +559,9 @@ class _BackendChannelDialogState extends State<_BackendChannelDialog> {
         _error = 'This server is no longer selected. Close this editor.';
       } else if (widget.controller.canSelectChannel) {
         _initial = widget.controller.channel;
-        _choice ??= _initial!.name;
+        if (!{'stable', 'main', _initial!.name}.contains(_choice)) {
+          _choice = _initial!.name;
+        }
       } else {
         _error =
             'The current channel is unavailable. Check again to enable saving.';

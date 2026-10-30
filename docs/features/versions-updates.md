@@ -39,6 +39,8 @@ The channel selector remains visible when a check fails. Opening it without a
 verified channel immediately shows progress; its Check update channel control
 retries failures. Saving requires verified installation details. Closing the
 editor during a read retires its presentation without saving.
+Refreshing also reconciles a preview channel changed on the server while
+preserving an unsaved Stable/Main choice.
 
 Channel verification targets the current stock Hermes source-check protocol (3).
 The controller suite verifies that fresh stock metadata enables the exact target

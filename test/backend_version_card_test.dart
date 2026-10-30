@@ -943,6 +943,68 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  for (final next in ['main', 'stable']) {
+    testWidgets('channel refresh reconciles a retired preview with $next', (
+      tester,
+    ) async {
+      final host = _UpdateHost();
+      host.source
+        ..channel = 'pm-preview'
+        ..branch = null;
+      await showCard(tester, host);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Change update channel'));
+      await tester.pumpAndSettle();
+      expect(find.text('pm-preview').last, findsOneWidget);
+
+      host.source
+        ..channel = next
+        ..branch = next == 'main' ? 'main' : null;
+      await tester.tap(find.byTooltip('Check update channel'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text(next == 'main' ? 'Main branch' : 'Stable releases'),
+        findsOneWidget,
+      );
+      expect(find.text('pm-preview'), findsNothing);
+      expect(host.source.writes, isEmpty);
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+    });
+  }
+
+  testWidgets('channel refresh preserves a supported unsaved choice', (
+    tester,
+  ) async {
+    final host = _UpdateHost();
+    host.source
+      ..channel = 'pm-preview'
+      ..branch = null;
+    await showCard(tester, host);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Change update channel'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('pm-preview').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stable releases').last);
+    await tester.pumpAndSettle();
+    host.source
+      ..channel = 'main'
+      ..branch = 'main';
+    await tester.tap(find.byTooltip('Check update channel'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Stable releases'), findsOneWidget);
+    expect(host.source.writes, isEmpty);
+    await tester.tap(find.byTooltip('Save update channel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Channel: stable'), findsOneWidget);
+    expect(host.source.writes, hasLength(1));
+  });
+
   testWidgets('closing an unverified channel editor retires its held read', (
     tester,
   ) async {
