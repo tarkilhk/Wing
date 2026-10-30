@@ -25,7 +25,6 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
 
 class _ResumeHost extends Host {
-  Object? resumeError;
   Map<String, dynamic>? resumeInfo;
   bool failResumeOnce = false;
   int resumeCalls = 0;

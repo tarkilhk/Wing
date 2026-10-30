@@ -6,7 +6,7 @@ Feature ID: `conversation`.
 
 ## Sub-features
 
-- `conversation.read` — Reconcile live and saved messages.
+- `conversation.read` — Reconcile live and saved messages. Saved history opens independently of runtime attachment; an attachment refusal keeps messages and drafts visible, with Retry to enable sending.
 - Normal chats, canonical Bot Chats, group discussions and bot working histories share the conversation frame and reading layout. Passive Recents cards use the same frame and composer presentation.
 - `conversation.reading-mode` — Use a table’s full-screen icon to hide the composer and portrait context row without leaving the conversation. The same icon or Android Back restores it; drafts remain intact. Landscape puts title and scope in one header row.
 - `conversation.search` — Find and open older content.
@@ -70,7 +70,27 @@ Stock standalone Dashboard can pass login and ping while serving a different
 session API; a current version or accepted subprotocol does not establish
 canonical session support.
 
+To check one reported conversation through the production workspace controller,
+add `WING_HERMES_SESSION='<saved-session-id>'` to those environment variables and
+select `--plain-name 'requested saved conversation'`. It requires nonempty saved
+history before attachment completes, then reports whether canonical attachment
+succeeded or a visible attachment failure remains. This targeted case establishes
+readability, not permission to force takeover or proof of message submission.
+
 ## Gotchas
+
+When Hermes refuses attachment because another writer holds a chat, Wing shows
+the saved messages and keeps the draft. Sending remains unavailable until normal
+attachment succeeds. Close the chat in the holding app, then use Retry; Wing
+does not force ownership away from another process. Retry shows the pulsating
+Wing in the header while messages stay usable.
+The host recovery recipe exercises the real Recents control, readable history
+during held attachment, refused sending, retained drafts and successful retry
+in both themes at normal and enlarged text sizes:
+
+```sh
+flutter test --no-pub test/recent_conversation_switcher_test.dart --name 'Recents tap enters chat before held resume and history.*coordination'
+```
 
 Git review uses read-only stock Hermes endpoints. It does not stage, revert,
 commit or push. SSH, Modal and per-session container paths are not treated as

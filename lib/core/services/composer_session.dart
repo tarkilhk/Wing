@@ -529,7 +529,12 @@ class ComposerSession {
         item != null &&
         !editedText.startsWith('/') &&
         (editedText.isNotEmpty || item.attachments.isNotEmpty);
-    final reasons = !runtime.connected
+    final reasons = runtime.attachmentBlocked
+        ? <ComposerAction, ComposerUnavailableReason?>{
+            for (final action in ComposerAction.values)
+              action: ComposerUnavailableReason.reconnect,
+          }
+        : !runtime.connected
         ? <ComposerAction, ComposerUnavailableReason?>{
             for (final action in ComposerAction.values)
               action: ComposerUnavailableReason.reconnect,

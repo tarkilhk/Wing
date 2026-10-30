@@ -154,7 +154,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(tester.getSize(find.byType(ProfileActivityStatus)).height, 0);
 
     runtime.finishOpening(error: 'Could not open conversation');
-    expect(label(), 'Chat unavailable · Your draft is kept');
+    expect(label(), 'Sending unavailable · Your draft is kept');
     runtime.recovered();
     expect(label(), 'Hermes is working…');
   });

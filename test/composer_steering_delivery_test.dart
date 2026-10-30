@@ -77,6 +77,7 @@ void main() {
       runtimeId: 'runtime',
       working: working,
       canSteer: working,
+      attachmentBlocked: false,
       connected: true,
       automaticDrainAvailable: true,
       switching: false,
