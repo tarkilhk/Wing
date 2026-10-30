@@ -9,6 +9,8 @@ import 'package:wing/core/services/profiles_repository.dart';
 import 'dart:io';
 
 import 'support/gateway_application_requests.dart';
+import 'support/canonical_gateway_fixture.dart';
+import 'package:wing/core/services/ws_client.dart';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/foundation.dart';
@@ -107,6 +109,143 @@ void main() {
     'runtime_revision': 7,
     'runtime_generation': 3,
   };
+
+  for (final owner in ['old', 'conversation-root']) {
+    test(
+      'workspace move prepares saved chat before fencing owner $owner',
+      () async {
+        var prepared = false;
+        final order = <String>[];
+        final gateway = ProfileGateway(
+          scope: WorkspaceScope(connectionId: 'move', profileName: 'personal'),
+          discover: () async => const ProfileDiscovery(
+            profiles: [HermesProfile(name: 'personal')],
+            currentName: 'personal',
+            activeName: 'personal',
+          ),
+          get: (endpoint, query) async {
+            order.add('snapshot');
+            if (prepared) expect(endpoint, 'sessions/$owner/mutation-snapshot');
+            return {
+              'session_id': prepared ? owner : 'old',
+              'exists': true,
+              'runtime_revision': prepared ? 2 : 0,
+              'runtime_generation': prepared ? 1 : 0,
+            };
+          },
+          rpc: (method, params) async {
+            expect(params['profile'], 'personal');
+            if (method == 'session.resume') {
+              order.add('prepare');
+              expect(params['session_id'], 'old');
+              expect(params['omit_messages'], true);
+              prepared = true;
+              return {
+                ...canonicalSnapshotFields,
+                'session_id': owner,
+                'stored_session_id': 'old',
+                'info': {'profile_name': 'personal'},
+              };
+            }
+            order.add('move');
+            if (!prepared) {
+              throw JsonRpcError(
+                method,
+                'runtime_coordination_required',
+                code: 4001,
+                reason: 'runtime_coordination_required',
+              );
+            }
+            expect(method, 'session.mutate');
+            expect(params['session_id'], owner);
+            expect(params['expected_revision'], 2);
+            expect(params['expected_generation'], 1);
+            expect(params['payload'], {'cwd': '/project'});
+            return {
+              'session_id': owner,
+              'operation': 'workspace',
+              'revision': 3,
+              'execution_generation': 2,
+              'cwd': '/project',
+            };
+          },
+        );
+        addTearDown(gateway.close);
+        expect(
+          (await gateway.moveSession(
+            'old',
+            '/project',
+            canDispatch: () => true,
+          ))['cwd'],
+          '/project',
+        );
+        expect(order, ['prepare', 'snapshot', 'move']);
+      },
+    );
+  }
+
+  for (final refusal in ['departure', 'close', 'wrong-profile', 'conflict']) {
+    test('workspace move refuses $refusal without replaying writes', () async {
+      var active = true, preparations = 0, snapshots = 0, writes = 0;
+      late ProfileGateway gateway;
+      gateway = ProfileGateway(
+        scope: WorkspaceScope(connectionId: 'move', profileName: 'personal'),
+        discover: () async => const ProfileDiscovery(
+          profiles: [HermesProfile(name: 'personal')],
+          currentName: 'personal',
+          activeName: 'personal',
+        ),
+        get: (endpoint, query) async {
+          snapshots++;
+          return {
+            'session_id': 'old',
+            'exists': true,
+            'runtime_revision': 0,
+            'runtime_generation': 0,
+          };
+        },
+        rpc: (method, params) async {
+          if (method == 'session.resume') {
+            preparations++;
+            if (refusal == 'departure') active = false;
+            if (refusal == 'close') gateway.close();
+            return {
+              ...canonicalSnapshotFields,
+              'session_id': 'old',
+              'stored_session_id': 'old',
+              'info': {
+                'profile_name': refusal == 'wrong-profile'
+                    ? 'work'
+                    : 'personal',
+              },
+            };
+          }
+          writes++;
+          throw JsonRpcError(
+            method,
+            'revision_conflict',
+            code: 4001,
+            reason: 'revision_conflict',
+          );
+        },
+      );
+      addTearDown(gateway.close);
+      await expectLater(
+        gateway.moveSession('old', '/project', canDispatch: () => active),
+        throwsA(
+          refusal == 'conflict'
+              ? isA<JsonRpcError>()
+              : refusal == 'wrong-profile'
+              ? isA<FormatException>()
+              : isA<DashboardRequestNotSentException>(),
+        ),
+      );
+      expect(preparations, 1);
+      expect(snapshots, refusal == 'conflict' ? 1 : 0);
+      expect(writes, refusal == 'conflict' ? 1 : 0);
+    });
+  }
+
   ProfileGateway mutationGateway(ScopedGet read, ScopedOwnedPost patch) =>
       ProfileGateway(
         scope: WorkspaceScope(

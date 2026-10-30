@@ -10,6 +10,9 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
   final deletes = <(String, Map<String, String>)>[];
   final deleteAttempts = <(String, Map<String, String>)>[];
   final moves = <(String, Map<String, dynamic>)>[];
+  final _workspaceStorageIds = <String, String>{};
+  Completer<void>? movePreparationDelay;
+  final movePreparations = <String>[];
   final changes = <String, Map<String, Map<String, dynamic>>>{};
   final removed = <String, Set<String>>{};
   bool failMutation = false;
@@ -158,7 +161,9 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
           await mutationDelay?.future;
           if (failMutation) throw StateError('Move rejected');
           _verifyMutationFence(params);
-          final id = params['session_id'] as String;
+          final ownerId = params['session_id'] as String;
+          final id =
+              _workspaceStorageIds['${scope.profileName}:$ownerId'] ?? ownerId;
           final cwd = (params['payload'] as Map)['cwd'];
           final profile = changes.putIfAbsent(scope.profileName, () => {});
           profile[id] = {
@@ -168,8 +173,10 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
             'git_repo_root': null,
           };
           mutationRevision++;
+          canonicalRevisions['${scope.profileName}:$ownerId'] =
+              mutationRevision;
           return {
-            'session_id': id,
+            'session_id': ownerId,
             'operation': 'workspace',
             'revision': mutationRevision,
             'execution_generation': mutationGeneration,
@@ -196,20 +203,41 @@ class ProfileActionsFixture extends ProfileBrowserFixture {
             ],
           };
         }
-        if (method == 'session.resume' &&
-            params['session_id'] == activeSessionKey) {
-          active = true;
-          return {
-            ...canonicalSnapshotFields,
-            'session_id': 'runtime',
-            'stored_session_id': resumeSessionId,
-            'messages': [],
-            'info': {
-              'profile_name': resumeProfile ?? scope.profileName,
-              if (lazyResume) 'lazy': true,
-            },
-            ...resumeOverrides,
-          };
+        if (method == 'session.resume') {
+          final Map<String, dynamic> result;
+          if (params['session_id'] == activeSessionKey) {
+            active = true;
+            result = {
+              ...canonicalSnapshotFields,
+              'revision':
+                  canonicalRevisions['${scope.profileName}:runtime'] ?? 0,
+              'session_id': 'runtime',
+              'stored_session_id': resumeSessionId,
+              'messages': [],
+              'info': {
+                'profile_name': resumeProfile ?? scope.profileName,
+                if (lazyResume) 'lazy': true,
+              },
+              ...resumeOverrides,
+            };
+          } else {
+            result = await base.call(method, params);
+          }
+          final ownerId = result['session_id'] as String;
+          _workspaceStorageIds['${scope.profileName}:$ownerId'] =
+              result['stored_session_id'] as String;
+          if (params['omit_messages'] == true) {
+            movePreparations.add(params['session_id'] as String);
+            await movePreparationDelay?.future;
+            final revision = result['revision'] as int;
+            if (revision > mutationRevision) mutationRevision = revision;
+            return {
+              ...result,
+              'revision': mutationRevision,
+              'execution_generation': mutationGeneration,
+            };
+          }
+          return result;
         }
         return base.call(method, params);
       },

@@ -1703,15 +1703,28 @@ class ProfileGateway {
       throw ArgumentError('A chat and project folder are required');
     }
     await requireProfile();
-    final fence = await _rowMutationFence(id);
-    final result = await _browserCommand('session.mutate', {
+    // A saved transcript has no frozen workspace policy until stock resume
+    // prepares it. Resume also resolves a listed compression segment to its
+    // logical owner; fence that owner after preparation, not the captured row.
+    final prepared = await _browserCommand('session.resume', {
       'session_id': id,
+      'omit_messages': true,
+    }, canDispatch);
+    if (_closed || !canDispatch()) {
+      throw DashboardRequestNotSentException(
+        StateError('Profile changed. Open the menu again.'),
+      );
+    }
+    final ownerId = _ownedSession(prepared)['session_id'] as String;
+    final fence = await _rowMutationFence(ownerId);
+    final result = await _browserCommand('session.mutate', {
+      'session_id': ownerId,
       'request_id': const Uuid().v4(),
       ...fence,
       'operation': 'workspace',
       'payload': {'cwd': cwd},
     }, canDispatch);
-    if (result['session_id'] != id ||
+    if (result['session_id'] != ownerId ||
         result['operation'] != 'workspace' ||
         result['revision'] is! int ||
         result['cwd'] is! String ||
@@ -1721,7 +1734,7 @@ class ProfileGateway {
             result['git_repo_root'] is! String)) {
       throw const FormatException('Invalid workspace move response');
     }
-    canonical.mutationResult(id, result);
+    canonical.mutationResult(ownerId, result);
     return {
       'cwd': result['cwd'],
       'git_branch': result['branch'],

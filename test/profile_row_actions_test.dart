@@ -1429,7 +1429,7 @@ void main() {
         isTrue,
       );
       expect(host.moves.single.$2, {
-        'session_id': 'newest',
+        'session_id': 'runtime',
         'operation': 'workspace',
         'request_id': isNotEmpty,
         'expected_revision': 0,
@@ -1671,6 +1671,42 @@ void main() {
     expect(find.byKey(const ValueKey('chat-personal-newest')), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('saved chat move shows progress while its policy is prepared', (
+    tester,
+  ) async {
+    host.movePreparationDelay = Completer<void>();
+    addTearDown(() {
+      if (!host.movePreparationDelay!.isCompleted) {
+        host.movePreparationDelay!.complete();
+      }
+    });
+    await show(tester);
+    await menu(tester, 'newest', overflow: true);
+    await tester.tap(find.text('Move to project'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Move chat'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(host.movePreparations, ['newest']);
+    expect(
+      find.byType(CircularProgressIndicator).hitTestable(),
+      findsOneWidget,
+    );
+    expect(
+      host.reads.where((r) => r.$1.endsWith('/mutation-snapshot')),
+      isEmpty,
+    );
+    expect(host.moves, isEmpty);
+    expect(controller.current!.mutatingSessions, contains('newest'));
+    host.movePreparationDelay!.complete();
+    await tester.pumpAndSettle();
+    expect(host.moves, hasLength(1));
+    expect(find.byKey(const ValueKey('chat-project-sheet')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Unassigned opens projects independently of connection details', (
@@ -2044,7 +2080,7 @@ void main() {
     await tester.tap(find.byTooltip('Move chat'));
     await tester.pumpAndSettle();
 
-    expect(host.moves.single.$2['session_id'], 'new-chat');
+    expect(host.moves.single.$2['session_id'], 'runtime');
     expect(host.changes['personal']!['new-chat']!['cwd'], '/Mobile app');
     expect(controller.chatProjectLabel(chat), 'Mobile app');
     expect(find.text('Mobile app'), findsOneWidget);
