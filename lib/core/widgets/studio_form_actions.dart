@@ -208,13 +208,13 @@ class StudioFormActions extends StatelessWidget {
                           : Theme.of(context).colorScheme.error,
                     )
                   : null,
-              foregroundColor: destructive
-                  ? WidgetStateProperty.resolveWith(
-                      (states) => states.contains(WidgetState.disabled)
-                          ? null
-                          : Theme.of(context).colorScheme.onError,
-                    )
-                  : null,
+              foregroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.disabled)
+                    ? null
+                    : destructive
+                    ? Theme.of(context).colorScheme.onError
+                    : Theme.of(context).colorScheme.onPrimary,
+              ),
             ),
             icon: busy
                 ? SizedBox.square(
