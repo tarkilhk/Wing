@@ -3,10 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/backend_update.dart';
 import 'package:wing/core/models/hermes_profile.dart';
+import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profiles_repository.dart';
 import 'package:wing/core/services/ws_client.dart';
 
@@ -150,6 +154,59 @@ void main() {
       print('EXISTING_HERMES_REOPEN ${jsonEncode({'reopened': rows.length})}');
     },
     skip: !enabled,
+    timeout: const Timeout(Duration(minutes: 2)),
+  );
+
+  test(
+    'requested saved conversation is readable independently of attachment',
+    () async {
+      final profile = Platform.environment['WING_HERMES_PROFILE'];
+      final sessionId = Platform.environment['WING_HERMES_SESSION']!;
+      expect(discovery.named(profile ?? ''), isNotNull);
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final appPreferences = AppPreferences(preferences);
+      addTearDown(appPreferences.dispose);
+      final controller = ProfileWorkspaceController(
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        connectionIdentity: 'existing-readonly',
+        preferences: preferences,
+        appPreferences: appPreferences,
+      );
+      addTearDown(controller.dispose);
+      await controller.initialize();
+      var revealed = false;
+      final chat = await controller.openSessionForReading(
+        ProfileSessionKey(
+          WorkspaceScope(
+            connectionId: connection.id,
+            connectionIdentity: 'existing-readonly',
+            profileName: profile!,
+          ),
+          sessionId,
+        ),
+        isCurrentRequest: () => true,
+        onReadingAvailable: (chat) {
+          expect(chat.reading.messages, isNotEmpty);
+          expect(chat.runtime.offline, isTrue);
+          revealed = true;
+        },
+      );
+      expect(revealed, isTrue);
+      expect(chat, isNotNull);
+      expect(chat!.reading.messages, isNotEmpty);
+      expect(chat.reading.historyError, isNull);
+      expect(chat.refreshingConversation, isFalse);
+      if (chat.runtime.offline) {
+        expect(chat.runtime.openingError, isNotNull);
+      }
+      // Counts and attachment state only; never transcript or credentials.
+      // ignore: avoid_print
+      print(
+        'EXISTING_HERMES_READING ${jsonEncode({'rows': chat.reading.messages.length, 'attached': !chat.runtime.offline})}',
+      );
+    },
+    skip: !enabled || Platform.environment['WING_HERMES_SESSION'] == null,
     timeout: const Timeout(Duration(minutes: 2)),
   );
 

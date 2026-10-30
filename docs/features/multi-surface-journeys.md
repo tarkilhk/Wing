@@ -58,3 +58,7 @@ when session APIs change. The fixture journeys and stock profile/project runner
 do not establish that existing chats reopen on the intended deployment. This
 read check needs no provider turn; sending/queueing still requires its separate
 authorized journey.
+
+For attachment refusal, the [conversation recovery recipe](conversation.md#gotchas)
+checks that saved messages remain visible, Send is unavailable, and Retry keeps
+the draft while attachment completes. History access does not grant write authority.

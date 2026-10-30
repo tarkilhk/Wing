@@ -124,6 +124,13 @@ class ProfileChat {
   CurrentPlanGauge? _planGauge;
   CurrentPlanGauge? get planGauge => _planGauge;
   String? _readOnlyReason;
+  bool _attachmentRefused = false;
+
+  /// Foreground attachment and explicit refusal cannot admit composer work.
+  /// Background network recovery can still accept an offline queued message.
+  bool get attachmentBlocked =>
+      _attachmentRefused ||
+      refreshingConversation && runtime.opening && runtime.openingError == null;
   HostedConnectionOperation? _connectionOperation;
   Object? _connectionOperationAction;
   bool _answeringQuestion = false;
@@ -2240,6 +2247,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         });
       } else {
         _error = null;
+        if (isConversationAttachmentRefused(failure)) {
+          chat._attachmentRefused = true;
+        }
         chat._runtime.finishOpening(
           error: _isMissingSessionFailure(failure)
               ? 'This conversation is no longer available.'
@@ -3187,7 +3197,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat, {
     bool userInitiated = false,
   }) async {
-    if (_closed) return;
+    if (_closed || chat.runtime.offline) return;
     final resource = _owned(chat);
     final key = chat._key;
     final gateway = resource.gateway;
@@ -4269,9 +4279,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } catch (failure) {
       if (reading == null) rethrow;
       if (ownsReading()) {
+        if (isConversationAttachmentRefused(failure)) {
+          reading!._attachmentRefused = true;
+        }
         reading!._runtime.finishOpening(
           error: _isMissingSessionFailure(failure)
               ? 'This conversation is no longer available. Your saved messages are kept.'
+              : failure is JsonRpcError
+              ? conversationOpeningFailureMessage(failure)
               : 'Conversation could not be refreshed. Retry to check for new messages.',
         );
       }
@@ -4280,12 +4295,42 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (ownsReading()) {
         reading!._readingRefresh = null;
         if (reading!.runtime.opening && reading!.runtime.openingError == null) {
-          reading!._runtime.finishOpening();
+          if (reading!.runtime.offline) {
+            reading!._runtime.cancelOpening();
+          } else {
+            reading!._runtime.finishOpening();
+          }
         }
         _changed();
       }
     }
   });
+
+  /// Retry this conversation's attachment without treating a refusal as loss of
+  /// the whole workspace connection. Saved reading and drafts stay mounted.
+  Future<void> retryConversation(ProfileChat chat) async {
+    _owned(chat);
+    if (chat.refreshingConversation) return;
+    if (_notificationTarget == chat.key) {
+      final token = Object();
+      chat._readingRefresh = token;
+      _changed();
+      try {
+        await _resumeNotification();
+      } finally {
+        if (identical(chat._readingRefresh, token)) {
+          chat._readingRefresh = null;
+          _changed();
+        }
+      }
+      return;
+    }
+    await openSessionForReading(
+      chat.key,
+      isCurrentRequest: () => !_closed && identical(_current?.chat, chat),
+      onReadingAvailable: (_) {},
+    );
+  }
 
   /// Camera intake borrows a mounted draft without navigation or server reads.
   /// An absent destination still uses the exact saved-chat recovery workflow.
@@ -4387,8 +4432,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
     _cancelOlderLoads();
     var chat = resource._chats[key.sessionId];
     var replacedExpiredDraft = false;
+    var resumedOnCreation = false;
     if (chat == null) {
-      final response = await resource.gateway.resume(key.sessionId);
+      // A UI visit reads saved history independently of runtime attachment.
+      // Non-view callers still require a canonical receipt before proceeding.
+      final response = onReadingAvailable == null
+          ? await resource.gateway.resume(key.sessionId)
+          : null;
       if (_closed ||
           !identical(_resources[key.workspace], resource) ||
           resource.blocksSession(key.sessionId)) {
@@ -4416,21 +4466,21 @@ class ProfileWorkspaceController extends ChangeNotifier {
             return null;
           }
         }
-        if (response.containsKey('parent_session_id')) {
+        if (response?.containsKey('parent_session_id') == true) {
           _applyServerParentRows(
             resource,
             key.sessionId,
-            response['parent_session_id'],
+            response!['parent_session_id'],
           );
         }
         chat = _createChatRecord(
           key: key,
-          runtimeId: response['session_id'] as String,
+          runtimeId: response?['session_id'] as String? ?? key.sessionId,
           source: sessionRow?['source']?.toString() ?? '',
           title: sessionRow?['title']?.toString() ?? 'Chat',
           parentSessionId: _serverParent(
-            response.containsKey('parent_session_id')
-                ? response['parent_session_id']
+            response?.containsKey('parent_session_id') == true
+                ? response!['parent_session_id']
                 : sessionRow?['parent_session_id'],
             key.sessionId,
           ),
@@ -4450,10 +4500,42 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.reading.dispose();
           return null;
         }
-        _hydrate(chat, response);
+        if (response != null) {
+          _hydrate(chat, response);
+          resumedOnCreation = true;
+        } else {
+          // The durable ID locates saved rows; it grants no runtime authority.
+          chat._runtime.installOfflineReading();
+        }
         await _restoreDraft(chat);
       }
-    } else if (chat.runtime.execution != ChatExecution.submitting &&
+    }
+    if (chat.runtime.offline) {
+      if (_closed || isCurrentRequest?.call() == false) return null;
+      if (_current == resource &&
+          !switching &&
+          navigation == _navigationGeneration) {
+        resource._selectedSession = key.sessionId;
+      }
+      await refreshHistory(
+        chat,
+        propagateFailure: onReadingAvailable != null || propagateHistoryFailure,
+      );
+      if (_closed ||
+          isCurrentRequest?.call() == false ||
+          navigation != _navigationGeneration ||
+          !identical(resource._chats[key.sessionId], chat)) {
+        return null;
+      }
+      onReadingAvailable?.call(chat);
+      _changed();
+      if (isCurrentRequest?.call() == false ||
+          navigation != _navigationGeneration) {
+        return null;
+      }
+    }
+    if (!resumedOnCreation &&
+        chat.runtime.execution != ChatExecution.submitting &&
         !chat.composer.observation.sending) {
       chat._runtime.invalidateResume();
       final read = _captureResume(resource, chat);
@@ -5698,6 +5780,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       runtimeId: chat.runtime.runtimeId,
       working: chat.runtime.blocksTurnAdmission,
       canSteer: chat.runtime.canSteer,
+      attachmentBlocked: chat.attachmentBlocked,
       connected:
           !_closed &&
           !chat.runtime.opening &&
@@ -6789,7 +6872,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   Future<String?> send(ProfileChat chat) async {
     final resource = _commandOwner(chat);
-    if (chat._replacingExpiredRuntime ||
+    if (chat.attachmentBlocked ||
+        chat._replacingExpiredRuntime ||
         chat.composer.observation.preparing ||
         chat.runtime.commandRunning ||
         chat._changingIntelligence ||
@@ -9843,6 +9927,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   }
 
   void _hydrate(ProfileChat chat, Map<String, dynamic> result) {
+    chat._attachmentRefused = false;
     _observeConnectionOperation(
       chat,
       result['pending_connection'],

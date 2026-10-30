@@ -427,10 +427,9 @@ void main() {
         ..resumeStarted = Completer<void>()
         ..resumeDelay = Completer<void>();
       await tester.tap(find.byKey(const ValueKey('saved-draft-orphan-draft')));
-      await tester.pump();
-      await host.resumeStarted!.future;
       await tester.tap(find.byKey(const ValueKey('saved-draft-orphan-draft')));
       await tester.pump();
+      await host.resumeStarted!.future;
       host.resumeDelay!.complete();
       await tester.pumpAndSettle();
 

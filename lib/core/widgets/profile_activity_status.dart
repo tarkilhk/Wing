@@ -26,7 +26,7 @@ class ProfileActivityStatus extends StatelessWidget {
 
   String? get label {
     if (runtime.openingError != null) {
-      return 'Chat unavailable · Your draft is kept';
+      return 'Sending unavailable · Your draft is kept';
     }
     if (runtime.opening || runtime.offline) {
       return null;

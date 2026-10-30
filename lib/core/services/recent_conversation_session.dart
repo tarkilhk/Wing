@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/recent_conversation.dart';
 import 'recent_conversation_snapshots.dart';
+import 'workspace_connection_failure.dart';
 
 /// Captured workspace reads and commands. Preview reads grant no runtime lease.
 abstract interface class RecentConversationSource implements Listenable {
@@ -282,8 +283,8 @@ final class RecentConversationSession extends ChangeNotifier {
       if (_source.selected != key) return false;
       _selected = key;
       return true;
-    } catch (_) {
-      if (current()) _error = 'Could not open this conversation. Try again.';
+    } catch (error) {
+      if (current()) _error = conversationOpeningFailureMessage(error);
       return false;
     } finally {
       if (current()) {

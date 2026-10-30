@@ -72,6 +72,7 @@ final class ComposerRuntimeObservation {
     required this.working,
     required this.canSteer,
     required this.connected,
+    required this.attachmentBlocked,
     required this.automaticDrainAvailable,
     required this.switching,
     required this.changingAnswer,
@@ -86,6 +87,7 @@ final class ComposerRuntimeObservation {
   final bool working;
   final bool canSteer;
   final bool connected;
+  final bool attachmentBlocked;
 
   /// Automatic sending requires positively observed access and live transport.
   /// Optimistic availability offered by the UI does not grant this authority.
