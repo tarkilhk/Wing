@@ -270,6 +270,70 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'automation start preserves its typed display notice ${brightness.name} $scale',
+        (tester) async {
+          final chat = await show(tester, brightness: brightness, scale: scale);
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 800);
+          final gateway = controller.current!.gateway;
+          const raw = 'Model context without any delegation marker';
+          final receipt = canonicalReceipt(
+            {
+              'session_id': chat.runtime.runtimeId,
+              'submission_id': 'automation-input',
+              'text': raw,
+            },
+            admissionId: 'automation-admission',
+            status: 'queued',
+          );
+          var sequence = 0;
+          void event(String type, Map<String, dynamic> data) {
+            gateway.onEvent!(
+              StreamEvent(
+                type: type,
+                sessionId: chat.runtime.runtimeId,
+                data: data,
+                envelope: {
+                  'replay_epoch': 'fixture-epoch',
+                  'seq': ++sequence,
+                  'admission_id': 'automation-admission',
+                },
+              ),
+            );
+          }
+
+          event('session.info', {
+            'pending': [receipt],
+          });
+          event('message.start', {
+            'display_kind': 'async_delegation_complete',
+            'display_text': 'Subagent Tasks Completed: retailer checks',
+            'text': raw,
+          });
+          event('session.info', {
+            'pending': [
+              {...receipt, 'status': 'started'},
+            ],
+          });
+          await pumpFrames(tester);
+          final row = chat.reading.messages.single;
+          expect(row['display_kind'], 'async_delegation_complete');
+          expect(row['display_metadata'], {
+            'display_text': 'Subagent Tasks Completed: retailer checks',
+          });
+          expect(row['content'], raw);
+          expect(find.text(raw), findsNothing);
+          expect(find.byTooltip('Edit message'), findsNothing);
+          expect(find.byTooltip('Restore checkpoint'), findsNothing);
+          expect(tester.takeException(), isNull);
+          await capture(tester, 'automation-flag-${brightness.name}-$scale');
+        },
+      );
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
       testWidgets('fresh Send after interruption shows delivery feedback '
           '${brightness.name} $scale', (tester) async {
         const text = 'A fresh request after stopping';

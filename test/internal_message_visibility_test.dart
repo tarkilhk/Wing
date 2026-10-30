@@ -1,4 +1,11 @@
+import 'dart:io';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
+import 'package:wing/core/models/reading_snapshot_message.dart';
 import 'package:wing/core/services/chat_reading_session.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'support/composer_fixture.dart';
@@ -64,6 +71,31 @@ const _rawDelegationEnvelope =
     'A background fan-out unit you dispatched earlier — 2 subagent(s) — '
     'has finished; its consolidated results are below. Any other units from the sa';
 
+// Stock process_registry_notifications.py::_format_batch_delegation at
+// ef35e8b9e1a8bc7f0efb50e4f2d68f1ec052f6a8; matches the reported bubble.
+const _batchDelegationEnvelope =
+    '[ASYNC DELEGATION BATCH COMPLETE — deleg_441d6ba6]\n'
+    'A background fan-out unit you dispatched earlier — 3 subagent(s) — '
+    'has finished; its consolidated results are below. Any other units from the '
+    'same delegate_task call report separately as they finish. You may have '
+    'moved on since dispatching — act on these or re-dispatch if things have '
+    'changed. If you are still waiting on siblings, end your turn after acting '
+    'on this one.\n\n'
+    'Dispatched: 2026-10-30 15:07:46 (5m ago)\n'
+    'Role: leaf   Total duration: 300s\n\n'
+    '--- ✓ TASK 1/3: Check retailers  (status=completed) ---\n'
+    'Retailer results for the parent agent';
+
+Map<String, dynamic> _batchNotice() => {
+  'id': 14,
+  'role': 'user',
+  'content': _batchDelegationEnvelope,
+  'display_kind': 'async_delegation_complete',
+  'display_metadata': {
+    'display_text': 'Subagent Tasks Completed: retailer checks',
+  },
+};
+
 class _NoticeHistory extends ProfileHistoryFixture {
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) => [
@@ -98,10 +130,187 @@ class _NoticeHistory extends ProfileHistoryFixture {
       'content': _processHeartbeat,
       'display_kind': 'hidden',
     },
+    _batchNotice(),
   ];
 }
 
 void main() {
+  const capture = bool.fromEnvironment('STUDIO_REVIEW');
+  setUpAll(() async {
+    if (!capture) return;
+    for (final entry in {
+      'Roboto': 'build/studio-roboto.ttf',
+      'Ahem': 'build/studio-roboto.ttf',
+      'MaterialIcons': 'build/studio-icons.otf',
+    }.entries) {
+      await (FontLoader(entry.key)..addFont(
+            Future.value(
+              ByteData.sublistView(File(entry.value).readAsBytesSync()),
+            ),
+          ))
+          .load();
+    }
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'delegation batch stays out of phone messages ${brightness.name} $scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          const frame = ValueKey('delegation-review');
+          await tester.pumpWidget(
+            RepaintBoundary(
+              key: frame,
+              child: MaterialApp(
+                debugShowCheckedModeBanner: false,
+                theme: wingTheme(brightness),
+                builder: (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(scale)),
+                  child: child!,
+                ),
+                home: Scaffold(
+                  body: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        for (final row in [
+                          {
+                            'role': 'user',
+                            'content': 'Find a reliable retailer.',
+                          },
+                          _batchNotice(),
+                          {
+                            'role': 'assistant',
+                            'content': 'I am comparing the offers.',
+                          },
+                        ])
+                          ProfileMessage(
+                            message: TranscriptMessage.fromRow(row),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.settleMarkdown();
+          expect(find.textContaining('deleg_441d6ba6'), findsNothing);
+          expect(find.textContaining('Retailer results'), findsNothing);
+          expect(find.text('Find a reliable retailer.'), findsOneWidget);
+          expect(
+            find.textContaining('I am comparing the offers.'),
+            findsOneWidget,
+          );
+          expect(tester.takeException(), isNull);
+          if (capture) {
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(frame),
+            );
+            await tester.runAsync(() async {
+              final image = await boundary.toImage();
+              final bytes = await image.toByteData(
+                format: ui.ImageByteFormat.png,
+              );
+              final directory = Directory(
+                'build/design-previews/delegation-exception',
+              )..createSync(recursive: true);
+              await File(
+                '${directory.path}/${brightness.name}-$scale.png',
+              ).writeAsBytes(bytes!.buffer.asUint8List());
+              image.dispose();
+            });
+          }
+        },
+      );
+    }
+  }
+
+  test('typed delegation batch preserves metadata and raw history', () {
+    for (final fields in <Map<String, dynamic>>[
+      {'content': _batchDelegationEnvelope},
+      {'text': _batchDelegationEnvelope},
+      {'content': _batchDelegationEnvelope.replaceAll('\n', '\r\n')},
+      {'content': '  $_batchDelegationEnvelope\n'},
+      {'content': 'wire payload', 'display_content': _batchDelegationEnvelope},
+      {
+        'content': [
+          {'type': 'text', 'text': _batchDelegationEnvelope},
+        ],
+      },
+      {
+        'content': _batchDelegationEnvelope.replaceFirst(
+          '3 subagent(s)',
+          "group 'retailers' (3 subagent(s))",
+        ),
+      },
+    ]) {
+      final row = {..._batchNotice(), ...fields};
+      for (final projected in [
+        row,
+        answerHistoryRows([row]).single,
+        projectReadingSnapshotMessage(row),
+      ]) {
+        expect(isHiddenAnswerMessage(projected), isFalse, reason: '$fields');
+        expect(isHumanAnswerPrompt(projected), isFalse);
+        expect(
+          TranscriptMessage.fromRow(projected).kind,
+          TranscriptMessageKind.notice,
+        );
+        expect(projected['id'], 14);
+        expect(answerMessageText(projected), answerMessageText(row));
+        expect(isAnswerPrompt(projected), isFalse);
+      }
+    }
+  });
+
+  test('delegation text alone has no classification authority', () {
+    for (final text in [
+      _batchDelegationEnvelope,
+      'Explain this:\n$_batchDelegationEnvelope',
+      '```\n$_batchDelegationEnvelope\n```',
+      '> $_batchDelegationEnvelope',
+      _rawDelegationEnvelope,
+      '[ASYNC DELEGATION BATCH COMPLETE — deleg_441d6ba6]',
+      _batchDelegationEnvelope.replaceFirst(
+        'A background fan-out',
+        'My fan-out',
+      ),
+    ]) {
+      expect(
+        isHiddenAnswerMessage({'role': 'user', 'content': text}),
+        isFalse,
+        reason: text,
+      );
+    }
+    for (final row in [
+      {'role': 'assistant', 'content': _batchDelegationEnvelope},
+      {
+        'role': 'user',
+        'content': _batchDelegationEnvelope,
+        'display_content': 'Visible server projection',
+      },
+      {
+        'role': 'user',
+        'content': _batchDelegationEnvelope,
+        'display_content': '',
+      },
+      {
+        'role': 'user',
+        'content': _batchDelegationEnvelope,
+        'display_kind': 'steer',
+      },
+      {..._notice(), 'content': _batchDelegationEnvelope},
+    ]) {
+      expect(isHiddenAnswerMessage(row), isFalse);
+    }
+  });
+
   test('saved subagent completion belongs to Activity, never a prose row', () {
     final timeline = TranscriptTimeline.project([
       {'id': 1, 'role': 'assistant', 'content': 'The change is underway.'},
@@ -552,6 +761,9 @@ void main() {
         expect(find.byKey(const ValueKey('edit-message-12')), findsNothing);
         expect(find.textContaining('heartbeat #9'), findsNothing);
         expect(find.byKey(const ValueKey('edit-message-13')), findsNothing);
+        expect(find.textContaining('deleg_441d6ba6'), findsNothing);
+        expect(find.textContaining('Retailer results'), findsNothing);
+        expect(find.byKey(const ValueKey('edit-message-14')), findsNothing);
         // Retain server history and IDs for paging/rewind; filter only the view.
         expect(chat.reading.messages.map((row) => row['id']), [
           1,
@@ -567,6 +779,7 @@ void main() {
           11,
           12,
           13,
+          14,
         ]);
         await controller.refreshHistory(chat);
         await tester.pumpAndSettle();
@@ -596,6 +809,12 @@ void main() {
     expect(find.text('Private hidden instructions'), findsNothing);
     expect(find.text('View in chat'), findsNothing);
     await tester.enterText(find.byType(TextField), 'deleg_22411d56');
+    await tester.pump();
+    expect(find.text('View in chat'), findsNothing);
+    await tester.enterText(
+      find.byType(TextField),
+      'end your turn after acting',
+    );
     await tester.pump();
     expect(find.text('View in chat'), findsNothing);
     await tester.enterText(find.byType(TextField), 'Quiesce processing');

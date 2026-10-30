@@ -289,12 +289,16 @@ final class TranscriptReading implements TranscriptReader {
     required String inputId,
     required String text,
     String? displayText,
+    String? displayKind,
+    Map<String, dynamic>? displayMetadata,
     Iterable<UserMessageAttachment> attachments = const [],
   }) {
     if (_closed || !_displayedPromptInputs.add(inputId)) return;
     appendPrompt(
       text: text,
       displayText: displayText,
+      displayKind: displayKind,
+      displayMetadata: displayMetadata,
       attachments: attachments,
     );
   }
@@ -302,6 +306,8 @@ final class TranscriptReading implements TranscriptReader {
   void appendPrompt({
     required String text,
     String? displayText,
+    String? displayKind,
+    Map<String, dynamic>? displayMetadata,
     Iterable<UserMessageAttachment> attachments = const [],
     bool steering = false,
   }) {
@@ -310,7 +316,9 @@ final class TranscriptReading implements TranscriptReader {
       'content': text,
       'display_content': ?displayText,
       if (attachments.isNotEmpty) 'submitted_attachments': attachments.toList(),
-      if (steering) 'display_kind': 'steer',
+      if (steering || displayKind != null)
+        'display_kind': steering ? 'steer' : displayKind,
+      'display_metadata': ?displayMetadata,
       if (!steering) 'timestamp': DateTime.now().millisecondsSinceEpoch / 1000,
     });
   }
