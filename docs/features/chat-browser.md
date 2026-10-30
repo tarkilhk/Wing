@@ -22,6 +22,8 @@ If the chat is still working, confirmation shows why it cannot move. Retry in
 the same picker after the work finishes; admission uses the current chat state.
 Choosing another project and tapping the removal cross use the same Move chat
 confirmation, naming the destination and keeping messages and drafts.
+Moving a saved chat prepares its Hermes execution policy automatically before
+changing the folder; opening or sending a message in the chat first is unnecessary.
 
 ## Driving it with Wing harnesses
 
@@ -49,7 +51,7 @@ The native creation journey waits for the new project's row menu to become
 reachable after keyboard dismissal before verifying edit and delete actions.
 
 Removal checks use the production picker and confirmation, holding the default
-folder read, mutation snapshot and write separately. They cover cancellation,
+folder read, saved-chat preparation, mutation snapshot and write separately. They cover cancellation,
 read/write failure and retry, immediate membership cleanup, draft preservation,
 and profile retirement. The design suite inspects the assigned card and
 confirmation at normal and enlarged text in both themes.
