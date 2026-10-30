@@ -219,6 +219,30 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
           projectChanges['${scope.profileName}/$id'] = updated;
           return {'project': _confirmedProject(updated)};
         }
+        if (method == 'projects.get' || method == 'projects.remove_folder') {
+          final id = params['id'] as String;
+          final project = projects(
+            scope.profileName,
+          ).firstWhere((p) => p['id'] == id);
+          final folders =
+              project['folders'] as List? ??
+              [
+                {'path': project['path'], 'is_primary': true},
+              ];
+          final updated = {
+            ...project,
+            'folders': [
+              for (final folder in folders)
+                if (method != 'projects.remove_folder' ||
+                    (folder as Map)['path'] != params['path'])
+                  folder,
+            ],
+          };
+          if (method == 'projects.remove_folder') {
+            projectChanges['${scope.profileName}/$id'] = updated;
+          }
+          return {'project': _confirmedProject(updated)};
+        }
         if (method == 'projects.update') {
           if (failProjectUpdate) throw StateError('Project details rejected');
           final id = params['id'] as String;

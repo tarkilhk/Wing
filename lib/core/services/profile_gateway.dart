@@ -1568,11 +1568,13 @@ class ProfileGateway {
     return Map<String, dynamic>.from(project);
   }
 
-  /// Changes the primary folder while retaining all existing associations.
-  Future<Map<String, dynamic>> setProjectPrimaryFolder(
+  /// Replaces the folder binding exposed by Wing's single-folder project editor.
+  /// Confirmed intermediate states remain observable if a later write fails.
+  Future<Map<String, dynamic>> replaceProjectFolder(
     String id,
     String path, {
     required bool Function() canDispatch,
+    required void Function(Map<String, dynamic>) onConfirmed,
   }) async {
     final projectId = id.trim();
     final folder = path.trim();
@@ -1580,25 +1582,82 @@ class ProfileGateway {
       throw ArgumentError('A project id and folder are required');
     }
     await requireProfile();
-    final result = await _browserCommand('projects.add_folder', {
-      'id': projectId,
-      'path': folder,
-      'is_primary': true,
-    }, canDispatch);
-    final project = result['project'];
-    if (project is! Map ||
-        project['id'] != projectId ||
-        project['primary_path'] != folder ||
-        project['folders'] is! List ||
+    Map<String, dynamic> confirmed(
+      Map<String, dynamic> result, {
+      bool primary = false,
+    }) {
+      final value = result['project'];
+      if (value is! Map ||
+          value['id'] != projectId ||
+          value['folders'] is! List ||
+          (value['folders'] as List).any(
+            (entry) =>
+                entry is! Map ||
+                entry['path'] is! String ||
+                (entry['path'] as String).isEmpty,
+          ) ||
+          primary &&
+              (value['primary_path'] != folder ||
+                  !(value['folders'] as List).any(
+                    (entry) =>
+                        (entry as Map)['path'] == folder &&
+                        entry['is_primary'] == true,
+                  ))) {
+        throw const FormatException('Project folder change not acknowledged');
+      }
+      return Map<String, dynamic>.from(value);
+    }
+
+    List<String> paths(Map<String, dynamic> project) => [
+      for (final entry in project['folders'] as List)
+        (entry as Map)['path'] as String,
+    ];
+    var project = confirmed(
+      await _browserCommand('projects.get', {'id': projectId}, canDispatch),
+    );
+    if (project['primary_path'] != folder ||
         !(project['folders'] as List).any(
           (entry) =>
-              entry is Map &&
-              entry['path'] == folder &&
-              entry['is_primary'] == true,
+              (entry as Map)['path'] == folder && entry['is_primary'] == true,
         )) {
-      throw const FormatException('Primary folder change not acknowledged');
+      project = confirmed(
+        await _browserCommand('projects.add_folder', {
+          'id': projectId,
+          'path': folder,
+          'is_primary': true,
+        }, canDispatch),
+        primary: true,
+      );
+      onConfirmed(project);
     }
-    return Map<String, dynamic>.from(project);
+    try {
+      for (final previous in paths(
+        project,
+      ).where((path) => path != folder).toList()) {
+        final next = confirmed(
+          await _browserCommand('projects.remove_folder', {
+            'id': projectId,
+            'path': previous,
+          }, canDispatch),
+          primary: true,
+        );
+        if (paths(next).contains(previous)) {
+          throw const FormatException('Previous folder is still associated');
+        }
+        project = next;
+        onConfirmed(project);
+      }
+      if (paths(project).length != 1 || paths(project).single != folder) {
+        throw const FormatException('Project has other folder associations');
+      }
+    } on DashboardRequestNotSentException {
+      rethrow;
+    } catch (_) {
+      throw StateError(
+        'Project folder change is incomplete. Previous folders are still linked. Try saving again.',
+      );
+    }
+    return project;
   }
 
   Future<void> deleteProject(

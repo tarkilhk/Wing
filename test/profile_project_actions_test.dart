@@ -3,6 +3,7 @@ import 'package:wing/core/models/chat_list_view.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
+import 'package:wing/core/services/connection_manager.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -147,6 +148,27 @@ void main() {
     expect(host.personalProject['label'], 'Renamed project');
   });
 
+  testWidgets('name-only project edit preserves other folder associations', (
+    tester,
+  ) async {
+    await showHarness(tester);
+    await openAction(tester, 'editProject');
+    await tester.enterText(
+      find.byKey(const ValueKey('project-name-field')),
+      'Renamed',
+    );
+    await tester.tap(find.byKey(const ValueKey('project-edit-confirm')));
+    await tester.pumpAndSettle();
+    expect(
+      (controller.current!.projects.single['folders'] as List).map(
+        (f) => f['path'],
+      ),
+      ['/mobile', '/archive'],
+    );
+    expect(host.calls.where((c) => c.$2 == 'projects.remove_folder'), isEmpty);
+    expect(host.calls.where((c) => c.$2 == 'projects.get'), isEmpty);
+  });
+
   testWidgets('pending delete stays open until acknowledgement', (
     tester,
   ) async {
@@ -208,8 +230,8 @@ void main() {
     );
     await tester.tap(find.byTooltip('Cancel icon selection'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byTooltip('Change primary folder'));
-    await tester.tap(find.byTooltip('Change primary folder'));
+    await tester.ensureVisible(find.byTooltip('Change project folder'));
+    await tester.tap(find.byTooltip('Change project folder'));
     await tester.pumpAndSettle();
     expect(find.text('/mobile'), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
@@ -221,7 +243,7 @@ void main() {
   });
 
   test(
-    'primary switch retains folders and publishes before metadata failure',
+    'folder replacement removes old associations before metadata failure',
     () async {
       final resource = controller.current!;
       host.failMutation = true;
@@ -247,7 +269,7 @@ void main() {
       expect(resource.projects.single['name'], 'Mobile app');
       expect(
         (resource.projects.single['folders'] as List).map((f) => f['path']),
-        containsAll(['/mobile', '/archive', '/new']),
+        ['/new'],
       );
       expect(
         host.calls
@@ -259,14 +281,22 @@ void main() {
               }.contains(call.$2),
             )
             .map((call) => call.$2),
-        ['projects.add_folder', 'projects.update'],
+        [
+          'projects.add_folder',
+          'projects.remove_folder',
+          'projects.remove_folder',
+          'projects.update',
+        ],
       );
-      expect(host.calls.first.$3, {
-        'id': 'personal-project',
-        'path': '/new',
-        'is_primary': true,
-        'profile': 'personal',
-      });
+      expect(
+        host.calls.firstWhere((call) => call.$2 == 'projects.add_folder').$3,
+        {
+          'id': 'personal-project',
+          'path': '/new',
+          'is_primary': true,
+          'profile': 'personal',
+        },
+      );
       host.failMutation = false;
       await controller.updateProject(
         resource.scope,
@@ -285,7 +315,7 @@ void main() {
       expect(resource.projects.single['path'], '/new');
       expect(
         (resource.projects.single['folders'] as List).map((f) => f['path']),
-        containsAll(['/mobile', '/archive', '/new']),
+        ['/new'],
       );
     },
   );
@@ -338,6 +368,191 @@ void main() {
     expect(host.calls.where((call) => call.$2 == 'projects.update'), isEmpty);
   });
 
+  test(
+    'saving the selected folder removes retained old associations',
+    () async {
+      await controller.updateProject(
+        controller.current!.scope,
+        'personal-project',
+        path: '/mobile',
+        canDispatch: () => true,
+      );
+      expect(
+        (controller.current!.projects.single['folders'] as List).map(
+          (f) => f['path'],
+        ),
+        ['/mobile'],
+      );
+      expect(host.calls.where((c) => c.$2 == 'projects.add_folder'), isEmpty);
+      expect(
+        host.calls
+            .where((c) => c.$2 == 'projects.remove_folder')
+            .single
+            .$3['path'],
+        '/archive',
+      );
+    },
+  );
+
+  test(
+    'failed folder cleanup publishes confirmed steps and retries only remaining associations',
+    () async {
+      host.failRemovalPath = '/archive';
+      await expectLater(
+        controller.updateProject(
+          controller.current!.scope,
+          'personal-project',
+          path: '/new',
+          name: 'Edited',
+          canDispatch: () => true,
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Project folder change is incomplete.'),
+          ),
+        ),
+      );
+      expect(
+        (controller.current!.projects.single['folders'] as List).map(
+          (f) => f['path'],
+        ),
+        ['/archive', '/new'],
+      );
+      expect(host.calls.where((c) => c.$2 == 'projects.update'), isEmpty);
+      host.failRemovalPath = null;
+      await controller.updateProject(
+        controller.current!.scope,
+        'personal-project',
+        path: '/new',
+        name: 'Edited',
+        canDispatch: () => true,
+      );
+      expect(
+        (controller.current!.projects.single['folders'] as List).map(
+          (f) => f['path'],
+        ),
+        ['/new'],
+      );
+      expect(
+        host.calls.where((c) => c.$2 == 'projects.add_folder'),
+        hasLength(1),
+      );
+      expect(
+        host.calls.where(
+          (c) => c.$2 == 'projects.remove_folder' && c.$3['path'] == '/mobile',
+        ),
+        hasLength(1),
+      );
+      expect(host.calls.where((c) => c.$2 == 'projects.update'), hasLength(1));
+    },
+  );
+
+  test('unacknowledged folder removal cannot report successful save', () async {
+    host.rejectRemovalAck = true;
+    await expectLater(
+      controller.updateProject(
+        controller.current!.scope,
+        'personal-project',
+        path: '/new',
+        name: 'Edited',
+        canDispatch: () => true,
+      ),
+      throwsStateError,
+    );
+    expect(host.calls.where((c) => c.$2 == 'projects.update'), isEmpty);
+    expect(
+      (controller.current!.projects.single['folders'] as List).map(
+        (f) => f['path'],
+      ),
+      contains('/mobile'),
+    );
+  });
+
+  testWidgets(
+    'edit keeps progress and retry until old folder cleanup is acknowledged',
+    (tester) async {
+      host.removalDelay = Completer<void>();
+      host.failRemovalPath = '/archive';
+      addTearDown(() {
+        if (!host.removalDelay!.isCompleted) {
+          host.removalDelay!.complete();
+        }
+      });
+      await showHarness(tester);
+      await openAction(tester, 'editProject');
+      await tester.tap(find.byTooltip('Change project folder'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('project-folder-continue')));
+      await tester.pumpAndSettle();
+      final save = find.byKey(const ValueKey('project-edit-confirm'));
+      await tester.tap(save);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.bySemanticsLabel('Saving project'), findsOneWidget);
+      expect(tester.widget<IconButton>(save).onPressed, isNull);
+      expect(host.calls.where((c) => c.$2 == 'projects.update'), isEmpty);
+      host.removalDelay!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Edit project'), findsOneWidget);
+      expect(
+        find.textContaining('Project folder change is incomplete.'),
+        findsOneWidget,
+      );
+      expect(tester.widget<IconButton>(save).onPressed, isNotNull);
+      host.failRemovalPath = null;
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      expect(find.text('Edit project'), findsNothing);
+      expect(
+        (controller.current!.projects.single['folders'] as List).map(
+          (f) => f['path'],
+        ),
+        ['/mobile'],
+      );
+      expect(host.calls.where((c) => c.$2 == 'projects.update'), hasLength(1));
+    },
+  );
+
+  test(
+    'profile departure during cleanup fences every remaining write',
+    () async {
+      final captured = controller.current!;
+      host.removalDelay = Completer<void>();
+      final pending = controller.updateProject(
+        captured.scope,
+        'personal-project',
+        path: '/new',
+        name: 'Edited',
+        canDispatch: () => true,
+      );
+      for (
+        var step = 0;
+        step < 20 && !host.calls.any((c) => c.$2 == 'projects.remove_folder');
+        step++
+      ) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(
+        host.calls.where((c) => c.$2 == 'projects.remove_folder'),
+        hasLength(1),
+      );
+      await controller.navigateProfile('work');
+      host.removalDelay!.complete();
+      await expectLater(
+        pending,
+        throwsA(isA<DashboardRequestNotSentException>()),
+      );
+      expect(
+        host.calls.where((c) => c.$2 == 'projects.remove_folder'),
+        hasLength(1),
+      );
+      expect(host.calls.where((c) => c.$2 == 'projects.update'), isEmpty);
+      expect(controller.current!.projects.single['path'], '/work');
+    },
+  );
+
   test('invalid edit values cannot switch the folder first', () async {
     await expectLater(
       controller.updateProject(
@@ -378,7 +593,10 @@ void main() {
     );
     await controller.navigateProfile('work');
     host.primaryDelay!.complete();
-    await expectLater(pending, throwsStateError);
+    await expectLater(
+      pending,
+      throwsA(isA<DashboardRequestNotSentException>()),
+    );
     expect(
       host.calls
           .where(
@@ -529,6 +747,9 @@ class _ProjectFixture extends ProfileBrowserFixture {
   bool deleted = false;
   bool failMutation = false;
   bool rejectPrimaryAck = false;
+  String? failRemovalPath;
+  bool rejectRemovalAck = false;
+  Completer<void>? removalDelay;
   Completer<void>? primaryDelay;
   Completer<void>? delay;
 
@@ -558,6 +779,32 @@ class _ProjectFixture extends ProfileBrowserFixture {
         };
       },
       rpc: (method, params) async {
+        if (method == 'projects.get' || method == 'projects.remove_folder') {
+          calls.add((
+            scope.profileName,
+            method,
+            Map<String, dynamic>.from(params),
+          ));
+          if (method == 'projects.remove_folder') {
+            await removalDelay?.future;
+            if (params['path'] == failRemovalPath) {
+              throw StateError('Removal rejected');
+            }
+            if (!rejectRemovalAck) {
+              personalProject['folders'] = [
+                for (final folder in personalProject['folders'] as List)
+                  if (folder['path'] != params['path']) folder,
+              ];
+            }
+          }
+          return {
+            'project': {
+              ...personalProject,
+              'name': personalProject['label'],
+              'primary_path': personalProject['path'],
+            },
+          };
+        }
         if (method == 'projects.update' ||
             method == 'projects.delete' ||
             method == 'projects.add_folder') {

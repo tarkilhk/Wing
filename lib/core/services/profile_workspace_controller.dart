@@ -5456,16 +5456,17 @@ class ProfileWorkspaceController extends ChangeNotifier {
       _browserMutated(ProjectBrowserMutation(resource.scope, id, project));
     }
 
-    final existing = resource._projects.firstWhere((row) => row['id'] == id);
-    final folderChanged =
-        path != null &&
-        path.trim() != ProfileGateway.projectDirectory(existing);
-    if (folderChanged) {
+    var folderSaved = false;
+    if (path != null) {
       publish(
-        await resource.gateway.setProjectPrimaryFolder(
+        await resource.gateway.replaceProjectFolder(
           id,
           path,
           canDispatch: admitted,
+          onConfirmed: (confirmed) {
+            folderSaved = true;
+            publish(confirmed);
+          },
         ),
       );
     }
@@ -5481,7 +5482,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           ),
         );
       } catch (_) {
-        if (folderChanged) {
+        if (folderSaved) {
           throw StateError(
             "Folder saved. Other changes weren't confirmed. Try saving again.",
           );
