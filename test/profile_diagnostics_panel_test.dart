@@ -49,8 +49,9 @@ class _DiagnosticsHost {
                 method == 'setup.status'
                     ? <String, dynamic>{'provider_configured': true}
                     : <String, dynamic>{
+                        // Stock native gateway validates the request's profile
+                        // and returns readiness without a profile echo.
                         'ok': true,
-                        'profile': profile,
                         'model': 'gpt-5.6-sol',
                         'provider': 'openai-codex',
                       },
@@ -138,7 +139,7 @@ Widget _app(
 
 void main() {
   testWidgets(
-    'healthy access is a passive row with no settings or recovery action',
+    'native readiness without a profile echo shows healthy passive access',
     (tester) async {
       final host = _DiagnosticsHost();
       await tester.pumpWidget(_app(host.workspace('work')));
@@ -253,7 +254,15 @@ void main() {
       for (final response in [
         {},
         {'ok': true},
+        {'ok': true, 'model': 'gpt-5.6-sol'},
+        {'ok': true, 'provider': 'openai-codex'},
         {'ok': true, 'profile': 'another'},
+        {
+          'ok': true,
+          'profile': 'another',
+          'model': 'gpt-5.6-sol',
+          'provider': 'openai-codex',
+        },
         {'ok': false, 'profile': 'another'},
       ]) {
         host.onCall = (_, _) async => Map<String, dynamic>.from(response);
@@ -274,8 +283,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Retry'), findsOneWidget);
       expect(find.text('Fix access'), findsNothing);
-      host.onCall = null;
+      final retry = Completer<Map<String, dynamic>>();
+      host.onCall = (_, _) => retry.future;
       await tester.tap(find.text('Retry'));
+      await tester.pump();
+      expect(find.text('Checking access…'), findsOneWidget);
+      expect(find.text('Retry'), findsNothing);
+      retry.complete({
+        'ok': true,
+        'model': 'gpt-5.6-sol',
+        'provider': 'openai-codex',
+      });
       await tester.pumpAndSettle();
       expect(find.text('Access is set up'), findsOneWidget);
       expect(find.text('Retry'), findsNothing);
