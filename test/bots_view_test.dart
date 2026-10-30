@@ -51,6 +51,8 @@ import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/administration_repository.dart';
+import 'package:wing/core/services/server_connection_status.dart';
 import 'package:wing/core/screens/profile_workspace_screen.dart';
 
 const _export = bool.fromEnvironment('STUDIO_REVIEW');
@@ -2506,7 +2508,23 @@ void main() {
           SharedPreferences.setMockInitialValues({});
           final administration = AdministrationFixture('Home server');
           administration.configs['atlas'] = {};
-          final fixture = BotsFixture(server: administration.server);
+          final status = ServerConnectionStatus('Home server')
+            ..accessAvailable()
+            ..liveChanged('default', true);
+          final otherStatus = ServerConnectionStatus('Home server');
+          addTearDown(status.dispose);
+          addTearDown(otherStatus.dispose);
+          final base = administration.server;
+          final server = AdministrationRepository(
+            connectionId: base.connectionId,
+            connectionIdentity: base.connectionIdentity,
+            connectionLabel: base.connectionLabel,
+            request: base.request,
+            settingsWrite: base.settingsWrite,
+            ownedMutation: base.ownedMutation,
+            gateway: (name) => base.gateway(name)..connectionStatus = status,
+          );
+          final fixture = BotsFixture(server: server);
           final session = BotsSession((_) async => [fixture.repository]);
           await session.refresh();
           var view = const BotsViewState();
@@ -2525,7 +2543,10 @@ void main() {
                   textScaler: TextScaler.linear(scale),
                   disableAnimations: true,
                 ),
-                child: RepaintBoundary(key: frame, child: child!),
+                child: ServerConnectionScope(
+                  status: otherStatus,
+                  child: RepaintBoundary(key: frame, child: child!),
+                ),
               ),
               home: StatefulBuilder(
                 builder: (context, setState) => BotsContent(
@@ -2581,6 +2602,25 @@ void main() {
           await tester.tap(find.byKey(const ValueKey('bot-menu-screen')));
           await tester.pumpAndSettle();
           expect(find.byTooltip('Human has control'), findsOneWidget);
+          final screenHeader = tester.widget<ServerConnectionLabel>(
+            find.byType(ServerConnectionLabel),
+          );
+          expect(screenHeader.status, same(status));
+          final led = find.byKey(const ValueKey('server-connection-led'));
+          final tokens = Theme.of(tester.element(led)).extension<WingTokens>()!;
+          Color? ledColor() =>
+              (tester.widget<Container>(led).decoration! as BoxDecoration)
+                  .color;
+          expect(ledColor(), tokens.success);
+          otherStatus.beginRecovery('unrelated-instance');
+          await tester.pump();
+          expect(ledColor(), tokens.success);
+          status.beginRecovery('display-instance');
+          await tester.pump();
+          expect(ledColor(), tokens.warning);
+          status.endRecovery('display-instance');
+          await tester.pump();
+          expect(ledColor(), tokens.success);
           await _capture(
             tester,
             frame,

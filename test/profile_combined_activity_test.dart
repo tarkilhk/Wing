@@ -28,6 +28,7 @@ import 'support/browser_mutations_fixture.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/wing_app_bar.dart';
 import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/widgets/server_connection_label.dart';
 
 const _captureMenu = bool.fromEnvironment('STUDIO_REVIEW');
 
@@ -500,7 +501,7 @@ void main() {
             addTearDown(appPreferences.dispose);
             await controller.initialize();
             final chat = await controller.createChat(canDispatch: () => true);
-            final fixture = BotsFixture();
+            final fixture = BotsFixture(server: controller.administration());
             fixture.profiles
               ..clear()
               ..add(
@@ -596,6 +597,53 @@ void main() {
             await tester.pump(const Duration(milliseconds: 300));
             expect(find.byType(BotScreenView), findsOneWidget);
             expect(find.text('Pace screen'), findsOneWidget);
+            controller.connectionStatus
+              ..accessAvailable()
+              ..liveChanged(chat.key.workspace.profileName, true);
+            await tester.pump();
+            await _capture(tester, frame, '$name-screen-connected');
+            final connectionLabel = find.descendant(
+              of: find.byType(BotScreenView),
+              matching: find.byType(ServerConnectionLabel),
+            );
+            expect(
+              tester.widget<ServerConnectionLabel>(connectionLabel).status,
+              same(controller.connectionStatus),
+              reason:
+                  'The pushed desktop route must retain live connection status',
+            );
+            final led = find.descendant(
+              of: find.byType(BotScreenView),
+              matching: find.byKey(const ValueKey('server-connection-led')),
+            );
+            final tokens = Theme.of(
+              tester.element(led),
+            ).extension<WingTokens>()!;
+            Color? ledColor() =>
+                (tester.widget<Container>(led).decoration! as BoxDecoration)
+                    .color;
+            expect(ledColor(), tokens.success);
+            controller.connectionStatus.beginRecovery('screen-test');
+            await tester.pump();
+            expect(ledColor(), tokens.warning);
+            await _capture(tester, frame, '$name-screen-reconnecting');
+            controller.connectionStatus.failRecovery(
+              'screen-test',
+              'Connection interrupted',
+            );
+            await tester.pump();
+            expect(ledColor(), tokens.danger);
+            await _capture(tester, frame, '$name-screen-disconnected');
+            await tester.tap(find.byTooltip('Connection details'));
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 300));
+            expect(find.text('Connection interrupted'), findsOneWidget);
+            Navigator.of(tester.element(find.text('Connection details'))).pop();
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 300));
+            controller.connectionStatus.endRecovery('screen-test');
+            await tester.pump();
+            expect(ledColor(), tokens.success);
             expect(screenReads, isNotEmpty);
             expect(screenReads, everyElement(chat.key.workspace.profileName));
             expect(fixture.commands, isEmpty);
