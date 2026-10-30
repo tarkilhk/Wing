@@ -189,6 +189,7 @@ void main() {
               find.byKey(const ValueKey('chat-project-sheet')),
               findsOneWidget,
             );
+            expect(find.byTooltip('Remove from project'), findsNothing);
             expect(tester.takeException(), isNull);
             await screenshot(tester, 'projects-${brightness.name}-$scale');
             await tester.tap(find.byTooltip('Cancel project selection'));
@@ -249,6 +250,47 @@ void main() {
               find.byKey(const ValueKey('chat-project-sheet')),
               findsOneWidget,
             );
+            final remove = find.byTooltip('Remove from project');
+            final destination = find.byKey(const ValueKey('move-project-p1'));
+            await tester.ensureVisible(destination);
+            await tester.tap(destination);
+            await tester.pumpAndSettle();
+            expect(find.text('Move chat?'), findsOneWidget);
+            expect(
+              find.textContaining('"Archive" in personal'),
+              findsOneWidget,
+            );
+            expect(find.byTooltip('Move chat').hitTestable(), findsOneWidget);
+            expect(host.moves, isEmpty);
+            expect(tester.takeException(), isNull);
+            await screenshot(tester, 'move-confirm-${brightness.name}-$scale');
+            await tester.tap(find.byTooltip('Cancel'));
+            await tester.pumpAndSettle();
+            await tester.ensureVisible(remove);
+            expect(
+              tester.getSize(remove).shortestSide,
+              greaterThanOrEqualTo(48),
+            );
+            await screenshot(
+              tester,
+              'remove-project-${brightness.name}-$scale',
+            );
+            await tester.tap(remove);
+            await tester.pumpAndSettle();
+            expect(find.text('Move chat?'), findsOneWidget);
+            expect(
+              find.textContaining('default project of personal'),
+              findsOneWidget,
+            );
+            expect(find.byTooltip('Move chat').hitTestable(), findsOneWidget);
+            expect(tester.takeException(), isNull);
+            await screenshot(
+              tester,
+              'remove-confirm-${brightness.name}-$scale',
+            );
+            await tester.tap(find.byTooltip('Cancel'));
+            await tester.pumpAndSettle();
+            expect(host.moves, isEmpty);
             await tester.tap(find.byTooltip('Cancel project selection'));
             await tester.pumpAndSettle();
             if (scale == 1) {
@@ -270,6 +312,47 @@ void main() {
             await screenshot(
               tester,
               'header-assigned-${brightness.name}-$scale',
+            );
+            await tester.tap(selector);
+            await tester.pumpAndSettle();
+            await tester.tap(find.byTooltip('Remove from project'));
+            await tester.pumpAndSettle();
+            host.defaultFolderDelay = Completer<void>();
+            host.failMutation = true;
+            await tester.tap(find.byTooltip('Move chat').hitTestable());
+            await tester.pump();
+            await tester.pump(const Duration(milliseconds: 300));
+            expect(find.text('Move chat?'), findsNothing);
+            expect(
+              find.byType(CircularProgressIndicator).hitTestable(),
+              findsOneWidget,
+            );
+            expect(tester.takeException(), isNull);
+            await screenshot(
+              tester,
+              'remove-pending-${brightness.name}-$scale',
+            );
+            host.defaultFolderDelay!.complete();
+            await tester.pumpAndSettle();
+            expect(find.text('Move rejected'), findsOneWidget);
+            expect(tester.takeException(), isNull);
+            await screenshot(
+              tester,
+              'remove-failure-${brightness.name}-$scale',
+            );
+            host.failMutation = false;
+            await tester.tap(find.byTooltip('Remove from project'));
+            await tester.pumpAndSettle();
+            await tester.tap(find.byTooltip('Move chat').hitTestable());
+            await tester.pumpAndSettle();
+            expect(
+              find.byKey(const ValueKey('chat-project-sheet')),
+              findsNothing,
+            );
+            expect(tester.takeException(), isNull);
+            await screenshot(
+              tester,
+              'remove-success-${brightness.name}-$scale',
             );
           } finally {
             semantics.dispose();

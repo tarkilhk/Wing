@@ -1568,6 +1568,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('move-project-p2')));
     await tester.pumpAndSettle();
+    expect(find.text('Move chat?'), findsOneWidget);
+    expect(find.textContaining('"Mobile app" in personal'), findsOneWidget);
+    expect(host.moves, isEmpty);
+    await tester.tap(find.byTooltip('Cancel'));
+    await tester.pumpAndSettle();
+    expect(host.moves, isEmpty);
+    await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Move chat'));
+    await tester.pumpAndSettle();
     expect((host.moves.single.$2['payload'] as Map)['cwd'], '/Mobile app');
     expect(tester.takeException(), isNull);
   });
@@ -1579,6 +1589,8 @@ void main() {
     await tester.tap(find.text('Move to project'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Move chat'));
     await tester.pumpAndSettle();
 
     expect(host.moves, hasLength(1));
@@ -1614,6 +1626,212 @@ void main() {
     expect(host.moves, isEmpty);
   });
 
+  testWidgets(
+    'remove project confirms and shows progress through every move stage',
+    (tester) async {
+      await tester.runAsync(() => controller.openSession(key()));
+      final chat = controller.current!.chat!;
+      await tester.runAsync(
+        () => controller.updateDraft(chat, 'Keep this draft'),
+      );
+      await controller.moveSessionToProject(
+        key(),
+        controller.current!.projects.first,
+        canDispatch: () => true,
+      );
+      host.moves.clear();
+      await showWorkspace(tester);
+      await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Remove from project'));
+      await tester.pumpAndSettle();
+      expect(find.text('Move chat?'), findsOneWidget);
+      expect(
+        find.textContaining('default project of personal'),
+        findsOneWidget,
+      );
+      expect(host.defaultFolderProfiles, isEmpty);
+      await tester.tap(find.byTooltip('Cancel'));
+      await tester.pumpAndSettle();
+      expect(host.moves, isEmpty);
+      expect(controller.chatProjectLabel(chat), 'Mobile app');
+
+      host.defaultFolderDelay = Completer<void>();
+      host.snapshotDelay = Completer<void>();
+      host.mutationDelay = Completer<void>();
+      await tester.tap(find.byTooltip('Remove from project'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move chat').hitTestable());
+      await tester.pump();
+      expect(
+        find.byType(CircularProgressIndicator).hitTestable(),
+        findsOneWidget,
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Move chat?'), findsNothing);
+      expect(host.defaultFolderProfiles, ['personal']);
+      expect(host.moves, isEmpty);
+      expect(
+        tester
+            .widget<IconButton>(
+              find
+                  .byWidgetPredicate(
+                    (widget) =>
+                        widget is IconButton &&
+                        widget.tooltip == 'Remove from project',
+                  )
+                  .hitTestable(),
+            )
+            .onPressed,
+        isNull,
+      );
+      host.defaultFolderDelay!.complete();
+      await tester.pump();
+      expect(
+        find.byType(CircularProgressIndicator).hitTestable(),
+        findsOneWidget,
+      );
+      expect(host.moves, isEmpty);
+      host.snapshotDelay!.complete();
+      await tester.pump();
+      expect(
+        find.byType(CircularProgressIndicator).hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        (host.moves.single.$2['payload'] as Map)['cwd'],
+        '/personal/default',
+      );
+      expect(controller.chatProjectLabel(chat), 'Mobile app');
+      host.mutationDelay!.complete();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('chat-project-sheet')), findsNothing);
+      expect(
+        find.text('Moved to the default project of personal'),
+        findsOneWidget,
+      );
+      expect(controller.chatProjectLabel(chat), 'Unassigned');
+      expect(chat.composer.observation.displayedText, 'Keep this draft');
+      final entry = browser
+          .project('')
+          .entries
+          .singleWhere((entry) => entry.sessionKey == chat.key);
+      expect(entry.cwd, '/personal/default');
+      expect(entry.project?.isHome ?? true, isTrue);
+      await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Remove from project'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  for (final failRead in [true, false]) {
+    testWidgets(
+      'remove project retains assignment after ${failRead ? 'default read' : 'move'} failure and retries',
+      (tester) async {
+        await tester.runAsync(() => controller.openSession(key()));
+        final chat = controller.current!.chat!;
+        await controller.moveSessionToProject(
+          key(),
+          controller.current!.projects.first,
+          canDispatch: () => true,
+        );
+        host.moves.clear();
+        host.failDefaultFolder = failRead;
+        host.failMutation = !failRead;
+        await showWorkspace(tester);
+        await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Remove from project'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Move chat').hitTestable());
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining(
+            failRead ? 'Default folder unavailable' : 'Move rejected',
+          ),
+          findsOneWidget,
+        );
+        expect(controller.chatProjectLabel(chat), 'Mobile app');
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        host.failDefaultFolder = false;
+        host.failMutation = false;
+        await tester.tap(find.byTooltip('Remove from project'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Move chat').hitTestable());
+        await tester.pumpAndSettle();
+        expect(controller.chatProjectLabel(chat), 'Unassigned');
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+  }
+
+  test(
+    'remove project retires before mutation when profile changes during the default read',
+    () async {
+      await controller.moveSessionToProject(
+        key(),
+        controller.current!.projects.first,
+        canDispatch: () => true,
+      );
+      host.moves.clear();
+      final action = (await browser.actionsFor(
+        browser
+            .project('')
+            .entries
+            .singleWhere((entry) => entry.id == 'newest'),
+      ))!;
+      host.defaultFolderDelay = Completer<void>();
+      final result = action.perform(BrowserAction.move);
+      await Future<void>.delayed(Duration.zero);
+      await controller.navigateProfile('work');
+      host.defaultFolderDelay!.complete();
+      expect(await result, isFalse);
+      expect(host.moves, isEmpty);
+      expect(host.defaultFolderProfiles, ['personal']);
+      action.dispose();
+    },
+  );
+
+  testWidgets(
+    'remove project through Chats row actions updates its membership',
+    (tester) async {
+      final owner = key();
+      await controller.moveSessionToProject(
+        owner,
+        controller.current!.projects.first,
+        canDispatch: () => true,
+      );
+      host.moves.clear();
+      await show(tester);
+      await menu(tester, 'newest');
+      await tester.tap(find.text('Move to project'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Remove from project'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move chat').hitTestable());
+      await tester.pumpAndSettle();
+      expect(
+        (host.moves.single.$2['payload'] as Map)['cwd'],
+        '/personal/default',
+      );
+      final entry = browser
+          .project('')
+          .entries
+          .singleWhere((entry) => entry.sessionKey == owner);
+      expect(entry.project, isNull);
+      expect(find.byKey(const ValueKey('chat-project-sheet')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('chat-personal-newest')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   testWidgets('chat header moves an open chat and keeps its draft on reopen', (
     tester,
   ) async {
@@ -1624,6 +1842,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('chat-project-picker')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Move chat'));
     await tester.pumpAndSettle();
 
     expect(host.moves, hasLength(1));
@@ -1674,6 +1894,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('move-project-p2')));
     await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Move chat'));
+    await tester.pumpAndSettle();
 
     expect(host.moves.single.$2['session_id'], 'new-chat');
     expect(host.changes['personal']!['new-chat']!['cwd'], '/Mobile app');
@@ -1694,13 +1916,18 @@ void main() {
       final destination = find.byKey(const ValueKey('move-project-p2'));
       await tester.tap(destination);
       await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move chat'));
+      await tester.pumpAndSettle();
       expect(find.text('Move rejected'), findsOneWidget);
       expect(find.byKey(const ValueKey('chat-project-sheet')), findsOneWidget);
       expect(host.changes['personal']?['newest']?['cwd'], isNull);
       host.failMutation = false;
       host.mutationDelay = Completer<void>();
       await tester.tap(destination);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move chat'));
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.tap(destination);
       await tester.pump();
       expect(host.moves, hasLength(2));
@@ -1725,6 +1952,8 @@ void main() {
       await controller.navigateProfile('work');
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('move-project-p2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Move chat'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Profile changed'), findsOneWidget);
       expect(host.moves, isEmpty);

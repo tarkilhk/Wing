@@ -773,7 +773,9 @@ final class ChatBrowserData extends ChangeNotifier {
           mutation.owner,
           mutation.id,
           changes: {...?previous?.changes, ...mutation.changes},
-          projectId: mutation.projectId ?? previous?.projectId,
+          projectId: mutation.changes.containsKey('cwd')
+              ? mutation.projectId
+              : mutation.projectId ?? previous?.projectId,
           deleted: mutation.deleted,
         );
       case ProjectBrowserMutation mutation:
@@ -1585,11 +1587,16 @@ final class ChatBrowserData extends ChangeNotifier {
           merged.remove(mutation.id);
         } else if (merged.containsKey(mutation.id)) {
           merged[mutation.id] = {...merged[mutation.id]!, ...mutation.changes};
-          if (mutation.projectId != null) {
+          if (mutation.projectId != null ||
+              mutation.changes.containsKey('cwd')) {
             final project = effectiveProjects
                 .where((p) => p['id'] == mutation.projectId)
                 .firstOrNull;
-            if (project != null) members[mutation.id] = project;
+            if (project != null) {
+              members[mutation.id] = project;
+            } else {
+              members.remove(mutation.id);
+            }
           }
         }
       }
@@ -1745,6 +1752,8 @@ final class BrowserActionSession extends ChangeNotifier {
   late final List<BrowserActionChoice> choices;
   late final List<BrowserProject> projects;
   late final BrowserProject? currentProject;
+  bool get canRemoveProject =>
+      currentProject != null && !currentProject!.isHome;
   BrowserActionState _state = const BrowserActionState();
   BrowserActionState get state => _state;
   WorkspaceScope get scope => _resource.scope;
@@ -1950,13 +1959,15 @@ final class BrowserActionSession extends ChangeNotifier {
       } else {
         final row = entry!;
         if (action == BrowserAction.move) {
-          if (target == null || !projects.contains(target)) {
+          if (target == null ? !canRemoveProject : !projects.contains(target)) {
             throw StateError('Project is unavailable. Open the menu again.');
           }
-          final raw = _resource.projects
-              .where((item) => item['id'] == target.id)
-              .firstOrNull;
-          if (raw == null) {
+          final raw = target == null
+              ? null
+              : _resource.projects
+                    .where((item) => item['id'] == target.id)
+                    .firstOrNull;
+          if (target != null && raw == null) {
             throw StateError('Project is unavailable. Open the menu again.');
           }
           final moved = await owner.moveSessionToProject(
