@@ -114,12 +114,12 @@ class NativeExecution(unittest.TestCase):
         self.assertEqual(adb.call_args_list[-1].args, ('forward', '--remove', 'tcp:43123'))
 
     def test_diagnostic_failures_are_recorded_without_replacing_the_test_error(self):
-        with patch.object(self.runner, 'adb', side_effect=OSError('device unavailable')), \
+        with patch.object(nightly.android, 'device', side_effect=OSError('device unavailable')), \
              patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
              patch.object(nightly.subprocess, 'run', side_effect=OSError('capture unavailable')):
             self.runner.capture_failure()
         errors = json.loads((self.output / 'capture-errors.json').read_text())
-        self.assertEqual(len(errors), 6)
+        self.assertEqual(len(errors), 8)
         self.assertTrue(any('failure-window.txt' in error for error in errors))
         self.assertTrue(any('failure.png' in error for error in errors))
 
