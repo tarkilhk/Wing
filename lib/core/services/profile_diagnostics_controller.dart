@@ -141,8 +141,10 @@ class ProfileDiagnosticsController extends ChangeNotifier {
 
     late final ProfileAccessResult result;
     try {
-      // Stock Hermes f971bbf51298e846834d3d76e18d763223bd58ec:
-      // resolves this profile's startup model and configured fallback chain.
+      // Stock Hermes 088f657ecf77674c7b8e2ededf4e3576d82e042c:
+      // the native authority validates the request's profile before probing,
+      // then returns readiness without echoing the profile in its result.
+      // Resolves this profile's model and configured fallback chain.
       // It does not send a prompt or establish model availability / quota.
       final response = await retryTransientRead(
         () => gateway.call('setup.runtime_check'),
@@ -156,8 +158,7 @@ class ProfileDiagnosticsController extends ChangeNotifier {
               response['profile'] != scope.profileName
           ? ProfileAccessResult.incomplete
           : switch (response['ok']) {
-              true when response['profile'] == scope.profileName =>
-                _resolvedResult(response),
+              true => _resolvedResult(response),
               false => ProfileAccessResult.failure(response['error']),
               _ => ProfileAccessResult.incomplete,
             };

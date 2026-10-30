@@ -91,8 +91,8 @@ class _Fixture {
                 });
               }
               return Future.value({
+                // The native authority validates profile before this result.
                 'ok': true,
-                'profile': scope.profileName,
                 ...modelInfo(scope.profileName),
               });
             }
