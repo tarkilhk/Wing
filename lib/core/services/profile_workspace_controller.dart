@@ -7462,13 +7462,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
               'mime': ticket.attachments[index].mediaType,
             },
       ];
+      final submittedText = promptText.isEmpty && images.isNotEmpty
+          ? 'What do you see in this image?'
+          : promptText;
       final payload = <String, dynamic>{
         'session_id': runtime,
         'submission_id': ticket.submissionId,
         if (admittingQueue) 'queued': true,
-        'text': promptText.isEmpty && images.isNotEmpty
-            ? 'What do you see in this image?'
-            : promptText,
+        'text': submittedText,
         if (images.isNotEmpty) 'attachments': images,
       };
       await chat.composer.prepareDispatch(ticket, payload: payload);
@@ -7477,7 +7478,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       }
       chat._replaceableUnsubmittedRuntime = false;
       if (!admittingQueue) {
-        chat.reading.appendPrompt(
+        chat.reading.appendSubmittedPrompt(
+          inputId: ticket.submissionId,
           text: text,
           displayText: displayText,
           attachments: chat.composer.submittedAttachments(ticket),
@@ -7530,16 +7532,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource.gateway.canonical.admission(
         receipt,
         inputId: ticket.submissionId,
-        text: ticket.text,
+        text: submittedText,
         observedSequence: observedSequence,
       );
       _observeCanonicalPending(chat);
-      try {
-        await chat.composer.settle(ticket, ComposerDelivery.accepted);
-      } finally {
-        // The server owns accepted work even if local journal cleanup fails.
-        await _refreshCanonicalPending(chat);
-      }
+      // The receipt and live pending events already establish acceptance.
+      // Resuming here races those events with an older snapshot and can turn
+      // successful delivery into a false local-save failure.
+      await chat.composer.settle(ticket, ComposerDelivery.accepted);
     } catch (error) {
       final rejected =
           error is JsonRpcError &&
@@ -8545,7 +8545,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
             .where((row) => row.id == admissionId && row.queued)
             .firstOrNull;
         if (pending != null && pending.text.isNotEmpty) {
-          chat.reading.appendPrompt(text: pending.text);
+          chat.reading.appendSubmittedPrompt(
+            inputId: pending.inputId,
+            text: pending.text,
+          );
         }
         applyChatTranscriptEvent(
           runtime: chat._runtime,

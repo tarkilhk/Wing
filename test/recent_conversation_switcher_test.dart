@@ -1,4 +1,5 @@
 import 'package:wing/core/widgets/conversation_composer.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/services/administration_repository.dart';
@@ -3895,7 +3896,6 @@ void main() {
           );
           list.controller!.jumpTo(0);
           await tester.pump();
-          final readingPosition = list.controller!.offset;
           final commands = List.of(botFixture.commands);
           final resumes = fixture.calls
               .where((call) => call.$2 == 'session.resume')
@@ -3923,6 +3923,35 @@ void main() {
             frame: frame,
             captureName: 'group-typing-arrival-${brightness.name}-$scale',
           );
+          final viewport = tester.getRect(
+            find.byKey(const ValueKey('profile-transcript')),
+          );
+          final visibleMessages =
+              [
+                  for (final element in find.byType(ProfileMessage).evaluate())
+                    (
+                      message:
+                          (element.widget as ProfileMessage).message.copyText,
+                      rect: tester.getRect(
+                        find.byElementPredicate(
+                          (candidate) => candidate == element,
+                        ),
+                      ),
+                    ),
+                ].where((row) => row.rect.overlaps(viewport)).toList()
+                ..sort((a, b) => a.rect.top.compareTo(b.rect.top));
+          final readingMessage = visibleMessages.first.message;
+          final readingRect = visibleMessages.first.rect;
+          final readingFraction =
+              ((viewport.top - readingRect.top) / readingRect.height).clamp(
+                0.0,
+                1.0,
+              );
+          final readingAlignment =
+              ((readingRect.top - viewport.top) / viewport.height).clamp(
+                0.0,
+                1.0,
+              );
           await _chatGesture(tester);
           expect(composerFocus.hasFocus, isFalse);
           tester.view.viewInsets = FakeViewPadding.zero;
@@ -3953,16 +3982,40 @@ void main() {
           await groupBots.refresh();
           await _finishFrames(tester);
           expect(groupBots.groupReads.sequence(room), receipt);
+          // Simulate the retained keyboard returning with the conversation so
+          // the reading geometry is compared at equal viewport dimensions.
+          tester.view.viewInsets = const FakeViewPadding(bottom: 200);
           await switcherState.selectAdjacent(0);
           await _finishFrames(tester);
           expect(composerFocus.hasFocus, isTrue);
           expect(find.byType(BotGroupScreen), findsOneWidget);
-          expect(list.controller!.offset, readingPosition);
+          // Restoring around a saved row changes the scroll origin. The same
+          // message must remain visible after a new reply arrives while away.
+          final restoredMessage = find.byWidgetPredicate(
+            (widget) =>
+                widget is ProfileMessage &&
+                widget.message.copyText == readingMessage,
+          );
+          expect(restoredMessage, findsOneWidget);
+          final restoredRect = tester.getRect(restoredMessage);
+          final restoredViewport = tester.getRect(
+            find.byKey(const ValueKey('profile-transcript')),
+          );
+          expect(
+            restoredRect.top,
+            closeTo(
+              restoredViewport.top +
+                  readingAlignment * restoredViewport.height -
+                  readingFraction * restoredRect.height,
+              3,
+            ),
+          );
           expect(
             tester.widget<TextField>(field).controller!.text,
             'Keep this group draft',
           );
           FocusManager.instance.primaryFocus?.unfocus();
+          tester.view.viewInsets = FakeViewPadding.zero;
           await tester.pump();
           await _chatGesture(tester, pinch: false);
           expect(visit.modeEnabled, isTrue);
@@ -4779,11 +4832,15 @@ void main() {
               reason: 'Revealing cached reading does not read the answer',
             );
             expect(acknowledgedSessions, isEmpty);
-            await tester.drag(
-              find.byKey(const ValueKey('profile-transcript')),
-              const Offset(0, -120),
-            );
-            await _finishFrames(tester);
+            // Return restores the reading point, not the newest edge. Read
+            // through the reply before expecting its acknowledgement.
+            for (var pass = 0; pass < 10 && reads.isEmpty; pass++) {
+              await tester.drag(
+                find.byKey(const ValueKey('profile-transcript')),
+                const Offset(0, -300),
+              );
+              await _finishFrames(tester);
+            }
             expect(reads, ['answer:3']);
             expect(acknowledgedSessions, [first.key]);
             expect(first.markReadFailed, isFalse);

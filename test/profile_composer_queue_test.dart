@@ -262,6 +262,31 @@ void main() {
   );
 
   test(
+    'accepted Send still reports a genuine local save failure without resending',
+    () async {
+      await controller.resumeQueue(chat);
+      host.promptSubmitStarted = Completer<void>();
+      host.promptSubmitDelay = Completer<void>();
+      final sending = controller.queuePrompt(chat, 'Accepted once');
+      await host.promptSubmitStarted!.future;
+      draftStore.failEmptyQueueWrites = true;
+      host.promptSubmitDelay!.complete();
+      await sending;
+      expect(sends(), 1);
+      expect(host.canonicalAdmissions, hasLength(1));
+      expect(
+        chat.runtime.error,
+        'The message was accepted. Remaining unsent work could not be saved.',
+      );
+      expect(chat.composer.observation.paused, isTrue);
+      draftStore.failEmptyQueueWrites = false;
+      await controller.resumeQueue(chat);
+      expect(sends(), 1);
+      expect(chat.composer.observation.submissionUncertain, isFalse);
+    },
+  );
+
+  test(
     'selected identities survive queue edits, restart and failed dispatch',
     () async {
       const file = ComposerReference(

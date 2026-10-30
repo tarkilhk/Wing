@@ -44,4 +44,4 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 
 ## Gotchas
 
-A file picker, external share and clipboard grant are separate OS entry points. A missing staged file must stop dispatch without discarding the newer draft. Real camera/OEM behaviour needs its own device evidence.
+A file picker, external share and clipboard grant are separate OS entry points. A missing staged file must stop dispatch without discarding the newer draft. Its failed-file chip remains actionable at the restored reading point; use Latest to inspect the transcript warning. Real camera/OEM behaviour needs its own device evidence.

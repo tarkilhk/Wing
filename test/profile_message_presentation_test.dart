@@ -172,8 +172,23 @@ void main() {
           isImage: false,
         ),
       ];
-      chat.reading.appendPrompt(text: 'Read this', attachments: attachments);
+      chat.reading.appendSubmittedPrompt(
+        inputId: 'attachment-input',
+        text: 'Read this',
+        displayText: 'Read my report',
+        attachments: attachments,
+      );
       final appended = chat.reading.messages.single;
+      final presentation = chat.reading.messagePresentationId(appended);
+      // Prepared text can include reference/upload expansion. The start event
+      // must keep the original authored bubble and its attachments.
+      chat.reading.appendSubmittedPrompt(
+        inputId: 'attachment-input',
+        text: 'Read this\n\n[file:/files/report.pdf]',
+      );
+      expect(chat.reading.messages.single, same(appended));
+      expect(appended['display_content'], 'Read my report');
+      expect(chat.reading.messagePresentationId(appended), same(presentation));
       final submitted =
           appended['submitted_attachments'] as List<UserMessageAttachment>;
       attachments.clear();

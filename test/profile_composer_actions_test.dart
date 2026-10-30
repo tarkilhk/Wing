@@ -1,6 +1,7 @@
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/widgets/profile_message.dart';
+import 'package:wing/core/services/ws_client.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/models/chat_runtime.dart';
@@ -37,6 +38,8 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
   Completer<Map<String, dynamic>>? steerReply;
   Completer<Map<String, dynamic>>? submitReply;
   Map<String, dynamic>? heldSubmission;
+  bool stalePostSubmitResume = false;
+  int postSubmitResumes = 0;
   List<Map<String, dynamic>> transcript = [];
 
   @override
@@ -51,6 +54,15 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
       discover: base.discover,
       get: base.read,
       rpc: (method, params) => switch (method) {
+        'session.resume' when stalePostSubmitResume && heldSubmission != null =>
+          () async {
+            postSubmitResumes++;
+            return {
+              ...await base.call(method, params),
+              // Same owner, but a snapshot taken before the live start event.
+              'session_id': params['session_id'],
+            };
+          }(),
         'prompt.submit' when submitReply != null => () {
           heldSubmission = Map.of(params);
           calls.add((scope.profileName, method, Map.of(params)));
@@ -397,6 +409,151 @@ void main() {
         expect(chat.composer.observation.text, 'Next idea');
         expect(tester.takeException(), isNull);
       });
+    }
+  }
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      for (final startBeforeAck in [true, false]) {
+        testWidgets('one sent bubble through processing start '
+            '${brightness.name} $scale beforeAck=$startBeforeAck', (
+          tester,
+        ) async {
+          const text = 'What is using all that space?';
+          final chat = await show(
+            tester,
+            draft: text,
+            brightness: brightness,
+            scale: scale,
+          );
+          controller.connectionStatus.accessAvailable();
+          controller.connectionStatus.liveChanged(
+            chat.key.workspace.profileName,
+            true,
+          );
+          final reply = fixture.submitReply = Completer<Map<String, dynamic>>();
+          fixture.stalePostSubmitResume = true;
+          await pumpFrames(tester);
+          await tester.tap(find.byTooltip('Send'));
+          await tester.runAsync(() async {
+            await chat.composer.admittedWrites;
+            await Future<void>.delayed(const Duration(milliseconds: 100));
+          });
+          await pumpFrames(tester);
+          final submitted = fixture.heldSubmission!;
+          final original = chat.reading.messages.single;
+          final presentation = chat.reading.messagePresentationId(original);
+          expect(find.byType(ProfileMessage), findsOneWidget);
+          expect(find.byTooltip('Stop'), findsOneWidget);
+
+          final receipt = canonicalReceipt(
+            submitted,
+            admissionId: 'sent-admission',
+            status: 'queued',
+          );
+          if (!startBeforeAck) {
+            reply.complete(receipt);
+            await pumpFrames(tester);
+          }
+          final gateway = controller.current!.gateway;
+          var sequence = 0;
+          void event(
+            String type,
+            Map<String, dynamic> data, {
+            String? admission,
+          }) {
+            gateway.onEvent!(
+              StreamEvent(
+                type: type,
+                sessionId: chat.runtime.runtimeId,
+                data: data,
+                envelope: {
+                  'replay_epoch': 'fixture-epoch',
+                  'seq': ++sequence,
+                  'admission_id': ?admission,
+                },
+              ),
+            );
+          }
+
+          event('session.info', {
+            'pending': [receipt],
+          });
+          event('message.start', {}, admission: 'sent-admission');
+          await pumpFrames(tester);
+          expect(chat.reading.messages, hasLength(1));
+          expect(chat.reading.messages.single, same(original));
+          expect(
+            chat.reading.messagePresentationId(original),
+            same(presentation),
+          );
+          expect(find.byType(ProfileMessage), findsOneWidget);
+          expect(find.byTooltip('Stop'), findsOneWidget);
+          if (startBeforeAck) reply.complete(receipt);
+          await pumpFrames(tester);
+          expect(chat.runtime.error, isNull);
+          expect(chat.composer.observation.error, isNull);
+          expect(chat.composer.observation.paused, isFalse);
+          expect(fixture.postSubmitResumes, 0);
+          expect(
+            find.text(
+              'The message was accepted. Remaining unsent work could not be saved.',
+            ),
+            findsNothing,
+          );
+          expect(find.byTooltip('Stop'), findsOneWidget);
+          fixture.transcript = [
+            {
+              'id': 1,
+              'role': 'user',
+              'content': text,
+              'timestamp': original['timestamp'],
+            },
+          ];
+          await tester.runAsync(() => controller.refreshHistory(chat));
+          // A retained start observation must not resurrect the provisional row
+          // after history has replaced it with the saved message.
+          event('message.start', {}, admission: 'sent-admission');
+          await pumpFrames(tester);
+          expect(chat.reading.messages, hasLength(1));
+          expect(find.byType(ProfileMessage), findsOneWidget);
+          expect(
+            fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+            hasLength(1),
+          );
+          // Stock publishes the claimed status after message.start. Settle
+          // the outbox observation before inspecting the working screen.
+          event('session.info', {
+            'pending': [
+              {...receipt, 'status': 'started'},
+            ],
+          });
+          await pumpFrames(tester);
+          await capture(
+            tester,
+            'single-prompt-${brightness.name}-$scale-$startBeforeAck',
+          );
+
+          // A different accepted input with identical prose still needs its own
+          // bubble when it starts; it has no local optimistic representation.
+          final next = canonicalReceipt(
+            {...submitted, 'submission_id': 'different-input'},
+            admissionId: 'different-admission',
+            status: 'queued',
+            sequence: 2,
+          );
+          event('session.info', {
+            'pending': [next],
+          });
+          event('message.start', {}, admission: 'different-admission');
+          await pumpFrames(tester);
+          expect(
+            chat.reading.messages.where((row) => row['role'] == 'user'),
+            hasLength(2),
+          );
+          expect(tester.takeException(), isNull);
+        });
+      }
     }
   }
 

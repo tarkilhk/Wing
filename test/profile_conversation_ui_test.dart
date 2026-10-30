@@ -393,6 +393,7 @@ void main() {
         await controller.openSession(
           ProfileSessionKey(controller.current!.scope, 'chat-0'),
         );
+        await tester.settleTranscript();
         await tester.pumpAndSettle();
         expect(
           tester.widget<TextField>(field).controller!.text,

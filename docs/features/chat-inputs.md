@@ -6,7 +6,7 @@ Feature ID: `chat-inputs`.
 
 ## Sub-features
 
-- `chat-inputs.send` — Submit once and preserve newer unsent text. When leaving after Send, [conversation reading position](conversation.md) retains the sent-message boundary so the reply opens at its beginning.
+- `chat-inputs.send` — Submit once and preserve newer unsent text. A sent message stays one bubble when Hermes begins processing it, including when processing starts before acknowledgement. Separate submissions with identical text remain separate. When leaving after Send, [conversation reading position](conversation.md) retains the sent-message boundary so the reply opens at its beginning.
 - `chat-inputs.landscape` — Normal chats, Bot Chats and group discussions use the same responsive composer. Read with a one-row composer on landscape phones. Send/Stop stays visible; expand the controls to reach attachments, context and model options. With the keyboard open, the field and Send/Stop stay on one row; expanding dismisses the keyboard.
 - `chat-inputs.queue` — Hermes owns the accepted FIFO; edits retain authored text and selected references and replace a still-queued message at the tail, steering transfers that exact admission to the current turn, and cancellation names its admission. Unsupported controls remain unavailable. Notes and continuation requests from the remote screen are queued independently and preserve the main draft, references and attachments, even when the text matches.
 - `chat-inputs.revise` — Edit, restore or regenerate using revision-fenced saved row targets. Deep revision explains the number of later user turns removed; harmless last-turn regeneration remains immediate. Fork requires an idle source.
@@ -39,6 +39,24 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```
 
 ## Gotchas
+
+The `one sent bubble through processing start` cases in
+`profile_composer_actions_test.dart` drive Send with a held acknowledgement and
+check both event orders, history replacement and separate identical-text inputs
+in both themes at normal and enlarged text sizes. The attachment case in
+`profile_message_presentation_test.dart` checks that the original authored text,
+attachment and presentation identity survive the start event:
+
+```sh
+flutter test --no-pub test/profile_composer_actions_test.dart test/profile_message_presentation_test.dart
+```
+
+Successful acceptance uses the receipt and live queue updates without an extra
+conversation refresh. A newer processing event must not become a false
+"Remaining unsent work could not be saved" warning or pause the queue. The same
+Send cases exercise this race; `profile_composer_queue_test.dart` also verifies
+that a genuine local save failure still reports the problem without resending
+accepted work.
 
 A fresh Send with an empty outbox proceeds after a stopped or failed reply,
 even if an earlier empty queue was paused. Older paused or uncertain messages
