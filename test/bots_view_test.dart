@@ -4676,17 +4676,7 @@ void main() {
             await tester.pump();
           }
           expect(find.byType(StudioLoading), findsOneWidget);
-          expect(
-            tester
-                .widget<IconButton>(
-                  find.byWidgetPredicate(
-                    (widget) =>
-                        widget is IconButton && widget.tooltip == 'Retry',
-                  ),
-                )
-                .onPressed,
-            isNull,
-          );
+          expect(find.byTooltip('Retry'), findsNothing);
           retryHistory.complete();
           await tester.settleTranscript();
           await tester.pumpAndSettle();

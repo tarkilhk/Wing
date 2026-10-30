@@ -126,9 +126,11 @@ class ProfileChat {
   String? _readOnlyReason;
   bool _attachmentRefused = false;
 
-  /// A pending or refused attachment cannot admit new composer work.
+  /// Foreground attachment and explicit refusal cannot admit composer work.
+  /// Background network recovery can still accept an offline queued message.
   bool get attachmentBlocked =>
-      _attachmentRefused || runtime.opening && runtime.openingError == null;
+      _attachmentRefused ||
+      refreshingConversation && runtime.opening && runtime.openingError == null;
   HostedConnectionOperation? _connectionOperation;
   Object? _connectionOperationAction;
   bool _answeringQuestion = false;
@@ -4515,7 +4517,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
           navigation == _navigationGeneration) {
         resource._selectedSession = key.sessionId;
       }
-      await refreshHistory(chat, propagateFailure: true);
+      await refreshHistory(
+        chat,
+        propagateFailure: onReadingAvailable != null || propagateHistoryFailure,
+      );
       if (_closed ||
           isCurrentRequest?.call() == false ||
           navigation != _navigationGeneration ||
