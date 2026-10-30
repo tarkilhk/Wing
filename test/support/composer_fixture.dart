@@ -47,6 +47,7 @@ ProfileChat composeChat({
       runtimeId: chat.runtime.runtimeId,
       working: chat.runtime.blocksTurnAdmission,
       canSteer: chat.runtime.canSteer,
+      attachmentBlocked: chat.attachmentBlocked,
       connected:
           !chat.runtime.offline &&
           !chat.runtime.opening &&

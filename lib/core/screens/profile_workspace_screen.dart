@@ -376,7 +376,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       setState(
         () => _pendingChatError = error is StateError
             ? error.message.toString()
-            : workspaceFailureMessage(error),
+            : conversationOpeningFailureMessage(error),
       );
     }
   }
@@ -1808,7 +1808,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                               controller.recovering ||
                                   chat.refreshingConversation
                               ? null
-                              : () => _run(controller.resumeConnection),
+                              : () => _run(
+                                  () => controller.retryConversation(chat),
+                                ),
                           icon: const Icon(Icons.refresh),
                         ),
                       ),
@@ -2480,7 +2482,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               ? ProfileTranscriptOpening(
                   status: controller.connectionStatus,
                   error: chat.runtime.openingError,
-                  onRetry: controller.resumeConnection,
+                  onRetry: () => controller.retryConversation(chat),
                 )
               : null,
           notificationReading: chat.reading,
