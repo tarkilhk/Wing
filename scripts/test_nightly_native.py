@@ -137,31 +137,7 @@ class Runner:
         return self.adb('shell', *parts)
 
     def capture_failure(self):
-        """Keep native evidence before retiring the emulator; preserve the original failure."""
-        errors = []
-        for name, command in {
-            'failure-logcat.txt': ('logcat', '-d', '-t', '3000'),
-            'failure-window.txt': ('shell', 'dumpsys', 'window'),
-            'failure-notifications.txt': ('shell', 'dumpsys', 'notification', '--noredact'),
-            'failure-services.txt': ('shell', 'dumpsys', 'activity', 'services'),
-        }.items():
-            try:
-                (self.output / name).write_text(self.adb(*command))
-            except Exception as error:
-                errors.append(name + ': ' + str(error))
-        try:
-            self.shell('uiautomator', 'dump', '/sdcard/wing-nightly-failure.xml')
-            (self.output / 'failure-ui.xml').write_text(self.shell('cat', '/sdcard/wing-nightly-failure.xml'))
-        except Exception as error:
-            errors.append('failure-ui.xml: ' + str(error))
-        try:
-            with (self.output / 'failure.png').open('wb') as capture:
-                subprocess.run([android.adb_path(), '-s', self.device, 'exec-out', 'screencap', '-p'],
-                               stdout=capture, check=True, timeout=25)
-        except Exception as error:
-            errors.append('failure.png: ' + str(error))
-        if errors:
-            (self.output / 'capture-errors.json').write_text(json.dumps(errors, indent=2) + '\n')
+        android.capture_failure(self.device, self.output)
 
     def build(self, target, *, qa=False, defines=()):
         self.environment['ORG_GRADLE_PROJECT_notificationQa'] = str(qa).lower()

@@ -5,6 +5,7 @@ With no serial, own an ephemeral AVD (SDK image must already be installed).
 --serial reuses an operator-owned emulator; only the notification QA app is reset.
 """
 import argparse
+import json
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -37,6 +38,44 @@ def require_emulator(serial):
         raise ValueError('Notification gate requires a disposable Android emulator')
 
 
+def capture_failure(serial, output):
+    """Preserve owned-emulator evidence without replacing the original failure."""
+    try:
+        output.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        print('Could not create failure evidence directory: ' + str(error), file=sys.stderr)
+        return
+    errors = []
+    for name, args in {
+        'failure-logcat.txt': ('logcat', '-d', '-t', '3000'),
+        'failure-window.txt': ('shell', 'dumpsys', 'window'),
+        'failure-input-method.txt': ('shell', 'dumpsys', 'input_method'),
+        'failure-activity.txt': ('shell', 'dumpsys', 'activity', 'activities'),
+        'failure-notifications.txt': ('shell', 'dumpsys', 'notification', '--noredact'),
+        'failure-services.txt': ('shell', 'dumpsys', 'activity', 'services'),
+    }.items():
+        try:
+            (output / name).write_text(device(serial, *args))
+        except (OSError, subprocess.SubprocessError) as error:
+            errors.append(name + ': ' + str(error))
+    try:
+        device(serial, 'shell', 'uiautomator', 'dump', '/sdcard/wing-failure.xml')
+        (output / 'failure-ui.xml').write_text(device(serial, 'shell', 'cat', '/sdcard/wing-failure.xml'))
+    except (OSError, subprocess.SubprocessError) as error:
+        errors.append('failure-ui.xml: ' + str(error))
+    try:
+        with (output / 'failure.png').open('wb') as capture:
+            subprocess.run([adb_path(), '-s', serial, 'exec-out', 'screencap', '-p'],
+                           stdout=capture, check=True, timeout=25)
+    except (OSError, subprocess.SubprocessError) as error:
+        errors.append('failure.png: ' + str(error))
+    if errors:
+        try:
+            (output / 'capture-errors.json').write_text(json.dumps(errors, indent=2) + '\n')
+        except OSError as error:
+            print('Could not record capture errors: ' + str(error), file=sys.stderr)
+
+
 def check_on_emulator(serial):
     require_emulator(serial)
     # Fresh SDK AVDs start behind the keyguard. The fixture awaits its first
@@ -49,25 +88,7 @@ def check_on_emulator(serial):
         command(sys.executable, 'tools/qa/check_notification_revamp.py',
                 '--serial', serial, '--output', str(OUTPUT), '--tap-only')
     except subprocess.CalledProcessError:
-        for name, args in [
-            ('app.log', ('logcat', '-d', '-s',
-                         'flutter:V', 'AndroidRuntime:E', 'ActivityTaskManager:I')),
-            ('activity.txt', ('shell', 'dumpsys', 'activity', 'activities')),
-            ('notifications.txt', ('shell', 'dumpsys', 'notification', '--noredact')),
-            ('services.txt', ('shell', 'dumpsys', 'activity', 'services',
-                              'com.tarkilhk.wing.notificationqa')),
-            ('failure-ui.xml', ('shell', 'cat', '/sdcard/wing-notification-ui.xml')),
-        ]:
-            try:
-                (OUTPUT / name).write_text(device(serial, *args))
-            except (OSError, subprocess.SubprocessError):
-                pass
-        try:
-            with (OUTPUT / 'failure.png').open('wb') as capture:
-                command(adb_path(), '-s', serial, 'exec-out', 'screencap', '-p',
-                        stdout=capture)
-        except (OSError, subprocess.SubprocessError):
-            pass
+        capture_failure(serial, OUTPUT)
         raise
 
 

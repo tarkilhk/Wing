@@ -1,5 +1,7 @@
 """Keep the notification regression harness fail-closed at its OS boundary."""
 import importlib.util
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -326,6 +328,23 @@ elif sys.argv[3] == 'forward':
                 gate.check_on_emulator('emulator-5562')
         command.assert_not_called()
 
+    def test_failure_capture_tolerates_unwritable_evidence_directory(self):
+        with patch.object(Path, 'mkdir', side_effect=OSError('disk full')), \
+             patch.object(gate, 'device') as device, \
+             contextlib.redirect_stderr(io.StringIO()) as errors:
+            gate.capture_failure('emulator-5562', Path('/unwritable'))
+        device.assert_not_called()
+        self.assertIn('disk full', errors.getvalue())
+
+    def test_failure_capture_tolerates_unwritable_error_report(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(gate, 'device', side_effect=OSError('device unavailable')), \
+             patch.object(gate.subprocess, 'run', side_effect=OSError('capture unavailable')), \
+             patch.object(Path, 'write_text', side_effect=OSError('disk full')), \
+             contextlib.redirect_stderr(io.StringIO()) as errors:
+            gate.capture_failure('emulator-5562', Path(directory))
+        self.assertIn('disk full', errors.getvalue())
+
     def test_shade_driver_failure_fails_the_gate(self):
         calls = []
 
@@ -338,13 +357,15 @@ elif sys.argv[3] == 'forward':
         with tempfile.TemporaryDirectory() as directory, \
              patch.object(gate, 'OUTPUT', Path(directory)), \
              patch.object(gate, 'device', return_value='1'), \
-             patch.object(gate, 'command', side_effect=command):
+             patch.object(gate, 'command', side_effect=command), \
+             patch.object(gate.subprocess, 'run') as capture:
             with self.assertRaises(subprocess.CalledProcessError):
                 gate.check_on_emulator('emulator-5562')
             self.assertEqual({p.name for p in Path(directory).iterdir()},
-                             {'app.log', 'activity.txt', 'notifications.txt',
-                              'services.txt', 'failure-ui.xml', 'failure.png'})
-        self.assertEqual(calls[-1][-3:], ('exec-out', 'screencap', '-p'))
+                             {'failure-logcat.txt', 'failure-activity.txt', 'failure-notifications.txt',
+                              'failure-services.txt', 'failure-window.txt', 'failure-input-method.txt',
+                              'failure-ui.xml', 'failure.png'})
+        self.assertEqual(capture.call_args.args[0][-3:], ['exec-out', 'screencap', '-p'])
 
 
 class OwnedAndroidBootTest(unittest.TestCase):
