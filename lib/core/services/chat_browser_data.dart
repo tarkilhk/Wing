@@ -1865,7 +1865,7 @@ final class BrowserActionSession extends ChangeNotifier {
     String name = '',
     String color = '',
     String icon = '',
-    String path = '',
+    String? path,
     BrowserProject? target,
   }) async {
     if (_state.submitting || _state.generatingTitle) return false;
@@ -1902,7 +1902,9 @@ final class BrowserActionSession extends ChangeNotifier {
         trimmed.isEmpty) {
       return false;
     }
-    if (action == BrowserAction.editProject && path.trim().isEmpty) {
+    if (action == BrowserAction.editProject &&
+        path != null &&
+        path.trim().isEmpty) {
       return false;
     }
     _publish(BrowserActionState(submitting: true, moving: target));
@@ -2028,6 +2030,9 @@ final class BrowserActionSession extends ChangeNotifier {
           error: project != null
               ? message.startsWith('Profile changed.') ||
                         message.startsWith('Folder saved.') ||
+                        message.startsWith(
+                          'Project folder change is incomplete.',
+                        ) ||
                         message.startsWith('Project is unavailable.')
                     ? message
                     : 'The project change was not acknowledged. Check the connection and try again.'

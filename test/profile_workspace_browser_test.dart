@@ -697,7 +697,7 @@ void main() {
                 tester.widget<TextField>(name).controller!.text,
                 'Work project',
               );
-              expect(find.byTooltip('Change primary folder'), findsOneWidget);
+              expect(find.byTooltip('Change project folder'), findsOneWidget);
               await actionCapture(
                 tester,
                 'project-edit-form-${brightness.name}-$scale',
@@ -743,9 +743,9 @@ void main() {
               );
               await tester.pumpAndSettle();
               await tester.ensureVisible(
-                find.byTooltip('Change primary folder'),
+                find.byTooltip('Change project folder'),
               );
-              await tester.tap(find.byTooltip('Change primary folder'));
+              await tester.tap(find.byTooltip('Change project folder'));
               await tester.pumpAndSettle();
               expect(
                 tester
@@ -850,7 +850,7 @@ void main() {
                 (controller.current!.projects.single['folders'] as List).map(
                   (f) => f['path'],
                 ),
-                containsAll(['/work', '/work/new']),
+                ['/work/new'],
               );
               expect(
                 host.wireCalls.where((m) => m == 'projects.add_folder'),
@@ -858,7 +858,7 @@ void main() {
               );
               expect(
                 host.wireCalls.where((m) => m == 'projects.remove_folder'),
-                isEmpty,
+                hasLength(1),
               );
               expect(host.folderCreates, isEmpty);
               expect(tester.takeException(), isNull);

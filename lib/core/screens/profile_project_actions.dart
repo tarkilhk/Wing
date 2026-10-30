@@ -75,7 +75,7 @@ Future<void> showProjectActions(
           final saved = await session.perform(
             BrowserAction.editProject,
             name: draft.name,
-            path: draft.path,
+            path: draft.replaceFolder ? draft.path : null,
             color: draft.color,
             icon: draft.icon,
           );
@@ -400,6 +400,7 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
         path: _path,
         color: _color,
         icon: _icon,
+        replaceFolder: !_editing || _customFolder,
       ));
       if (mounted) Navigator.pop(context);
     } catch (error) {
@@ -499,7 +500,7 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
                   child: IconButton.outlined(
                     key: const ValueKey('project-choose-folder'),
                     tooltip: _editing
-                        ? 'Change primary folder'
+                        ? 'Change project folder'
                         : 'Choose project folder',
                     onPressed: _pending ? null : _chooseFolder,
                     icon: const Icon(Icons.folder_open_outlined),
@@ -525,7 +526,7 @@ class _ProjectEditorDialogState extends State<ProjectEditorDialog> {
             if (_editing) ...[
               const SizedBox(height: 4),
               Text(
-                'New chats start here. Existing chats keep their folders.',
+                'Choosing a folder replaces the project’s folder links. Chats keep their working folders.',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
             ],

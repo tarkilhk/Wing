@@ -14,6 +14,11 @@ Feature ID: `chat-browser`.
 
 Choose Chats in the drawer. Search or filter by profile and project, tap a row to open it, use row actions to organize it, or long-press New chat to reveal New project.
 
+Choosing a folder in Edit project and saving makes it the project's only folder association.
+Chats in other folders leave that project's group, keeping their working folders
+and messages. Choose the current folder again and save to remove leftover associations from
+earlier edits. Name, color and icon edits leave the folder links unchanged. Failed cleanup keeps the editor open for retry.
+
 To remove a chat from its project, open Move to project from its row actions or
 tap the project in the conversation header. Tap the cross in Current project,
 then confirm. Cancel keeps the assignment. Chats already in the default bucket
