@@ -19,6 +19,11 @@ Chats in other folders leave that project's group, keeping their working folders
 and messages. Choose the current folder again and save to remove leftover associations from
 earlier edits. Name, color and icon edits leave the folder links unchanged. Failed cleanup keeps the editor open for retry.
 
+Only saved Hermes projects appear as projects in Wing. Automatic folder groups
+from Hermes, such as a group named `projects` for the profile's default folder,
+are unassigned chats in Wing. Their chats remain visible; those generated groups
+have no project editor or move destination.
+
 To remove a chat from its project, open Move to project from its row actions or
 tap the project in the conversation header. Tap the cross in Current project,
 then confirm. Cancel keeps the assignment. Chats already in the default bucket
@@ -62,6 +67,9 @@ and profile retirement. The design suite inspects the assigned card and
 confirmation at normal and enlarged text in both themes.
 The Chats overflow checks enter through the row's trailing action button and
 verify that its inherited icon styling cannot fade the filled confirmation glyph.
+The project-action suite also supplies an automatic root-folder group alongside
+a saved project, verifies its chats remain unassigned in the browser and header,
+and excludes the generated group from project actions and move destinations.
 
 ## Gotchas
 
