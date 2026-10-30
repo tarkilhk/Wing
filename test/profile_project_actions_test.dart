@@ -88,6 +88,38 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  test(
+    'automatic root-folder groups are not saved project memberships or edit targets',
+    () async {
+      host.showAutomaticRoot = true;
+      await controller.refresh();
+      await browser.refresh(archivedOnly: false);
+      expect(
+        controller.current!.projects.map((p) => p['id']),
+        isNot(contains('/home/tarkil/projects')),
+      );
+      final projection = browser.project('');
+      final rootChat = projection.entries.singleWhere(
+        (e) => e.profile == 'personal' && e.id == 'newest',
+      );
+      expect(rootChat.project, isNull);
+      expect(
+        projection.groups.any((g) => g.project?.id == '/home/tarkil/projects'),
+        isFalse,
+      );
+      expect(
+        controller.current!.projects.map((p) => p['id']),
+        contains('personal-project'),
+      );
+      final actions = (await browser.actionsFor(rootChat))!;
+      addTearDown(actions.dispose);
+      expect(actions.currentProject, isNull);
+      expect(actions.projects.map((p) => p.id), ['personal-project']);
+      final chat = (await controller.openSession(rootChat.sessionKey))!;
+      expect(controller.chatProjectLabel(chat), 'Unassigned');
+    },
+  );
+
   testWidgets('edit keeps its draft on failure and blocks duplicate save', (
     tester,
   ) async {
@@ -726,6 +758,16 @@ void main() {
 }
 
 class _ProjectFixture extends ProfileBrowserFixture {
+  bool showAutomaticRoot = false;
+  @override
+  List<Map<String, dynamic>> sessions(String profile) => [
+    for (final row in super.sessions(profile))
+      {
+        ...row,
+        if (showAutomaticRoot && profile == 'personal' && row['id'] == 'newest')
+          'cwd': '/home/tarkil/projects',
+      },
+  ];
   final personalProject = <String, dynamic>{
     'id': 'personal-project',
     'label': 'Mobile app',
@@ -756,7 +798,21 @@ class _ProjectFixture extends ProfileBrowserFixture {
   @override
   List<Map<String, dynamic>> projects(String profile) {
     if (profile == 'work') return [Map<String, dynamic>.from(workProject)];
-    return deleted ? [] : [Map<String, dynamic>.from(personalProject)];
+    return deleted
+        ? []
+        : [
+            Map<String, dynamic>.from(personalProject),
+            if (showAutomaticRoot)
+              {
+                'id': '/home/tarkil/projects',
+                'label': 'projects',
+                'path': '/home/tarkil/projects',
+                'lastActive': 11,
+                'isAuto': true,
+                'isNoProject': false,
+                'sessionIds': ['newest'],
+              },
+          ];
   }
 
   @override

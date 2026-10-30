@@ -16,7 +16,7 @@ import '../models/bots.dart';
 import 'bots_repository.dart';
 import 'bots_session.dart';
 import 'profile_workspace_controller.dart';
-import 'profile_gateway.dart' show ProfileCanonicalBotChat;
+import 'profile_gateway.dart' show ProfileCanonicalBotChat, ProfileGateway;
 import 'connection_manager.dart' show DashboardRequestNotSentException;
 import 'workspace_connection_failure.dart';
 import 'connection_diagnostics.dart';
@@ -811,7 +811,7 @@ final class ChatBrowserData extends ChangeNotifier {
         merged[entry.key.$2] = {...?merged[entry.key.$2], ...project};
       }
     }
-    return merged.values.toList();
+    return merged.values.where(ProfileGateway.isSavedProject).toList();
   }
 
   List<ChatListEntry> get entries => List.unmodifiable(_entries);
@@ -1664,7 +1664,7 @@ final class BrowserActionSession extends ChangeNotifier {
     this.project,
     this.draft,
   }) {
-    final rawProjects = _resource.projects;
+    final rawProjects = _resource.projects.where(ProfileGateway.isSavedProject);
     final currentId = entry == null
         ? null
         : _resource.chats[entry!.id]?.projectId ??

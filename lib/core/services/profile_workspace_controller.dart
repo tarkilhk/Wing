@@ -2359,18 +2359,19 @@ class ProfileWorkspaceController extends ChangeNotifier {
         resource._projectMembershipLimit = sessionLimit;
         resource._projectMembershipLabels = {
           for (final project in projects)
-            project['id'] as String: project['label'] as String,
+            if (ProfileGateway.isSavedProject(project))
+              project['id'] as String: project['label'] as String,
         };
         resource._projectMembership = {
           for (final project in projects)
             for (final id in project['sessionIds'] as List)
               if (id is String)
-                id: project['isNoProject'] == true
-                    ? null
-                    : project['id'] as String,
+                id: ProfileGateway.isSavedProject(project)
+                    ? project['id'] as String
+                    : null,
         };
       }
-      return projects;
+      return projects.where(ProfileGateway.isSavedProject).toList();
     } finally {
       reader.close();
     }
@@ -2399,7 +2400,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
         () async {
           // The tree is capped and filters archived, child and non-chat sessions.
           // Use the complete list's count to cover large histories. Only explicit
-          // Home membership proves unassigned; an absent key remains unknown.
+          // Home or automatic-folder membership proves no saved project; an
+          // absent key remains unknown.
           final page = await resource.gateway.sessions(
             visibility: SessionVisibility.all,
             limit: 1,

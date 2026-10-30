@@ -1070,13 +1070,18 @@ class ProfileGateway {
     );
   }
 
+  /// Hermes also returns automatic folder groups in its project tree. Only
+  /// registry projects have identities that support project edits and deletion.
+  static bool isSavedProject(Map<String, dynamic> project) =>
+      project['isAuto'] != true && project['isNoProject'] != true;
+
   Future<List<Map<String, dynamic>>> projects() async {
     final rows = records(
       (await call('projects.tree', {'preview_limit': 0}))['projects'],
     );
     final projects = <Map<String, dynamic>>[];
     for (final row in rows) {
-      if (row['isNoProject'] == true) continue;
+      if (!isSavedProject(row)) continue;
       if (row['id'] is! String ||
           row['label'] is! String ||
           row['lastActive'] is! num) {
