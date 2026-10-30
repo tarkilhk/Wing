@@ -32,6 +32,9 @@ import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/profile_workspace_controller.dart';
 import 'package:wing/core/services/profile_gateway.dart';
+import 'package:wing/core/services/ws_client.dart';
+import 'package:wing/core/models/composer_action.dart';
+import 'package:wing/core/widgets/composer_action_button.dart';
 import 'package:wing/core/widgets/source_code_block.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
 import 'package:wing/core/widgets/bot_group_identity.dart';
@@ -441,7 +444,13 @@ void main() {
 
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
-      for (final outcome in ['success', 'failure', 'back', 'back-history']) {
+      for (final outcome in [
+        'success',
+        'failure',
+        'coordination',
+        'back',
+        'back-history',
+      ]) {
         testWidgets(
           'Recents tap enters chat before held resume and history ${brightness.name} $scale $outcome',
           (tester) async {
@@ -450,7 +459,8 @@ void main() {
             final appPreferences = AppPreferences(preferences);
             addTearDown(appPreferences.dispose);
             final fixture = _ScreenFixture();
-            final resume = Completer<void>();
+            var resume = Completer<void>();
+            var refuseAttachment = outcome == 'coordination';
             final history = Completer<void>();
             var opening = false;
             var resumeStarted = false;
@@ -485,6 +495,14 @@ void main() {
                     if (opening && method == 'session.resume') {
                       resumeStarted = true;
                       await resume.future;
+                      if (refuseAttachment) {
+                        throw JsonRpcError(
+                          'session.resume',
+                          'runtime_coordination_required',
+                          code: 4001,
+                          reason: 'runtime_coordination_required',
+                        );
+                      }
                     }
                     return base.call(method, params);
                   },
@@ -543,66 +561,130 @@ void main() {
             for (var i = 0; i < 30; i++) {
               await tester.pump();
             }
-            expect(resumeStarted, isTrue);
+            expect(historyStarted, isTrue);
+            expect(resumeStarted, isFalse);
             await _captureCurrent(
               tester,
               frame,
-              'recents-entry-resume-${brightness.name}-$scale-$outcome',
+              'recents-entry-history-${brightness.name}-$scale-$outcome',
             );
-            if (outcome == 'back') {
+            if (outcome == 'back-history') {
               await tester.tap(find.byTooltip('Back'));
               await tester.pump();
-              resume.complete();
               history.complete();
+              resume.complete();
               await tester.pumpAndSettle();
               expect(find.text('Recents'), findsOneWidget);
               expect(controller.current!.chat, isNull);
-            } else {
+            } else if (outcome == 'failure') {
+              history.completeError(StateError('History unavailable'));
+              await tester.pumpAndSettle();
+              expect(find.byTooltip('Retry'), findsOneWidget);
+              expect(find.byType(StudioLoading), findsNothing);
+              expect(find.byType(ProfileTranscript), findsNothing);
+              expect(resumeStarted, isFalse);
+              opening = false;
               resume.complete();
-              for (var i = 0; i < 30; i++) {
-                await tester.pump();
-              }
-              expect(historyStarted, isTrue);
-              expect(find.text('Recents'), findsNothing);
-              expect(find.byType(StudioLoading), findsOneWidget);
-              expect(tester.getRect(find.byTooltip('Back')), backRect);
-              await tester.pump(const Duration(seconds: 3));
-              expect(find.byType(StudioLoading), findsOneWidget);
-              if (outcome == 'back-history') {
-                await tester.binding.handlePopRoute();
-                await tester.pump();
-                history.complete();
-                await tester.pumpAndSettle();
-                expect(find.text('Recents'), findsOneWidget);
-                expect(controller.current!.chat, isNull);
-                expect(tester.takeException(), isNull);
-                await tester.pumpWidget(const SizedBox());
-                return;
-              } else if (outcome == 'failure') {
-                history.completeError(StateError('History unavailable'));
-                await tester.pumpAndSettle();
-                expect(find.text('Recents'), findsNothing);
-                expect(find.byTooltip('Retry'), findsOneWidget);
-                expect(find.byType(StudioLoading), findsNothing);
-                expect(tester.getRect(find.byTooltip('Back')), backRect);
-                await _captureCurrent(
-                  tester,
-                  frame,
-                  'recents-entry-error-${brightness.name}-$scale',
-                );
-                opening = false;
-                await tester.tap(find.byTooltip('Retry'));
-              } else {
-                history.complete();
-              }
+              await tester.tap(find.byTooltip('Retry'));
               await _finishFrames(tester);
               expect(controller.current!.chat!.key.sessionId, 'chat-0');
               expect(find.byType(ProfileTranscript), findsOneWidget);
-              expect(find.byType(StudioLoading), findsNothing);
-              expect(find.byType(RecentConversationSwitcher), findsOneWidget);
-              await tester.binding.handlePopRoute();
+            } else {
+              history.complete();
               await _finishFrames(tester);
-              expect(find.text('Recents'), findsOneWidget);
+              expect(resumeStarted, isTrue);
+              expect(find.byType(ProfileTranscript), findsOneWidget);
+              expect(controller.current!.chat!.reading.messages, isNotEmpty);
+              expect(controller.current!.chat!.runtime.offline, isTrue);
+              expect(find.byType(StudioLoading), findsOneWidget);
+              expect(
+                tester.getRect(find.byTooltip('Open navigation menu')),
+                backRect,
+              );
+              await _captureCurrent(
+                tester,
+                frame,
+                'recents-entry-resume-${brightness.name}-$scale-$outcome',
+              );
+              if (outcome == 'back') {
+                await tester.binding.handlePopRoute();
+                await tester.pump();
+                resume.complete();
+                await _finishFrames(tester);
+                expect(find.text('Recents'), findsOneWidget);
+                expect(controller.current!.chat, isNull);
+              } else {
+                resume.complete();
+                await _finishFrames(tester);
+                if (outcome == 'coordination') {
+                  expect(
+                    find.text(
+                      'Sending is unavailable while another Hermes app holds this chat. Close it there, then retry.',
+                    ),
+                    findsOneWidget,
+                  );
+                  expect(find.byType(ProfileTranscript), findsOneWidget);
+                  expect(find.byTooltip('Retry'), findsOneWidget);
+                  expect(find.byType(StudioLoading), findsNothing);
+                  final chat = controller.current!.chat!;
+                  expect(chat.runtime.offline, isTrue);
+                  await controller.updateDraft(chat, 'Keep my draft');
+                  await _finishFrames(tester);
+                  expect(
+                    tester
+                        .widget<ComposerActionButton>(
+                          find.byType(ComposerActionButton),
+                        )
+                        .unavailable[ComposerAction.send],
+                    isNotNull,
+                  );
+                  await tester.tap(find.byType(ComposerActionButton));
+                  await _finishFrames(tester);
+                  expect(
+                    fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+                    isEmpty,
+                  );
+                  expect(chat.composer.observation.text, 'Keep my draft');
+                  await _captureCurrent(
+                    tester,
+                    frame,
+                    'coordination-${brightness.name}-$scale',
+                  );
+                  refuseAttachment = false;
+                  resume = Completer<void>();
+                  await tester.tap(find.byTooltip('Retry'));
+                  await tester.pump();
+                  await tester.pump();
+                  expect(find.byType(ProfileTranscript), findsOneWidget);
+                  expect(find.byType(StudioLoading), findsOneWidget);
+                  await _captureCurrent(
+                    tester,
+                    frame,
+                    'coordination-retry-${brightness.name}-$scale',
+                  );
+                  resume.complete();
+                  await _finishFrames(tester);
+                  expect(controller.current!.chat, same(chat));
+                  expect(chat.runtime.offline, isFalse);
+                  expect(chat.runtime.openingError, isNull);
+                  expect(chat.composer.observation.text, 'Keep my draft');
+                  expect(
+                    tester
+                        .widget<ComposerActionButton>(
+                          find.byType(ComposerActionButton),
+                        )
+                        .unavailable[ComposerAction.send],
+                    isNull,
+                  );
+                }
+                expect(controller.current!.chat!.key.sessionId, 'chat-0');
+                expect(find.byType(ProfileTranscript), findsOneWidget);
+                expect(find.byType(StudioLoading), findsNothing);
+                expect(find.byType(RecentConversationSwitcher), findsOneWidget);
+                await tester.binding.handlePopRoute();
+                await _finishFrames(tester);
+                expect(find.text('Recents'), findsOneWidget);
+              }
             }
             expect(tester.takeException(), isNull);
             await tester.pumpWidget(const SizedBox());
@@ -3546,7 +3628,7 @@ void main() {
           await _finishFrames(tester);
           expect(source.selected, source.entries.first.key);
           expect(
-            find.text('Could not open this conversation. Try again.'),
+            find.text('Couldn’t reopen this chat. Retry to continue.'),
             findsOneWidget,
           );
           expect(find.byType(SnackBar), findsNothing);
@@ -3555,7 +3637,7 @@ void main() {
           await _finishFrames(tester);
           expect(source.selected, source.entries[1].key);
           expect(
-            find.text('Could not open this conversation. Try again.'),
+            find.text('Couldn’t reopen this chat. Retry to continue.'),
             findsNothing,
           );
         },
@@ -4655,14 +4737,22 @@ void main() {
               (entry) => entry.key.chat!.workspace != first.key.workspace,
             );
             fixture.failedResume = other.key.chat!;
-            expect(await visit.select(other.key), isFalse);
+            expect(await visit.select(other.key), isTrue);
             await _finishFrames(tester);
-            expect(controller.current!.chat!.key, first.key);
+            expect(controller.current!.chat!.key, other.key.chat);
+            expect(controller.current!.chat!.reading.messages, isNotEmpty);
+            expect(controller.current!.chat!.runtime.openingError, isNotNull);
             expect(
-              controller.current!.chat!.composer.observation.displayedText,
+              first.composer.observation.displayedText,
               'Return to this draft',
             );
             fixture.failedResume = null;
+            expect(
+              await visit.select(RecentConversationKey.chat(first.key)),
+              isTrue,
+            );
+            await _finishFrames(tester);
+            expect(controller.current!.chat!.key, first.key);
           }
           final resumes = fixture.calls
               .where((call) => call.$2 == 'session.resume')

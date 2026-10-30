@@ -1309,7 +1309,8 @@ void main() {
       final first = app.currentState!.openProfileNotification(payload);
       final duplicate = app.currentState!.openProfileNotification(payload);
       await tester.pump();
-      expect(_resumeCount(harness, 'a'), 1);
+      // Saved history is read before attaching the one coalesced target.
+      expect(_resumeCount(harness, 'a'), 0);
       history.complete();
       await Future.wait([first, duplicate]);
       await _pumpNavigation(tester);
@@ -1483,7 +1484,8 @@ void main() {
     await app.currentState!.openProfileNotification('{invalid');
     final retry = app.currentState!.openProfileNotification(payload);
     await tester.pump();
-    expect(_resumeCount(harness, 'a'), 2);
+    // Neither request may attach before its saved-history read completes.
+    expect(_resumeCount(harness, 'a'), 0);
 
     history.complete();
     await Future.wait([first, retry]);
@@ -1535,7 +1537,8 @@ void main() {
     await Future.wait([firstA, finalA]);
     await _pumpNavigation(tester);
 
-    expect(_resumeCount(harness, 'a'), 2);
+    // The retired first A never reaches attachment after its held read.
+    expect(_resumeCount(harness, 'a'), 1);
     expect(harness.controller.current!.scope.profileName, 'a');
     expect(
       find.text('This chat is unavailable on its original host or profile.'),

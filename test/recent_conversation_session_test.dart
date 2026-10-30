@@ -9,6 +9,7 @@ import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/models/recent_conversation.dart';
 import 'package:wing/core/models/transcript_reading.dart';
 import 'package:wing/core/services/recent_conversation_session.dart';
+import 'package:wing/core/services/ws_client.dart';
 
 final _scope = WorkspaceScope(
   connectionId: 'home',
@@ -52,6 +53,7 @@ class _Source extends ChangeNotifier implements RecentConversationSource {
   final reads = <RecentConversationKey, Completer<RecentConversationPreview>>{};
   Completer<void>? heldOpen;
   bool failOpen = false, cached = false;
+  Object? openFailure;
   final denied = <RecentConversationKey>{};
   Completer<RecentConversationCatalog>? catalogRead;
   int catalogReads = 0;
@@ -103,6 +105,7 @@ class _Source extends ChangeNotifier implements RecentConversationSource {
     opens.add(key);
     await heldOpen?.future;
     if (!isCurrent()) return;
+    if (openFailure case final failure?) throw failure;
     if (failOpen) throw StateError('Offline');
     selected = key;
     notifyListeners();
@@ -621,6 +624,26 @@ void main() {
     expect(session.selected, _entry(0).key);
     expect(session.error, isNotNull);
     expect(session.active, isTrue);
+  });
+
+  test('Desktop ownership refusal explains recovery and permits retry', () async {
+    await session.select(_entry(0).key);
+    source.openFailure = JsonRpcError(
+      'session.resume',
+      'runtime_coordination_required',
+      code: 4001,
+      reason: 'runtime_coordination_required',
+    );
+    expect(await session.select(_entry(1).key), isFalse);
+    expect(session.selected, _entry(0).key);
+    expect(session.selecting, isFalse);
+    expect(
+      session.error,
+      'Sending is unavailable while another Hermes app holds this chat. Close it there, then retry.',
+    );
+    source.openFailure = null;
+    expect(await session.select(_entry(1).key), isTrue);
+    expect(session.error, isNull);
   });
 
   test(

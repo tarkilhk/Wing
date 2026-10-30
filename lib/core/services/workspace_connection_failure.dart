@@ -82,8 +82,16 @@ String workspaceFailureMessage(Object error) {
   return 'Couldn’t open this workspace. Check the connection settings and try again.';
 }
 
+bool isConversationAttachmentRefused(Object error) =>
+    error is JsonRpcError &&
+    error.method == 'session.resume' &&
+    error.reason == 'runtime_coordination_required';
+
 String conversationOpeningFailureMessage(Object error) {
   if (isUnsupportedChatEndpoint(error)) return chatEndpointFailureMessage;
+  if (isConversationAttachmentRefused(error)) {
+    return 'Sending is unavailable while another Hermes app holds this chat. Close it there, then retry.';
+  }
   if (error is TlsException ||
       error is DashboardHttpException &&
           {401, 403}.contains(error.statusCode)) {

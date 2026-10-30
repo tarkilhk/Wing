@@ -222,6 +222,7 @@ class Host {
   Completer<void>? activeListDelay;
   int connectFailures = 0;
   Object? connectError;
+  Object? resumeError;
   int connectCalls = 0;
   int disconnectCalls = 0;
   final connectsByProfile = <String, int>{};
@@ -596,6 +597,9 @@ class Host {
             );
           }
           return steerResult;
+        }
+        if (method == 'session.resume' && resumeError != null) {
+          throw resumeError!;
         }
         if (method == 'session.resume' && resumeFailures > 0) {
           resumeFailures--;
@@ -3397,6 +3401,114 @@ void main() {
       expect(() => controller.selectProject(aProject), throwsArgumentError);
     },
   );
+
+  test(
+    'fresh reading survives a refused runtime attachment and retries',
+    () async {
+      host.running = false;
+      host.resumeError = JsonRpcError(
+        'session.resume',
+        'runtime_coordination_required',
+        code: 4001,
+        reason: 'runtime_coordination_required',
+      );
+      final key = ProfileSessionKey(controller.current!.scope, 'same');
+      ProfileChat? revealed;
+      final chat = await controller.openSessionForReading(
+        key,
+        isCurrentRequest: () => true,
+        onReadingAvailable: (chat) => revealed = chat,
+      );
+      expect(chat, same(revealed));
+      expect(chat, isNotNull);
+      expect(chat!.reading.messages, isNotEmpty);
+      expect(chat.runtime.offline, isTrue);
+      expect(chat.runtime.openingError, contains('Sending is unavailable'));
+      expect(host.gateways['a']!.canonical.session('same'), isNull);
+      await controller.updateDraft(chat, 'Keep this draft');
+      expect((await controller.savedDraft(key))!.text, 'Keep this draft');
+      await controller.send(chat);
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+      // A later network failure does not revoke the known attachment refusal.
+      host.resumeError = TimeoutException('Unavailable');
+      await controller.retryConversation(chat);
+      expect(chat.attachmentBlocked, isTrue);
+      await controller.send(chat);
+      expect(chat.composer.observation.queue, isEmpty);
+      expect(chat.composer.observation.text, 'Keep this draft');
+      host.resumeError = null;
+      await controller.retryConversation(chat);
+      expect(chat.attachmentBlocked, isFalse);
+      expect(controller.current!.chat, same(chat));
+      expect(chat.runtime.offline, isFalse);
+      expect(chat.runtime.openingError, isNull);
+      expect(chat.composer.observation.text, 'Keep this draft');
+      expect(
+        host.gateways['a']!.canonical.session(chat.runtime.runtimeId),
+        isNotNull,
+      );
+    },
+  );
+
+  test(
+    'fresh reading is available before runtime attachment completes',
+    () async {
+      host.running = false;
+      final resume = host.resumeDelay = Completer<void>();
+      final visible = Completer<ProfileChat>();
+      final opening = controller.openSessionForReading(
+        ProfileSessionKey(controller.current!.scope, 'same'),
+        isCurrentRequest: () => true,
+        onReadingAvailable: visible.complete,
+      );
+      final chat = await visible.future.timeout(const Duration(seconds: 2));
+      expect(chat.reading.messages, isNotEmpty);
+      expect(chat.runtime.offline, isTrue);
+      expect(chat.refreshingConversation, isTrue);
+      resume.complete();
+      expect(await opening, same(chat));
+      expect(chat.runtime.offline, isFalse);
+      expect(chat.refreshingConversation, isFalse);
+    },
+  );
+
+  test(
+    'notification reads history despite refused runtime attachment',
+    () async {
+      host.resumeError = JsonRpcError(
+        'session.resume',
+        'runtime_coordination_required',
+        code: 4001,
+        reason: 'runtime_coordination_required',
+      );
+      await controller.openNotification(
+        ProfileSessionKey(controller.current!.scope, 'same'),
+      );
+      final chat = controller.notificationChat!;
+      expect(chat.reading.messages, isNotEmpty);
+      expect(chat.runtime.offline, isTrue);
+      expect(chat.runtime.openingError, contains('Sending is unavailable'));
+      expect(host.calls.where((call) => call.$2 == 'prompt.submit'), isEmpty);
+    },
+  );
+
+  test('leaving fresh reading cannot manufacture runtime authority', () async {
+    var current = true;
+    ProfileChat? revealed;
+    final opened = await controller.openSessionForReading(
+      ProfileSessionKey(controller.current!.scope, 'same'),
+      isCurrentRequest: () => current,
+      onReadingAvailable: (chat) {
+        revealed = chat;
+        current = false;
+      },
+    );
+    expect(opened, isNull);
+    expect(revealed!.reading.messages, isNotEmpty);
+    expect(revealed!.runtime.offline, isTrue);
+    expect(revealed!.refreshingConversation, isFalse);
+    expect(host.calls.where((call) => call.$2 == 'session.resume'), isEmpty);
+  });
 
   test('reconnect uses original durable owner without resubmitting', () async {
     final a = await controller.createChat(canDispatch: () => true);
