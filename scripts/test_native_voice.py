@@ -110,7 +110,15 @@ class Driver:
                 self.deadline = None
                 try:
                     if record['root_requested']:
-                        self.adb('unroot')
+                        try:
+                            self.adb('unroot')
+                        except subprocess.CalledProcessError as error:
+                            # Restarting adbd can close its reply after unroot
+                            # succeeds. Reconnect and establish actual authority.
+                            record['unroot_reply_error'] = {
+                                'returncode': error.returncode,
+                                'stderr': error.stderr,
+                            }
                         self.adb('wait-for-device')
                     if (self.adb('get-serialno').strip() != self.serial
                             or self.shell('id', '-u').strip() != prior_uid):
