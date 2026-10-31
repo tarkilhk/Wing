@@ -27,7 +27,8 @@ DRIVERS = (
 
 
 class NativeVoiceAdbdOwnership(unittest.TestCase):
-    def driver(self, prior='2000', *, root_error=False, root_denied=False, restore_bad=False):
+    def driver(self, prior='2000', *, root_error=False, root_denied=False,
+               restore_bad=False, unroot_error=False):
         from scripts import test_native_voice as voice
         driver = voice.Driver('emulator-5562', Path('/unused'), 30)
         state = {'uid': prior}
@@ -52,6 +53,9 @@ class NativeVoiceAdbdOwnership(unittest.TestCase):
                     raise RuntimeError('lost root receipt')
             elif command == ('unroot',):
                 state['uid'] = '0' if restore_bad else '2000'
+                if unroot_error:
+                    raise subprocess.CalledProcessError(
+                        1, ['adb', '-s', driver.serial, 'unroot'], stderr='error: closed')
             elif command == ('get-serialno',):
                 return driver.serial
             elif command != ('wait-for-device',):
@@ -102,6 +106,33 @@ class NativeVoiceAdbdOwnership(unittest.TestCase):
                 pass
         self.assertFalse(driver.evidence['adbd']['restored'])
         self.assertIn('cleanup_error', driver.evidence['adbd'])
+
+    def test_lost_unroot_reply_reconnects_and_verifies_restored_authority(self):
+        driver, state, calls = self.driver(unroot_error=True)
+        with driver.rooted_emulator():
+            self.assertEqual(state['uid'], '0')
+        self.assertEqual(state['uid'], '2000')
+        self.assertTrue(driver.evidence['adbd']['restored'])
+        self.assertEqual(calls.count(('unroot',)), 1)
+        self.assertIn(('wait-for-device',), calls[calls.index(('unroot',)) + 1:])
+        self.assertEqual(driver.evidence['adbd']['unroot_reply_error'],
+                         {'returncode': 1, 'stderr': 'error: closed'})
+
+    def test_lost_unroot_reply_with_wrong_authority_still_fails(self):
+        driver, _, _ = self.driver(unroot_error=True, restore_bad=True)
+        with self.assertRaisesRegex(RuntimeError, 'authority was not restored'):
+            with driver.rooted_emulator():
+                pass
+        self.assertFalse(driver.evidence['adbd']['restored'])
+
+    def test_lost_unroot_reply_with_changed_identity_still_fails(self):
+        driver, _, _ = self.driver(unroot_error=True)
+        adb = driver.adb
+        with self.assertRaisesRegex(RuntimeError, 'authority was not restored'):
+            with driver.rooted_emulator():
+                driver.adb = lambda *args: ('emulator-9999' if args == ('get-serialno',)
+                                            else adb(*args))
+        self.assertFalse(driver.evidence['adbd']['restored'])
 
     def test_physical_identity_is_rejected_before_adb_root(self):
         driver, _, calls = self.driver()
