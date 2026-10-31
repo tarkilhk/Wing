@@ -265,7 +265,11 @@ time.sleep(30)
             deadline = time.monotonic() + 3
             while time.monotonic() < deadline:
                 state = Path(f'/proc/{child_pid}/stat')
-                if not state.exists() or state.read_text().split()[2] == 'Z':
+                try:
+                    stopped = state.read_text().split()[2] == 'Z'
+                except (FileNotFoundError, ProcessLookupError):
+                    stopped = True
+                if stopped:
                     break
                 time.sleep(.01)
             else:
