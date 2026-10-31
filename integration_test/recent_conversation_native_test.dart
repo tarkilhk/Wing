@@ -219,22 +219,32 @@ class _NativeEventChats extends ProfileBrowserFixture {
   });
 }
 
-Future<void> _readNewest(WidgetTester tester, String checkpoint) async {
+Future<void> _readNewest(
+  WidgetTester tester,
+  String checkpoint, {
+  bool Function()? acknowledged,
+}) async {
   final viewport = tester.getRect(
     find.byKey(const ValueKey('profile-transcript')),
   );
-  await _native(
-    tester,
-    checkpoint,
-    actions: [
-      _touch(tester, 'one', [
-        (
-          Offset(viewport.center.dx, viewport.top + viewport.height * .75),
-          Offset(viewport.center.dx, viewport.top + viewport.height * .25),
-        ),
-      ], milliseconds: 450),
-    ],
-  );
+  // Enlarged text can place the answer more than one viewport below the
+  // restored reading position. Drive real scrolls until the read receipt.
+  for (var attempt = 0; attempt < 8; attempt++) {
+    await _native(
+      tester,
+      '$checkpoint-$attempt',
+      actions: [
+        _touch(tester, 'one', [
+          (
+            Offset(viewport.center.dx, viewport.top + viewport.height * .75),
+            Offset(viewport.center.dx, viewport.top + viewport.height * .25),
+          ),
+        ], milliseconds: 450),
+      ],
+    );
+    if (acknowledged == null || acknowledged()) return;
+  }
+  fail('Newest answer was not acknowledged after scrolling: $checkpoint');
 }
 
 Future<void> _until(
@@ -1603,7 +1613,11 @@ void main() {
             reason: 'Stack reveal alone does not read the cached answer',
           );
           expect(host.patched, hasLength(readsBeforeStackReturn));
-          await _readNewest(tester, '$prefix-read-restored-answer');
+          await _readNewest(
+            tester,
+            '$prefix-read-restored-answer',
+            acknowledged: () => readReceipts.isNotEmpty,
+          );
           expect(readReceipts, ['answer:1000']);
           expect(host.patched.skip(readsBeforeStackReturn), [first.key]);
           expect(first.markReadFailed, isFalse);
@@ -1619,16 +1633,24 @@ void main() {
           final rejectedBefore = host.rejectedResumes;
           await swipe('failed-selection');
           expect(host.rejectedResumes, rejectedBefore + 1);
-          expect(controller.current!.chat!.key, beforeRejectedSelection);
+          expect(controller.current!.chat!.key, host.failedResume);
+          expect(controller.current!.chat!.reading.messages, isNotEmpty);
           expect(
-            find.text('Could not open this conversation. Try again.'),
+            find.text(
+              'Conversation could not be refreshed. Retry to check for new messages.',
+            ),
             findsOneWidget,
           );
+          expect(controller.current!.chat!.runtime.offline, isTrue);
           host.failedResume = null;
-          ScaffoldMessenger.of(
-            tester.element(find.byType(ProfileWorkspaceScreen)),
-          ).hideCurrentSnackBar();
-          await tester.pumpAndSettle();
+          await _native(
+            tester,
+            '$prefix-retry-selection',
+            actions: [_tap(tester, find.byTooltip('Retry'))],
+          );
+          expect(controller.current!.chat!.runtime.openingError, isNull);
+          expect(controller.current!.chat!.runtime.offline, isFalse);
+          await swipe('return-to-neighbor-after-retry', right: true);
           await swipe('return-after-failed-selection', right: true);
           expect(controller.current!.chat!.key, first.key);
           var sequence = 0;
@@ -1815,7 +1837,6 @@ void main() {
               expect(focusedTarget, findsOneWidget);
             }
 
-            final beforeCrossProfile = controller.current!.chat!.key;
             host.failedResume = ring[target].key.chat!;
             await browseToTarget();
             await _native(
@@ -1825,28 +1846,24 @@ void main() {
                 {'type': 'tap', 'x': mid.dx, 'y': mid.dy},
               ],
             );
-            expect(controller.current!.chat!.key, beforeCrossProfile);
+            expect(controller.current!.chat!.key, ring[target].key.chat);
+            expect(controller.current!.chat!.reading.messages, isNotEmpty);
             expect(
-              find.text('Could not open this conversation. Try again.'),
+              find.text(
+                'Conversation could not be refreshed. Retry to check for new messages.',
+              ),
               findsOneWidget,
             );
-            await _native(
-              tester,
-              '$prefix-cross-profile-recovery-back',
-              actions: [
-                {'type': 'back'},
-              ],
-            );
+            expect(controller.current!.chat!.runtime.offline, isTrue);
             host.failedResume = null;
-            await browseToTarget();
             await _native(
               tester,
-              '$prefix-cross-profile-open',
-              actions: [
-                {'type': 'tap', 'x': mid.dx, 'y': mid.dy},
-              ],
+              '$prefix-cross-profile-retry',
+              actions: [_tap(tester, find.byTooltip('Retry'))],
             );
             expect(controller.current!.chat!.key, ring[target].key.chat);
+            expect(controller.current!.chat!.runtime.openingError, isNull);
+            expect(controller.current!.chat!.runtime.offline, isFalse);
             await _native(tester, '$prefix-cross-profile-settled');
             for (
               var i = 0;

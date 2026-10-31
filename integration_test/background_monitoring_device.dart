@@ -209,21 +209,18 @@ Future<void> _runFixture(_NotificationPollProbe probe) async {
             chat.composer.editText('Native fixture work');
             await controller.send(chat);
           }
-          host.gateways[profile]!.onEvent!(
-            StreamEvent(
-              type: 'message.start',
-              sessionId: chat.runtime.runtimeId,
-              data: const {},
-            ),
-          );
+          host.startTurn(profile, chat.runtime.runtimeId);
+        } else if (state == 'idle') {
+          host.completeTurn(profile, chat.runtime.runtimeId, reply);
         } else {
           host.gateways[profile]!.onEvent!(
             StreamEvent(
-              type: state == 'waiting' ? 'clarify' : 'message.complete',
+              type: 'clarify',
               sessionId: chat.runtime.runtimeId,
-              data: state == 'waiting'
-                  ? {'request_id': 'question-$profile', 'question': 'Continue?'}
-                  : {'text': reply},
+              data: {
+                'request_id': 'question-$profile',
+                'question': 'Continue?',
+              },
             ),
           );
         }

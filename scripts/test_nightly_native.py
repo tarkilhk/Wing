@@ -24,16 +24,8 @@ from scripts.test_journeys import verdict  # noqa: E402
 from scripts.test_vanilla_hermes import cleanup_signals  # noqa: E402
 from scripts.test_native_bots import input_view_visible  # noqa: E402
 from tools.qa import run_notification_gate as android  # noqa: E402
+from scripts.native_impact import FAMILIES, plan as impact_plan  # noqa: E402
 
-FAMILIES = (
-    'journeys', 'notification-actions', 'notification-restore',
-    'notification-counts', 'notification-cold', 'background',
-    'health-normal', 'health-large', 'backup', 'bots', 'file-transfer',
-    'voice', 'recents', 'recents-code', 'recents-events', 'recents-momentum',
-    'platform-plugins', 'scheduled-tasks', 'administration', 'queue-editing',
-    'health-entry', 'transcript-expansion', 'health-retention',
-    'slash', 'html', 'stock-hermes', 'external-share', 'clipboard',
-)
 DEV = 'com.tarkilhk.wing.dev'
 QA = 'com.tarkilhk.wing.notificationqa'
 CLIPBOARD_DEFINES = ('--dart-define=HERMES_CLIPBOARD_DEVICE_TEST=true',)
@@ -474,16 +466,29 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('family', choices=FAMILIES, nargs='?')
     parser.add_argument('--matrix', action='store_true', help='Publish every enrolled native family to CI')
+    parser.add_argument('--changed-since', help='With --matrix, select affected families; an unknown base runs all')
     parser.add_argument('--output', type=Path, default=ROOT / 'build/nightly-native')
     parser.add_argument('--hermes-source', type=Path)
     args = parser.parse_args()
+    if args.changed_since is not None and not args.matrix:
+        parser.error('--changed-since requires --matrix')
     if args.matrix:
         if not FAMILIES or len(set(FAMILIES)) != len(FAMILIES):
             raise ValueError('Nightly native catalog must be nonempty with unique families')
-        matrix = json.dumps(FAMILIES)
+        selection = (impact_plan(ROOT, args.changed_since) if args.changed_since is not None
+                     else {'families': list(FAMILIES), 'reasons': {}, 'changed': None})
+        matrix = json.dumps(selection['families'])
         if 'GITHUB_OUTPUT' in os.environ:
             with Path(os.environ['GITHUB_OUTPUT']).open('a') as output:
                 output.write('families=' + matrix + '\n')
+        if 'GITHUB_STEP_SUMMARY' in os.environ:
+            with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a') as summary:
+                summary.write('### Native verification selection\n\n')
+                summary.write(f"Selected {len(selection['families'])} of {len(FAMILIES)} families.\n\n")
+                for family, paths in selection['reasons'].items():
+                    summary.write(f'- **{family}**: ' + ', '.join(f'`{path}`' for path in paths) + '\n')
+        args.output.mkdir(parents=True, exist_ok=True)
+        (args.output / 'selection.json').write_text(json.dumps(selection, indent=2) + '\n')
         print(matrix)
         return 0
     if args.family is None:

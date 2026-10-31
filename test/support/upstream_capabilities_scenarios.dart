@@ -246,12 +246,17 @@ void registerUpstreamCapabilitiesScenarios({
             EnginePhase.sendSemanticsUpdate,
             const Duration(seconds: 5),
           );
-          await tester.ensureVisible(
-            find.byKey(const Key('delegation-model-example-second')),
+          // At enlarged text with the native keyboard open, the row can be
+          // taller than the list viewport. Its geometric centre is not the
+          // visible label. Drive the actual visible option, then require Save
+          // admission before testing the held write.
+          final option = find.descendant(
+            of: find.byKey(const Key('delegation-model-example-second')),
+            matching: find.text('Second'),
           );
-          await tester.tap(
-            find.byKey(const Key('delegation-model-example-second')),
-          );
+          await tester.ensureVisible(option);
+          await tester.pumpAndSettle();
+          await tester.tap(option.hitTestable());
           await tester.pumpAndSettle(
             const Duration(milliseconds: 100),
             EnginePhase.sendSemanticsUpdate,
@@ -263,6 +268,12 @@ void registerUpstreamCapabilitiesScenarios({
             keyboard: true,
           );
           fixture.writeGate = Completer<void>();
+          expect(
+            tester
+                .widget<StudioFormActions>(find.byType(StudioFormActions))
+                .onConfirm,
+            isNotNull,
+          );
           await tester.tap(find.byTooltip('Save subagent model'));
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 100));

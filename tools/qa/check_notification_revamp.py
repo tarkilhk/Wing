@@ -483,12 +483,24 @@ def check_monitoring_taps(output):
 
 def wait_for_approval_choices():
     labels = ('Approve once', 'Approve for session', 'Always approve', 'Reject')
+    revealed = False
 
     def visible_choices():
+        nonlocal revealed
         shown = nodes()
-        return all(any(label in (node.get('text'), node.get('content-desc'))
+        if all(any(label in (node.get('text'), node.get('content-desc'))
                        and node.get('enabled') == 'true'
-                       for node in shown) for label in labels)
+                       for node in shown) for label in labels):
+            return True
+        # Review opens at the command. At large text its actions can be below
+        # the transcript viewport; use the same explicit jump as the reader.
+        cue = next((node for node in shown if
+                    'Input needed' in (node.get('text'), node.get('content-desc'))
+                    and node.get('enabled') == 'true'), None)
+        if cue is not None and not revealed:
+            tap_notification_node(cue)
+            revealed = True
+        return False
 
     until(visible_choices, 'Review did not expose all enabled approval choices')
 

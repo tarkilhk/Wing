@@ -121,25 +121,36 @@ class VanillaEnvironmentAndVerdict(unittest.TestCase):
 # The production runner still starts its standard CLI and creates profiles over
 # HTTP. Native acceptance uses only the independently verified upstream checkout.
 FAKE_STOCK_CLI = '''
-import http.server, json, os, pathlib
+import http.server, json, os, pathlib, sys
+assert sys.argv[1:] == ["gateway", "run"], "Must launch the canonical gateway"
 home = pathlib.Path(os.environ['HERMES_HOME'])
+config = json.loads((home / 'config.yaml').read_text())
+assert config['webapp']['host'] == '127.0.0.1'
+assert config['webapp']['public_url'] == 'http://wing-ci.test'
+auth = config['dashboard']['basic_auth']
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *args): pass
     def do_GET(self):
+        assert self.path == '/api/health'
         self.send_response(200); self.end_headers()
-        self.wfile.write(b'window.__HERMES_SESSION_TOKEN__="synthetic-local-token";'
-                         if self.path == '/' else b'{"status":"ok"}')
+        self.wfile.write(b'{"status":"ok"}')
     def do_POST(self):
-        assert self.path == '/api/profiles'
-        assert self.headers['X-Hermes-Session-Token'] == 'synthetic-local-token'
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-        assert body['no_skills'] is True and set(body) == {'name', 'no_skills'}
-        (home / body['name']).write_text('owned profile')
-        self.send_response(200); self.end_headers(); self.wfile.write(b'{}')
-server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
-pathlib.Path(os.environ['HERMES_DESKTOP_READY_FILE']).write_text(json.dumps({'port':server.server_port}))
+        if self.path == '/auth/password-login':
+            assert body == dict(provider='basic', **auth)
+            self.send_response(200)
+            self.send_header('Set-Cookie', 'hermes_session_at=synthetic-local-token; Path=/')
+        else:
+            assert self.path == '/api/profiles'
+            assert self.headers['Cookie'] == 'hermes_session_at=synthetic-local-token'
+            assert body['no_skills'] is True and set(body) == {'name', 'no_skills'}
+            (home / body['name']).write_text('owned profile')
+            self.send_response(200)
+        self.end_headers(); self.wfile.write(b'{}')
+server = http.server.HTTPServer(('127.0.0.1', config['webapp']['port']), Handler)
 server.serve_forever()
 '''
+
 
 
 class BackendOwnership(unittest.TestCase):
@@ -160,10 +171,16 @@ class BackendOwnership(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'journey failed'):
             with runner.owned_backend(self.source, self.output, startup_timeout=5) as backend:
                 home = Path(backend['temporary_home'])
+                defines = Path(backend['defines_file'])
+                credentials = json.loads(defines.read_text())
+                self.assertEqual(defines.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(credentials['HERMES_TEST_PORT'], backend['port'])
+                self.assertNotIn(credentials['HERMES_TEST_PASSWORD'], json.dumps(backend))
                 self.assertEqual({p.name for p in home.glob('android-qa-*')}, set(runner.PROFILES))
                 self.assertEqual(runner.local_request(backend['port'], '/api/health'), '{"status":"ok"}')
                 raise RuntimeError('journey failed')
         self.assertFalse(home.exists())
+        self.assertFalse(defines.exists())
         with self.assertRaises(ProcessLookupError):
             os.kill(backend['pid'], 0)
         self.assertEqual((self.output / 'backend.log').stat().st_mode & 0o777, 0o600)

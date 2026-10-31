@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager, nullcontext
+import http.cookiejar
 import json
 import os
 from pathlib import Path
 import re
 import signal
+import secrets
+import socket
 import subprocess
 import sys
 import tempfile
@@ -113,7 +116,8 @@ def backend_environment(source: Path, temporary: Path, inherited: dict) -> dict:
         'XDG_CACHE_HOME': str(temporary / 'user/cache'),
         'XDG_DATA_HOME': str(temporary / 'user/data'),
         'TMPDIR': str(temporary / 'tmp'),
-        'HERMES_DESKTOP_READY_FILE': str(temporary / 'ready.json'),
+        'HERMES_RUNTIME_DIR': str(temporary / 'runtime'),
+        'HERMES_GATEWAY_LOCK_DIR': str(temporary / 'locks'),
         'PYTHONNOUSERSITE': '1', 'PYTHONDONTWRITEBYTECODE': '1',
         'PYTHONUNBUFFERED': '1',
     })
@@ -131,17 +135,11 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError('Disposable backend unexpectedly redirected a request')
 
 
-def local_request(port: int, path: str, *, token: str = '', body=None):
+def local_request(port: int, path: str):
     """Only the owned loopback listener; proxies/redirects cannot change it."""
     if type(port) is not int or not 0 < port < 65536 or not path.startswith('/') or path.startswith('//'):
         raise ValueError('Invalid owned backend request')
-    headers = {'X-Hermes-Session-Token': token} if token else {}
-    if body is not None:
-        headers['Content-Type'] = 'application/json'
-    request = urllib.request.Request(
-        f'http://127.0.0.1:{port}{path}', headers=headers,
-        data=None if body is None else json.dumps(body).encode(),
-    )
+    request = urllib.request.Request(f'http://127.0.0.1:{port}{path}')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     with opener.open(request, timeout=5) as response:
         return response.read().decode()
@@ -155,36 +153,59 @@ def owned_backend(source: Path, output: Path, *, startup_timeout: float = 120):
         for key in ('HOME', 'HERMES_HOME', 'TMPDIR', 'XDG_CONFIG_HOME', 'XDG_CACHE_HOME', 'XDG_DATA_HOME'):
             Path(env[key]).mkdir(parents=True, exist_ok=True, mode=0o700)
         home = Path(env['HERMES_HOME'])
-        (home / 'config.yaml').write_text('{}\n')
+        # Use the canonical gateway's Webapp listener and the same password
+        # login as Wing. Standalone `serve` has no session authority.
+        with socket.socket() as reservation:
+            reservation.bind(('127.0.0.1', 0))
+            port = reservation.getsockname()[1]
+        username, password = 'wing-ci', secrets.token_urlsafe(32)
+        origin = f'http://127.0.0.1:{port}'
+        # A declared non-loopback public host engages stock password auth even
+        # on a loopback bind. All test traffic still uses the owned local port;
+        # this reserved .test name is never resolved or contacted.
+        with private_file(home / 'config.yaml') as config:
+            json.dump({'webapp': {'enabled': True, 'host': '127.0.0.1',
+                                  'port': port, 'public_url': 'http://wing-ci.test'},
+                       'dashboard': {'basic_auth': {'username': username,
+                                                    'password': password}}}, config)
+        defines = temporary / 'android-defines.json'
+        with private_file(defines) as stream:
+            json.dump({'HERMES_TEST_PORT': port, 'HERMES_TEST_USERNAME': username,
+                       'HERMES_TEST_PASSWORD': password}, stream)
         (home / '.env').write_text('')
         (home / '.no-bundled-skills').write_text('Disposable profile: essential stock skills only.\n')
-        command = [str(source / '.venv/bin/python'), '-m', 'hermes_cli.main', 'serve',
-                   '--isolated', '--host', '127.0.0.1', '--port', '0']
+        command = [str(source / '.venv/bin/python'), '-m', 'hermes_cli.main', 'gateway', 'run']
         with private_file(output / 'backend.log') as log:
             process = subprocess.Popen(command, cwd=source, env=env, stdout=log,
                                        stderr=subprocess.STDOUT, start_new_session=True)
             try:
-                ready = Path(env['HERMES_DESKTOP_READY_FILE'])
                 deadline = time.monotonic() + startup_timeout
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
                         raise RuntimeError('Stock Hermes exited during startup; see private backend.log')
-                    if ready.exists():
-                        port = json.loads(ready.read_text())['port']
+                    try:
                         local_request(port, '/api/health')
                         break
+                    except (OSError, ValueError):
+                        pass
                     time.sleep(.1)
                 else:
                     raise TimeoutError('Stock Hermes startup timed out; see private backend.log')
-                page = local_request(port, '/')
-                match = re.search(r'__HERMES_SESSION_TOKEN__\s*=\s*("[^"\r\n]+")\s*;', page)
-                if match is None:
-                    raise ValueError('Stock local session bootstrap token is missing')
-                token = json.loads(match[1])
+                cookies = http.cookiejar.CookieJar()
+                client = urllib.request.build_opener(urllib.request.ProxyHandler({}),
+                    _NoRedirect(), urllib.request.HTTPCookieProcessor(cookies))
+                def post(path, body):
+                    request = urllib.request.Request(origin + path,
+                        data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'})
+                    with client.open(request, timeout=30) as response:
+                        return json.load(response)
+                post('/auth/password-login', {'provider': 'basic',
+                     'username': username, 'password': password})
                 for name in PROFILES:
-                    local_request(port, '/api/profiles', token=token, body={'name': name, 'no_skills': True})
-                token = ''
-                yield {'port': port, 'pid': process.pid, 'temporary_home': str(home)}
+                    post('/api/profiles', {'name': name, 'no_skills': True})
+                cookies.clear()
+                yield {'port': port, 'pid': process.pid, 'temporary_home': str(home),
+                       'defines_file': str(defines)}
                 if process.poll() is not None:
                     raise RuntimeError('Stock Hermes exited before acceptance completed')
             finally:
@@ -228,7 +249,7 @@ def run(source: Path, output: Path, device: str | None = None) -> dict:
                     android.device(serial, 'reverse', '--no-rebind', endpoint, endpoint)
                     forwarded = True
                     command = ['flutter', 'test', '--no-pub', '-d', serial, '--reporter=json',
-                               '--dart-define=HERMES_TEST_PORT=' + str(backend['port']), TARGET]
+                               '--dart-define-from-file=' + backend['defines_file'], TARGET]
                     receipt['command'] = command
                     with private_file(output / 'journeys.jsonl') as log:
                         process = subprocess.Popen(command, cwd=ROOT, stdout=log,

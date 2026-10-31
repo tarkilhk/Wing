@@ -252,6 +252,61 @@ class NotificationCoverageHost {
 
   void connection(bool connected) =>
       gateways['a']!.onConnectionChanged!(connected);
+
+  Iterable<Map<String, dynamic>> _turnAdmissions(
+    String profile,
+    String runtime,
+  ) => admissions.values.where(
+    (row) =>
+        (row['ref'] as Map)['profile_id'] == '/fixture/$profile' &&
+        (row['ref'] as Map)['session_id'] == runtime,
+  );
+
+  void _pending(String profile, String runtime) {
+    gateways[profile]!.onEvent!(
+      StreamEvent(
+        type: 'session.info',
+        sessionId: runtime,
+        data: {
+          'pending': _turnAdmissions(
+            profile,
+            runtime,
+          ).where((row) => row['status'] != 'terminal').toList(),
+        },
+      ),
+    );
+  }
+
+  /// Model the server claiming an admitted input, including one queued while
+  /// foreground recovery was observing an already-working session.
+  void startTurn(String profile, String runtime) {
+    final pending = _turnAdmissions(
+      profile,
+      runtime,
+    ).where((row) => row['status'] != 'terminal');
+    if (pending.isNotEmpty) pending.first['status'] = 'started';
+    _pending(profile, runtime);
+    gateways[profile]!.onEvent!(
+      StreamEvent(type: 'message.start', sessionId: runtime, data: const {}),
+    );
+  }
+
+  void completeTurn(String profile, String runtime, String reply) {
+    for (final row in _turnAdmissions(profile, runtime)) {
+      if (row['status'] == 'started') {
+        row['status'] = 'terminal';
+        row['outcome'] = 'completed';
+      }
+    }
+    _pending(profile, runtime);
+    gateways[profile]!.onEvent!(
+      StreamEvent(
+        type: 'message.complete',
+        sessionId: runtime,
+        data: {'text': reply},
+      ),
+    );
+  }
 }
 
 Future<void> waitForReads(NotificationCoverageHost host, int count) async {
@@ -326,6 +381,48 @@ void main() {
     if (!disposed) controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'answered background question settles after reconnect and posts its reply',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      // The device fixture exposes working state before the UI submits. A
+      // foreground recovery can observe it and correctly enqueue the input.
+      host.workingProfiles.add('a');
+      await controller.reconnect(chat.key.workspace);
+      chat.composer.editText('Native fixture work');
+      await controller.send(chat);
+      void event(String type, Map<String, dynamic> data) {
+        host.gateways['a']!.onEvent!(
+          StreamEvent(
+            type: type,
+            sessionId: chat.runtime.runtimeId,
+            data: data,
+          ),
+        );
+      }
+
+      host.startTurn('a', chat.runtime.runtimeId);
+      host.waitingProfiles.add('a');
+      event('clarify', {'request_id': 'question-a', 'question': 'Continue?'});
+      await Future<void>.delayed(Duration.zero);
+      expect(alerts, [(profile: 'a', session: 'loaded', input: true)]);
+      await controller.reconnect(chat.key.workspace);
+      await controller.clarify(chat, 'Continue');
+      host.waitingProfiles.clear();
+      host.startTurn('a', chat.runtime.runtimeId);
+      host.history = [
+        {'id': 1, 'role': 'assistant', 'content': 'Reply ready'},
+      ];
+      host.completeTurn('a', chat.runtime.runtimeId, 'Reply ready');
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.composer.observation.queue, isEmpty);
+      expect(alerts, [
+        (profile: 'a', session: 'loaded', input: true),
+        (profile: 'a', session: 'loaded', input: false),
+      ]);
+    },
+  );
 
   test(
     'resume durable identity requires the canonical stored identity without mutation',

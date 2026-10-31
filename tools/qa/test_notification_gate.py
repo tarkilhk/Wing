@@ -19,6 +19,17 @@ import run_notification_gate as gate
 
 
 class NotificationCaptureTest(unittest.TestCase):
+    def test_long_review_reveals_actions_through_input_needed_without_deciding(self):
+        cue = ET.Element('node', {'content-desc': 'Input needed', 'enabled': 'true',
+                                  'bounds': '[100,600][150,650]'})
+        choices = [ET.Element('node', {'content-desc': label, 'enabled': 'true'})
+                   for label in ('Approve once', 'Approve for session', 'Always approve', 'Reject')]
+        with patch.object(driver, 'nodes', side_effect=[[cue], choices]), \
+             patch.object(driver, 'tap_notification_node') as tap, \
+             patch.object(driver.time, 'sleep'):
+            driver.wait_for_approval_choices()
+        tap.assert_called_once_with(cue)
+
     def test_failed_dump_cannot_reuse_a_previous_successful_capture(self):
         with patch.object(driver, 'adb', side_effect=[
             'ERROR: null root node', '<hierarchy><node text="stale reply"/></hierarchy>',
