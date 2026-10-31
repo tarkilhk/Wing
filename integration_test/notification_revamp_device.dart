@@ -33,6 +33,22 @@ import 'package:wing/core/widgets/app_drawer.dart';
 import '../test/profile_connection_identity_test.dart' show MemoryIdentityStore;
 import '../test/profile_workspace_controller_test.dart' show Host;
 
+ProfileGateway Function(WorkspaceScope) notificationFixtureGateways(
+  Host primary,
+  Host secondary,
+) {
+  // The discovery workspace is recovered on foreground entry too. It owns no
+  // chats; returning primary's index violates the stock profile boundary and
+  // makes the whole connection unavailable during notification Review.
+  final bootstrap = Host()..indexedSessions = [];
+  return (scope) => switch (scope.profileName) {
+    'default' => bootstrap.gateway(scope),
+    'a' => primary.gateway(scope),
+    'b' => secondary.gateway(scope),
+    _ => throw ArgumentError('Unknown notification fixture profile'),
+  };
+}
+
 Future<({ProfileChat chat, ProfileChat other})> prepareNotificationFixtureChats(
   ProfileWorkspaceController controller, {
   required bool restarting,
@@ -207,14 +223,14 @@ Future<void> main() async {
   final launchIntents = AndroidLaunchIntentService();
   await launchIntents.initialize();
   final app = GlobalKey<WingAppState>();
+  final fixtureGateway = notificationFixtureGateways(host, otherHost);
   runApp(
     WingApp(
       appPreferences: AppPreferences(prefs),
       key: app,
       launchIntents: launchIntents,
       connManager: manager,
-      gatewayFactory: (_, scope) =>
-          (scope.profileName == 'b' ? otherHost : host).gateway(scope),
+      gatewayFactory: (_, scope) => fixtureGateway(scope),
     ),
   );
   await WidgetsBinding.instance.endOfFrame;

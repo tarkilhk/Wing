@@ -33,6 +33,8 @@ void main() {
     port: port,
     dashboardPortOverride: port,
     apiKey: '',
+    dashboardUsername: const String.fromEnvironment('HERMES_TEST_USERNAME'),
+    dashboardPassword: const String.fromEnvironment('HERMES_TEST_PASSWORD'),
   );
 
   WorkspaceScope scope(String identity) => WorkspaceScope(

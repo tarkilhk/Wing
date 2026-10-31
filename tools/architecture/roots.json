@@ -6755,6 +6755,11 @@
       "provenance": "tracked"
     },
     {
+      "path": ".github/actions/prepare-native-runner/action.yml",
+      "area": ".github",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": ".github/actions/setup-flutter/LICENSE",
       "area": ".github",
       "provenance": "tracked"
@@ -6778,6 +6783,11 @@
       "path": ".github/dependabot.yml",
       "area": ".github",
       "provenance": "tracked"
+    },
+    {
+      "path": ".github/workflows/native-impact.yml",
+      "area": ".github",
+      "provenance": "intentional-untracked"
     },
     {
       "path": ".github/workflows/nightly-tests.yml",
@@ -10895,6 +10905,11 @@
       "provenance": "tracked"
     },
     {
+      "path": "scripts/native_impact.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": "scripts/release-history-start",
       "area": "scripts",
       "provenance": "tracked"
@@ -10996,6 +11011,11 @@
     },
     {
       "path": "scripts/tests/test_native_driver_guards.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "scripts/tests/test_native_impact.py",
       "area": "scripts",
       "provenance": "intentional-untracked"
     },

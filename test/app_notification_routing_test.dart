@@ -44,7 +44,7 @@ import 'profile_connection_identity_test.dart'
     show MemoryIdentityStore, identityTestConnection;
 import 'profile_workspace_controller_test.dart' show Host;
 import '../integration_test/notification_revamp_device.dart'
-    show prepareNotificationFixtureChats;
+    show prepareNotificationFixtureChats, notificationFixtureGateways;
 
 typedef NotificationHarness = ({
   ConnectionManager manager,
@@ -220,6 +220,31 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
+  test(
+    'native notification bootstrap never borrows another profile session index',
+    () async {
+      final primary = Host()
+        ..indexedSessions = [
+          {'id': 'same', 'profile': 'a', 'title': 'Website refresh'},
+        ];
+      final secondary = Host()
+        ..indexedSessions = [
+          {'id': 'same', 'profile': 'b', 'title': 'Weekly report'},
+        ];
+      final gateway = notificationFixtureGateways(primary, secondary);
+      for (final profile in ['default', 'a', 'b']) {
+        final page = await gateway(
+          WorkspaceScope(
+            connectionId: 'fixture',
+            connectionIdentity: 'fixture',
+            profileName: profile,
+          ),
+        ).sessions();
+        expect(page.rows.map((row) => row['profile']), everyElement(profile));
+        expect(page.rows, profile == 'default' ? isEmpty : hasLength(1));
+      }
+    },
+  );
   for (final choice in ['once', 'deny', 'stale', 'review']) {
     testWidgets(
       'group approval native interaction uses exact room authority: $choice',
