@@ -218,8 +218,8 @@ def start_owned_emulator(sdk, serial, avds):
         process = subprocess.Popen([
             str(sdk / 'emulator/emulator'), '-avd', 'wing_notification_gate',
             '-port', serial.removeprefix('emulator-'), '-no-window', '-no-audio', '-no-boot-anim',
-            # Guest Vulkan queue waits stalled Android input in Wing and the launcher.
-            '-no-snapshot', '-gpu', 'swangle', '-feature', '-Vulkan',
+            # Keep Mesa rendering without opting into Vulkan-native composition.
+            '-no-snapshot', '-gpu', 'lavapipe', '-feature', 'Vulkan,-VulkanNativeSwapchain',
             '-memory', '4096', '-cores', '4',
             '-no-metrics', '-show-kernel',
         ], stdout=log, stderr=subprocess.STDOUT, env=env)
