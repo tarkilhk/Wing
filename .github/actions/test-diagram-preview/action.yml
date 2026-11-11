@@ -23,7 +23,11 @@ runs:
     - name: Install pinned Chromium and system dependencies
       shell: bash
       working-directory: ${{ inputs.source-directory }}
-      run: node scripts/diagram-preview/node_modules/playwright-core/cli.js install --with-deps chromium
+      run: |
+        # The hosted runner's Azure mirror repeatedly failed DNS resolution.
+        # Keep Ubuntu's signed packages, using its canonical archive directly.
+        printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+        node scripts/diagram-preview/node_modules/playwright-core/cli.js install --with-deps chromium
 
     - name: Test actual renderer isolation
       shell: bash
