@@ -20,14 +20,13 @@ runs:
       working-directory: ${{ inputs.source-directory }}
       run: npm ci --prefix scripts/diagram-preview --ignore-scripts --no-audit --no-fund
 
-    - name: Install pinned Chromium and system dependencies
+    - name: Install pinned Chromium
       shell: bash
       working-directory: ${{ inputs.source-directory }}
       run: |
-        # The hosted runner's Azure mirror repeatedly failed DNS resolution.
-        # Keep Ubuntu's signed packages, using its canonical archive directly.
-        printf '%s\n' 'https://archive.ubuntu.com/ubuntu' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
-        node scripts/diagram-preview/node_modules/playwright-core/cli.js install --with-deps chromium
+        # Ubuntu 24.04 runners already include Chromium's runtime libraries.
+        # The actual browser test verifies them without provisioning extra fonts.
+        node scripts/diagram-preview/node_modules/playwright-core/cli.js install chromium
 
     - name: Test actual renderer isolation
       shell: bash
