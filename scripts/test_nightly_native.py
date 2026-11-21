@@ -30,6 +30,7 @@ from scripts.native_impact import FAMILIES, plan as impact_plan  # noqa: E402
 DEV = 'com.tarkilhk.wing.dev'
 QA = 'com.tarkilhk.wing.notificationqa'
 ADB_INPUT_TIMEOUT_EXIT = 75
+ADB_COMMAND_TIMEOUT_EXIT = 76
 CLIPBOARD_DEFINES = ('--dart-define=HERMES_CLIPBOARD_DEVICE_TEST=true',)
 SLASH_DEFINES = ('--dart-define=SLASH_NATIVE_INPUT=true',)
 DIRECT_SUITES = {
@@ -86,6 +87,7 @@ class Runner:
         self.prepared = None
         self.steps = []
         self.input_timeout_at = None
+        self.adb_timeout_at = None
         self.environment = dict(os.environ)
         self.environment.update({
             'ORG_GRADLE_PROJECT_notificationQa': 'false',
@@ -188,19 +190,23 @@ class Runner:
             '        seen.add(id(original))\n'
             '        original = original.__context__\n'
             '    cmd = original.cmd if isinstance(original, subprocess.TimeoutExpired) else None\n'
-            '    if (isinstance(cmd, (tuple, list)) and len(cmd) > 5\n'
+            '    if (isinstance(cmd, (tuple, list)) and len(cmd) > 3\n'
             '            and os.path.basename(cmd[0]) == "adb"\n'
-            '            and list(cmd[1:5]) == ["-s", serial, "shell", "input"]):\n'
+            '            and list(cmd[1:3]) == ["-s", serial]):\n'
             '        traceback.print_exc()\n'
-            f'        sys.exit({ADB_INPUT_TIMEOUT_EXIT})\n'
+            f'        sys.exit({ADB_INPUT_TIMEOUT_EXIT} if list(cmd[3:5]) == ["shell", "input"]\n'
+            f'                 else {ADB_COMMAND_TIMEOUT_EXIT})\n'
             '    raise\n'
         )
         try:
             self.run(Path(script).stem, [sys.executable, '-c', trampoline,
                                        str(self.device), script, *map(str, args)], timeout=3000)
         except RuntimeError:
-            if self.steps[-1].get('exit_code') == ADB_INPUT_TIMEOUT_EXIT:
-                self.input_timeout_at = time.time()
+            code = self.steps[-1].get('exit_code')
+            if code in (ADB_INPUT_TIMEOUT_EXIT, ADB_COMMAND_TIMEOUT_EXIT):
+                self.adb_timeout_at = time.time()
+            if code == ADB_INPUT_TIMEOUT_EXIT:
+                self.input_timeout_at = self.adb_timeout_at
             raise
 
     def wait_fixture(self, port):
@@ -588,7 +594,7 @@ def run_family_attempt(args, output, *, detect_emulator_failure=False):
         receipt['passed'] = bool(runner.steps) and all(step['passed'] for step in runner.steps)
     except (Exception, KeyboardInterrupt) as error:
         receipt['error'] = str(error) or type(error).__name__
-        if (detect_emulator_failure and runner.input_timeout_at is not None and
+        if (detect_emulator_failure and runner.adb_timeout_at is not None and
                 not isinstance(error, KeyboardInterrupt) and
                 android.has_native_emulator_crash(output, attempt_started_at)):
             receipt['emulator_failure'] = 'native_sigsegv'

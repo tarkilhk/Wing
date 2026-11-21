@@ -451,13 +451,16 @@ class Catalog(unittest.TestCase):
             ('unretired segfault', 1, 1),
             ('assertion masked by cleanup', 1, 1),
             ('foreign serial segfault', 1, 1),
-            ('screencap segfault', 1, 1),
+            ('screencap segfault', 2, 0),
+            ('uiautomator segfault', 2, 0),
+            ('uiautomator timeout', 1, 1),
             ('source change segfault', 1, 1),
         ):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 driver = root / 'driver.py'
-                action = 'screencap' if scenario in ('unrelated timeout', 'screencap segfault') else 'input'
+                action = ('uiautomator' if scenario.startswith('uiautomator') else
+                          'screencap' if scenario in ('unrelated timeout', 'screencap segfault') else 'input')
                 failure = (
                     'raise AssertionError("wrong notification count")'
                     if scenario == 'product assertion' else
@@ -503,7 +506,8 @@ class Catalog(unittest.TestCase):
                         runner.steps.append({'name': 'native journey', 'passed': True})
 
                 def capture(runner):
-                    if 'segfault' in scenario or scenario == 'assertion masked by cleanup':
+                    if ('segfault' in scenario or
+                            scenario in ('assertion masked by cleanup', 'uiautomator timeout')):
                         return None
                     now = datetime.now(timezone.utc)
                     if scenario == 'stale trace':
