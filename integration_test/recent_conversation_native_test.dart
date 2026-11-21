@@ -1619,9 +1619,7 @@ void main() {
           expect(controller.current!.chat!.key, host.failedResume);
           expect(controller.current!.chat!.reading.messages, isNotEmpty);
           expect(
-            find.text(
-              'Conversation could not be refreshed. Retry to check for new messages.',
-            ),
+            find.text('Could not refresh this conversation.'),
             findsOneWidget,
           );
           expect(controller.current!.chat!.runtime.offline, isTrue);
@@ -1835,9 +1833,7 @@ void main() {
             expect(controller.current!.chat!.key, ring[target].key.chat);
             expect(controller.current!.chat!.reading.messages, isNotEmpty);
             expect(
-              find.text(
-                'Conversation could not be refreshed. Retry to check for new messages.',
-              ),
+              find.text('Could not refresh this conversation.'),
               findsOneWidget,
             );
             expect(controller.current!.chat!.runtime.offline, isTrue);
