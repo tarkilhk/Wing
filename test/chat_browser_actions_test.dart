@@ -634,7 +634,7 @@ void main() {
           );
           await screenshot(tester, '${brightness.name}-$scale-failure');
           host.pageFailures.clear();
-          await tester.tap(find.text('Retry'));
+          await tester.tap(find.byTooltip('Retry'));
           await tester.pumpAndSettle();
           expect(
             find.text('Could not refresh chats for personal.'),

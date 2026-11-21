@@ -192,7 +192,7 @@ void main() {
     await refreshed(chat);
     expect(chat.reading.messages.single['content'], 'a completed');
     expect(chat.refreshingConversation, isFalse);
-    expect(chat.runtime.openingError, contains('could not be refreshed'));
+    expect(chat.runtime.openingError, 'Could not refresh this conversation.');
     expect(visit.error, isNull);
     await controller.resumeConnection();
     expect(chat.runtime.openingError, isNull);
