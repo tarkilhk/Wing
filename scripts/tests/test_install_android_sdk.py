@@ -248,7 +248,10 @@ class EmulatorPin(unittest.TestCase):
             with zipfile.ZipFile(archive, 'w') as bundle:
                 entry = zipfile.ZipInfo('emulator/emulator')
                 entry.external_attr = 0o100755 << 16
-                bundle.writestr(entry, '#!/bin/sh\necho "Android emulator version '
+                bundle.writestr(entry, '#!/bin/sh\n'
+                                '# CI runners do not provision graphical emulator libraries.\n'
+                                '[ "$*" = "-no-window -version" ] || exit 127\n'
+                                'echo "Android emulator version '
                                 + version + '.0 (build_id ' + values['EMULATOR_BUILD'] + ')"\n')
             values['EMULATOR_SHA256'] = ('0' * 64 if corrupt else
                                         hashlib.sha256(archive.read_bytes()).hexdigest())

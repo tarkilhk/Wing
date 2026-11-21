@@ -34,7 +34,8 @@ runs:
             raise ValueError('Expected exactly one installed emulator revision')
         Path(sys.argv[2]).write_text(manifest)
         PY
-        "$staging/emulator/emulator" -version > "$staging/version.txt"
+        # Match the headless native harness; runners need no GUI libraries.
+        "$staging/emulator/emulator" -no-window -version > "$staging/version.txt"
         cat "$staging/version.txt"
         grep -F "Android emulator version $EMULATOR_VERSION.0 (build_id $EMULATOR_BUILD)" "$staging/version.txt"
         rm -rf "$ANDROID_HOME/emulator"
