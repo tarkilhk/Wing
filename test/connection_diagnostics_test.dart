@@ -327,12 +327,15 @@ void main() {
   testWidgets(
     'recovery logs retain failure, capped retry and successful resume',
     (tester) async {
+      Iterable<Map<String, dynamic>> recoveryEvents() => events().where(
+        (event) => (event['event'] as String).startsWith('workspace.recover'),
+      );
       host.connectFailures = 5;
       host.gateways['a']!.onConnectionChanged!(false);
       for (final seconds in [1, 2, 4, 8, 16]) {
         await tester.pump(Duration(seconds: seconds));
       }
-      final failures = events().where(
+      final failures = recoveryEvents().where(
         (event) => event['event'] == 'workspace.recovery_failed',
       );
       expect(failures, hasLength(5));
@@ -340,13 +343,13 @@ void main() {
       expect(failures.first['causes'], [
         {'type': 'TimeoutException'},
       ]);
-      expect(events().last['event'], 'workspace.recovery_scheduled');
-      expect(events().last['delay_ms'], 30000);
+      expect(recoveryEvents().last['event'], 'workspace.recovery_scheduled');
+      expect(recoveryEvents().last['delay_ms'], 30000);
       expect(controller.error, isNull);
       await tester.pump(const Duration(seconds: 30));
       await tester.runAsync(() => Future<void>.delayed(Duration.zero));
       await tester.pump();
-      expect(events().last['event'], 'workspace.recovered');
+      expect(recoveryEvents().last['event'], 'workspace.recovered');
       expect(controller.connectionStatus.liveAvailable('a'), isTrue);
       debugPrint = tester.binding.debugPrintOverride;
     },
