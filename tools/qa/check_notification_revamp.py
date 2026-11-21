@@ -382,9 +382,15 @@ def assert_group_approval_controls(shown, review):
 def check_group_approval_rendering(output):
     """Unsupported hidden buttons must not prevent a group alert being posted."""
     component = PACKAGE + '/com.tarkilhk.wing.MainActivity'
+
+    def foreground_fixture():
+        adb('shell', 'am', 'start', '-W', '-n', component)
+        until(lambda: (current := state())['ready'] and current['lifecycle'] == 'resumed',
+              'Group approval fixture did not resume')
+
     for review in (False, True):
         try:
-            adb('shell', 'am', 'start', '-W', '-n', component)
+            foreground_fixture()
             try:
                 state('/native-group-approval', {'long': review})
             except urllib.error.HTTPError as error:
@@ -414,7 +420,7 @@ def check_group_approval_rendering(output):
         finally:
             # Android may freeze a cached app behind the shade. Wake the QA
             # control server before asking it to clean up its synthetic alert.
-            adb('shell', 'am', 'start', '-W', '-n', component)
+            foreground_fixture()
             state('/cancel-native-group-approval', {})
     print('PASS: group approvals render only Once/Deny or Review/Deny without hidden unsupported actions', flush=True)
 

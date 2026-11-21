@@ -667,6 +667,34 @@ class GroupApprovalControlsTest(unittest.TestCase):
                                   'text': name.title()})
                 for name in names]
 
+    def test_group_setup_and_cleanup_wait_for_foreground_fixture_readiness(self):
+        reads = 0
+        mutations = []
+
+        def foreground(*args):
+            nonlocal reads
+            reads = 0
+
+        def state(path='/', data=None):
+            nonlocal reads
+            if path == '/':
+                reads += 1
+                if reads == 1:
+                    raise ConnectionResetError('QA server is still resuming')
+                return {'ready': True, 'lifecycle': 'paused' if reads == 2 else 'resumed'}
+            self.assertGreaterEqual(reads, 3, 'Mutation reached an unready fixture')
+            mutations.append(path)
+
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(driver, 'adb', side_effect=foreground), \
+             patch.object(driver, 'state', side_effect=state), \
+             patch.object(driver, 'shade'), patch.object(driver, 'screenshot'), \
+             patch.object(driver.time, 'sleep'), \
+             patch.object(driver, 'nodes', side_effect=[self.controls('once', 'deny'),
+                                                       self.controls('review', 'deny')]):
+            driver.check_group_approval_rendering(Path(directory))
+        self.assertEqual(mutations, ['/native-group-approval', '/cancel-native-group-approval'] * 2)
+
     def test_expands_the_exact_group_card_when_another_chat_is_first(self):
         root = ET.fromstring('''<hierarchy><node><node>
             <node text="Other chat"/>
@@ -676,7 +704,8 @@ class GroupApprovalControlsTest(unittest.TestCase):
             </node></node></hierarchy>''')
         shown = list(root.iter('node'))
         with tempfile.TemporaryDirectory() as directory, \
-             patch.object(driver, 'state'), patch.object(driver, 'shade'), \
+             patch.object(driver, 'state', return_value={'ready': True, 'lifecycle': 'resumed'}), \
+             patch.object(driver, 'shade'), \
              patch.object(driver, 'screenshot'), \
              patch.object(driver.time, 'sleep'), patch.object(driver, 'adb') as adb, \
              patch.object(driver, 'nodes', side_effect=[shown, self.controls('once', 'deny'),
