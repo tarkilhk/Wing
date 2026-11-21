@@ -433,7 +433,7 @@ class Catalog(unittest.TestCase):
                 self.assertEqual(nightly.android.OUTPUT, original_output)
                 capture.assert_called_once()
 
-    def test_ci_replays_only_a_current_graphics_input_stall_on_a_fresh_emulator(self):
+    def test_ci_replays_only_a_confirmed_emulator_failure_on_a_fresh_emulator(self):
         for scenario, expected_attempts, expected_code in (
             ('graphics', 2, 0),
             ('repeated stall', 2, 1),
@@ -443,17 +443,36 @@ class Catalog(unittest.TestCase):
             ('product assertion', 1, 1),
             ('retirement failed', 1, 1),
             ('local execution', 1, 1),
+            ('segfault', 2, 0),
+            ('segfault cleanup timeout', 2, 0),
+            ('repeated segfault', 2, 1),
+            ('local segfault', 1, 1),
+            ('stale segfault report', 1, 1),
+            ('unretired segfault', 1, 1),
+            ('assertion masked by cleanup', 1, 1),
+            ('foreign serial segfault', 1, 1),
+            ('screencap segfault', 1, 1),
+            ('source change segfault', 1, 1),
         ):
             with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 driver = root / 'driver.py'
-                action = 'screencap' if scenario == 'unrelated timeout' else 'input'
+                action = 'screencap' if scenario in ('unrelated timeout', 'screencap segfault') else 'input'
                 failure = (
                     'raise AssertionError("wrong notification count")'
                     if scenario == 'product assertion' else
                     "raise subprocess.TimeoutExpired("
                     f"['adb', '-s', 'emulator-5562', 'shell', {action!r}, 'keyevent', '4'], 20)"
                 )
+                if scenario == 'segfault cleanup timeout':
+                    failure = ('try:\n    ' + failure + '\nfinally:\n'
+                               '    raise subprocess.TimeoutExpired('
+                               "['adb', '-s', 'emulator-5562', 'shell', 'settings'], 25)")
+                if scenario == 'assertion masked by cleanup':
+                    failure = ('try:\n    raise AssertionError("wrong notification count")\n'
+                               'finally:\n    ' + failure)
+                if scenario == 'foreign serial segfault':
+                    failure = failure.replace('emulator-5562', 'emulator-5554')
                 driver.write_text('import subprocess\n' + failure + '\n')
                 events = []
 
@@ -464,16 +483,28 @@ class Catalog(unittest.TestCase):
                         yield 'emulator-5562'
                     finally:
                         events.append('retire')
+                        if 'segfault' in scenario or scenario == 'assertion masked by cleanup':
+                            lifecycle = nightly.android.OUTPUT / 'emulator-lifecycle.json'
+                            lifecycle.write_text(json.dumps({
+                                'pid': 123,
+                                'exit_before_cleanup': -signal.SIGSEGV,
+                                'retirement_confirmed': scenario != 'unretired segfault',
+                            }))
+                            if scenario == 'stale segfault report':
+                                stale = time.time() - 60
+                                os.utime(lifecycle, (stale, stale))
                         if scenario == 'retirement failed':
                             raise RuntimeError('The ADB slot remained occupied')
 
                 def family(runner, *_):
-                    if events.count('boot') == 1 or scenario == 'repeated stall':
+                    if events.count('boot') == 1 or scenario in ('repeated stall', 'repeated segfault'):
                         runner.driver(str(driver))
                     else:
                         runner.steps.append({'name': 'native journey', 'passed': True})
 
                 def capture(runner):
+                    if 'segfault' in scenario or scenario == 'assertion masked by cleanup':
+                        return None
                     now = datetime.now(timezone.utc)
                     if scenario == 'stale trace':
                         now -= timedelta(minutes=5)
@@ -493,12 +524,13 @@ class Catalog(unittest.TestCase):
                         ))
                     return report
 
-                hosted = 'false' if scenario == 'local execution' else 'true'
+                hosted = 'false' if scenario in ('local execution', 'local segfault') else 'true'
                 with patch.dict(os.environ, {'GITHUB_ACTIONS': hosted}), \
                      patch.object(sys, 'argv', ['nightly', 'notification-counts', '--output', directory]), \
                      patch.object(nightly.android, 'owned_emulator', side_effect=emulator), \
                      patch.object(nightly.android, 'require_emulator'), \
-                     patch.object(nightly, 'fingerprint', return_value='stable'), \
+                     patch.object(nightly, 'fingerprint', return_value='stable',
+                                  side_effect=['before', 'after'] if scenario == 'source change segfault' else None), \
                      patch.object(nightly.Runner, 'family', family), \
                      patch.object(nightly.Runner, 'capture_failure', capture), \
                      contextlib.redirect_stdout(io.StringIO()), \
@@ -510,9 +542,12 @@ class Catalog(unittest.TestCase):
                 receipt = json.loads((output / 'receipt.json').read_text())
                 self.assertEqual(receipt['passed'], expected_code == 0)
                 if expected_attempts == 2:
-                    first = output / receipt['graphics_recovery']['first_receipt']
+                    first = output / receipt['emulator_recovery']['first_receipt']
                     self.assertFalse(json.loads(first.read_text())['passed'])
-                    self.assertTrue((output / 'failure-bugreport.zip').is_file())
+                    self.assertEqual(receipt['emulator_recovery']['reason'],
+                                     'native_sigsegv' if 'segfault' in scenario else 'graphics_input_anr')
+                    if 'segfault' not in scenario:
+                        self.assertTrue((output / 'failure-bugreport.zip').is_file())
 
     def test_source_change_invalidates_successful_steps(self):
         def successful(runner, *args):

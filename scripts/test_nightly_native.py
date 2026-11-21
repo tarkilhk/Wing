@@ -182,8 +182,12 @@ class Runner:
             'sys.argv = sys.argv[2:]\n'
             'try:\n'
             '    runpy.run_path(sys.argv[0], run_name="__main__")\n'
-            'except subprocess.TimeoutExpired as error:\n'
-            '    cmd = error.cmd\n'
+            'except Exception as error:\n'
+            '    original, seen = error, set()\n'
+            '    while original.__context__ is not None and id(original) not in seen:\n'
+            '        seen.add(id(original))\n'
+            '        original = original.__context__\n'
+            '    cmd = original.cmd if isinstance(original, subprocess.TimeoutExpired) else None\n'
             '    if (isinstance(cmd, (tuple, list)) and len(cmd) > 5\n'
             '            and os.path.basename(cmd[0]) == "adb"\n'
             '            and list(cmd[1:5]) == ["-s", serial, "shell", "input"]):\n'
@@ -518,17 +522,19 @@ def main():
     os.chdir(ROOT)
     output = args.output.resolve() / args.family
     receipt = run_family_attempt(args, output,
-                                 detect_graphics_stall=os.environ.get('GITHUB_ACTIONS') == 'true')
-    if receipt.get('graphics_input_stall') and not receipt.get('source_changed'):
-        recovery = Path(tempfile.mkdtemp(prefix='graphics-retry-', dir=output))
+                                 detect_emulator_failure=os.environ.get('GITHUB_ACTIONS') == 'true')
+    if receipt.get('emulator_failure') and not receipt.get('source_changed'):
+        recovery = Path(tempfile.mkdtemp(prefix='emulator-retry-', dir=output))
         first_receipt = recovery / 'first-attempt.json'
         (output / 'receipt.json').replace(first_receipt)
-        print('Android gfxstream input ANR; repeating the complete family on a fresh emulator.',
+        print(f"Android emulator failure ({receipt['emulator_failure']}); "
+              'repeating the complete family on a fresh emulator.',
               flush=True)
         retry = run_family_attempt(args, recovery)
         if retry['source_before'] != receipt['source_before']:
             retry.update(passed=False, source_changed=True)
-        retry['graphics_recovery'] = {
+        retry['emulator_recovery'] = {
+            'reason': receipt['emulator_failure'],
             'first_receipt': str(first_receipt.relative_to(output)),
             'retry_receipt': str((recovery / 'receipt.json').relative_to(output)),
         }
@@ -538,11 +544,12 @@ def main():
     return 0 if receipt['passed'] else 1
 
 
-def run_family_attempt(args, output, *, detect_graphics_stall=False):
+def run_family_attempt(args, output, *, detect_emulator_failure=False):
     output.mkdir(parents=True, exist_ok=True)
     previous_output = android.OUTPUT
     android.OUTPUT = output
     runner = Runner(output)
+    attempt_started_at = time.time()
     receipt = {'family': args.family, 'passed': False, 'source_before': fingerprint(),
                'steps': runner.steps}
     try:
@@ -569,18 +576,22 @@ def run_family_attempt(args, output, *, detect_graphics_stall=False):
                         runner.family(args.family, args.hermes_source)
                     except (Exception, KeyboardInterrupt) as error:
                         report = runner.capture_failure()
-                        if (not detect_graphics_stall or runner.input_timeout_at is None or
+                        if (not detect_emulator_failure or runner.input_timeout_at is None or
                                 isinstance(error, KeyboardInterrupt) or
                                 not android.has_graphics_input_anr(report, runner.input_timeout_at)):
                             raise
                         stalled = error
                 # Recovery is safe only after the first AVD has retired.
                 if stalled is not None:
-                    receipt['graphics_input_stall'] = True
+                    receipt['emulator_failure'] = 'graphics_input_anr'
                     raise stalled
         receipt['passed'] = bool(runner.steps) and all(step['passed'] for step in runner.steps)
     except (Exception, KeyboardInterrupt) as error:
         receipt['error'] = str(error) or type(error).__name__
+        if (detect_emulator_failure and runner.input_timeout_at is not None and
+                not isinstance(error, KeyboardInterrupt) and
+                android.has_native_emulator_crash(output, attempt_started_at)):
+            receipt['emulator_failure'] = 'native_sigsegv'
     finally:
         android.OUTPUT = previous_output
         receipt['source_after'] = fingerprint()

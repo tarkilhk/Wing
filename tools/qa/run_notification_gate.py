@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -115,6 +116,21 @@ def has_graphics_input_anr(report, input_timeout_at):
     except (OSError, BadZipFile, EOFError, RuntimeError, ZipDataError):
         return False
     return False
+
+
+def has_native_emulator_crash(output, attempt_started_at):
+    """Accept only this attempt's retired emulator SIGSEGV, before cleanup."""
+    report = output / 'emulator-lifecycle.json'
+    try:
+        if report.stat().st_mtime < attempt_started_at:
+            return False
+        lifecycle = json.loads(report.read_text())
+        return (isinstance(lifecycle, dict) and
+                type(lifecycle.get('pid')) is int and lifecycle['pid'] > 0 and
+                lifecycle.get('exit_before_cleanup') == -signal.SIGSEGV and
+                lifecycle.get('retirement_confirmed') is True)
+    except (OSError, ValueError):
+        return False
 
 
 def _graphics_input_trace(trace, input_timeout_at):

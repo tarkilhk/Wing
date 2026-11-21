@@ -541,6 +541,30 @@ class OwnedEmulatorRetirementTest(unittest.TestCase):
             self.assertIn('after_cleanup', evidence)
             self.assertIn('memory', evidence['before_start'])
 
+    def test_native_crash_admission_uses_current_owned_lifecycle_evidence(self):
+        for exit_code in (-11, -9, -15, None):
+            with self.subTest(exit_code=exit_code), self.transport() as (processes, _):
+                started = gate.time.time()
+                with gate.owned_emulator():
+                    processes[0].poll.return_value = exit_code
+                self.assertEqual(gate.has_native_emulator_crash(gate.OUTPUT, started),
+                                 exit_code == -11)
+                self.assertFalse(gate.has_native_emulator_crash(gate.OUTPUT, gate.time.time() + 1))
+
+    def test_native_crash_rejects_missing_or_unconfirmed_evidence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            report = output / 'emulator-lifecycle.json'
+            self.assertFalse(gate.has_native_emulator_crash(output, 0))
+            for contents in ('{', '[]', '{}', json.dumps({
+                'pid': 123, 'exit_before_cleanup': -11, 'retirement_confirmed': False,
+            }), json.dumps({
+                'pid': True, 'exit_before_cleanup': -11, 'retirement_confirmed': True,
+            })):
+                with self.subTest(contents=contents):
+                    report.write_text(contents)
+                    self.assertFalse(gate.has_native_emulator_crash(output, 0))
+
     def test_unwritable_lifecycle_evidence_does_not_replace_native_failure(self):
         write_text = Path.write_text
         def write(path, *args, **kwargs):
