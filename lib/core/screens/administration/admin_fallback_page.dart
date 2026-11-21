@@ -88,17 +88,17 @@ class _AdminFallbackPageState extends State<AdminFallbackPage> {
   Widget build(BuildContext context) => AdminPage(
     title: 'Fallback models',
     scope: widget.profile.label,
-    child: StudioLoadingRegion(
-      available: _rows != null,
-      busy: _rows == null && _error == null,
-      label: 'Loading fallback models',
+    child: StudioPageLoading(
+      active: _busy,
+      label: 'Updating fallback models',
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           const AdminNotice(
             'Hermes tries these models in order. Changes are saved individually.',
           ),
-          if (_error != null) AdminNotice.error(_error!, retry: _edit.load),
+          if (_error != null)
+            AdminNotice.error(_error!, retry: _busy ? null : _edit.load),
           if (_pendingRows != null)
             StudioButtonPress(
               child: TextButton(

@@ -196,86 +196,97 @@ class _AdminIdentityPageState extends State<AdminIdentityPage> {
               onClose: _close,
               onSave: _state.canSave ? _save : null,
             ),
-      child: _state.loading && !_state.hasObservation
-          ? StudioPageLoading.waiting(label: 'Loading profile identity')
-          : !_state.hasObservation
-          ? Padding(
-              padding: const EdgeInsets.all(16),
-              child: AdminNotice.error(_state.error!, retry: _session.load),
-            )
-          : SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Give your agent a point of view',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'A short description helps you recognize this profile. Its SOUL gives the agent instructions about how to work.',
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Stored for this profile on ${_state.connectionLabel}.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  const SizedBox(height: 24),
-                  Column(
-                    key: _noticeAnchor,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (_state.notice != null) AdminNotice(_state.notice!),
-                      if (_state.error != null)
-                        AdminNotice.error(_state.error!, retry: _session.load),
-                    ],
-                  ),
-                  viewportSelection(
-                    TextField(
-                      key: const ValueKey('profile-description-field'),
-                      controller: _description,
-                      enabled: _state.description.enabled,
-                      minLines: 2,
-                      maxLines: 6,
-                      decoration: InputDecoration(
-                        labelText: 'Description',
-                        hintText: 'What this profile is for',
-                        alignLabelWithHint: true,
-                        errorText: _state.description.issue,
-                        errorMaxLines: 4,
+      child: StudioPageLoading(
+        active: _state.loading,
+        label: 'Loading profile identity',
+        child: _state.loading && !_state.hasObservation
+            ? const SizedBox.shrink()
+            : !_state.hasObservation
+            ? Padding(
+                padding: const EdgeInsets.all(16),
+                child: AdminNotice.error(
+                  _state.error!,
+                  retry: _state.loading ? null : _session.load,
+                ),
+              )
+            : SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Give your agent a point of view',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'A short description helps you recognize this profile. Its SOUL gives the agent instructions about how to work.',
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Stored for this profile on ${_state.connectionLabel}.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 24),
+                    Column(
+                      key: _noticeAnchor,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (_state.notice != null) AdminNotice(_state.notice!),
+                        if (_state.error != null)
+                          AdminNotice.error(
+                            _state.error!,
+                            retry: _state.loading ? null : _session.load,
+                          ),
+                      ],
+                    ),
+                    viewportSelection(
+                      TextField(
+                        key: const ValueKey('profile-description-field'),
+                        controller: _description,
+                        enabled: _state.description.enabled,
+                        minLines: 2,
+                        maxLines: 6,
+                        decoration: InputDecoration(
+                          labelText: 'Description',
+                          hintText: 'What this profile is for',
+                          alignLabelWithHint: true,
+                          errorText: _state.description.issue,
+                          errorMaxLines: 4,
+                        ),
                       ),
                     ),
-                  ),
-                  if (_state.description.conflicted)
-                    _comparison(
-                      ProfileIdentityField.description,
-                      _state.description,
-                    ),
-                  const SizedBox(height: 24),
-                  viewportSelection(
-                    TextField(
-                      key: const ValueKey('profile-soul-field'),
-                      controller: _soul,
-                      enabled: _state.soul.enabled,
-                      minLines: 12,
-                      maxLines: null,
-                      decoration: InputDecoration(
-                        labelText: 'SOUL',
-                        hintText: 'Instructions that shape this profile',
-                        alignLabelWithHint: true,
-                        errorText: _state.soul.issue,
-                        errorMaxLines: 4,
+                    if (_state.description.conflicted)
+                      _comparison(
+                        ProfileIdentityField.description,
+                        _state.description,
+                      ),
+                    const SizedBox(height: 24),
+                    viewportSelection(
+                      TextField(
+                        key: const ValueKey('profile-soul-field'),
+                        controller: _soul,
+                        enabled: _state.soul.enabled,
+                        minLines: 12,
+                        maxLines: null,
+                        decoration: InputDecoration(
+                          labelText: 'SOUL',
+                          hintText: 'Instructions that shape this profile',
+                          alignLabelWithHint: true,
+                          errorText: _state.soul.issue,
+                          errorMaxLines: 4,
+                        ),
                       ),
                     ),
-                  ),
-                  if (_state.soul.conflicted)
-                    _comparison(ProfileIdentityField.soul, _state.soul),
-                  const SizedBox(height: 24),
-                ],
+                    if (_state.soul.conflicted)
+                      _comparison(ProfileIdentityField.soul, _state.soul),
+                    const SizedBox(height: 24),
+                  ],
+                ),
               ),
-            ),
+      ),
     ),
   );
 }

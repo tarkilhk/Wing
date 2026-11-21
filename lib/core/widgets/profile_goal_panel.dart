@@ -256,16 +256,10 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
         childrenPadding: EdgeInsets.zero,
         children: [
           if (error != null)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: StudioError(error)),
-                ActivityDetailAction(
-                  label: 'Retry',
-                  icon: Icons.refresh,
-                  onPressed: working ? null : _refresh,
-                ),
-              ],
+            StudioRetryNotice(
+              message: error,
+              busy: chat.sessionControlLoading,
+              onRetry: working ? null : _refresh,
             ),
           if (goal == null && error == null)
             const Align(
@@ -304,14 +298,16 @@ class _ProfileGoalPanelState extends State<ProfileGoalPanel> {
                 ),
               ],
             ),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ActivityDetailAction(
-              onPressed: working ? null : _refresh,
-              icon: Icons.refresh,
-              label: 'Refresh',
+          if (error == null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: ActivityDetailAction(
+                busy: chat.sessionControlLoading,
+                onPressed: working ? null : _refresh,
+                icon: Icons.refresh,
+                label: 'Refresh',
+              ),
             ),
-          ),
           if (chat.sessionControlNotice case final notice?)
             Padding(
               padding: const EdgeInsets.only(top: 4),

@@ -1,13 +1,91 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_identity_page.dart';
 import 'package:wing/core/services/profile_identity_edit_session.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 
 import 'support/administration_fixture.dart';
 
 void main() {
+  testWidgets(
+    'identity Retry shows held read progress over the retained draft',
+    (tester) async {
+      final fixture = AdministrationFixture();
+      Completer<void>? held;
+      var fail = true;
+      fixture.override = (method, path, query, body) async {
+        if (path == 'profiles') {
+          return {
+            'profiles': [
+              {'name': 'work', 'path': '/fixture/work'},
+            ],
+          };
+        }
+        if (path == 'profiles/active') {
+          return {'current': 'work', 'active': 'work'};
+        }
+        if (path == 'profiles/work/soul') {
+          await held?.future;
+          if (fail) throw StateError('Read unavailable');
+          return {'content': 'Opening SOUL', 'exists': true};
+        }
+        if (path == 'files/read') {
+          final bytes = utf8.encode('description: Opening description\n');
+          return {
+            'name': 'profile.yaml',
+            'path': '/fixture/work/profile.yaml',
+            'size': bytes.length,
+            'mime_type': 'application/octet-stream',
+            'data_url':
+                'data:application/octet-stream;base64,${base64Encode(bytes)}',
+          };
+        }
+        throw StateError('Unexpected request $path');
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: AdminIdentityPage(
+            createSession: () =>
+                ProfileIdentityEditSession(fixture.server.profile('work')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final field = find.byKey(const ValueKey('profile-description-field'));
+      await tester.enterText(field, 'Keep this draft');
+      for (final failAgain in [true, false]) {
+        fail = failAgain;
+        held = Completer<void>();
+        await tester.ensureVisible(find.byTooltip('Retry'));
+        await tester.tap(find.byTooltip('Retry'));
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(
+          tester
+              .getRect(find.byType(StudioLoading))
+              .overlaps(Offset.zero & tester.view.physicalSize),
+          isTrue,
+        );
+        expect(
+          tester.widget<TextField>(field).controller!.text,
+          'Keep this draft',
+        );
+        held.complete();
+        await tester.pumpAndSettle();
+      }
+      expect(find.byTooltip('Retry'), findsNothing);
+      expect(
+        tester.widget<TextField>(field).controller!.text,
+        'Keep this draft',
+      );
+      expect(find.byType(StudioLoading), findsNothing);
+    },
+  );
+
   testWidgets('identity keeps a same-field change made elsewhere', (
     tester,
   ) async {

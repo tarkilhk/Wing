@@ -176,15 +176,16 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
               ],
             ),
           ),
-          StudioButtonPress(
-            child: IconButton(
-              tooltip: 'Refresh capabilities',
-              onPressed: _state.loading || _state.busy
-                  ? null
-                  : () => _session.load(_kind),
-              icon: const Icon(Icons.refresh),
+          if (_state.error == null)
+            StudioButtonPress(
+              child: IconButton(
+                tooltip: 'Refresh capabilities',
+                onPressed: _state.loading || _state.busy
+                    ? null
+                    : () => _session.load(_kind),
+                icon: const Icon(Icons.refresh),
+              ),
             ),
-          ),
         ],
       ),
       body: CustomScrollView(
@@ -290,18 +291,11 @@ class _ProfileCapabilitiesScreenState extends State<ProfileCapabilitiesScreen> {
                   if (_state.error != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Column(
-                        children: [
-                          StudioError(_state.error!),
-                          StudioButtonPress(
-                            child: TextButton(
-                              onPressed: _state.loading || _state.busy
-                                  ? null
-                                  : () => _session.load(_kind),
-                              child: const Text('Retry'),
-                            ),
-                          ),
-                        ],
+                      child: StudioRetryNotice(
+                        message: _state.error!,
+                        onRetry: _state.loading || _state.busy
+                            ? null
+                            : () => _session.load(_kind),
                       ),
                     ),
                 ],

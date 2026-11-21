@@ -1244,26 +1244,45 @@ void main() {
         host.pendingRoster!.completeError(StateError('Roster unavailable'));
         await settle();
         expect(chat.subagentsError, isNotNull);
-        expect(
-          find.text('${chat.subagentsError!} Reopen to retry.'),
-          findsOneWidget,
-        );
+        expect(find.byTooltip('Retry'), findsOneWidget);
+        expect(find.text(chat.subagentsError!), findsOneWidget);
+        expect(find.textContaining('Reopen to retry'), findsNothing);
         expect(find.byType(CircularProgressIndicator), findsNothing);
-        expectNoReadButtons();
         await picture('roster-failed');
-        // The same tab closes the drawer. Reopening is the retry control.
-        await tester.tap(tab(0));
-        await settle();
-        expect(find.byType(PageView), findsNothing);
-        host.pendingRoster = Completer<Map<String, dynamic>>();
-        await tester.tap(tab(0, overlay: false));
-        await tester.pump();
-        expect(host.rosterReads, beforeRetry + 2);
-        expect(chat.subagentsError, isNull);
-        expect(find.byType(CircularProgressIndicator), findsWidgets);
-        expectNoReadButtons();
-        host.pendingRoster!.complete({'subagents': host.agents});
-        await settle();
+        for (final fails in [true, false]) {
+          host.pendingRoster = Completer<Map<String, dynamic>>();
+          final retry = find.byTooltip('Retry');
+          if (retry.hitTestable().evaluate().isEmpty) {
+            await tester.ensureVisible(retry);
+          }
+          await tester.tap(retry);
+          await tester.pump();
+          expect(chat.subagentsError, isNotNull);
+          expect(
+            find.descendant(
+              of: retry,
+              matching: find.byType(CircularProgressIndicator),
+            ),
+            findsOneWidget,
+          );
+          expect(tester.getRect(composer), rect);
+          final reads = host.rosterReads;
+          await tester.tap(retry);
+          await settle();
+          expect(host.rosterReads, reads);
+          await picture('roster-retry-held');
+          if (fails) {
+            host.pendingRoster!.completeError(StateError('Still unavailable'));
+          } else {
+            host.pendingRoster!.complete({'subagents': host.agents});
+          }
+          await settle();
+          if (fails) {
+            expect(find.byTooltip('Retry'), findsOneWidget);
+            expect(find.byType(CircularProgressIndicator), findsNothing);
+          }
+        }
+        expect(host.rosterReads, beforeRetry + 3);
         host.pendingRoster = null;
         expect(chat.subagentsError, isNull);
         expect(find.byType(CircularProgressIndicator), findsNothing);

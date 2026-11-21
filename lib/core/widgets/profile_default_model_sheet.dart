@@ -213,10 +213,16 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                     padding: const EdgeInsets.symmetric(
                       horizontal: WingSpacing.lg,
                     ),
-                    child: StudioError(
-                      _error!,
-                      key: const Key('profile-model-error'),
-                    ),
+                    child: _choices.isEmpty
+                        ? StudioRetryNotice(
+                            key: const Key('profile-model-retry'),
+                            message: _error!,
+                            onRetry: _loading ? null : _load,
+                          )
+                        : StudioError(
+                            _error!,
+                            key: const Key('profile-model-error'),
+                          ),
                   ),
                 if (_edit.canReview || _edit.reviewing)
                   Padding(
@@ -250,15 +256,7 @@ class _ProfileDefaultModelSheetState extends State<ProfileDefaultModelSheet> {
                   child: _loading
                       ? const StudioPageLoading.waiting(label: 'Loading models')
                       : _error != null && _choices.isEmpty
-                      ? Center(
-                          child: StudioButtonPress(
-                            child: TextButton(
-                              key: const Key('profile-model-retry'),
-                              onPressed: _load,
-                              child: const Text('Retry'),
-                            ),
-                          ),
-                        )
+                      ? const SizedBox.shrink()
                       : ModelChooser(
                           choices: _choices,
                           selected: _selected == null

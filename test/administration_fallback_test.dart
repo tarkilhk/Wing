@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
 
@@ -7,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/screens/administration/admin_fallback_page.dart';
 import 'package:wing/core/theme/wing_theme.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
 
 import 'support/administration_fixture.dart';
 
@@ -49,6 +51,62 @@ Future<void> _selectSecond(WidgetTester tester, String action) async {
 }
 
 void main() {
+  testWidgets(
+    'fallback read Retry shows progress and disables repeat recovery',
+    (tester) async {
+      final fixture = AdministrationFixture();
+      Completer<void>? held;
+      var fail = true;
+      var reads = 0;
+      fixture.override = (method, path, query, body) async {
+        if (path == 'profiles') {
+          return {
+            'profiles': [
+              {'name': 'default', 'is_default': true},
+            ],
+          };
+        }
+        if (path == 'profiles/active') {
+          return {'current': 'default', 'active': 'default'};
+        }
+        if (path == 'config') {
+          reads++;
+          await held?.future;
+          if (fail) throw StateError('Read unavailable');
+          return {
+            'fallback_providers': [_entry],
+          };
+        }
+        throw StateError('Unexpected request $path');
+      };
+      await _open(tester, fixture);
+      expect(find.byTooltip('Retry'), findsOneWidget);
+      for (final failAgain in [true, false]) {
+        fail = failAgain;
+        held = Completer<void>();
+        await tester.tap(find.byTooltip('Retry'));
+        await tester.pump();
+        await tester.pump();
+        expect(find.byType(StudioLoading), findsOneWidget);
+        expect(
+          tester
+              .getRect(find.byType(StudioLoading))
+              .overlaps(Offset.zero & tester.view.physicalSize),
+          isTrue,
+        );
+        final count = reads;
+        expect(find.byTooltip('Retry'), findsNothing);
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(reads, count);
+        held.complete();
+        await tester.pumpAndSettle();
+        expect(find.byType(StudioLoading), findsNothing);
+      }
+      expect(find.byTooltip('Retry'), findsNothing);
+      expect(find.text('backup-model'), findsOneWidget);
+    },
+  );
+
   for (final invalid in <Object?>[
     null,
     42,

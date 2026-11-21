@@ -281,18 +281,23 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        await tester.ensureVisible(find.text('Retry'));
+        await tester.ensureVisible(find.byTooltip('Retry'));
         await tester.pumpAndSettle();
         await capture(
           tester,
           'capabilities-error-${brightness.name}-200-keyboard',
         );
+        expect(find.byTooltip('Refresh capabilities'), findsNothing);
+        expect(
+          find.textContaining('Check the connection and retry'),
+          findsNothing,
+        );
         final previousReads = reads;
-        expect(find.text('Retry').hitTestable(), findsOneWidget);
-        await tester.tap(find.text('Retry'));
+        expect(find.byTooltip('Retry').hitTestable(), findsOneWidget);
+        await tester.tap(find.byTooltip('Retry'));
         await tester.pumpAndSettle();
         expect(reads, greaterThan(previousReads));
-        expect(find.text('Retry').hitTestable(), findsOneWidget);
+        expect(find.byTooltip('Retry').hitTestable(), findsOneWidget);
       },
     );
 

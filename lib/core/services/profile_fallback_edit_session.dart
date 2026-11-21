@@ -65,6 +65,8 @@ class ProfileFallbackEditSession extends ChangeNotifier {
   Future<void> load() async {
     if (_disposed || _busy) return;
     final generation = ++_generation;
+    _busy = true;
+    _changed();
     try {
       final config = await profile.config();
       final rows = FallbackModel.fromConfig(config);
@@ -75,7 +77,10 @@ class ProfileFallbackEditSession extends ChangeNotifier {
     } catch (failure) {
       if (_owns(generation)) _error = administrationError(failure);
     }
-    if (_owns(generation)) _changed();
+    if (_owns(generation)) {
+      _busy = false;
+      _changed();
+    }
   }
 
   Future<List<ModelChoice>> catalog({bool refresh = false}) async {
@@ -90,7 +95,7 @@ class ProfileFallbackEditSession extends ChangeNotifier {
       return List.unmodifiable(choices);
     } catch (_) {
       if (_owns(generation)) {
-        _error = 'Current model choices could not be loaded. Retry.';
+        _error = 'Could not load model choices.';
         _changed();
       }
       rethrow;

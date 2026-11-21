@@ -1,4 +1,3 @@
-import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/wing_app_bar.dart';
 import '../widgets/studio_task_marker.dart';
@@ -32,31 +31,25 @@ class _PrivacyPolicyScreenState extends State<PrivacyPolicyScreen> {
     body: FutureBuilder<String>(
       future: _policy,
       builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const StudioPageLoading.waiting(
+            label: 'Loading privacy policy',
+          );
+        }
         if (snapshot.hasError) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const StudioError('Could not load the privacy policy.'),
-                  StudioButtonPress(
-                    child: TextButton(
-                      onPressed: () => setState(() {
-                        _policy = DefaultAssetBundle.of(
-                          context,
-                        ).loadString('PRIVACY.md');
-                      }),
-                      child: const Text('Retry'),
-                    ),
-                  ),
-                ],
+              child: StudioRetryNotice(
+                message: 'Could not load the privacy policy.',
+                onRetry: () => setState(() {
+                  _policy = DefaultAssetBundle.of(
+                    context,
+                  ).loadString('PRIVACY.md');
+                }),
               ),
             ),
           );
-        }
-        if (!snapshot.hasData) {
-          return StudioPageLoading.waiting(label: 'Loading privacy policy');
         }
         return Markdown(
           checkboxBuilder: (checked) => StudioTaskMarker(completed: checked),

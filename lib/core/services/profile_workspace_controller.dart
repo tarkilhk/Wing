@@ -1151,7 +1151,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       await _refreshSessions(resource);
     } catch (_) {
       if (!_closed && _current == resource && sessionVisibility == value) {
-        resource._sessionsPageError = 'Chats could not be loaded. Retry.';
+        resource._sessionsPageError = 'Could not load chats.';
         _changed();
       }
     }
@@ -2839,7 +2839,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       try {
         projects = await target.gateway.projects();
       } catch (_) {
-        projectError = 'Projects are unavailable for $name. Retry to reload.';
+        projectError = 'Projects are unavailable for $name.';
       }
       if (_closed || generation != _generation) return false;
       if (sessionReadGeneration != target._sessionGeneration) {
@@ -3539,7 +3539,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final before = chat._subagents;
     final loadGeneration = ++chat._subagentsLoadGeneration;
     chat._subagentsLoading = true;
-    chat._subagentsError = null;
     _changed();
     try {
       final response = await resource.gateway.call('subagent.list', {
@@ -3585,6 +3584,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat._subagentCompletionTurns.putIfAbsent(item.id, () => turn);
         }
       }
+      chat._subagentsError = null;
       chat._subagents = next;
       chat._unconfirmedSubagentIds
         ..clear()
@@ -4084,7 +4084,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final generation = ++chat._sessionControlGeneration;
     chat._sessionControlReadAttempted = true;
     chat._sessionControlLoading = true;
-    chat._sessionControlError = null;
     _changed();
     try {
       final response = await resource.gateway.call('session.control.read', {
@@ -4100,12 +4099,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
         throw const FormatException('Invalid session control response');
       }
       chat._sessionControl = snapshot;
+      chat._sessionControlError = null;
     } catch (_) {
       if (_sessionControlIsCurrent(resource, chat, runtime) &&
           chat._sessionControlGeneration == generation &&
           chat._sessionControlEventRevision == eventRevision) {
-        chat._sessionControlError =
-            'Session controls could not be refreshed. Retry.';
+        chat._sessionControlError = 'Could not refresh session controls.';
       }
     } finally {
       if (_sessionControlIsCurrent(resource, chat, runtime) &&
@@ -4379,7 +4378,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       resource._nextSessionOffset = page.nextOffset;
     } catch (_) {
       if (valid()) {
-        resource._sessionsPageError = 'More chats could not be loaded. Retry.';
+        resource._sessionsPageError = 'Could not load more chats.';
       }
     } finally {
       if (valid()) {
@@ -4761,7 +4760,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
               ? 'This conversation is no longer available. Your saved messages are kept.'
               : failure is JsonRpcError
               ? conversationOpeningFailureMessage(failure)
-              : 'Conversation could not be refreshed. Retry to check for new messages.',
+              : 'Could not refresh this conversation.',
         );
       }
       return reading;
@@ -9797,8 +9796,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         resource._projectsError = null;
       } catch (_) {
-        resource._projectsError =
-            'Projects could not be refreshed. Retry to reload.';
+        resource._projectsError = 'Could not refresh projects.';
       }
       final project = resource._selectedProject;
       if (project != null) await _loadProject(resource, project);

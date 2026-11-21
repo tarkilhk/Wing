@@ -243,7 +243,7 @@ void main() {
     expect(find.textContaining('could not be displayed'), findsOneWidget);
     expect(find.textContaining('PRIVATE'), findsNothing);
     fail = false;
-    await tester.tap(find.text('Retry'));
+    await tester.tap(find.byTooltip('Retry'));
     await tester.pumpAndSettle();
     expect(find.byType(InteractiveViewer), findsOneWidget);
     expect(service.openedBytes, hasLength(1));

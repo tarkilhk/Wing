@@ -127,23 +127,25 @@ class _ProfileBackgroundWorkPanelState
               child: Text('No recurring work is configured for this chat.'),
             ),
           if (chat.sessionControlError case final error?)
-            _ErrorRow(
+            StudioRetryNotice(
               message: error,
+              busy: refreshing,
               onRetry: working ? null : _refreshSessionControl,
             ),
           if (chat.actionError case final error?)
             Align(alignment: Alignment.centerLeft, child: StudioError(error)),
           if (chat.sessionControlNotice case final notice?)
             Align(alignment: Alignment.centerLeft, child: Text(notice)),
-          Align(
-            alignment: Alignment.centerRight,
-            child: ActivityDetailAction(
-              onPressed: refreshing || chat.actionBusy ? null : _refresh,
-              busy: refreshing,
-              icon: Icons.refresh,
-              label: 'Refresh',
+          if (chat.sessionControlError == null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: ActivityDetailAction(
+                onPressed: refreshing || chat.actionBusy ? null : _refresh,
+                busy: refreshing,
+                icon: Icons.refresh,
+                label: 'Refresh',
+              ),
             ),
-          ),
         ],
       );
     },
@@ -192,7 +194,7 @@ class _ProfileProcessPanelState extends State<ProfileProcessPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (state.inlineProcessesError case final error?)
-            _ErrorRow(
+            StudioRetryNotice(
               message: error,
               busy: _retrying,
               onRetry: session.active && !state.processesLoading
@@ -498,44 +500,6 @@ class _ProcessTile extends StatelessWidget {
         ],
       ),
     ],
-  );
-}
-
-class _ErrorRow extends StatelessWidget {
-  final String message;
-  final Future<void> Function()? onRetry;
-  final bool busy;
-
-  const _ErrorRow({
-    required this.message,
-    required this.onRetry,
-    this.busy = false,
-  });
-
-  @override
-  Widget build(BuildContext context) => StudioError(
-    message,
-    stacked: MediaQuery.textScalerOf(context).scale(14) > 21,
-    action: StudioButtonPress(
-      child: IconButton(
-        tooltip: 'Retry',
-        style: IconButton.styleFrom(
-          minimumSize: const Size.square(48),
-          maximumSize: const Size.square(48),
-        ),
-        onPressed: busy ? null : onRetry,
-        icon: busy
-            ? SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
-                  semanticsLabel: 'Retry',
-                ),
-              )
-            : const Icon(Icons.refresh, size: 20),
-      ),
-    ),
   );
 }
 

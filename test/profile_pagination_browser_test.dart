@@ -85,7 +85,7 @@ void main() {
       findsOneWidget,
     );
     fixture.pageFailures.clear();
-    await tester.tap(find.text('Retry').first);
+    await tester.tap(find.byTooltip('Retry').first);
     await tester.pumpAndSettle();
     expect(find.text('Could not finish loading personal.'), findsNothing);
   });

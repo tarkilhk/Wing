@@ -1,4 +1,3 @@
-import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import '../widgets/studio_error.dart';
 import 'dart:async';
@@ -60,18 +59,9 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                 : observation.error != null
                 ? SingleChildScrollView(
                     padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        StudioError(observation.error!),
-                        const SizedBox(height: 12),
-                        StudioButtonPress(
-                          child: OutlinedButton(
-                            onPressed: () => _reader.load(),
-                            child: const Text('Retry'),
-                          ),
-                        ),
-                      ],
+                    child: StudioRetryNotice(
+                      message: observation.error!,
+                      onRetry: _reader.load,
                     ),
                   )
                 : InteractiveViewer(

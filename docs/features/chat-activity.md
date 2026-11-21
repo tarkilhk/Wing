@@ -32,6 +32,8 @@ down; continuing downward from their top closes the drawer. The small top handle
 also toggles compact/expanded height on tap. Closing keeps the draft; reopening
 by tap starts compact. Three categories share the same single bar; at enlarged text the strip scrolls horizontally and reveals the selected category. Background processes use the same bounded drawer, preserving the draft and composer position.
 
+Subagent roster failures offer Retry inside the open drawer, with progress until the read settles. Goal and recurring-work read failures also have one contained Retry action; the healthy Refresh control returns after recovery. Live output uses one Refresh live output action, which also restarts polling after three failures. The panel and production-route suites hold retries through failure and success and check repeat-tap admission.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

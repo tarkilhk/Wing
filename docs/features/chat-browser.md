@@ -64,6 +64,8 @@ confirmation, naming the destination and keeping messages and drafts.
 Moving a saved chat prepares its Hermes execution policy automatically before
 changing the folder; opening or sending a message in the chat first is unnecessary.
 
+Chat-list read failures place the icon-only Retry inside the error notice. Reloads keep the existing header progress cue and disable repeated recovery while reading. Browser, pagination and focus-recovery suites drive that action through the production view.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

@@ -37,6 +37,21 @@ class ProfileSubagentPanel extends StatefulWidget {
 }
 
 class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
+  bool _retrying = false;
+
+  Future<void> _retry() async {
+    if (_retrying || widget.session.state.subagentsLoading) return;
+    final session = widget.session;
+    setState(() => _retrying = true);
+    try {
+      await _refresh();
+    } finally {
+      if (mounted && identical(widget.session, session)) {
+        setState(() => _retrying = false);
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -49,6 +64,7 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
   @override
   void didUpdateWidget(ProfileSubagentPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.session, widget.session)) _retrying = false;
     if (!widget.embedded &&
         !identical(oldWidget.session, widget.session) &&
         (widget.initiallyExpanded || widget.session.state.subagents.isEmpty)) {
@@ -101,20 +117,10 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
             ),
           ),
         if (chat.subagentsError case final error?)
-          Row(
-            children: [
-              Expanded(
-                child: StudioError(
-                  widget.embedded ? '$error Reopen to retry.' : error,
-                ),
-              ),
-              if (!widget.embedded)
-                ActivityDetailAction(
-                  label: 'Retry',
-                  icon: Icons.refresh,
-                  onPressed: _refresh,
-                ),
-            ],
+          StudioRetryNotice(
+            message: error,
+            busy: _retrying,
+            onRetry: chat.subagentsLoading ? null : _retry,
           ),
         if (!chat.subagentsLoading &&
             chat.subagentsError == null &&
@@ -130,13 +136,14 @@ class _ProfileSubagentPanelState extends State<ProfileSubagentPanel> {
             unconfirmed: chat.unconfirmedSubagentIds.contains(activity.id),
             onTap: () => _openSubagent(activity.id),
           ),
-        if (!widget.embedded)
+        if (!widget.embedded && chat.subagentsError == null)
           Align(
             alignment: Alignment.centerRight,
             child: ActivityDetailAction(
               onPressed: chat.subagentsLoading ? null : _refresh,
               icon: Icons.refresh,
               label: 'Refresh',
+              busy: chat.subagentsLoading,
             ),
           ),
       ];
@@ -549,15 +556,10 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
       label: 'Refresh live output',
       icon: Icons.refresh,
       busy: widget.session.state.loadingTail,
-      onPressed: widget.session.refreshTail,
+      onPressed: widget.session.state.tailFailures >= 3
+          ? widget.session.retryTail
+          : widget.session.refreshTail,
     ),
-    if (widget.session.state.tailError != null &&
-        widget.session.state.tailFailures >= 3)
-      ActivityDetailAction(
-        label: 'Retry',
-        icon: Icons.refresh,
-        onPressed: widget.session.retryTail,
-      ),
   ];
 }
 

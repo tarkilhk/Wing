@@ -140,9 +140,9 @@ class ProfileIdentityEditSession extends ChangeNotifier {
         _error =
             'Review the checked values before saving again. Your edits are kept.';
       } else if (_baseline.isEmpty) {
-        _error = 'This profile could not be loaded. Retry.';
+        _error = 'Could not load this profile.';
       } else if (_issues.isNotEmpty) {
-        _error = 'Some profile text could not be read. Retry to check it.';
+        _error = 'Could not read some profile text.';
       }
     } catch (_) {
       if (_owns(generation)) {
@@ -150,9 +150,9 @@ class ProfileIdentityEditSession extends ChangeNotifier {
           ..clear()
           ..addAll({
             for (final field in ProfileIdentityField.values)
-              field: 'This field could not be checked. Retry.',
+              field: 'Could not check this field.',
           });
-        _error = 'This profile could not be loaded. Retry.';
+        _error = 'Could not load this profile.';
       }
     } finally {
       if (_owns(generation)) {

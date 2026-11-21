@@ -123,7 +123,7 @@ class ProfileModelEditSession extends ChangeNotifier {
       }
     } catch (_) {
       if (_owns(generation)) {
-        _error = 'The profile models could not be loaded. Retry.';
+        _error = 'Could not load profile models.';
       }
     } finally {
       if (_owns(generation)) {

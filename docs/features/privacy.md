@@ -14,6 +14,8 @@ Feature ID: `privacy`.
 
 Open App settings and choose Privacy policy. Read the bundled document offline, enlarge text or switch theme, and return to Settings.
 
+If the bundled policy cannot be read, its error includes an icon-only Retry. A retry immediately replaces the old error with the header Wing until success or another failure. The host suite holds both outcomes in light/dark themes at normal and enlarged text.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

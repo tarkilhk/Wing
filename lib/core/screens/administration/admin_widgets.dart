@@ -239,23 +239,25 @@ class AdminNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 12),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (isError)
-          StudioError(text)
-        else
-          Text(text, style: Theme.of(context).textTheme.bodyMedium),
-        if (retry != null)
-          StudioButtonPress(
-            child: IconButton(
-              onPressed: retry,
-              tooltip: 'Retry',
-              icon: const Icon(Icons.refresh),
-            ),
+    child: isError && retry != null
+        ? StudioRetryNotice(message: text, onRetry: retry)
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isError)
+                StudioError(text)
+              else
+                Text(text, style: Theme.of(context).textTheme.bodyMedium),
+              if (retry != null)
+                StudioButtonPress(
+                  child: IconButton(
+                    onPressed: retry,
+                    tooltip: 'Retry',
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ),
+            ],
           ),
-      ],
-    ),
   );
 }
 

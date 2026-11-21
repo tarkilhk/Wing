@@ -15,6 +15,8 @@ Feature ID: `ui-foundations`.
 
 Use a shared selection control, form, dialog or reader in light/dark themes and enlarged text. Start and fail a refresh or save while keeping the rest of its page usable.
 
+Persistent read failures use one contained icon-only Retry with a 48 dp target and accessible label. The action becomes a progress ring when it owns feedback; pages with header feedback keep that single cue. Enlarged text places the status icon and action above full-width error copy. Retry instructions are omitted when the control already supplies the action.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

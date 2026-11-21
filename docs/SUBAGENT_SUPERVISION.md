@@ -16,8 +16,9 @@ interrupted and unconfirmed agents are counted separately when present. Zero
 status counts are omitted; unconfirmed agents are not also counted as running
 or queued.
 
-Received events update progress automatically. Close and reopen Subagents to
-fetch a fresh snapshot or retry a failed read. Past answers retain
+Received events update progress automatically. Reopening Subagents fetches a
+fresh snapshot. If a read fails, use the Retry icon inside its error notice;
+the icon shows progress until the attempt succeeds or fails. Past answers retain
 **Activity → Agents** with received goals, status, output and available timings.
 Historical results do not offer live controls.
 Completed agents leave the drawer when their parent turn ends. Their saved
@@ -31,8 +32,8 @@ Expand **Task** for its goal and metadata. Eligible guidance and Send controls
 stay below the conversation, with Interrupt in the status row. Nested read-only viewers do not offer those controls.
 
 Use Refresh in the header to reread the child. Updates continue while the viewer is open and
-Wing is active. After three consecutive failures, automatic refresh stops; use
-Retry. Closing the sheet stops its reads. The parent chat and draft stay selected.
+Wing is active. After three consecutive failures, automatic refresh stops;
+the same Refresh live output action retries and resumes polling. Closing the sheet stops its reads. The parent chat and draft stay selected.
 
 **Steer** appears when the child accepts guidance. Accepted guidance is queued,
 so delivery can still be missed if the child finishes first. Failed or rejected

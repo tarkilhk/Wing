@@ -14,6 +14,8 @@ Feature ID: `administration`.
 
 Choose Hermes administration from the drawer or open Bot settings for a chosen bot. Select the intended profile and open an editor or diagnostic destination; return and retry a failed read.
 
+Read failures with an available retry place a single icon-only recovery action inside the notice. Fallback-model reloads show the header Wing until settlement and block repeat reads. The administration fallback suite holds the request through repeated failure and success.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

@@ -18,6 +18,7 @@ import 'support/profile_actions_fixture.dart';
 
 class _GoalFixture extends ProfileActionsFixture {
   Completer<void>? heldMetadata;
+  bool failRead = false;
 
   final requests = <(String, Map<String, dynamic>)>[];
   bool hasGoal = true;
@@ -56,7 +57,10 @@ class _GoalFixture extends ProfileActionsFixture {
       rpc: (method, params) async {
         requests.add((method, params));
         if (method == 'session.control.read') await heldMetadata?.future;
-        if (method == 'session.control.read') return {'control': control};
+        if (method == 'session.control.read') {
+          if (failRead) throw StateError('Read unavailable');
+          return {'control': control};
+        }
         if (method == 'session.control') {
           if (failAction) throw StateError('Action rejected');
           final args = params['args'] as Map<String, dynamic>;
@@ -132,6 +136,47 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
   }
+
+  testWidgets('goal read failure has one recovery action through settlement', (
+    tester,
+  ) async {
+    fixture.failRead = true;
+    await showPanel(tester);
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Retry'), findsOneWidget);
+    expect(find.byTooltip('Refresh'), findsNothing);
+    expect(find.text('Could not refresh session controls.'), findsOneWidget);
+    for (final fail in [true, false]) {
+      fixture.failRead = fail;
+      fixture.heldMetadata = Completer<void>();
+      final retry = find.byTooltip('Retry');
+      await tester.ensureVisible(retry);
+      await tester.tap(retry);
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: retry,
+          matching: find.byType(CircularProgressIndicator),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Refresh'), findsNothing);
+      final reads = fixture.requests
+          .where((r) => r.$1 == 'session.control.read')
+          .length;
+      await tester.tap(retry);
+      await tester.pump();
+      expect(
+        fixture.requests.where((r) => r.$1 == 'session.control.read').length,
+        reads,
+      );
+      fixture.heldMetadata!.complete();
+      await tester.pumpAndSettle();
+    }
+    expect(find.byTooltip('Retry'), findsNothing);
+    expect(find.byTooltip('Refresh'), findsOneWidget);
+    expect(chat.sessionControlError, isNull);
+  });
 
   testWidgets('automatic metadata read keeps the usable conversation quiet', (
     tester,

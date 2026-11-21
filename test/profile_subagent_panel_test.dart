@@ -1606,7 +1606,7 @@ void main() {
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(
-        'tail polling stops after three failures and Retry restarts it ${brightness.name} $scale',
+        'tail polling stops after three failures and one refresh action restarts it ${brightness.name} $scale',
         (tester) async {
           fixture.tailFailures = 3;
           await openDetails(
@@ -1639,13 +1639,29 @@ void main() {
           await tester.ensureVisible(find.byType(StudioError));
           await tester.pump();
           await capture(tester, 'tail-error-${brightness.name}-$scale');
-          expect(find.byTooltip('Retry'), findsOneWidget);
+          expect(find.byTooltip('Retry'), findsNothing);
+          expect(find.byTooltip('Refresh live output'), findsOneWidget);
           await tester.pump(const Duration(seconds: 4));
           expect(fixture.tailCalls, 3);
 
-          await tester.ensureVisible(find.byTooltip('Retry'));
+          await tester.ensureVisible(find.byTooltip('Refresh live output'));
           await tester.pumpAndSettle();
-          await tester.tap(find.byTooltip('Retry'));
+          final held = fixture.tailGate = Completer<void>();
+          await tester.tap(find.byTooltip('Refresh live output'));
+          await tester.pump();
+          expect(
+            find.descendant(
+              of: find.byTooltip('Refresh live output'),
+              matching: find.byType(CircularProgressIndicator),
+            ),
+            findsOneWidget,
+          );
+          expect(find.byTooltip('Retry'), findsNothing);
+          final reads = fixture.tailCalls;
+          await tester.tap(find.byTooltip('Refresh live output'));
+          await tester.pump();
+          expect(fixture.tailCalls, reads);
+          held.complete();
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 100));
           await tester.scrollUntilVisible(

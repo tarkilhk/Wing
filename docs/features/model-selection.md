@@ -17,6 +17,8 @@ Feature ID: `model-selection`.
 
 Tap the short model name in the composer, or open model settings for the selected profile. Choose provider/model and reasoning or fast settings, then apply or cancel the pending choice.
 
+A failed model catalog with no choices offers one contained icon-only Retry. Its pending read uses the existing loading cue. Read-error copy does not repeat the action name; write conflicts and uncertain saves retain their specific recovery instructions.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

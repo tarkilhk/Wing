@@ -39,6 +39,11 @@ updates must be reviewed on the server. Progress remains visible through invento
 readback. A known result survives unavailable readback; refresh confirms current
 inventory before another update. Opening the page does not enable automatic updates.
 
+A failed inventory read has one icon-only Retry inside its notice. The header
+Refresh action returns after recovery; read-error copy does not repeat the
+instruction. Pending reads use the header Wing. The capability session, screen
+and narrow-layout suites cover recovery and enlarged text.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

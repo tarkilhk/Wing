@@ -92,7 +92,7 @@ class ProfileCapabilitiesSession extends ChangeNotifier {
       _publish(
         loading: false,
         error:
-            'Could not load ${kind == ProfileCapabilityKind.skills ? 'skills' : 'tools'} from this profile. Check the connection and retry.',
+            'Could not load ${kind == ProfileCapabilityKind.skills ? 'skills' : 'tools'} from this profile.',
         notice: _state.notice,
       );
     }

@@ -28,6 +28,8 @@ model picker. Selecting a catalog model or Inherit parent model clears a previou
 direct endpoint, key and protocol together on Save. Auxiliary helper models are
 separate. Existing subagents keep their current route.
 
+Identity read recovery retains the editable draft and shows the header Wing until settlement. The failure explains what could not be read; its icon-only Retry supplies the action. `test/profile_identity_view_test.dart` holds a retry through failure and success while checking the draft remains intact.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

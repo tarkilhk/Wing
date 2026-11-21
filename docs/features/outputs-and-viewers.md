@@ -17,6 +17,8 @@ Web-link rows in Outputs follow the destination saved under **App settings →
 Open links in**. An image viewer's **Open in browser** action opens the external browser.
 The same resource actions work inside Subagent activity, including nested child traces. Files and images belong to the displayed child chat; relative paths use that child's workspace.
 
+PDF load failures offer a contained icon-only Retry with an accessible name. `test/pdf_preview_screen_test.dart` drives failure and retry; the existing viewer loading state spans the new attempt.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.

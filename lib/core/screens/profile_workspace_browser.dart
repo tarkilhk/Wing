@@ -910,34 +910,13 @@ class _ProfileWorkspaceBrowserState extends State<ProfileWorkspaceBrowser>
     return label;
   }
 
-  Widget _readFailure(String message, VoidCallback retry) {
-    final largeText = MediaQuery.textScalerOf(context).scale(16) > 20;
-    final explanation = DefaultTextStyle(
-      style: Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 12),
-      child: StudioError(message),
-    );
-    final action = StudioButtonPress(
-      child: TextButton(onPressed: retry, child: const Text('Retry')),
-    );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: largeText
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                explanation,
-                Align(alignment: Alignment.centerRight, child: action),
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(child: explanation),
-                const SizedBox(width: 12),
-                action,
-              ],
-            ),
-    );
-  }
+  Widget _readFailure(String message, VoidCallback retry) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+    child: StudioRetryNotice(
+      message: message,
+      onRetry: _data.state.loading || _data.state.searching ? null : retry,
+    ),
+  );
 
   List<Widget> _draftRows(List<ChatListEntry> entries) {
     final rows = <Widget>[];

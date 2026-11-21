@@ -157,6 +157,46 @@ class StudioError extends StatelessWidget {
   }
 }
 
+/// Persistent read failure and its single recovery action.
+class StudioRetryNotice extends StatelessWidget {
+  final String message;
+  final VoidCallback? onRetry;
+  final bool busy;
+
+  const StudioRetryNotice({
+    super.key,
+    required this.message,
+    required this.onRetry,
+    this.busy = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => StudioError(
+    message,
+    stacked: MediaQuery.textScalerOf(context).scale(14) > 21,
+    action: StudioButtonPress(
+      child: IconButton(
+        tooltip: 'Retry',
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(48),
+          maximumSize: const Size.square(48),
+        ),
+        onPressed: busy ? null : onRetry,
+        icon: busy
+            ? SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
+                  semanticsLabel: 'Retry',
+                ),
+              )
+            : const Icon(Icons.refresh, size: 20),
+      ),
+    ),
+  );
+}
+
 /// Common surface for error content that needs separate recovery controls.
 class StudioErrorFrame extends StatelessWidget {
   const StudioErrorFrame({

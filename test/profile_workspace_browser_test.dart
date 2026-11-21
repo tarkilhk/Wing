@@ -1691,7 +1691,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Could not finish loading'), findsWidgets);
     expect(find.text('No chats here yet'), findsNothing);
-    expect(find.text('Retry'), findsWidgets);
+    expect(find.byTooltip('Retry'), findsWidgets);
   });
 }
 
