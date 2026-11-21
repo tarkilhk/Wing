@@ -31,6 +31,7 @@ DEV = 'com.tarkilhk.wing.dev'
 QA = 'com.tarkilhk.wing.notificationqa'
 ADB_INPUT_TIMEOUT_EXIT = 75
 ADB_COMMAND_TIMEOUT_EXIT = 76
+ADB_COMMAND_FAILURE_EXIT = 77
 CLIPBOARD_DEFINES = ('--dart-define=HERMES_CLIPBOARD_DEVICE_TEST=true',)
 SLASH_DEFINES = ('--dart-define=SLASH_NATIVE_INPUT=true',)
 DIRECT_SUITES = {
@@ -87,7 +88,7 @@ class Runner:
         self.prepared = None
         self.steps = []
         self.input_timeout_at = None
-        self.adb_timeout_at = None
+        self.adb_failure_at = None
         self.environment = dict(os.environ)
         self.environment.update({
             'ORG_GRADLE_PROJECT_notificationQa': 'false',
@@ -124,6 +125,9 @@ class Runner:
         else:
             step['passed'] = child.returncode == 0
         if not step['passed']:
+            if (len(command) > 3 and Path(command[0]).name == 'adb' and
+                    list(command[1:3]) == ['-s', self.device]):
+                self.adb_failure_at = time.time()
             print(log_path.read_text()[-16000:], file=sys.stderr)
             raise RuntimeError(name + ' failed; see ' + str(log_path))
         print('PASS ' + name, flush=True)
@@ -189,11 +193,13 @@ class Runner:
             '    while original.__context__ is not None and id(original) not in seen:\n'
             '        seen.add(id(original))\n'
             '        original = original.__context__\n'
-            '    cmd = original.cmd if isinstance(original, subprocess.TimeoutExpired) else None\n'
+            '    cmd = original.cmd if isinstance(original, (subprocess.TimeoutExpired, subprocess.CalledProcessError)) else None\n'
             '    if (isinstance(cmd, (tuple, list)) and len(cmd) > 3\n'
             '            and os.path.basename(cmd[0]) == "adb"\n'
             '            and list(cmd[1:3]) == ["-s", serial]):\n'
             '        traceback.print_exc()\n'
+            '        if isinstance(original, subprocess.CalledProcessError):\n'
+            f'            sys.exit({ADB_COMMAND_FAILURE_EXIT})\n'
             f'        sys.exit({ADB_INPUT_TIMEOUT_EXIT} if list(cmd[3:5]) == ["shell", "input"]\n'
             f'                 else {ADB_COMMAND_TIMEOUT_EXIT})\n'
             '    raise\n'
@@ -203,10 +209,10 @@ class Runner:
                                        str(self.device), script, *map(str, args)], timeout=3000)
         except RuntimeError:
             code = self.steps[-1].get('exit_code')
-            if code in (ADB_INPUT_TIMEOUT_EXIT, ADB_COMMAND_TIMEOUT_EXIT):
-                self.adb_timeout_at = time.time()
+            if code in (ADB_INPUT_TIMEOUT_EXIT, ADB_COMMAND_TIMEOUT_EXIT, ADB_COMMAND_FAILURE_EXIT):
+                self.adb_failure_at = time.time()
             if code == ADB_INPUT_TIMEOUT_EXIT:
-                self.input_timeout_at = self.adb_timeout_at
+                self.input_timeout_at = self.adb_failure_at
             raise
 
     def wait_fixture(self, port):
@@ -556,6 +562,7 @@ def run_family_attempt(args, output, *, detect_emulator_failure=False):
     android.OUTPUT = output
     runner = Runner(output)
     attempt_started_at = time.time()
+    boot_started = False
     receipt = {'family': args.family, 'passed': False, 'source_before': fingerprint(),
                'steps': runner.steps}
     try:
@@ -574,6 +581,7 @@ def run_family_attempt(args, output, *, detect_emulator_failure=False):
                 runner.family(args.family, args.hermes_source)
             else:
                 stalled = None
+                boot_started = True
                 with android.owned_emulator() as device:
                     runner.device = device
                     android.require_emulator(device)
@@ -594,7 +602,8 @@ def run_family_attempt(args, output, *, detect_emulator_failure=False):
         receipt['passed'] = bool(runner.steps) and all(step['passed'] for step in runner.steps)
     except (Exception, KeyboardInterrupt) as error:
         receipt['error'] = str(error) or type(error).__name__
-        if (detect_emulator_failure and runner.adb_timeout_at is not None and
+        if (detect_emulator_failure and
+                (runner.adb_failure_at is not None or (boot_started and runner.device is None)) and
                 not isinstance(error, KeyboardInterrupt) and
                 android.has_native_emulator_crash(output, attempt_started_at)):
             receipt['emulator_failure'] = 'native_sigsegv'

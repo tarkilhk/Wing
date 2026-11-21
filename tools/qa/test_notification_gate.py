@@ -715,6 +715,41 @@ class GroupApprovalControlsTest(unittest.TestCase):
                 if call.args[:3] == ('shell', 'input', 'tap')]
         self.assertEqual(taps, [('shell', 'input', 'tap', '250', '250')] * 2)
 
+    def test_group_cleanup_waits_for_fixture_resume_after_closing_the_shade(self):
+        from http.client import RemoteDisconnected
+        focused, resumed, reads = False, False, 0
+
+        def adb(*args):
+            nonlocal focused
+            if args == ('shell', 'cmd', 'statusbar', 'collapse'):
+                focused = True
+
+        def shade():
+            nonlocal focused, resumed, reads
+            focused, resumed, reads = False, False, 0
+
+        def state(path='/', data=None):
+            nonlocal resumed, reads
+            if path == '/':
+                self.assertTrue(focused, 'Close the shade before waiting for the app')
+                reads += 1
+                if reads == 1:
+                    raise RemoteDisconnected('Cached fixture is still thawing')
+                resumed = reads >= 3
+                return {'ready': True, 'lifecycle': 'resumed' if resumed else 'inactive'}
+            if path == '/cancel-native-group-approval':
+                self.assertTrue(resumed, 'Cleanup reached the frozen fixture before resume')
+            return {}
+
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(driver, 'adb', side_effect=adb), \
+             patch.object(driver, 'state', side_effect=state), \
+             patch.object(driver, 'shade', side_effect=shade), \
+             patch.object(driver, 'screenshot'), patch.object(driver.time, 'sleep'), \
+             patch.object(driver, 'nodes', side_effect=[self.controls('once', 'deny'),
+                                                       self.controls('review', 'deny')]):
+            driver.check_group_approval_rendering(Path(directory))
+
     def test_supported_short_and_review_layouts_are_accepted(self):
         driver.assert_group_approval_controls(self.controls('once', 'deny'), False)
         driver.assert_group_approval_controls(self.controls('review', 'deny'), True)

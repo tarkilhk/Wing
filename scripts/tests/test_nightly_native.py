@@ -553,6 +553,67 @@ class Catalog(unittest.TestCase):
                     if 'segfault' not in scenario:
                         self.assertTrue((output / 'failure-bugreport.zip').is_file())
 
+    def test_ci_recovers_crashes_during_boot_install_and_driver_device_loss(self):
+        for phase, crashed in ((phase, crashed) for phase in ('boot', 'install', 'driver')
+                               for crashed in (True, False)):
+            with self.subTest(phase=phase, crashed=crashed), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                adb = root / 'adb'
+                adb.write_text('#!/bin/sh\necho "error: device not found" >&2\nexit 1\n')
+                adb.chmod(0o755)
+                driver = root / 'driver.py'
+                driver.write_text(
+                    'import subprocess\n'
+                    f'subprocess.run([{str(adb)!r}, "-s", "emulator-5562", '
+                    '"shell", "cat", "/fixture-stage"], check=True)\n')
+                events = []
+
+                @contextlib.contextmanager
+                def emulator():
+                    events.append('boot')
+                    try:
+                        if phase == 'boot' and events.count('boot') == 1:
+                            raise TimeoutError('Android launcher did not become healthy before Wing installation')
+                        yield 'emulator-5562'
+                    finally:
+                        events.append('retire')
+                        (nightly.android.OUTPUT / 'emulator-lifecycle.json').write_text(json.dumps({
+                            'pid': 123, 'exit_before_cleanup': -signal.SIGSEGV if crashed else None,
+                            'retirement_confirmed': True,
+                        }))
+                        # Filesystem timestamps can lag wall time by one tick.
+                        stamp = time.time() + 1
+                        os.utime(nightly.android.OUTPUT / 'emulator-lifecycle.json', (stamp, stamp))
+
+                def family(runner, *_):
+                    if events.count('boot') == 1:
+                        if phase == 'install':
+                            runner.run('install', [str(adb), '-s', runner.device, 'install', 'fixture.apk'])
+                        else:
+                            runner.driver(str(driver))
+                    else:
+                        runner.steps.append({'name': 'native journey', 'passed': True})
+
+                with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}), \
+                     patch.object(sys, 'argv', ['nightly', 'backup', '--output', directory]), \
+                     patch.object(nightly.android, 'owned_emulator', side_effect=emulator), \
+                     patch.object(nightly.android, 'require_emulator'), \
+                     patch.object(nightly, 'fingerprint', return_value='stable'), \
+                     patch.object(nightly.Runner, 'family', family), \
+                     patch.object(nightly.Runner, 'capture_failure'), \
+                     contextlib.redirect_stdout(io.StringIO()), \
+                     contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(nightly.main(), 0 if crashed else 1)
+                self.assertEqual(events, ['boot', 'retire'] * (2 if crashed else 1))
+                receipt = json.loads((root / 'backup/receipt.json').read_text())
+                self.assertEqual(receipt['passed'], crashed)
+                if not crashed:
+                    self.assertNotIn('emulator_recovery', receipt)
+                    continue
+                self.assertEqual(receipt['emulator_recovery']['reason'], 'native_sigsegv')
+                original = root / 'backup' / receipt['emulator_recovery']['first_receipt']
+                self.assertFalse(json.loads(original.read_text())['passed'])
+
     def test_source_change_invalidates_successful_steps(self):
         def successful(runner, *args):
             runner.steps.append({'name': 'owned driver', 'passed': True})

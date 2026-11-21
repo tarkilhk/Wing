@@ -1,0 +1,41 @@
+name: Set up pinned Android emulator
+description: Install the verified Linux emulator used by the native test families
+runs:
+  using: composite
+  steps:
+    - name: Install Android Emulator 37.2.13
+      shell: bash
+      env:
+        EMULATOR_VERSION: '37.2.13'
+        EMULATOR_BUILD: '16740729'
+        EMULATOR_SHA256: cbc7c3cfb83220b8a0f9c513fdab557712e74d339ec19ddffa43f23350ae9bdd
+      run: |
+        set -euo pipefail
+        # https://developer.android.com/studio/emulator_archive
+        # sdkmanager installs a moving stable release. Native CI uses this
+        # verified archive after SDK provisioning, including its dependencies.
+        staging="$(mktemp -d "$RUNNER_TEMP/wing-emulator.XXXXXX")"
+        trap 'rm -rf "$staging"' EXIT
+        curl --fail --location --retry 2 --max-time 120 \
+          "https://dl.google.com/android/repository/emulator-linux_x64-${EMULATOR_BUILD}.zip" \
+          --output "$staging/emulator.zip"
+        echo "$EMULATOR_SHA256  $staging/emulator.zip" | sha256sum --check --strict
+        unzip -q "$staging/emulator.zip" -d "$staging"
+        python3 - "$ANDROID_HOME/emulator/package.xml" "$staging/emulator/package.xml" <<'PY'
+        import os, re, sys
+        from pathlib import Path
+        # Preserve SDK namespaces and license metadata; replace only the
+        # local package revision, as the official archive instructions require.
+        manifest = Path(sys.argv[1]).read_text()
+        major, minor, micro = os.environ['EMULATOR_VERSION'].split('.')
+        revision = f'<revision><major>{major}</major><minor>{minor}</minor><micro>{micro}</micro></revision>'
+        manifest, count = re.subn(r'<revision>.*?</revision>', revision, manifest, flags=re.S)
+        if count != 1:
+            raise ValueError('Expected exactly one installed emulator revision')
+        Path(sys.argv[2]).write_text(manifest)
+        PY
+        "$staging/emulator/emulator" -version > "$staging/version.txt"
+        cat "$staging/version.txt"
+        grep -F "Android emulator version $EMULATOR_VERSION.0 (build_id $EMULATOR_BUILD)" "$staging/version.txt"
+        rm -rf "$ANDROID_HOME/emulator"
+        mv "$staging/emulator" "$ANDROID_HOME/emulator"

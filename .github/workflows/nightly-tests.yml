@@ -124,6 +124,9 @@ jobs:
       - name: Install pinned Android SDK
         timeout-minutes: 15
         run: python3 scripts/install_android_sdk.py "platform-tools" "platforms;android-36" "build-tools;36.0.0" "emulator" "system-images;android-36;google_apis;x86_64"
+      - name: Pin the Android emulator
+        timeout-minutes: 7
+        uses: ./.github/actions/setup-emulator
       - name: Enable emulator acceleration
         run: sudo chmod a+rw /dev/kvm
       - name: Expose Android tools to native drivers

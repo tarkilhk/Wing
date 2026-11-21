@@ -1,4 +1,5 @@
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -9,6 +10,8 @@ import subprocess
 import sys
 import signal
 import time
+import textwrap
+import zipfile
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -220,6 +223,64 @@ if attempt <= int(os.environ['FAKE_SDK_FAILURES']):
         self.assertTrue((self.root / 'build/sdk-install/attempt-1.log').exists())
         context = json.loads((self.root / 'build/sdk-install/context.json').read_text())
         self.assertIn('ndk;99.2.3', context['packages'])
+
+
+class EmulatorPin(unittest.TestCase):
+    def exercise(self, *, corrupt=False, wrong_version=False):
+        action = (installer.ROOT / '.github/actions/setup-emulator/action.yml').read_text()
+        script = textwrap.dedent(action.split('      run: |\n', 1)[1])
+        values = {}
+        for line in action.split('      run: |\n', 1)[0].splitlines():
+            key, separator, value = line.strip().partition(': ')
+            if separator and key.startswith('EMULATOR_'):
+                values[key] = value.strip("'")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sdk = root / 'sdk'
+            original = sdk / 'emulator'
+            original.mkdir(parents=True)
+            (original / 'package.xml').write_text(
+                '<repository><localPackage path="emulator"><revision><major>99</major>'
+                '</revision><display-name>Android Emulator</display-name></localPackage></repository>')
+            (original / 'old-binary').write_text('must survive a rejected install')
+            archive = root / 'fixture.zip'
+            version = '99.0.0' if wrong_version else values['EMULATOR_VERSION']
+            with zipfile.ZipFile(archive, 'w') as bundle:
+                entry = zipfile.ZipInfo('emulator/emulator')
+                entry.external_attr = 0o100755 << 16
+                bundle.writestr(entry, '#!/bin/sh\necho "Android emulator version '
+                                + version + '.0 (build_id ' + values['EMULATOR_BUILD'] + ')"\n')
+            values['EMULATOR_SHA256'] = ('0' * 64 if corrupt else
+                                        hashlib.sha256(archive.read_bytes()).hexdigest())
+            binaries = root / 'bin'
+            binaries.mkdir()
+            curl = binaries / 'curl'
+            curl.write_text('#!/bin/bash\ncp "$PIN_FIXTURE_ARCHIVE" "${@: -1}"\n')
+            curl.chmod(0o755)
+            result = subprocess.run(['bash', '-c', script], text=True, capture_output=True,
+                                    env={**os.environ, **values, 'RUNNER_TEMP': str(root),
+                                         'ANDROID_HOME': str(sdk), 'PIN_FIXTURE_ARCHIVE': str(archive),
+                                         'PATH': str(binaries) + os.pathsep + os.environ['PATH']})
+            if corrupt or wrong_version:
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue((original / 'old-binary').is_file())
+            else:
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertFalse((original / 'old-binary').exists())
+                self.assertTrue(os.access(original / 'emulator', os.X_OK))
+                manifest = (original / 'package.xml').read_text()
+                self.assertIn('<major>37</major><minor>2</minor><micro>13</micro>', manifest)
+                self.assertIn('<display-name>Android Emulator</display-name>', manifest)
+            self.assertEqual(list(root.glob('wing-emulator.*')), [])
+
+    def test_verified_archive_replaces_the_moving_sdk_package(self):
+        self.exercise()
+
+    def test_bad_checksum_keeps_the_existing_sdk_intact(self):
+        self.exercise(corrupt=True)
+
+    def test_wrong_binary_revision_cannot_be_promoted(self):
+        self.exercise(wrong_version=True)
 
 
 if __name__ == '__main__':

@@ -384,6 +384,9 @@ def check_group_approval_rendering(output):
     component = PACKAGE + '/com.tarkilhk.wing.MainActivity'
 
     def foreground_fixture():
+        # Starting an activity does not close the notification shade or prove
+        # its cached process has resumed. Close it before the readiness read.
+        adb('shell', 'cmd', 'statusbar', 'collapse')
         adb('shell', 'am', 'start', '-W', '-n', component)
         until(lambda: (current := state())['ready'] and current['lifecycle'] == 'resumed',
               'Group approval fixture did not resume')

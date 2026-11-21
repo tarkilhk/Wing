@@ -7079,6 +7079,11 @@
       "provenance": "intentional-untracked"
     },
     {
+      "path": ".github/actions/setup-emulator/action.yml",
+      "area": ".github",
+      "provenance": "intentional-untracked"
+    },
+    {
       "path": ".github/actions/setup-flutter/LICENSE",
       "area": ".github",
       "provenance": "tracked"
