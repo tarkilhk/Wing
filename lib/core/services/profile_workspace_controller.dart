@@ -3882,7 +3882,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
     chat._processReads.update(runtime, (count) => count + 1, ifAbsent: () => 1);
     if (!quiet) {
       chat._processesLoading = true;
-      chat._processesError = null;
+      // Keep failed reads actionable and the empty Background category present
+      // until a fresh snapshot confirms recovery.
       _changed(saveReading: false);
     }
     try {
@@ -3943,8 +3944,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       return true;
     } catch (_) {
       if (_processReadIsCurrent(resource, chat, runtime, before, generation)) {
-        chat._processesError =
-            'Background processes could not be refreshed. Retry.';
+        chat._processesError = 'Could not refresh processes.';
         chat._passiveProcessFailure =
             quiet &&
             !chat._explicitAutomaticProcessRead &&

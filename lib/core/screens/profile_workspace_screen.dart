@@ -2876,9 +2876,12 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     processes: ProfileProcessPanel(session: _supervisionFor(chat)),
     processSummary: ListenableBuilder(
       listenable: _supervisionFor(chat),
-      builder: (context, _) => ActivityDetailFacts(
-        facts: [_supervisionFor(chat).state.processSummary],
-      ),
+      builder: (context, _) {
+        final summary = _supervisionFor(chat).state.processSummary;
+        return summary.isEmpty
+            ? const SizedBox.shrink()
+            : ActivityDetailFacts(facts: [summary]);
+      },
     ),
     onProcessesSelected: _supervisionFor(chat).refreshProcesses,
   );

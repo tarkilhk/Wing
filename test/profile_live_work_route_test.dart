@@ -24,6 +24,7 @@ import 'package:wing/core/widgets/profile_subagent_panel.dart';
 import 'package:wing/core/widgets/profile_tool_call.dart';
 import 'package:wing/core/widgets/profile_tool_activity.dart';
 import 'package:wing/core/widgets/profile_live_execution.dart';
+import 'package:wing/core/widgets/studio_error.dart';
 import 'package:wing/core/widgets/activity_time.dart';
 import 'package:wing/core/widgets/transcript_latest_button.dart';
 
@@ -344,9 +345,10 @@ void main() {
             MaterialApp(
               theme: wingTheme(brightness),
               builder: (context, child) => MediaQuery(
-                data: MediaQuery.of(
-                  context,
-                ).copyWith(textScaler: TextScaler.linear(scale)),
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(scale),
+                  disableAnimations: scale == 2,
+                ),
                 child: RepaintBoundary(key: frame, child: child!),
               ),
               home: ProfileWorkspaceScreen(
@@ -446,19 +448,99 @@ void main() {
           await picture('pending');
           held.completeError(StateError('Temporary process read failure'));
           await settle();
-          expect(
-            find.text('Background processes could not be refreshed. Retry.'),
-            findsOneWidget,
-          );
+          expect(find.text('Could not refresh processes.'), findsOneWidget);
           await picture('failed');
+          expect(find.byTooltip('Retry'), findsOneWidget);
+          final recoveryNotice = find.ancestor(
+            of: find.byTooltip('Retry'),
+            matching: find.byType(StudioErrorFrame),
+          );
+          expect(recoveryNotice, findsOneWidget);
+          final recoveryButton = find.ancestor(
+            of: find.byTooltip('Retry'),
+            matching: find.byType(IconButton),
+          );
+          expect(
+            tester.getSize(recoveryButton).width,
+            greaterThanOrEqualTo(48),
+          );
+          expect(
+            tester.getSize(recoveryButton).height,
+            greaterThanOrEqualTo(48),
+          );
+          final errorCopy = tester.getRect(
+            find.text('Could not refresh processes.'),
+          );
+          final noticeBounds = tester.getRect(recoveryNotice);
+          expect(noticeBounds.contains(errorCopy.topLeft), isTrue);
+          expect(noticeBounds.contains(errorCopy.bottomRight), isTrue);
+          expect(
+            tester.getRect(recoveryButton).right,
+            closeTo(noticeBounds.right - 12, 0.1),
+          );
+          if (scale == 2) {
+            expect(
+              errorCopy.top,
+              greaterThan(tester.getRect(recoveryButton).bottom),
+            );
+          }
+          for (final failRetry in [true, false]) {
+            final retryRead = host.pendingProcesses =
+                Completer<Map<String, dynamic>>();
+            final beforeReads = host.calls
+                .where((call) => call.$2 == 'process.list')
+                .length;
+            final retry = find.byTooltip('Retry');
+            final retryButton = find.ancestor(
+              of: retry,
+              matching: find.byType(IconButton),
+            );
+            if (retry.hitTestable().evaluate().isEmpty) {
+              await tester.ensureVisible(retry);
+            }
+            await tester.tap(retry);
+            await tester.pump();
+            final pending = find.descendant(
+              of: retry,
+              matching: find.byType(CircularProgressIndicator),
+            );
+            expect(pending, findsOneWidget);
+            expect(
+              tester.getRect(pending).overlaps(tester.getRect(retry)),
+              isTrue,
+            );
+            expect(tester.getRect(draft), composer);
+            expect(find.text('Keep my hotel notes'), findsOneWidget);
+            expect(chat.processes, hasLength(1));
+            expect(chat.processesError, isNotNull);
+            expect(tester.widget<IconButton>(retryButton).onPressed, isNull);
+            await tester.tap(retry);
+            await tester.pump(const Duration(milliseconds: 350));
+            expect(
+              host.calls.where((call) => call.$2 == 'process.list').length,
+              beforeReads + 1,
+            );
+            expect(pending, findsOneWidget);
+            await picture('retry-pending');
+            if (failRetry) {
+              retryRead.completeError(StateError('Still unavailable'));
+            } else {
+              retryRead.complete({'processes': host.processes});
+            }
+            await settle();
+            expect(pending, findsNothing);
+            if (failRetry) {
+              expect(
+                tester.widget<IconButton>(retryButton).onPressed,
+                isNotNull,
+              );
+              expect(chat.processesError, isNotNull);
+              await picture('retry-failed');
+            }
+          }
           host.pendingProcesses = null;
-          await tester.ensureVisible(tab(2, true));
-          await tester.tap(tab(2, true));
-          await settle();
-          await tester.ensureVisible(tab(2, false));
-          await tester.tap(tab(2, false));
-          await settle();
           expect(chat.processesError, isNull);
+          expect(find.byTooltip('Retry'), findsNothing);
           expect(find.text('1 running'), findsOneWidget);
 
           final command = host.processes.single['command'] as String;
@@ -498,6 +580,43 @@ void main() {
           await controller.refreshProcesses(chat);
           await settle();
           expect(tab(2, false), findsNothing);
+
+          // A failed discovery with no current rows must keep its drawer and
+          // recovery control while retrying. Closing it retires only the UI.
+          host.processes = [];
+          host.processReadFails = true;
+          await controller.refreshProcesses(chat);
+          await settle();
+          final backgroundTab = tab(2, true).evaluate().isEmpty
+              ? tab(2, false)
+              : tab(2, true);
+          await tester.ensureVisible(backgroundTab);
+          await tester.tap(backgroundTab);
+          await settle();
+          expect(find.byTooltip('Retry'), findsOneWidget);
+          expect(find.text('Last received processes'), findsNothing);
+          await picture('empty-failed');
+          host.processReadFails = false;
+          final emptyRetry = host.pendingProcesses =
+              Completer<Map<String, dynamic>>();
+          await tester.ensureVisible(find.byTooltip('Retry'));
+          await tester.tap(find.byTooltip('Retry'));
+          await tester.pump();
+          expect(tab(2, true), findsOneWidget);
+          expect(
+            find.descendant(
+              of: find.byTooltip('Retry'),
+              matching: find.byType(CircularProgressIndicator),
+            ),
+            findsOneWidget,
+          );
+          await tester.tap(tab(2, true));
+          await settle();
+          emptyRetry.complete({'processes': <Map<String, dynamic>>[]});
+          await settle();
+          expect(tab(2, false), findsNothing);
+          expect(chat.processesError, isNull);
+          expect(find.text('Keep my hotel notes'), findsOneWidget);
           expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox.shrink());
         },

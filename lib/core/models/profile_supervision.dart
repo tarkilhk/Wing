@@ -87,7 +87,9 @@ final class ProfileSupervisionObservation {
   final Map<String, String> processErrors;
 
   String get processSummary {
-    if (processesError != null) return 'Last received processes';
+    if (processesError != null) {
+      return processes.isEmpty ? '' : 'Last received processes';
+    }
     final running = processes.where((process) => process.isRunning).length;
     final exited = processes.length - running;
     return [

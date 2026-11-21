@@ -154,7 +154,7 @@ task's chevron to expand its full selectable text. Live updates and reordering
 retain the correct task's expansion. Hermes supplies the list order and nesting,
 but no task creation timestamps for chronological sorting.
 
-Background discovers terminal commands when the chat becomes visible and follows running processes automatically. Expand a command for its full command and recent output, then use the icon-only Stop or Dismiss action. Close and reopen the tab to refresh or retry. These are terminal processes, separate from the Tasks checklist and recurring schedules.
+Background discovers terminal commands when the chat becomes visible and follows running processes automatically. Expand a command for its full command and recent output, then use the icon-only Stop or Dismiss action. If a read fails, use the Retry icon inside the error notice. It shows a progress ring until the retry finishes and keeps the last received rows available. Closing and reopening the tab also refreshes it. These are terminal processes, separate from the Tasks checklist and recurring schedules.
 
 Background process completion notices appear inside Activity’s Timeline. Open
 Activity and then Process update to inspect the command and result, including failures

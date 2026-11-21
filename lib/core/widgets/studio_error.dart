@@ -42,6 +42,7 @@ class StudioError extends StatelessWidget {
     this.framed = true,
     this.announce = true,
     this.stacked = false,
+    this.action,
   }) : _centerIcon = false;
 
   const StudioError._capsule(
@@ -51,6 +52,7 @@ class StudioError extends StatelessWidget {
     required this.severity,
   }) : framed = false,
        stacked = false,
+       action = null,
        announce = false,
        _centerIcon = true;
 
@@ -64,6 +66,10 @@ class StudioError extends StatelessWidget {
 
   /// Put the status icon above the copy in compact attachment cards.
   final bool stacked;
+
+  /// Recovery stays inside the notice; stacked copy uses the full width below
+  /// the status icon and action.
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -112,20 +118,30 @@ class StudioError extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                statusIcon,
+                if (action case final action?)
+                  Row(children: [statusIcon, const Spacer(), action])
+                else
+                  statusIcon,
                 const SizedBox(height: WingSpacing.sm),
                 copy,
               ],
             )
           : Row(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: _centerIcon
+              crossAxisAlignment: _centerIcon || action != null
                   ? CrossAxisAlignment.center
                   : CrossAxisAlignment.start,
               children: [
                 statusIcon,
                 const SizedBox(width: WingSpacing.md),
-                Flexible(child: copy),
+                if (action != null)
+                  Expanded(child: copy)
+                else
+                  Flexible(child: copy),
+                if (action case final action?) ...[
+                  const SizedBox(width: WingSpacing.sm),
+                  action,
+                ],
               ],
             ),
     );

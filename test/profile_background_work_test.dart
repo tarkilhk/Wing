@@ -413,7 +413,7 @@ void main() {
 
       expect(chat.processes.single.id, 'live');
       expect(chat.processes.single.isRunning, isTrue);
-      expect(chat.processesError, contains('could not be refreshed'));
+      expect(chat.processesError, 'Could not refresh processes.');
 
       host.listResponse = {
         'processes': [
@@ -424,7 +424,7 @@ void main() {
       await controller.refreshProcesses(chat);
 
       expect(chat.processes.single.id, 'live');
-      expect(chat.processesError, contains('could not be refreshed'));
+      expect(chat.processesError, 'Could not refresh processes.');
     },
   );
 

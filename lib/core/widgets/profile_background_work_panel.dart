@@ -152,19 +152,53 @@ class _ProfileBackgroundWorkPanelState
 
 /// Borrowed process rows in the live-work dock. The workspace owns discovery
 /// and refresh lifetime; mounting a kept-alive page performs no I/O.
-class ProfileProcessPanel extends StatelessWidget {
+class ProfileProcessPanel extends StatefulWidget {
   const ProfileProcessPanel({super.key, required this.session});
   final ProfileSupervisionSession session;
 
   @override
+  State<ProfileProcessPanel> createState() => _ProfileProcessPanelState();
+}
+
+class _ProfileProcessPanelState extends State<ProfileProcessPanel> {
+  bool _retrying = false;
+
+  @override
+  void didUpdateWidget(ProfileProcessPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.session, widget.session)) _retrying = false;
+  }
+
+  Future<void> _retry() async {
+    final session = widget.session;
+    if (_retrying || !session.active || session.state.processesLoading) return;
+    setState(() => _retrying = true);
+    try {
+      await session.refreshProcesses();
+    } finally {
+      if (mounted && identical(widget.session, session)) {
+        setState(() => _retrying = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => ListenableBuilder(
-    listenable: session,
+    listenable: widget.session,
     builder: (context, _) {
+      final session = widget.session;
       final state = session.state;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (state.inlineProcessesError case final error?) StudioError(error),
+          if (state.inlineProcessesError case final error?)
+            _ErrorRow(
+              message: error,
+              busy: _retrying,
+              onRetry: session.active && !state.processesLoading
+                  ? _retry
+                  : null,
+            ),
           for (final process in state.processes)
             _ProcessTile(
               key: ValueKey(process.id),
@@ -470,20 +504,38 @@ class _ProcessTile extends StatelessWidget {
 class _ErrorRow extends StatelessWidget {
   final String message;
   final Future<void> Function()? onRetry;
+  final bool busy;
 
-  const _ErrorRow({required this.message, required this.onRetry});
+  const _ErrorRow({
+    required this.message,
+    required this.onRetry,
+    this.busy = false,
+  });
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Expanded(child: StudioError(message)),
-      ActivityDetailAction(
-        label: 'Retry',
-        icon: Icons.refresh,
-        onPressed: onRetry,
+  Widget build(BuildContext context) => StudioError(
+    message,
+    stacked: MediaQuery.textScalerOf(context).scale(14) > 21,
+    action: StudioButtonPress(
+      child: IconButton(
+        tooltip: 'Retry',
+        style: IconButton.styleFrom(
+          minimumSize: const Size.square(48),
+          maximumSize: const Size.square(48),
+        ),
+        onPressed: busy ? null : onRetry,
+        icon: busy
+            ? SizedBox.square(
+                dimension: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  value: MediaQuery.disableAnimationsOf(context) ? 0.75 : null,
+                  semanticsLabel: 'Retry',
+                ),
+              )
+            : const Icon(Icons.refresh, size: 20),
       ),
-    ],
+    ),
   );
 }
 
