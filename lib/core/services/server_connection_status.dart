@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import 'connection_manager.dart';
+import 'connection_diagnostics.dart';
 import 'workspace_connection_failure.dart';
 
 enum ServerConnectionPhase {
@@ -33,6 +34,7 @@ class ServerConnectionStatus extends ChangeNotifier {
       _recoveries.values.any((active) => active);
   VoidCallback? onInterruption;
   bool _closed = false;
+  Object? _lastDiagnosticState;
 
   ServerConnectionStatus(this.label);
 
@@ -97,7 +99,34 @@ class ServerConnectionStatus extends ChangeNotifier {
                 : 'Conversation unavailable',
         };
   void _changed() {
-    if (!_closed) notifyListeners();
+    if (_closed) return;
+    final observation = (
+      phase,
+      access,
+      live,
+      recoveryAttemptInProgress,
+      _recoveries.length,
+      _failedRecoveries.length,
+      chatEndpointUnsupported,
+    );
+    if (observation != _lastDiagnosticState) {
+      _lastDiagnosticState = observation;
+      logConnectionDiagnostic(
+        'connection.status',
+        details: {
+          // Process-local identity correlates transitions without exporting labels.
+          'status_owner': identityHashCode(this),
+          'phase': phase.name,
+          'http': access.name,
+          'live': live.name,
+          'retry_active': recoveryAttemptInProgress,
+          'recoveries': _recoveries.length,
+          'failed_recoveries': _failedRecoveries.length,
+          'chat_endpoint_unsupported': chatEndpointUnsupported,
+        },
+      );
+    }
+    notifyListeners();
   }
 
   /// The exact socket's stock greeting owns endpoint support. HTTP reads and

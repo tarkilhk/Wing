@@ -11,6 +11,7 @@ Feature ID: `platform-lifecycle`.
   Pausing stops Recents display polling and catalog projections immediately,
   even when Android renders no final frame. Background replies and notifications
   continue; reopening catches up the preview and unread state.
+- `platform-lifecycle.diagnostics` — Retain bounded local diagnostic events across process restarts; export lifecycle, network and process-exit evidence through [App settings](app-preferences-backup.md).
 - `platform-lifecycle.intent` — Handle native entry without crossing draft ownership.
 
 ## How to get to it (user POV)
@@ -44,6 +45,11 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```sh
   python3 scripts/test_nightly_native.py platform-plugins --output build/feature-verification/platform-lifecycle
   ```
+
+The [diagnostic export recipe](app-preferences-backup.md#driving-it-with-wing-harnesses)
+verifies a real force-stop/reopen and a separate-UID ZIP recipient on an owned
+emulator. It exercises the retained engine’s native diagnostic channel without
+a Hermes connection.
 
 Live voice uses a microphone/media foreground service and a separate retained-engine lease. Home and screen lock keep the call; microphone/service teardown retires the lease. Calls are not resurrected after process death. The voice native recipe verifies the call separately from notification monitoring; see [voice](voice.md).
 

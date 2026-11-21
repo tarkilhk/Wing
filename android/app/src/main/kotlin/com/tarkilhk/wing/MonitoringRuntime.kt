@@ -30,6 +30,7 @@ object MonitoringRuntime {
         ChatNotifications.attach(context, flutterEngine)
         LiveVoiceRuntime.attach(context, flutterEngine)
         val app = context.applicationContext
+        DiagnosticRuntime.attach(app, flutterEngine.dartExecutor.binaryMessenger)
         channel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "com.tarkilhk.wing/background_monitoring",
@@ -84,12 +85,14 @@ object MonitoringRuntime {
 
     fun started(context: Context) {
         running = true
+        DiagnosticRuntime.record("monitoring.started")
         val pending = starting.toList()
         starting.clear()
         pending.forEach { it.success(status(context)) }
     }
 
     fun startFailed() {
+        if (starting.isNotEmpty()) DiagnosticRuntime.record("monitoring.start_failed")
         val pending = starting.toList()
         starting.clear()
         pending.forEach { it.error("monitoring_start_failed", "Could not start monitoring", null) }
@@ -103,6 +106,7 @@ object MonitoringRuntime {
 
     fun serviceDestroyed() {
         running = false
+        DiagnosticRuntime.record("monitoring.stopped")
         completeStop()
         startFailed()
         releaseIfUnused()
@@ -131,6 +135,7 @@ object MonitoringRuntime {
                 channel = null
                 ChatNotifications.detach()
                 LiveVoiceRuntime.detach()
+                DiagnosticRuntime.detach()
                 engine?.destroy()
                 engine = null
             }

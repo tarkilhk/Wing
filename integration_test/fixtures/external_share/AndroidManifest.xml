@@ -19,6 +19,15 @@
                 <data android:mimeType="application/json" />
             </intent-filter>
         </activity>
+        <activity android:name=".DiagnosticReceiveActivity" android:exported="true"
+            android:label="Receive Wing diagnostics"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/zip" />
+            </intent-filter>
+        </activity>
         <activity android:name=".ControlledCameraActivity" android:exported="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
             <intent-filter>

@@ -5,7 +5,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-/// Internal device console only, including release builds. Never use response
+/// Receives the same sanitized record as the console. Installed by app startup.
+void Function(String record)? connectionDiagnosticSink;
+
+/// Local diagnostics, including release builds. Never use response
 /// bodies, exception prose, URLs, credentials or request parameters as details.
 /// Exception prose often embeds authenticated URLs or server-returned content.
 void logConnectionDiagnostic(
@@ -52,9 +55,19 @@ void logConnectionDiagnostic(
     if (bases.length < 4 && base) bases.add(line);
   }
   try {
-    debugPrint(
-      '[WingConnection] ${jsonEncode({'time': DateTime.now().toUtc().toIso8601String(), 'event': event, ...details, if (causes.isNotEmpty) 'causes': causes, if (frames.isNotEmpty) 'stack': frames, if (bases.isNotEmpty) 'stack_bases': bases})}',
-    );
+    final record = jsonEncode({
+      'time': DateTime.now().toUtc().toIso8601String(),
+      'event': event,
+      ...details,
+      if (causes.isNotEmpty) 'causes': causes,
+      if (frames.isNotEmpty) 'stack': frames,
+      if (bases.isNotEmpty) 'stack_bases': bases,
+    });
+    // A broken console adapter must not prevent durable capture, or vice versa.
+    try {
+      connectionDiagnosticSink?.call(record);
+    } catch (_) {}
+    debugPrint('[WingConnection] $record');
   } catch (_) {
     // Diagnostics must never change transport/recovery behavior.
   }

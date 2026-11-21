@@ -148,7 +148,7 @@ Use the order below for a broad pass; finish with [connected journeys](features/
 
 <a id="app-preferences-backup"></a>
 
-- [Personalize and back up Wing](features/app-preferences-backup.md) — `app-preferences-backup`.
+- [Personalize and back up Wing](features/app-preferences-backup.md) — `app-preferences-backup`; includes offline diagnostic ZIP sharing.
 
 <a id="privacy"></a>
 

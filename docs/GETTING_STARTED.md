@@ -28,3 +28,16 @@ On a short screen or with enlarged text, scroll below the filters to reach these
 choices, then choose a profile to reopen the workspace.
 
 If something does not connect, the check screen shows which part needs attention. [Connection help](SELF_HOSTING.md#connection-help) covers the usual fixes. [Good to know](KNOWN_LIMITATIONS.md) explains offline reading and notifications.
+
+## Share diagnostic logs
+
+If Wing keeps reconnecting or another problem recurs, open **App settings →
+About → Diagnostic logs** and tap the Share icon. Wing creates a ZIP and opens
+Android's share sheet, where you can save it or choose someone to send it to.
+This works offline and does not need ADB.
+
+The bundle contains recent app events, connection-indicator changes and device/
+network details. Its bounded local journal survives restarts. Chat content and
+credentials are excluded; connection/profile identifiers and local network
+addresses can appear. Recording begins with the version that introduces this
+feature, so it cannot recover older incidents. See [diagnostic export details](features/app-preferences-backup.md).

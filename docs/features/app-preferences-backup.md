@@ -7,6 +7,7 @@ Feature ID: `app-preferences-backup`.
 ## Sub-features
 
 - `app-preferences-backup.wing-plugin` — See the latest GitHub release and each backend profile’s installed Wing plugin version. Install, update and enable Wing in one profile or across all profiles through Hermes.
+- `app-preferences-backup.diagnostics` — Export recent local diagnostic events and device context as a ZIP through Android sharing, including while offline.
 - `app-preferences-backup.personalize` — Save and preview device preferences.
 - `app-preferences-backup.export` — Write the chosen backup through Android.
 - `app-preferences-backup.restore` — Read back settings and credentials with explicit outcomes.
@@ -14,6 +15,22 @@ Feature ID: `app-preferences-backup`.
 ## How to get to it (user POV)
 
 Open App settings from the drawer. Change theme, accent or text size. Under Voice, select a GPT-Live voice for each live conversation mode; these phone-owned choices are included in settings backups. Tap the adjacent speaker to preview subscription voices offline; API previews are unavailable. Use its export/restore controls to back up connections/preferences with an optional passphrase, then review a restore result.
+
+Under **About → Diagnostic logs**, tap the Share icon. Wing prepares a ZIP,
+then opens Android's share sheet so you can choose where to save or send it.
+The icon shows progress until the share sheet settles. A failed export keeps
+settings usable and offers the same action to retry. Leaving settings before
+preparation completes cancels the pending share offer.
+
+The ZIP includes retained connection/recovery events, lifecycle/network changes,
+sanitized error traces, app and Android versions, network/VPN/DNS/MTU details,
+power/background restrictions, memory/storage state and recent Android process
+exit summaries. The manifest identifies unavailable sections and known dropped
+records. Logs rotate within 2 MiB and survive restarts; their time span depends on
+activity. Recording starts with the version that introduces this feature. Export
+needs no server or ADB. Chats, credentials, request payloads, arbitrary exception
+messages, raw logcat and server logs are excluded. Local network addresses and
+connection/profile identifiers can be present.
 
 Under **Open links in**, choose **Open in Wing** or **Open in external browser** for
 regular web-link taps. Open in Wing is the initial choice. The saved choice
@@ -61,6 +78,19 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   The link setting checks cover the popup below the row's trailing edge for
   either selected destination, held saves, recovery, app-wide dispatch, reopened
   preferences and backup round trips.
+
+- **Diagnostic export:** verify retention, privacy, UI feedback and share lifetime:
+
+  ```sh
+  flutter test --no-pub test/diagnostic_export_test.dart test/connection_diagnostics_test.dart
+  ./android/gradlew -p android :app:testDebugUnitTest --tests '*DiagnosticJournalTest' --no-daemon
+  python3 scripts/test_native_diagnostics.py --output build/feature-verification/diagnostics-native
+  ```
+
+  The native driver owns an API36 emulator and disposable receiver. It drives
+  the production offline settings control and real Android chooser, reads the
+  ZIP under a separate app UID, restarts Wing and verifies retained incidents,
+  snapshot sections, secret exclusion and staging cleanup.
 
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
 

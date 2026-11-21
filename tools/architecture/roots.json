@@ -7007,6 +7007,44 @@
       "source": "docs/features/conversation.md; integration_test/unread_runtime_native_test.dart",
       "status": "supported",
       "selector": "main"
+    },
+    {
+      "id": "host-test-test/diagnostic_export_test.dart",
+      "kind": "host-test",
+      "path": "test/diagnostic_export_test.dart",
+      "purpose": "Diagnostic export verification on owned fixtures; no backend access",
+      "source": "docs/features/app-preferences-backup.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "device-or-live-test-integration_test/diagnostic_export_device.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/diagnostic_export_device.dart",
+      "purpose": "Diagnostic export verification on owned fixtures; no backend access",
+      "source": "docs/features/app-preferences-backup.md",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "manual-or-ci-cli-scripts/test_native_diagnostics.py",
+      "kind": "manual-or-ci-cli",
+      "path": "scripts/test_native_diagnostics.py",
+      "purpose": "Diagnostic export verification on owned fixtures; no backend access",
+      "source": "docs/features/app-preferences-backup.md",
+      "status": "supported"
+    },
+    {
+      "id": "channel-diagnostics",
+      "kind": "platform-channel",
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/DiagnosticRuntime.kt",
+      "purpose": "Retained-engine local event capture and diagnostic ZIP export",
+      "source": "lib/core/services/diagnostic_export.dart; android/app/src/main/kotlin/com/tarkilhk/wing/MonitoringRuntime.kt",
+      "status": "supported",
+      "selector": [
+        "append",
+        "export"
+      ]
     }
   ],
   "files": [
@@ -16418,6 +16456,51 @@
     {
       "path": "integration_test/unread_runtime_native_test.dart",
       "area": "integration_test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/DiagnosticJournal.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/main/kotlin/com/tarkilhk/wing/DiagnosticRuntime.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "android/app/src/test/kotlin/com/tarkilhk/wing/DiagnosticJournalTest.kt",
+      "area": "android",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "integration_test/diagnostic_export_device.dart",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "integration_test/fixtures/external_share/DiagnosticReceiveActivity.java",
+      "area": "integration_test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/diagnostic_export.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/diagnostic_logs_tile.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "scripts/test_native_diagnostics.py",
+      "area": "scripts",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/diagnostic_export_test.dart",
+      "area": "test",
       "provenance": "intentional-untracked"
     }
   ],

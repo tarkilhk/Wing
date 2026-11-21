@@ -22,6 +22,7 @@ import '../widgets/installed_app_version_card.dart';
 import '../widgets/composer_action_settings.dart';
 import '../widgets/voice_preferences_card.dart';
 import 'privacy_policy_screen.dart';
+import '../widgets/diagnostic_logs_tile.dart';
 
 /// Existing device preferences, shared by connected and disconnected navigation.
 class AppSettingsContent extends StatefulWidget {
@@ -475,6 +476,11 @@ class _AppSettingsContentState extends State<AppSettingsContent> {
                       children: [
                         const InstalledAppVersionCard(),
                         const Divider(height: 1),
+                        if (defaultTargetPlatform ==
+                            TargetPlatform.android) ...[
+                          const DiagnosticLogsTile(),
+                          const Divider(height: 1),
+                        ],
                         StudioButtonPress(
                           child: ListTile(
                             key: const ValueKey('privacy-policy'),

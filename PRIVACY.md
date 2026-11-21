@@ -1,6 +1,6 @@
 # Wing privacy policy
 
-Effective date: 10 October 2026.
+Effective date: 21 November 2026.
 
 This policy covers Wing (`com.tarkilhk.wing`), maintained by [tarkilhk and the Wing contributors](https://github.com/tarkilhk/Wing). It is an independent Android client for a Hermes server you choose. The app does not require an account with Wing's maintainer. Hermes Cloud sign-in uses Nous Portal if you choose that route. Your Hermes host, model providers, and services used by your agent have their own data practices.
 
@@ -37,6 +37,27 @@ Microphone access is requested on first launch, after notifications, and is used
 Use HTTPS or an encrypted private network when connecting remotely. A plain HTTP connection does not encrypt your credentials or content in transit. The server address and network protection are chosen by you or your server administrator.
 
 HTTPS protects the connection to your server; it does not prevent that server, its configured model providers or agent tools from reading the content they process. Wing does not provide end-to-end encryption that hides your messages from those services.
+
+## Local diagnostic logs
+
+Wing retains a rotating diagnostic journal of up to 2 MiB in private app storage
+across restarts. It records connection failures and recovery, app lifecycle and
+network changes, and sanitized error types and stack locations. It excludes
+chat/tool content, credentials, request payloads and arbitrary exception messages.
+
+App settings → About → Diagnostic logs prepares a ZIP locally and opens Android
+sharing. The ZIP adds app/device versions, current network/VPN details (including
+local IP and DNS addresses), power/background restrictions, memory/storage state
+and recent Android process-exit summaries. Connection/profile identifiers can
+appear in events. It includes no raw logcat, screenshots, audio, files or backend
+logs. Its manifest reports unavailable sections and known capture gaps. Nothing
+is uploaded automatically; the app you choose receives the ZIP.
+
+Old events are overwritten as the journal fills. Clearing app storage or
+uninstalling Wing removes the journal. Export staging is removed when sharing
+settles, or after 24 hours on a later export if a process interruption left it
+behind. Android's share plugin keeps a separate cache copy. Copies saved or sent
+to other apps remain until you delete them there.
 
 ## Retention and deletion
 

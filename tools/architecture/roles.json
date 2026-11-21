@@ -1396,6 +1396,11 @@
       "feature": "app-preferences-backup",
       "library": "lib/core/services/device_preference.dart"
     },
+    "lib/core/services/diagnostic_export.dart": {
+      "role": "platform",
+      "feature": "app-preferences-backup",
+      "library": "lib/core/services/diagnostic_export.dart"
+    },
     "lib/core/services/doctor_diagnostic.dart": {
       "role": "domain",
       "feature": "administration-health",
@@ -2240,6 +2245,11 @@
       "role": "view",
       "feature": "outputs-and-viewers",
       "library": "lib/core/widgets/deliverable_attachment.dart"
+    },
+    "lib/core/widgets/diagnostic_logs_tile.dart": {
+      "role": "view",
+      "feature": "app-preferences-backup",
+      "library": "lib/core/widgets/diagnostic_logs_tile.dart"
     },
     "lib/core/widgets/dirty_editor_guard.dart": {
       "role": "view",

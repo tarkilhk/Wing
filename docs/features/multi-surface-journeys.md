@@ -156,3 +156,12 @@ connection recovery. Managed-lock refusals need an existing policy prerequisite;
 this recipe never installs instance-wide locks solely for a test. Retain focused
 native/host refusal proofs alongside these production outcomes and report the
 unexercised production branches explicitly.
+
+## Capture a connection incident
+
+After an orange connection indicator or interruption, open App settings, scroll
+to About and use the Share icon beside Diagnostic logs. This works while
+disconnected. Choose a destination in Android to save/send the ZIP. The local
+timeline survives a restart and the manifest reports collection gaps. See
+[app-preferences-backup](app-preferences-backup.md) for the exact native and host
+verification commands; no backend request is part of this journey.

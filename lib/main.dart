@@ -70,9 +70,11 @@ import 'core/widgets/wing_welcome.dart';
 import 'core/screens/app_settings_content.dart';
 import 'core/widgets/config_backup_card.dart';
 import 'core/widgets/config_backup_actions.dart';
+import 'core/services/diagnostic_export.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  initializeDiagnosticCapture();
   ProjectIconGlyphs.registerLicense();
   WingIcons.registerLicense();
   final dependencies = await createApplicationDependencies();
