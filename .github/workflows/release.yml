@@ -240,6 +240,7 @@ jobs:
             source/build/notification-gate/*.log
             source/build/notification-gate/*.txt
             source/build/notification-gate/*.png
+            source/build/notification-gate/*.zip
           if-no-files-found: ignore
 
       - name: Check native share provider and queue boundaries

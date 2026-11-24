@@ -638,8 +638,10 @@ class OwnedAndroidBootTest(unittest.TestCase):
                 return 'UI hierarchy dumped to: /sdcard/wing-boot-ui.xml'
             if args[:2] == ('shell', 'cat'):
                 return next(reads)
+            if args == ('shell', 'getprop', 'sys.boot_completed'):
+                return '1'
             if args == ('shell', 'getprop', 'debug.hwui.renderer'):
-                self.assertIn(('shell', 'setprop', 'debug.hwui.renderer', 'skiagl'), calls)
+                self.assertIn(('shell', 'su', '0', 'setprop', 'debug.hwui.renderer', 'skiagl'), calls)
                 return 'skiagl' if hwui_enabled else 'skiavk'
             if args == ('shell', 'settings', 'get', 'secure',
                         'show_ime_with_hard_keyboard'):
@@ -672,12 +674,17 @@ class OwnedAndroidBootTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.exercise(installed=True)
 
-    def test_prepares_only_app_hwui_after_healthy_boot(self):
+    def test_restarts_framework_with_gles_before_launcher_provisioning(self):
         calls = self.exercise()
-        write = ('shell', 'setprop', 'debug.hwui.renderer', 'skiagl')
-        self.assertIn(write, calls)
-        self.assertLess(calls.index(('shell', 'cat', '/sdcard/wing-boot-ui.xml')), calls.index(write))
-        self.assertNotIn(('shell', 'setprop', 'debug.renderengine.backend', 'skiagl'), calls)
+        stop = ('shell', 'su', '0', 'stop')
+        reset = ('shell', 'su', '0', 'setprop', 'sys.boot_completed', '0')
+        write = ('shell', 'su', '0', 'setprop', 'debug.hwui.renderer', 'skiagl')
+        start = ('shell', 'su', '0', 'start')
+        booted = ('shell', 'getprop', 'sys.boot_completed')
+        ui = ('shell', 'cat', '/sdcard/wing-boot-ui.xml')
+        self.assertEqual([calls.index(call) for call in [stop, reset, write, start, booted, ui]],
+                         sorted(calls.index(call) for call in [stop, reset, write, start, booted, ui]))
+        self.assertFalse(any('debug.renderengine.backend' in call for call in calls))
         with self.assertRaisesRegex(RuntimeError, 'HWUI'):
             self.exercise(hwui_enabled=False)
 

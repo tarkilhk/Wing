@@ -188,6 +188,7 @@ jobs:
             build/notification-gate/*.log
             build/notification-gate/*.txt
             build/notification-gate/*.png
+            build/notification-gate/*.zip
             build/notification-gate/*.json
           if-no-files-found: ignore
 
