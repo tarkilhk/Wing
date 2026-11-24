@@ -487,6 +487,7 @@ class OwnedEmulatorRetirementTest(unittest.TestCase):
         def launch(*args, **kwargs):
             registered_until[0] = float('inf')
             process = Mock()
+            process.command = args[0]
             process.pid = 123
             process.poll.return_value = None
             def stopped(*args, **kwargs):
@@ -518,6 +519,16 @@ class OwnedEmulatorRetirementTest(unittest.TestCase):
              patch.object(gate.time, 'monotonic', side_effect=lambda: clock[0]), \
              patch.object(gate.time, 'sleep', side_effect=advance):
             yield processes, clock
+
+    def test_android_ui_avoids_vulkan_queue_while_app_keeps_vulkan(self):
+        with self.transport() as (processes, _):
+            with gate.owned_emulator():
+                command = processes[0].command
+                self.assertIn('-systemui-renderer', command)
+                self.assertEqual(command[command.index('-systemui-renderer') + 1], 'skiagl')
+                features = command[command.index('-feature') + 1].split(',')
+                self.assertIn('Vulkan', features)
+                self.assertNotIn('-Vulkan', features)
 
     def test_next_suite_can_own_slot_after_process_exits_before_adb_unregisters(self):
         with self.transport() as (processes, clock):

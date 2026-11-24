@@ -184,10 +184,29 @@ android.applicationVariants.configureEach {
     }
 }
 
+// Resolve the SDK used by ImeAnimationCacheTest through Gradle's dependency
+// cache, before execution. Robolectric's separate Maven downloader is not cached
+// by setup-gradle and can fail before any test runs on a fresh CI host.
+val robolectricSdk = configurations.create("robolectricSdk") {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+val prepareRobolectricSdk = tasks.register<Sync>("prepareRobolectricSdk") {
+    from(robolectricSdk)
+    into(layout.buildDirectory.dir("robolectric-sdk"))
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(prepareRobolectricSdk)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", prepareRobolectricSdk.get().destinationDir.absolutePath)
+}
+
 dependencies {
    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
    testImplementation("junit:junit:4.13.2")
    testImplementation("org.robolectric:robolectric:4.16.1")
+   // API35 preinstrumented SDK selected by Robolectric 4.16.1.
+   add(robolectricSdk.name, "org.robolectric:android-all-instrumented:15-robolectric-13954326-i7")
    // JVM tests exercise the actual native JSON boundary, outside Android's stub jar.
    testImplementation("org.json:json:20260814")
 }

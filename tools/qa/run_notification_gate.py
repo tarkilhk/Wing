@@ -284,6 +284,9 @@ def start_owned_emulator(sdk, serial, avds):
             str(sdk / 'emulator/emulator'), '-avd', 'wing_notification_gate',
             '-port', serial.removeprefix('emulator-'), '-no-window', '-no-audio', '-no-boot-anim',
             '-no-snapshot', '-gpu', 'lavapipe', '-feature', 'Vulkan,VulkanNativeSwapchain',
+            # API36's Skia Vulkan HWUI can deadlock input in vkQueueWaitIdle.
+            # Select GLES for Android UI; Flutter keeps its Vulkan/Impeller path.
+            '-systemui-renderer', 'skiagl',
             '-memory', '4096', '-cores', '4',
             '-no-metrics', '-show-kernel',
         ], stdout=log, stderr=subprocess.STDOUT, env=env)
