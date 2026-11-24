@@ -1,0 +1,21 @@
+name: Set up CI Gradle
+description: Configure Gradle caching and the CI Maven Central source
+inputs:
+  cache-read-only:
+    description: Whether this job may only read the shared Gradle cache
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      with:
+        cache-provider: basic
+        cache-read-only: ${{ inputs.cache-read-only }}
+    - name: Configure CI dependency repositories
+      shell: bash
+      env:
+        WING_GRADLE_INIT: ${{ github.action_path }}/central-mirror.init.gradle
+      run: |
+        gradle_home="${GRADLE_USER_HOME:-$HOME/.gradle}"
+        mkdir -p "$gradle_home/init.d"
+        cp "$WING_GRADLE_INIT" "$gradle_home/init.d/wing-central-mirror.gradle"

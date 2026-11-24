@@ -1,0 +1,33 @@
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository
+
+// Shared hosted CI egress can receive Central 429s even for plugin BOMs.
+// This official mirror serves the same immutable artifacts through Gradle's cache.
+def centralMirror = URI.create('https://maven-central.storage-download.googleapis.com/maven2/')
+def configureRepositories = { repositories ->
+    repositories.withType(MavenArtifactRepository).configureEach { repository ->
+        if (repository.url.host in ['repo.maven.apache.org', 'repo1.maven.org']) {
+            repository.url = centralMirror
+        } else if (repository.url.host == 'plugins.gradle.org') {
+            // This toolchain gets Gradle's DSL plugins from the portal. Their
+            // Kotlin/Gson/etc. dependencies belong to Central, not the portal's
+            // redirect to Central's throttled download endpoint.
+            repository.content { includeGroupByRegex('org\\.gradle(\\..*)?') }
+        }
+    }
+}
+
+gradle.beforeSettings { settings ->
+    def plugins = settings.pluginManagement.repositories
+    configureRepositories(plugins)
+    // Cover implicit plugin repositories, including Flutter's included build.
+    plugins.gradlePluginPortal()
+    plugins.maven {
+        name = 'wingCentralPlugins'
+        url = centralMirror
+    }
+    configureRepositories(settings.dependencyResolutionManagement.repositories)
+}
+gradle.beforeProject { project ->
+    configureRepositories(project.repositories)
+    configureRepositories(project.buildscript.repositories)
+}

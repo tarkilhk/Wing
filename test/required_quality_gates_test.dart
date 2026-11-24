@@ -145,16 +145,35 @@ void main() {
         contains(contains('gradle-cache-writer')),
       );
     }
-    file.writeAsStringSync(
+  });
+
+  test('shared Gradle action preserves the actual cache writer', () {
+    final file = File('${root.path}/.github/actions/setup-gradle/action.yml');
+    final original = file.readAsStringSync();
+    for (final replacement in [
+      original.replaceFirst('using: composite', 'using: node24'),
+      original.replaceFirst('cache-provider: basic', 'cache-provider: other'),
       original.replaceFirst(
         'cache-provider: basic',
-        'cache-provider: basic\n          cache-disabled: true',
+        'cache-provider: basic\n        cache-disabled: true',
       ),
-    );
-    expect(
-      checkRequiredQualityGates(root),
-      contains(contains('gradle-cache-writer')),
-    );
+      original.replaceFirst(r'${{ inputs.cache-read-only }}', 'true'),
+      original.replaceFirst('      with:', '      if: false\n      with:'),
+      original.replaceFirst(
+        '      with:',
+        '      continue-on-error: true\n      with:',
+      ),
+      original.replaceFirst('gradle/actions/setup-gradle@', 'other/action@'),
+    ]) {
+      file.writeAsStringSync(replacement);
+      expect(
+        checkRequiredQualityGates(root),
+        contains(contains('gradle-cache-writer')),
+        reason: replacement,
+      );
+    }
+    file.deleteSync();
+    expect(checkRequiredQualityGates(root), isNotEmpty);
   });
 
   test('transport fixture tests require their dependency setup first', () {
@@ -816,6 +835,17 @@ void _writeWorkflows(
   String? jobCondition,
   bool nativeSetup = true,
 }) {
+  final action = File('${root.path}/.github/actions/setup-gradle/action.yml');
+  action.parent.createSync(recursive: true);
+  action.writeAsStringSync(r'''
+runs:
+  using: composite
+  steps:
+    - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+      with:
+        cache-provider: basic
+        cache-read-only: ${{ inputs.cache-read-only }}
+''');
   for (final item in [
     ('pr-quality.yml', 'quality'),
     ('release.yml', 'build'),
@@ -826,9 +856,8 @@ jobs:
   ${item.$2}:
     ${jobCondition == null ? '# mandatory job' : 'if: $jobCondition'}
     steps:
-${item.$1 == 'pr-quality.yml' ? '''      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6
+${item.$1 == 'pr-quality.yml' ? '''      - uses: ./.github/actions/setup-gradle
         with:
-          cache-provider: basic
           cache-read-only: $gradleCacheReadOnly
 ''' : ''}
       - name: Linter runner proofs

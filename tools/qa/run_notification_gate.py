@@ -218,6 +218,11 @@ def prepare_owned_android(serial):
                 if device(serial, 'shell', 'settings', 'get', 'secure',
                           'show_ime_with_hard_keyboard').strip() != '1':
                     raise RuntimeError('Owned Android must display the software keyboard')
+                # Avoid the API36 app HWUI vkQueueWaitIdle input deadlock.
+                # Do not change SurfaceFlinger's separate boot renderer.
+                device(serial, 'shell', 'setprop', 'debug.hwui.renderer', 'skiagl')
+                if device(serial, 'shell', 'getprop', 'debug.hwui.renderer') != 'skiagl':
+                    raise RuntimeError('Owned Android must use GLES for app HWUI')
                 return
         except subprocess.SubprocessError:
             pass
@@ -284,9 +289,6 @@ def start_owned_emulator(sdk, serial, avds):
             str(sdk / 'emulator/emulator'), '-avd', 'wing_notification_gate',
             '-port', serial.removeprefix('emulator-'), '-no-window', '-no-audio', '-no-boot-anim',
             '-no-snapshot', '-gpu', 'lavapipe', '-feature', 'Vulkan,VulkanNativeSwapchain',
-            # API36's Skia Vulkan HWUI can deadlock input in vkQueueWaitIdle.
-            # Select GLES for Android UI while keeping Vulkan available to apps.
-            '-systemui-renderer', 'skiagl',
             '-memory', '4096', '-cores', '4',
             '-no-metrics', '-show-kernel',
         ], stdout=log, stderr=subprocess.STDOUT, env=env)

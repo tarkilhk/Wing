@@ -359,6 +359,8 @@ elif sys.argv[3:] in (['shell', 'getprop', 'ro.kernel.qemu'],
                        ['shell', 'getprop', 'sys.boot_completed'],
                        ['shell', 'settings', 'get', 'secure', 'show_ime_with_hard_keyboard']):
     print('1')
+elif sys.argv[3:] == ['shell', 'getprop', 'debug.hwui.renderer']:
+    print('skiagl')
 elif sys.argv[3:] == ['shell', 'cmd', 'package', 'resolve-activity', '--brief', '-a', 'android.intent.action.MAIN', '-c', 'android.intent.category.HOME']:
     print('com.android.launcher/.Home')
 elif sys.argv[3:6] == ['shell', 'uiautomator', 'dump']:
@@ -520,12 +522,11 @@ class OwnedEmulatorRetirementTest(unittest.TestCase):
              patch.object(gate.time, 'sleep', side_effect=advance):
             yield processes, clock
 
-    def test_android_ui_avoids_vulkan_queue_while_app_keeps_vulkan(self):
+    def test_launch_preserves_the_boot_compositor_and_vulkan(self):
         with self.transport() as (processes, _):
             with gate.owned_emulator():
                 command = processes[0].command
-                self.assertIn('-systemui-renderer', command)
-                self.assertEqual(command[command.index('-systemui-renderer') + 1], 'skiagl')
+                self.assertNotIn('-systemui-renderer', command)
                 features = command[command.index('-feature') + 1].split(',')
                 self.assertIn('Vulkan', features)
                 self.assertNotIn('-Vulkan', features)
@@ -558,9 +559,10 @@ class OwnedEmulatorRetirementTest(unittest.TestCase):
                 started = gate.time.time()
                 with gate.owned_emulator():
                     processes[0].poll.return_value = exit_code
+                os.utime(gate.OUTPUT / 'emulator-lifecycle.json', (started + 1, started + 1))
                 self.assertEqual(gate.has_native_emulator_crash(gate.OUTPUT, started),
                                  exit_code == -11)
-                self.assertFalse(gate.has_native_emulator_crash(gate.OUTPUT, gate.time.time() + 1))
+                self.assertFalse(gate.has_native_emulator_crash(gate.OUTPUT, started + 2))
 
     def test_native_crash_rejects_missing_or_unconfirmed_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -613,7 +615,7 @@ class OwnedEmulatorRetirementTest(unittest.TestCase):
 
 class OwnedAndroidBootTest(unittest.TestCase):
     def exercise(self, title=None, installed=False, repeat=False, failed_dump=False,
-                 keyboard_enabled=True):
+                 keyboard_enabled=True, hwui_enabled=True):
         launcher = '<hierarchy><node package="com.android.launcher"/></hierarchy>'
         alert = ('<hierarchy><node resource-id="android:id/alertTitle" text="' +
                  (title or '') + '"/><node resource-id="android:id/aerr_wait" '
@@ -636,6 +638,9 @@ class OwnedAndroidBootTest(unittest.TestCase):
                 return 'UI hierarchy dumped to: /sdcard/wing-boot-ui.xml'
             if args[:2] == ('shell', 'cat'):
                 return next(reads)
+            if args == ('shell', 'getprop', 'debug.hwui.renderer'):
+                self.assertIn(('shell', 'setprop', 'debug.hwui.renderer', 'skiagl'), calls)
+                return 'skiagl' if hwui_enabled else 'skiavk'
             if args == ('shell', 'settings', 'get', 'secure',
                         'show_ime_with_hard_keyboard'):
                 return '1' if keyboard_enabled else '0'
@@ -666,6 +671,15 @@ class OwnedAndroidBootTest(unittest.TestCase):
     def test_never_runs_boot_recovery_when_fixture_is_installed(self):
         with self.assertRaises(ValueError):
             self.exercise(installed=True)
+
+    def test_prepares_only_app_hwui_after_healthy_boot(self):
+        calls = self.exercise()
+        write = ('shell', 'setprop', 'debug.hwui.renderer', 'skiagl')
+        self.assertIn(write, calls)
+        self.assertLess(calls.index(('shell', 'cat', '/sdcard/wing-boot-ui.xml')), calls.index(write))
+        self.assertNotIn(('shell', 'setprop', 'debug.renderengine.backend', 'skiagl'), calls)
+        with self.assertRaisesRegex(RuntimeError, 'HWUI'):
+            self.exercise(hwui_enabled=False)
 
     def test_requires_real_software_keyboard_availability(self):
         with self.assertRaisesRegex(RuntimeError, 'software keyboard'):

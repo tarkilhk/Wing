@@ -73,7 +73,8 @@ List<String> checkRequiredQualityGates(Directory root) {
         throw FormatException('Expected job ${target.$2} with steps.');
       }
       final steps = (job['steps'] as List).whereType<Map>().toList();
-      if (target.$2 == 'quality' && !steps.any(_mainGradleCacheWriter)) {
+      if (target.$2 == 'quality' &&
+          !steps.any((step) => _mainGradleCacheWriter(root, step))) {
         failures.add(
           '${target.$1}:quality:gradle-cache-writer REQUIRED_QUALITY_GATE: '
           'Publish the basic Gradle cache on main pushes; keep other events read-only.',
@@ -199,17 +200,36 @@ List<String> checkRequiredQualityGates(Directory root) {
 bool _boundTestBase(Object? environment) =>
     environment is Map && environment['TEST_BASE_REF'] == _testBaseRef;
 
-bool _mainGradleCacheWriter(Map step) {
+bool _mainGradleCacheWriter(Directory root, Map step) {
   final inputs = step['with'];
-  return step['uses'] is String &&
-      (step['uses'] as String).startsWith('gradle/actions/setup-gradle@') &&
-      _mandatory(step['if']) &&
-      _hardFailure(step['continue-on-error']) &&
-      inputs is Map &&
-      inputs['cache-provider'] == 'basic' &&
-      _hardFailure(inputs['cache-disabled']) &&
-      inputs['cache-read-only'] ==
-          r"${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}";
+  if (step['uses'] != './.github/actions/setup-gradle' ||
+      !_mandatory(step['if']) ||
+      !_hardFailure(step['continue-on-error']) ||
+      inputs is! Map ||
+      inputs['cache-read-only'] !=
+          r"${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}") {
+    return false;
+  }
+  final action = loadYaml(
+    File(
+      '${root.path}/.github/actions/setup-gradle/action.yml',
+    ).readAsStringSync(),
+  );
+  final runs = action is Map ? action['runs'] : null;
+  if (runs is! Map || runs['using'] != 'composite' || runs['steps'] is! List) {
+    return false;
+  }
+  return (runs['steps'] as List).whereType<Map>().any((nested) {
+    final settings = nested['with'];
+    return nested['uses'] is String &&
+        (nested['uses'] as String).startsWith('gradle/actions/setup-gradle@') &&
+        _mandatory(nested['if']) &&
+        _hardFailure(nested['continue-on-error']) &&
+        settings is Map &&
+        settings['cache-provider'] == 'basic' &&
+        _hardFailure(settings['cache-disabled']) &&
+        settings['cache-read-only'] == r'${{ inputs.cache-read-only }}';
+  });
 }
 
 List<String> _checkNightly(Directory root) {

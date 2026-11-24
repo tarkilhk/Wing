@@ -187,17 +187,6 @@ android.applicationVariants.configureEach {
 // Resolve the SDK used by ImeAnimationCacheTest through Gradle's dependency
 // cache, before execution. Robolectric's separate Maven downloader is not cached
 // by setup-gradle and can fail before any test runs on a fresh CI host.
-repositories {
-    exclusiveContent {
-        forRepository {
-            maven {
-                name = "robolectricSdkMirror"
-                url = uri("https://maven-central.storage-download.googleapis.com/maven2/")
-            }
-        }
-        filter { includeModule("org.robolectric", "android-all-instrumented") }
-    }
-}
 val robolectricSdk = configurations.create("robolectricSdk") {
     isCanBeConsumed = false
     isTransitive = false
