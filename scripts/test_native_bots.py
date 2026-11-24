@@ -41,6 +41,34 @@ def require_completed_cases(records, name=None):
     return completed
 
 
+def cancel_native_picker(shell, output, name):
+    """Dismiss the picker keyboard, then require the owned app to resume."""
+    def resumed():
+        activity = shell("dumpsys", "activity", "activities")
+        (output / (name + "-activity.txt")).write_text(activity)
+        return "\n".join(line for line in activity.splitlines()
+                         if "ResumedActivity" in line)
+
+    def wait_for(check, message):
+        deadline = time.monotonic() + 5
+        while not check():
+            if time.monotonic() >= deadline:
+                raise RuntimeError(message)
+            time.sleep(.1)
+
+    wait_for(lambda: re.search(r"documentsui|DocumentsActivity|PickActivity", resumed()),
+             "Android document picker did not open")
+    # Wait for native UI idle before observing the save dialog's automatic IME.
+    shell("uiautomator", "dump", "/sdcard/wing-bots-window.xml")
+    if input_view_visible(shell("dumpsys", "input_method")):
+        shell("input", "keyevent", "KEYCODE_BACK")
+        wait_for(lambda: not input_view_visible(shell("dumpsys", "input_method")),
+                 "Android document picker keyboard did not close")
+    shell("input", "keyevent", "KEYCODE_BACK")
+    wait_for(lambda: PACKAGE + "/" in resumed(),
+             "Android document picker cancellation did not return to Wing")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", required=True)
@@ -168,21 +196,7 @@ def main():
                         raise RuntimeError("Group attachment was not selectable in Android Documents")
                     time.sleep(.5)
                 elif action == "picker-cancel":
-                    end = time.monotonic() + 5
-                    while True:
-                        activity = shell("dumpsys", "activity", "activities")
-                        resumed = "\n".join(line for line in activity.splitlines()
-                                            if "ResumedActivity" in line)
-                        if re.search(r"documentsui|DocumentsActivity|PickActivity", resumed):
-                            break
-                        if time.monotonic() >= end:
-                            break
-                        time.sleep(.1)
-                    if not re.search(r"documentsui|DocumentsActivity|PickActivity", resumed):
-                        (output / (name + "-activity.txt")).write_text(activity)
-                        raise RuntimeError("Android document picker did not open")
-                    shell("input", "keyevent", "KEYCODE_BACK")
-                    time.sleep(.5)
+                    cancel_native_picker(shell, output, name)
                 elif action != "capture":
                     raise ValueError("Unknown native action " + action)
                 stage["keyboard_visible"] = keyboard_visible()

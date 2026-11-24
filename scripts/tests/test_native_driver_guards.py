@@ -7,7 +7,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
-from scripts.test_native_bots import input_view_visible, require_completed_cases
+from scripts.test_native_bots import (
+    cancel_native_picker, input_view_visible, require_completed_cases)
 from scripts.test_native_recents import require_completed_cases as require_recents
 from tools.qa.check_background_monitoring import require_single_monitoring_card
 from tools.qa import check_notification_revamp as notification_ui
@@ -598,6 +599,45 @@ class NativeBotsKeyboard(unittest.TestCase):
     def test_missing_actual_view_state_is_not_assumed_hidden(self):
         with self.assertRaises(RuntimeError):
             input_view_visible('mInputShown=false')
+
+
+class NativeBotsPickerCancellation(unittest.TestCase):
+    def exercise(self, keyboard, stuck=False):
+        calls = []
+        activity = 'com.google.android.documentsui/.picker.PickActivity'
+        def shell(*command):
+            nonlocal keyboard, activity
+            calls.append(command)
+            if command == ('dumpsys', 'activity', 'activities'):
+                return 'topResumedActivity=ActivityRecord{' + activity + '}'
+            if command == ('dumpsys', 'input_method'):
+                value = str(keyboard).lower()
+                return f'mWindowVisible={value} mIsInputViewShown={value}'
+            if command == ('input', 'keyevent', 'KEYCODE_BACK'):
+                if keyboard:
+                    keyboard = False
+                elif not stuck:
+                    activity = 'com.tarkilhk.wing.dev/.MainActivity'
+            return ''
+        with tempfile.TemporaryDirectory() as directory, \
+             patch('scripts.test_native_bots.time.sleep'), \
+             patch('scripts.test_native_bots.time.monotonic', side_effect=range(100)):
+            cancel_native_picker(shell, Path(directory), 'save-cancel')
+        self.assertIn('com.tarkilhk.wing.dev/', activity)
+        self.assertEqual(calls[-1], ('dumpsys', 'activity', 'activities'))
+        return calls
+
+    def test_save_keyboard_is_dismissed_before_cancelling_picker(self):
+        calls = self.exercise(keyboard=True)
+        self.assertEqual(calls.count(('input', 'keyevent', 'KEYCODE_BACK')), 2)
+
+    def test_picker_without_keyboard_needs_one_back(self):
+        calls = self.exercise(keyboard=False)
+        self.assertEqual(calls.count(('input', 'keyevent', 'KEYCODE_BACK')), 1)
+
+    def test_acknowledgement_requires_actual_return_to_wing(self):
+        with self.assertRaisesRegex(RuntimeError, 'did not return to Wing'):
+            self.exercise(keyboard=True, stuck=True)
 
 
 class NativeBotsCompletion(unittest.TestCase):
