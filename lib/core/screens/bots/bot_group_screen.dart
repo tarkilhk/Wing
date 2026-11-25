@@ -10,6 +10,8 @@ import '../../widgets/studio_loading.dart';
 import '../../widgets/bot_group_conversation.dart';
 import '../../widgets/recent_conversations/conversation_route_scope.dart';
 import 'dart:async';
+import 'dart:typed_data';
+import '../../models/chat_output.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../services/android_share_intent_service.dart';
 import '../../services/remote_file_saver.dart';
@@ -258,6 +260,12 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     _syncVisibility();
   }
 
+  Future<Uint8List> _loadMessageImage(String target) async =>
+      (await _session.downloadAttachment(target)).bytes;
+
+  Future<bool> _downloadMessageAttachment(ChatOutput output) async =>
+      saveRemoteFile(await _session.downloadAttachment(output.target));
+
   Widget _message(TranscriptTimelineEntry entry) {
     final user = entry.role == 'user';
     final event = _session.events
@@ -279,13 +287,11 @@ class _BotGroupScreenState extends State<BotGroupScreen>
               _focus.requestFocus();
             }
           : null,
-      loadAttachmentImage: (target) async =>
-          (await _session.downloadAttachment(target)).bytes,
-      onDownloadAttachment: (output) async =>
-          saveRemoteFile(await _session.downloadAttachment(output.target)),
+      loadAttachmentImage: _loadMessageImage,
+      onDownloadAttachment: _downloadMessageAttachment,
       appearance: user || member == null
           ? null
-          : _session.appearance(member.profile),
+          : _session.appearance(member.id),
       senderAvatarVisible: _inspectedAvatarMessage != entry.presentationId,
       onSenderTap: user || member == null
           ? null
@@ -357,22 +363,65 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         for (final member in _session.group.members)
           _GroupMenuEntry<void>(
             key: ValueKey(('group-member', member.id)),
-            child: Builder(
-              builder: (context) {
-                final bot = _session.appearance(member.profile);
+            child: AnimatedBuilder(
+              animation: _session,
+              builder: (context, _) {
+                final bot = _session.appearance(member.id);
                 final name = bot?.title ?? member.name;
                 return Row(
                   children: [
                     BorrowedBotAvatar(bot: bot, name: name, size: 24),
                     const SizedBox(width: WingSpacing.sm),
                     Expanded(
-                      child: Text(
-                        name,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          if (member.target.isPeer) ...[
+                            Text(
+                              bot?.instance ?? 'Other instance',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            Text(
+                              _session.peerError(member) ??
+                                  _session.peerStatus(member),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ],
                       ),
                     ),
+                    if (member.target.isPeer)
+                      _session.peerJoining(member)
+                          ? SizedBox(
+                              width: 48,
+                              height: 48,
+                              child: Center(
+                                child: SizedBox.square(
+                                  dimension: 20,
+                                  child: CircularProgressIndicator(
+                                    value:
+                                        MediaQuery.disableAnimationsOf(context)
+                                        ? .75
+                                        : null,
+                                    strokeWidth: 2,
+                                    semanticsLabel: 'Joining member',
+                                  ),
+                                ),
+                              ),
+                            )
+                          : StudioButtonPress(
+                              child: IconButton(
+                                tooltip: 'Retry ${member.name}',
+                                onPressed: _session.canRetryPeer(member)
+                                    ? () => _session.retryPeer(member)
+                                    : null,
+                                icon: const Icon(Icons.refresh),
+                              ),
+                            ),
                   ],
                 );
               },
@@ -398,7 +447,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
             }),
             total: pendingCount,
             enabled: _session.canResolve(action),
-            onRespond: (choice) =>
+            onRespond: (choice, _) =>
                 _session.resolve(action, choice: choice.wireValue),
           ),
           if (_session.approvalError(action) case final error?)
@@ -469,7 +518,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                       name: member?.name ?? 'Bot',
                       bot: member == null
                           ? null
-                          : _session.appearance(member.profile),
+                          : _session.appearance(member.id),
                     );
                   },
                 ),
@@ -646,7 +695,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
     Object messageIdentity,
   ) async {
     if (!_visible) return;
-    final bot = _session.appearance(member.profile);
+    final bot = _session.appearance(member.id);
     final name = bot?.title ?? member.name;
     final tokens = WingTokens.of(context);
     final overlay =
@@ -794,7 +843,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
         ],
       );
       if (!mounted || ModalRoute.isCurrentOf(context) != true) return;
-      final currentBot = _session.appearance(member.profile);
+      final currentBot = _session.appearance(member.id);
       switch (action) {
         case _GroupBotAction.chat:
           if (currentBot != null) await widget.onOpenBotChat?.call(currentBot);
@@ -875,7 +924,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
       ),
       appearances: [
         for (final member in _session.group.members)
-          ?_session.appearance(member.profile),
+          ?_session.appearance(member.id),
       ],
       onBack: () => Navigator.of(context).maybePop(),
       membersAnchor: _membersAnchor,
@@ -1124,7 +1173,7 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                         readPreview: _session
                             .attachmentPreview(attachment)
                             ?.readBytes,
-                        onRemove: !_session.canAddAttachments
+                        onRemove: !_session.canRemoveAttachments
                             ? null
                             : () => _session.removeAttachment(attachment),
                       ),
@@ -1140,6 +1189,18 @@ class _BotGroupScreenState extends State<BotGroupScreen>
                       ),
                     ),
                 ],
+              ),
+            if (_session.attachmentRestriction case final reason?)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text(
+                  _session.pendingText != null
+                      ? '$reason The unconfirmed message keeps its original files. Retry to confirm it.'
+                      : _session.attachments.isEmpty
+                      ? reason
+                      : '$reason Remove the files before sending.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               ),
             VoiceInputActivity(context: this.context, controller: _voiceInput),
           ],

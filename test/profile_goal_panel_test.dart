@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'dart:async';
 import 'package:wing/core/widgets/studio_loading.dart';
@@ -51,6 +52,7 @@ class _GoalFixture extends ProfileActionsFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: base.read,

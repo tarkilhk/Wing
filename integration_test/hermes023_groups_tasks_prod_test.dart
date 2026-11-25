@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/bot_group_peer.dart';
 import 'package:wing/core/models/scheduled_task.dart';
 import 'package:wing/core/screens/administration/admin_scheduled_tasks_page.dart';
 import 'package:wing/core/screens/administration/admin_scheduled_task_editor_page.dart';
@@ -91,7 +92,9 @@ class _OwnedObjects {
     });
     await checkpoint();
     creationRequested = true;
-    await bots.createGroup(roomId, roomName, members, () => true, () {});
+    final capabilities = await bots.groupCapabilities('default');
+    final selection = BotGroupSelection(capabilities, {for (final bot in members) if (capabilities.seatableProfiles.contains(bot.profile.name)) bot.id: BotGroupTarget.local(bot.profile.name)}, const {});
+    await bots.createGroup(selection.intent(roomId, roomName, members), () => true, () {});
     room = (await bots.groupCatalog()).singleWhere((row) => row.id == roomId);
     _verifyRoom(room!);
     receipt['creation'] = 'group confirmed';

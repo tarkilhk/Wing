@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'dart:io';
@@ -34,6 +35,7 @@ class _ReferenceWorkspaceHost extends Host {
     final base = super.gateway(scope);
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       connect: () async {
@@ -164,7 +166,6 @@ void main() {
       read: botFixture.read,
       command: botFixture.command,
       ownership: botFixture.ownership,
-
     );
     bots = BotsSession((_) async => [botRepository], now: () => botNow);
   });

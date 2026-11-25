@@ -10,8 +10,8 @@ Feature ID: `chat-activity`.
 - Background process completion receipts stay inside Activity’s Timeline, including batches and failures. Open Activity, then the compact Process update row to read its full update and exact command/result; no separate completion card interrupts the answer. Saved receipts have no live process controls.
 - Live tools show supplied progress against their exact call identity. Progress disappears when the call settles or recovery starts; saved histories never replay a live counter.
 - Active recurring work shows a next-wakeup countdown with compact days/hours for long delays and the exact scheduled time in its tooltip. Paused work, a pending response and work deferred by a goal do not show a countdown; an overdue deadline says Due now without implying execution began.
-- `chat-activity.respond` — Answer the current question or approval. Live approvals in normal, bot and group chats share command-review content with notification review. The exact command starts visible; completed request receipts remain under collapsed Activity. Native prompts stay bound to their turn, while server-request prompts retain their own reply identity. Reopening keeps all waiting native questions in order and a settled request cannot close a newer one.
-- `chat-activity.delegate` — Follow a child and retain its saved result. Child and nested-child traces bind images, tool file previews, skill documents and message attachments to the child chat. Preview, share and download use the same viewers and file-delivery flows as the main trace.
+- `chat-activity.respond` — Answer the current question or approval. Live approvals in normal, bot and group chats share review content with notification review. Current stock native and group approvals remain command-only. Commands show their exact text; folder and website server requests show the exact target, supplied access mode and risk. Allow for a folder or website lasts until the sandbox is switched off; saving a rule persists it. Those requests can include an optional denial reason. Missing or malformed targets cannot be allowed; completed request receipts remain under collapsed Activity. Native prompts stay bound to their turn, while server-request prompts retain their own reply identity. Reopening keeps all waiting native questions in order and a settled request cannot close a newer one.
+- `chat-activity.delegate` — Follow a child through its parent, including before its saved chat is known. Read the latest saved window and load older pages in Hermes display order. Refresh replaces the loaded depth together, retaining readable content on failure. Child and nested-child images, file previews, skill documents and attachments follow the currently returned child chat; preview, share and download use the main trace’s viewers and delivery flows.
 - `chat-activity.processes` — Discover and follow background terminal commands in the optional Background tab above the composer. Read recent output, stop a running command or dismiss an exited row during its active response. Exited rows leave the dock when that response ends and do not return on later turns; running processes remain visible until they exit. Discovery happens on entering or returning to a visible connected chat; relevant tool receipts and a five-second running-work refresh keep it current. Hidden/offline chats and settled lists do not poll. Failed reads retain the last rows and stop polling. Use the icon-only Retry inside the error notice; its progress ring remains visible until the read succeeds or fails.
 - `chat-activity.tasks` — Follow the current task batch above the composer. Tap anywhere on a task row's header, including its text, status, padding or chevron, to expand or collapse it. The expanded body remains selectable and scrollable. Once every task is completed or cancelled and its response ends, read the batch in that response's Activity Tasks tab. Later rounds and replayed updates do not restore it to the composer.
 
@@ -32,7 +32,7 @@ down; continuing downward from their top closes the drawer. The small top handle
 also toggles compact/expanded height on tap. Closing keeps the draft; reopening
 by tap starts compact. Three categories share the same single bar; at enlarged text the strip scrolls horizontally and reveals the selected category. Background processes use the same bounded drawer, preserving the draft and composer position.
 
-Subagent roster failures offer Retry inside the open drawer, with progress until the read settles. Goal and recurring-work read failures also have one contained Retry action; the healthy Refresh control returns after recovery. Live output uses one Refresh live output action, which also restarts polling after three failures. The panel and production-route suites hold retries through failure and success and check repeat-tap admission.
+Subagent roster failures offer Retry inside the open drawer, with progress until the read settles. Goal and recurring-work read failures also have one contained Retry action; the healthy Refresh control returns after recovery. Child activity uses its header Refresh and contained read-error recovery; each failed read channel stops automatic attempts after three failures. The panel and production-route suites hold retries through failure and success and check repeat-tap admission.
 
 ## Driving it with Wing harnesses
 
@@ -46,7 +46,13 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 
 - **Compact live stack:** `profile_live_execution_test.dart` checks lazy collapse, one latest heading, reverse run/tool order, stable completion identity, joined saved/native receipts, tool expansion and reading anchors, non-expandable streamed titles, and restoration of full past reasoning details. `conversation_routes_test.dart` and `profile_live_work_route_test.dart` exercise the actual normal/Bot routes, image results, history handoffs, drafts and the adjacent Background dock. Capture the latter with `--dart-define=CAPTURE_LIVE_WORK_DOCK=true` for both themes at 390 dp and 320 dp/200% text.
 
-- **Child trace resources:** `flutter test --no-pub test/profile_subagent_panel_test.dart test/remote_files_client_test.dart test/resource_preview_owner_test.dart` opens the production child sheet, holds and retries source-image reads, opens full file content, saves a nested child's message attachment and closes during a pending share. Requests must retain the child's profile/session and exact path. Image states run in both themes at ordinary and enlarged text. These are host fixtures; native export behavior is covered by the [output viewer recipes](outputs-and-viewers.md).
+- **Child transcript and resources:** `flutter test --no-pub test/subagent_timeline_session_test.dart test/profile_subagent_panel_test.dart test/chat_inline_image_test.dart test/remote_files_client_test.dart test/resource_preview_owner_test.dart` checks bounded latest-window reconstruction, server order, compaction/message identity collisions, reset/failure retention, reading bookmarks and independent live replay. The production child sheet holds opening/refresh/retry in both themes at ordinary and 320 dp/200% text. Resource checks cover no available child, a changed child with the same file path, nested reads, and departure during image/share/save/skill work. Requests retain the returned child's profile/session and exact path. These are host fixtures; native export behavior has the [output viewer recipes](outputs-and-viewers.md).
+
+  The focused Android child/parent journey keeps the parent's draft and stream while opening held child/nested reads, refreshing rewritten history and viewing the child's file:
+
+  ```sh
+  python3 scripts/test_journeys.py --case 'completed child stays in current work while the parent streams' --capture-frames --output build/feature-verification/child-transcript
+  ```
 
 - **Task handoff across chat surfaces:** the production conversation route checks four completed tasks through streaming, held history, the original saved Activity Tasks tab, draft retention and three later rounds in both themes at normal/enlarged text. The owner suites also cover child completion, cancelled tasks, hydration and unfinished work retained after a response.
 
@@ -113,7 +119,27 @@ shows Expired; a submitted response shows Answered only after the canonical owne
 resolves it. The [secure-input transport recipe](chat-inputs.md#driving-it-with-wing-harnesses)
 covers this handoff and keeps credential values out of Activity.
 
+For real-backend Android verification, use the focused `additions` suite in the
+[existing production gateway recipe](multi-surface-journeys.md#selected-hermes-features-on-an-existing-production-gateway).
+It requires isolated QA mutations and the stated provider prerequisites.
+
 ## Gotchas
+
+Child refresh rebuilds at most the number of pages already loaded; it does not
+crawl an expanding archive to retain an old message. If an automatic refresh
+would remove the current reading point, Wing keeps the displayed window and
+reports newer activity. Refresh or Latest resumes publication. Explicit Refresh
+keeps a surviving reading point; if it has left the bounded window, Wing shows
+Latest and says so. A failed or changed multi-page read keeps the whole previous
+window and its child resource binding. Unavailable saved history is distinct
+from an available empty history; independently received live work remains.
+
+When a child turn is refused, its identified partial reply and live tool display
+retire while saved history supplies the refused prompt and explanation. A failed
+history read never turns the refusal text into a successful child answer. See the
+[conversation refusal checks](conversation.md#gotchas).
+Successful latest history removes rewound saved partial rows and ends refusal
+polling; a successor turn keeps its own stream and activity during that read.
 
 Progress with no supplied total or percentage stays a received value/message;
 Wing does not estimate completion. `gateway_activity_test.dart` and
@@ -124,7 +150,7 @@ the production Activity and recovery controls.
 
 Streaming durations start at the preceding user message or Reasoning block; native reasoning boundaries use their first receipt time on the phone. Missing or reversed timestamps omit the interval. Historical results have no live controls. Completed children remain current only while their parent turn is active. Task batches with unfinished work remain current after a response; fully settled batches retire when their response ends, before history finishes loading. A request must belong to the displayed chat.
 
-Tasks are plan items, while Background contains terminal processes. An exited process remains in the dock only during the response in which its completion was observed. When that response ends, Background hides finished rows and disappears if no running work remains. Opening an idle chat does not restore old exited registry entries; saved receipts remain in Activity. Automatic refreshes stay quiet; selecting Background shows a pending cue through its read. Stop uses the exact session-owned process and requires a server acknowledgement.
+Tasks are plan items, while Background contains terminal processes and, in canonical Bot Chats, [teammate deliveries](bots.md#teammate-delivery-verification). An exited process remains in the dock only during the response in which its completion was observed. When that response ends, Background hides finished rows and disappears if no running work or teammate status remains. Opening an idle chat does not restore old exited registry entries; saved receipts remain in Activity. Automatic refreshes stay quiet; selecting Background shows a pending cue through its read. Stop uses the exact session-owned process and requires a server acknowledgement.
 
 Failed Steer, Interrupt and Stop actions show local recovery beside their
 original controls. Steering keeps the unsent guidance and remains usable with

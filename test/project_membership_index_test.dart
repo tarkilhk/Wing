@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -18,6 +19,7 @@ class MembershipFixture extends ProfilePagingFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: base.read,

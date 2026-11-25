@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -29,6 +30,8 @@ void main() {
             dashboardOAuth: null,
           ),
           WorkspaceScope(connectionId: 'local-actions', profileName: profile),
+
+          loadClientIdentity: loadTestWingClientIdentity,
         );
         gateways.add(gateway);
         addTearDown(gateway.close);

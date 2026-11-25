@@ -25,15 +25,14 @@ Completed agents leave the drawer when their parent turn ends. Their saved
 results stay under that answer's Activity, while unfinished background
 agents remain in the drawer until they finish.
 
-Open a child's details to read its own conversation when Hermes supplies its
-session identity. It uses the same message and Activity timeline as the main
+Open a child's details to read its own conversation through the parent chat. It uses the same message and Activity timeline as the main
 chat, including saved tool results, available reasoning and live tool previews.
 Expand **Task** for its goal and metadata. Eligible guidance and Send controls
 stay below the conversation, with Interrupt in the status row. Nested read-only viewers do not offer those controls.
 
 Use Refresh in the header to reread the child. Updates continue while the viewer is open and
 Wing is active. After three consecutive failures, automatic refresh stops;
-the same Refresh live output action retries and resumes polling. Closing the sheet stops its reads. The parent chat and draft stay selected.
+Refresh retries and resumes polling. Closing the sheet stops its reads. The parent chat and draft stay selected.
 
 **Steer** appears when the child accepts guidance. Accepted guidance is queued,
 so delivery can still be missed if the child finishes first. Failed or rejected
@@ -51,10 +50,19 @@ may omit full arguments and results; saved receipts can provide those details.
 Live tool completion can be inferred by Hermes when the next tool starts, so
 Wing does not show an exact duration from that boundary.
 
-If Hermes supplies no child session, the details show received activity and any
-available live-output excerpt. That excerpt is limited to the latest 16 KiB and
-may become unavailable after completion. Recent activity remains inspectable
-without live-output access. Hermes' live list contains active children only;
-Wing does not provide a complete cross-session agent tree or transcript archive.
+The viewer reads the latest saved window and can load older pages. Refresh
+rebuilds only the depth already loaded. Automatic updates keep the reading point
+when it survives; if replacing the window would remove it, Wing keeps the old
+window and reports newer activity. Use Refresh or Latest to continue. Explicit
+Refresh returns to Latest when the old reading point is outside the new window.
+
+A failed or changed multi-page read keeps the whole previous window. Unavailable
+saved history clears that window and its file actions; independently received
+live work remains. Empty saved history is a separate state. Files, images and
+skill readers follow the child returned with the committed window, including
+when Hermes moves work to a new continuation. Pending reads from the old child
+cannot deliver into the new one. Finished children can still have readable saved
+history even after leaving the live roster. This viewer does not grant controls
+or provide a complete cross-session agent tree.
 
 See [Tool activity](TOOL_ACTIVITY.md) for saved and live activity views.

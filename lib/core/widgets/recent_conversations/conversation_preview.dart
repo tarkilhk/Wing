@@ -55,7 +55,12 @@ class ConversationPreview extends StatelessWidget {
     final rows = preview?.reading.messages ?? const <Map<String, dynamic>>[];
     final messages = rows
         .map(TranscriptMessage.fromRow)
-        .where((message) => message.kind == TranscriptMessageKind.dialogue)
+        .where(
+          (message) => const {
+            TranscriptMessageKind.dialogue,
+            TranscriptMessageKind.refused,
+          }.contains(message.kind),
+        )
         .toList()
         .reversed
         .toList();

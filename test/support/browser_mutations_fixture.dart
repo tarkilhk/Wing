@@ -1,3 +1,4 @@
+import 'wing_client_identity_fixture.dart';
 import 'dart:async';
 
 import 'package:wing/core/models/hermes_profile.dart';
@@ -75,6 +76,7 @@ class BrowserMutationsFixture extends ProfileActionsFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     final gateway = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       ownedPost: (endpoint, body, canDispatch, onDispatched) async {

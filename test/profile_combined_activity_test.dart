@@ -563,13 +563,14 @@ void main() {
                 )
                 .map((item) => item.value)
                 .toList();
-            expect(items, ['screen', 'outputs', 'find', 'git', 'refresh']);
+            expect(items, ['screen', 'outputs', 'find', 'git', 'account-usage', 'refresh']);
             expect(find.byType(PopupMenuDivider), findsOneWidget);
             for (final label in [
               'View screen',
               'Outputs',
               'Git review',
               'Find in chat',
+              'Account usage',
               'Refresh workspace',
             ]) {
               final target = tester.getRect(

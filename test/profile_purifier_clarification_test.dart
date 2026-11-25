@@ -1,3 +1,5 @@
+import 'support/canonical_gateway_fixture.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -108,15 +110,22 @@ void main() {
       await tester.runAsync(() async {
         final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
         final connected = Completer<WebSocket>();
-        final subscription = server
-            .transform(WebSocketTransformer())
-            .listen(connected.complete);
+        final subscription = server.transform(WebSocketTransformer()).listen((
+          socket,
+        ) {
+          announceTestGatewayReady(socket);
+          connected.complete(socket);
+        });
         final delivered = Completer<void>();
-        final client = WsClient('http://127.0.0.1:${server.port}')
-          ..onStreamEvent = (event) {
-            host.gateways['a']!.onEvent!(event);
-            delivered.complete();
-          };
+        final client =
+            WsClient(
+                'http://127.0.0.1:${server.port}',
+                clientIdentity: testWingClientIdentity,
+              )
+              ..onStreamEvent = (event) {
+                host.gateways['a']!.onEvent!(event);
+                delivered.complete();
+              };
         try {
           await client.connect();
           final socket = await connected.future;

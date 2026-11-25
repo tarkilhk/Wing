@@ -72,6 +72,206 @@ Future<void> _captureFrame(WidgetTester tester, String name) async {
 }
 
 void main() {
+  test(
+    'cache reports preserve independent facts, optional flags and zero epoch',
+    () {
+      final supplied = <String, dynamic>{
+        'guaranteed_until': 0,
+        'estimated_until': double.infinity,
+        'refreshed_at': 1.25,
+        'confidence': 'assumed',
+        'tier': '5m',
+        'coverage': {'5m': 0, '1h': 3600, 'bad': double.nan, 'text': '3600'},
+        'learned': 'unrecognized-rule',
+      };
+      final cache = PromptCacheWindow.fromJson(supplied)!;
+      expect(cache.guaranteedUntil, DateTime.utc(1970));
+      expect(cache.estimatedUntil, isNull);
+      expect(cache.refreshedAt!.millisecondsSinceEpoch, 1250);
+      expect(cache.confidence, PromptCacheConfidence.assumed);
+      expect(cache.warmingOff, isNull);
+      expect(cache.tierPending, isNull);
+      expect(cache.learned, 'unrecognized-rule');
+      expect(cache.coverage.keys, ['5m', '1h']);
+      (supplied['coverage'] as Map)['5m'] = 700;
+      expect(cache.coverage['5m'], DateTime.utc(1970));
+      expect(() => cache.coverage.clear(), throwsUnsupportedError);
+      for (final invalid in [
+        double.nan,
+        double.negativeInfinity,
+        18446744073709552,
+        -9223372036854775808,
+        8640000000001,
+        '123',
+      ]) {
+        expect(
+          PromptCacheWindow.fromJson({
+            'guaranteed_until': invalid,
+          })!.guaranteedUntil,
+          isNull,
+        );
+      }
+      for (final confidence in PromptCacheConfidence.values) {
+        expect(
+          PromptCacheWindow.fromJson({
+            'confidence': confidence.name,
+          })!.confidence,
+          confidence,
+        );
+      }
+      expect(
+        PromptCacheWindow.fromJson({'confidence': 'new'})!.confidence,
+        PromptCacheConfidence.unknown,
+      );
+      expect(PromptCacheWindow.fromJson(null), isNull);
+      expect(PromptCacheWindow.fromJson('invalid'), isNull);
+      expect(
+        PromptCacheWindow.fromJson({
+          'warming_off': false,
+          'tier_pending': true,
+        })!.warmingOff,
+        isFalse,
+      );
+      expect(
+        PromptCacheWindow.fromJson({
+          'warming_off': false,
+          'tier_pending': true,
+        })!.tierPending,
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('cache timing remains a report beside unknown occupancy', (
+    tester,
+  ) async {
+    final cache = PromptCacheWindow.fromJson({
+      'guaranteed_until': 0,
+      'estimated_until': 86400,
+      'confidence': 'unknown',
+      'reason': 'storage_unavailable',
+      'warming_off': true,
+      'tier_pending': true,
+      'learned': 'write-on-hit',
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomLeft,
+            child: ContextRing(promptCache: cache),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('context-ring-details')));
+    await tester.pumpAndSettle();
+    expect(find.text('Context usage unknown'), findsOneWidget);
+    expect(find.text('Prompt cache'), findsOneWidget);
+    expect(find.text('Unknown'), findsOneWidget);
+    expect(find.text('Guaranteed until'), findsOneWidget);
+    expect(find.text('Retention upper bound'), findsOneWidget);
+    expect(find.text('01/01/1970 00:00:00 UTC'), findsOneWidget);
+    expect(find.text('01/02/1970 00:00:00 UTC'), findsOneWidget);
+    expect(find.text('Saved cache timing could not be read.'), findsOneWidget);
+    expect(find.text('Cache warming is off for this session.'), findsOneWidget);
+    expect(find.text('Cache hits also rewrite the prefix.'), findsOneWidget);
+    expect(find.textContaining('expired'), findsNothing);
+    expect(find.textContaining('Warm now'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'a guarantee without an upper bound never invents expiry or warming',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomLeft,
+              child: ContextRing(
+                promptCache: PromptCacheWindow.fromJson({
+                  'guaranteed_until': 0,
+                  'confidence': 'declared',
+                }),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('context-ring-details')));
+      await tester.pumpAndSettle();
+      expect(find.text('Declared'), findsOneWidget);
+      expect(find.text('Not reported'), findsOneWidget);
+      expect(find.textContaining('warming'), findsNothing);
+      expect(find.textContaining('expired'), findsNothing);
+    },
+  );
+
+  for (final brightness in Brightness.values) {
+    testWidgets(
+      'cache Retry stays visible above keyboard with long values ${brightness.name}',
+      (tester) async {
+        tester.view.physicalSize = const Size(320, 844);
+        tester.view.devicePixelRatio = 1;
+        tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+        addTearDown(tester.view.reset);
+        var loading = false;
+        var reads = 0;
+        const longTier =
+            'A supplied tier label that wraps across several lines';
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.bottomLeft,
+                child: StatefulBuilder(
+                  builder: (context, update) => ContextRing(
+                    occupancy: ContextOccupancy.fromJson(_sample),
+                    promptCache: PromptCacheWindow.fromJson({
+                      'confidence': 'proven',
+                      'tier': longTier,
+                      'coverage': {longTier: 0},
+                      'learned': 'unknown-new-rule',
+                    }),
+                    error: 'Couldn’t load the context breakdown.',
+                    loading: loading,
+                    onRefresh: () {
+                      if (++reads > 1) update(() => loading = true);
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.byKey(const ValueKey('context-ring-details')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text(longTier));
+        await tester.pump();
+        expect(find.text(longTier), findsOneWidget);
+        expect(find.text('Proven'), findsOneWidget);
+        expect(find.text('unknown-new-rule'), findsNothing);
+        final retry = find.byTooltip('Retry');
+        await tester.ensureVisible(retry);
+        await tester.pump();
+        await tester.tap(retry);
+        await tester.pump();
+        expect(
+          find.byType(CircularProgressIndicator).hitTestable(),
+          findsOneWidget,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
   setUpAll(() async {
     if (!_capture) return;
     for (final entry in {
@@ -397,7 +597,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('context-ring-details')));
     await tester.pumpAndSettle();
     expect(find.text('Couldn’t load the context breakdown.'), findsOneWidget);
-    await tester.tap(find.byTooltip('Retry context breakdown'));
+    await tester.tap(find.byTooltip('Retry'));
     expect(retries, 2); // Open and explicit Retry each forward the intent.
     expect(find.textContaining('0%'), findsNothing);
   });

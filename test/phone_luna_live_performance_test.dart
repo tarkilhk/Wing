@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/model_catalog.dart';
 import 'package:wing/core/models/canonical_session.dart';
 import 'package:uuid/uuid.dart';
@@ -173,6 +174,8 @@ void main() {
       final gateway = ProfileGateway.forConnection(
         ConnectionAccess(connection: connection, dashboardOAuth: null),
         WorkspaceScope(connectionId: connection.id, profileName: profile),
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       addTearDown(gateway.close);
       await gateway.requireProfile();

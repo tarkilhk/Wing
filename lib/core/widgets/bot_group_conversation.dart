@@ -54,12 +54,12 @@ class BotGroupConversation extends StatelessWidget {
     final reading = ConversationReadingScope.maybeOf(context)!;
     final landscape = ConversationReadingScope.compact(context);
     final hideContext = reading.active && !landscape;
-    final bots = {for (final bot in appearances) bot.scope.profileName: bot};
+    final bots = BotGroupAppearance.forGroup(group, appearances).byHandle;
     final palette = botBubblePalette({
       for (final member in group.members)
         member.handle: BotAvatar.resolveColor(
-          bots[member.profile]?.color ?? '',
-          bots[member.profile]?.title ?? member.name,
+          bots[member.handle]?.color ?? '',
+          bots[member.handle]?.title ?? member.name,
         ),
     }, Theme.of(context));
     return ConversationPage(

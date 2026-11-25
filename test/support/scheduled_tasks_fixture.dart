@@ -199,6 +199,8 @@ class ScheduledTasksFixture {
         }
       }
       final job = taskJson(id: 'new-${jobs.length}')..addAll(body ?? {});
+      // Stock persists the optional create override only for real booleans.
+      if (job['wrap_response'] == null) job.remove('wrap_response');
       final expression = path == 'cron/blueprints/instantiate'
           ? '0 9 * * *'
           : body!['schedule'] as String;

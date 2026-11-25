@@ -9,6 +9,7 @@ import '../models/answer_versions.dart';
 import '../models/hermes_profile.dart';
 import '../models/local_transcript_message.dart';
 import '../models/reading_snapshot_message.dart';
+import '../models/transcript_notice.dart';
 import '../models/transcript_reading.dart';
 import '../models/user_message_content.dart';
 import 'completion_diagnostics.dart';
@@ -73,6 +74,7 @@ final class TranscriptReading implements TranscriptReader {
   final _sealedReplySegments = <(String, int)>{};
   final _completedReplyTurns = <String>{};
   String? _replyAdmission;
+  final _promptInputsByAdmission = <String, String>{};
   final _replyReceipts = <String, Set<int>>{};
   Set<String>? _pendingReplyAdmissions;
 
@@ -112,6 +114,75 @@ final class TranscriptReading implements TranscriptReader {
 
   void observePendingReplyAdmissions(Iterable<String> ids) {
     _pendingReplyAdmissions = ids.toSet();
+  }
+
+  /// Native input identity joins a local prompt to its execution. Text and
+  /// position cannot establish that relationship (steering and queues coexist).
+  void observePromptAdmission(String input, String admission) {
+    if (!_closed && input.isNotEmpty && admission.isNotEmpty) {
+      _promptInputsByAdmission[admission] = input;
+    }
+  }
+
+  bool isSupersededReplyCompletion(
+    Map<String, dynamic> completion,
+    Object? admission,
+  ) =>
+      completion['turn_id'] is String &&
+          _replyTurn != null &&
+          completion['turn_id'] != _replyTurn ||
+      admission is String &&
+          _replyAdmission != null &&
+          admission != _replyAdmission;
+
+  /// Replace only the prompt and partial reply belonging to this completion.
+  /// Missing prompt identity retains that prompt until authoritative history;
+  /// exactly identified partial reply output still retires immediately.
+  bool refuseReply(Map<String, dynamic> completion, {Object? admission}) {
+    if (_closed || !isContentRefusedCompletion(completion)) return false;
+    final turn = completion['turn_id'];
+    if (admission is! String ||
+        admission != _replyAdmission ||
+        _replyTurn == null ||
+        turn != null && turn != _replyTurn) {
+      return false;
+    }
+    final input = _promptInputsByAdmission[admission];
+    final prompt = _messages
+        .where(
+          (row) =>
+              input != null &&
+              row['role'] == 'user' &&
+              answerMessageDisplayMetadata(row)['submission_id'] == input,
+        )
+        .firstOrNull;
+    final refused = prompt == null
+        ? null
+        : _freezeRow({
+            ...prompt,
+            'display_kind': 'content_refused',
+            'display_metadata': {
+              ...answerMessageDisplayMetadata(prompt),
+              'content_refused': {'notice': liveContentRefusedNotice},
+            },
+          });
+    if (refused != null) {
+      _messagePresentations[refused] = messagePresentationId(prompt!);
+    }
+    _messages = List.unmodifiable([
+      for (final row in _messages)
+        if (refused != null && identical(row, prompt))
+          refused
+        else if (row['role'] != 'assistant' ||
+            row['_reply_turn'] != _replyTurn ||
+            row['_reply_admission'] != admission)
+          row,
+    ]);
+    _lastInterimMessage = null;
+    _lastInterimTurn = -1;
+    retireReply();
+    updateStreaming('');
+    return refused != null;
   }
 
   /// Native completion can omit its body after streaming it. All consumers use
@@ -427,10 +498,36 @@ final class TranscriptReading implements TranscriptReader {
     _closed = true;
     _observedTools.clear();
     _displayedPromptInputs.clear();
+    _promptInputsByAdmission.clear();
     // Retire read/publication authority immediately, but retain passive facts
     // for the controller's final ordered snapshot. Later chats may be captured
     // only after earlier index writes finish; disposal cannot erase their batch.
     cancelReads();
+  }
+
+  /// Retire one passive replay authority without replacing saved reading or its
+  /// bookmark. A new physical child cannot inherit the previous child's reply
+  /// admission, sequence fragments, tool observations or unpersisted journal.
+  void retireLiveObservation() {
+    if (_closed) return;
+    _messages = List.unmodifiable(
+      _messages.where((row) => row['_reply_turn'] == null),
+    );
+    _replyTurn = null;
+    _replyAdmission = null;
+    _replySegment = 0;
+    _replyDisplayedOffset = 0;
+    _replyFragments.clear();
+    _sealedReplySegments.clear();
+    _completedReplyTurns.clear();
+    _promptInputsByAdmission.clear();
+    _replyReceipts.clear();
+    _pendingReplyAdmissions = null;
+    _lastInterimMessage = null;
+    _lastInterimTurn = -1;
+    _confirmedPresentations.clear();
+    _observedTools.clear();
+    updateStreaming('');
   }
 
   /// A replacement runtime keeps visible work but cannot retain old paging.
@@ -491,7 +588,7 @@ final class TranscriptReading implements TranscriptReader {
       text: text,
       displayText: displayText,
       displayKind: displayKind,
-      displayMetadata: displayMetadata,
+      displayMetadata: {...?displayMetadata, 'submission_id': inputId},
       attachments: attachments,
     );
   }
@@ -614,9 +711,33 @@ final class TranscriptReading implements TranscriptReader {
 
   /// Adopts a saved page through the same paging and presentation policy used
   /// by a latest read. Local feedback remains in the resolved history segment.
-  void installSavedPage(ProfileHistoryPage page) {
+  void installSavedPage(ProfileHistoryPage page) =>
+      _installSavedPage(page, replace: false);
+
+  /// Replace the complete supplied window; a matching first row cannot retain
+  /// an obsolete prefix. Local notices and admission/refusal projection still
+  /// pass through the same saved-history policy as ordinary chat reads.
+  void replaceSavedWindow(ProfileHistoryPage page) =>
+      _installSavedPage(page, replace: true);
+
+  /// Whether a replacement keeps the current reading location. Compare saved
+  /// identity or the existing presentation token, never prose or numeric order.
+  bool windowContainsReadingBookmark(Iterable<Map<String, dynamic>> rows) {
+    final bookmark = readingPosition.resume;
+    if (bookmark == null) return true;
+    final ids = rows.map((row) => row['id']).whereType<Object>().toSet();
+    if (ids.contains(bookmark.messageId)) return true;
+    return _messages.any(
+      (row) =>
+          ids.contains(row['id']) &&
+          _messagePresentations[row] == bookmark.messageId,
+    );
+  }
+
+  void _installSavedPage(ProfileHistoryPage page, {required bool replace}) {
     if (_closed) return;
-    final anchor = page.rows.isEmpty || _historySessionId != page.sessionId
+    final anchor =
+        replace || page.rows.isEmpty || _historySessionId != page.sessionId
         ? -1
         : _messages.indexWhere((row) => row['id'] == page.rows.first['id']);
     final prefix = anchor > 0
@@ -837,8 +958,20 @@ final class TranscriptReading implements TranscriptReader {
       for (final row in _messages)
         if (row['id'] != null) row['id']: row,
     };
+    final previousByInput = {
+      for (final row in _messages)
+        if (row['role'] == 'user' &&
+            answerMessageDisplayMetadata(row)['submission_id'] is String)
+          answerMessageDisplayMetadata(row)['submission_id']: row,
+    };
     for (final row in refreshed) {
-      final previous = previousById[row['id']];
+      final previous =
+          previousById[row['id']] ??
+          (row['role'] == 'user'
+              ? previousByInput[answerMessageDisplayMetadata(
+                  row,
+                )['submission_id']]
+              : null);
       final previousToken = previous == null
           ? null
           : _messagePresentations[previous];

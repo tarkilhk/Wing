@@ -7,10 +7,12 @@ import 'package:uuid/uuid.dart';
 import 'package:crypto/crypto.dart';
 
 import '../models/bots.dart';
+import '../models/bot_group_peer.dart';
 import '../models/profile_colors.dart';
 import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
 import 'bots_repository.dart';
+import 'bot_group_peer_access.dart';
 import 'group_observations.dart';
 import 'bots_preferences.dart';
 import 'bot_screen_session.dart';
@@ -22,6 +24,13 @@ part 'bot_avatar_cache.dart';
 
 typedef BotsSources =
     Future<List<BotsRepository>> Function(bool Function() canUse);
+
+/// Fresh observations plus the captured saved-source lifetime for first dispatch.
+final class BotGroupPreparation {
+  const BotGroupPreparation(this.selection, this.isCurrent);
+  final BotGroupSelection selection;
+  final bool Function() isCurrent;
+}
 
 /// Owns the cross-instance roster and mutation lifetime, independent of the
 /// currently selected chat profile. Failed refreshes retain usable observations.
@@ -280,6 +289,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       BotGroupAppearance.forGroup(group, _identities.values);
 
   bool _sameMetadata(BotRecord a, BotRecord b) =>
+      a.installationId == b.installationId &&
       a.title == b.title &&
       a.shape == b.shape &&
       a.color == b.color &&
@@ -596,12 +606,23 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
 
   Iterable<BotRecord> _rosterWithGroupActivity() sync* {
     for (final bot in _bots.values.expand((rows) => rows)) {
-      final groupActive =
-          _groupPresenceAvailable.contains(bot.scope.connectionIdentity) &&
-          (_groups[bot.scope.connectionIdentity] ?? const <BotGroup>[]).any(
+      final groupActive = _groups.values
+          .expand((rooms) => rooms)
+          .any(
             (group) =>
-                group.scope.connectionId == bot.scope.connectionId &&
-                group.activeMemberProfiles.contains(bot.profile.name),
+                _groupPresenceAvailable.contains(
+                  group.scope.connectionIdentity,
+                ) &&
+                group.members.any(
+                  (member) =>
+                      group.activeMemberIds.contains(member.id) &&
+                      matchBotGroupMember(
+                            group,
+                            member,
+                            _bots.values.expand((rows) => rows),
+                          )?.id ==
+                          bot.id,
+                ),
           );
       yield groupActive &&
               (bot.presence == BotPresence.idle ||
@@ -616,6 +637,9 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       source.retain();
     }
     final previous = _repositories ?? <BotsRepository>[];
+    final availabilityChanged =
+        previous.length != sources.length ||
+        previous.any((old) => !sources.any((source) => identical(source, old)));
     for (final old in previous) {
       if (sources.any((source) => source.scope == old.scope)) continue;
       for (final jobs in [
@@ -657,6 +681,7 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     for (final source in previous) {
       source.release();
     }
+    if (availabilityChanged) notifyListeners();
   }
 
   BotsRepository repository(String identity) {
@@ -667,6 +692,17 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     if (repository == null) throw StateError('Instance is unavailable');
     return repository;
   }
+
+  /// Current source availability is independent of retained appearance facts.
+  BotsRepository? availableRepository(WorkspaceScope scope) => _closed
+      ? null
+      : _repositories
+            ?.where(
+              (source) =>
+                  source.scope.connectionId == scope.connectionId &&
+                  source.scope.connectionIdentity == scope.connectionIdentity,
+            )
+            .firstOrNull;
 
   /// Immutable room facts before roster-only pin decoration.
   List<BotGroup> get observedGroups =>
@@ -690,6 +726,8 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       group,
       groupMessages: _groupMessages,
       appearances: this,
+      peerAccess: peerAccess(group.scope.connectionIdentity),
+      peerRenewals: _peerRenewals,
       reads: groupReads,
       preferences: preferences,
       onRead: onGroupRead,
@@ -1085,6 +1123,12 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
       _groups[identity] = List.unmodifiable(
         catalogRooms.map((room) {
           final previous = old[room.key];
+          if (previous != null && !previous.sameRoster(room)) {
+            _stateJobs.remove(room.key);
+            _previewJobs.remove(room.key);
+            _roomStates.remove(room.key);
+          }
+          source.groupObservations.bind(room);
           // Catalog establishes membership/metadata, never newer runtime/messages.
           if (previous == null) return room;
           final result = previous.withCatalogObservation(
@@ -1125,7 +1169,8 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
     int generation,
   ) async {
     bool current() =>
-        _sourceCurrent(source, generation) && groupForKey(room.key) != null;
+        _sourceCurrent(source, generation) &&
+        (groupForKey(room.key)?.sameRoster(room) ?? false);
     final stateJob = _job(
       _stateJobs,
       room.key,
@@ -1421,35 +1466,139 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
         true;
   }
 
-  Future<bool> createGroup(
+  Future<BotGroupPreparation> prepareGroupSelection(
     String identity,
-    String roomId,
-    String name,
-    List<BotRecord> members, {
+    List<BotRecord> bots, {
     required bool Function() canUse,
-    Uint8List? picture,
-    required ProfileColorChoice iconColor,
+  }) async {
+    final ownerSource = repository(identity);
+    final owner = await ownerSource.groupCapabilities('default');
+    final captured = <BotsRepository, String>{ownerSource: owner.gateway};
+    bool current() =>
+        canUse() &&
+        captured.entries.every(
+          (entry) =>
+              entry.key.isCurrent &&
+              (_repositories?.any(
+                    (source) =>
+                        source.scope == entry.key.scope && source.isCurrent,
+                  ) ??
+                  false) &&
+              (entry.key.installationId == null ||
+                  entry.key.installationId == entry.value),
+        );
+    if (!canUse() || !ownerSource.isCurrent) {
+      throw StateError('Group preparation retired');
+    }
+    final targets = <String, BotGroupTarget>{};
+    final problems = <String, String>{};
+    await Future.wait(
+      bots.map((bot) async {
+        if (bot.scope.connectionIdentity == identity) {
+          if (owner.canCreate &&
+              owner.seatableProfiles.contains(bot.profile.name) &&
+              bot.installationId == owner.gateway) {
+            targets[bot.id] = BotGroupTarget.local(bot.profile.name);
+          } else {
+            problems[bot.id] = 'This host cannot seat this bot.';
+          }
+          return;
+        }
+        if (!owner.canRegister) {
+          problems[bot.id] = 'This host cannot add bots from other instances.';
+          return;
+        }
+        try {
+          final lender = repository(bot.scope.connectionIdentity);
+          final capability = await lender.groupCapabilities(bot.profile.name);
+          captured[lender] = capability.gateway;
+          if (!canUse() ||
+              !lender.isCurrent ||
+              capability.gateway != bot.installationId) {
+            throw const BotGroupPeerFailure('peer_gateway_changed');
+          }
+          final target = capability.peerTarget;
+          if (target == null) {
+            throw BotGroupPeerFailure(capability.peerProblem!);
+          }
+          targets[bot.id] = target;
+        } catch (error) {
+          problems[bot.id] = error is BotGroupPeerFailure
+              ? error.message
+              : 'This instance is unavailable. Connect and retry.';
+        }
+      }),
+    );
+    if (!current()) throw StateError('Group preparation retired');
+    return BotGroupPreparation(
+      BotGroupSelection(owner, targets, problems),
+      current,
+    );
+  }
+
+  final _peerRenewals = BotGroupPeerRenewalTimes();
+  void peerJoined(BotGroup room, BotGroupMember member) => _peerRenewals.record(
+    room,
+    member,
+    DateTime.now().add(const Duration(hours: 20)),
+  );
+
+  BotGroupPeerAccess peerAccess(String identity) => BotGroupPeerAccess(
+    owner: repository(identity),
+    sourcesForMember: (member) async => [
+      for (final source in _repositories ?? <BotsRepository>[])
+        if (source.isCurrent &&
+            (_bots[source.scope.connectionIdentity] ?? const <BotRecord>[]).any(
+              (bot) =>
+                  bot.installationId == member.target.installationId &&
+                  bot.profile.name == member.profile,
+            ))
+          source,
+    ],
+  );
+
+  Future<BotGroup?> createGroup(
+    BotGroupCreateIntent intent,
+    String identity, {
+    required bool Function() canUse,
+    required void Function() onDispatched,
+  }) => _mutate(
+    (active, sent) async {
+      final room = await repository(identity).createGroup(intent, active, () {
+        sent();
+        onDispatched();
+      });
+      if (active()) {
+        final existing = _groups[identity] ?? const <BotGroup>[];
+        _groups[identity] = List.unmodifiable([
+          ...existing.where((row) => row.id != room.id),
+          room,
+        ]);
+        notifyListeners();
+      }
+      return room;
+    },
+    canUse: canUse,
+    groupSource: identity,
+  );
+
+  Future<bool> saveCreatedGroupIcon(
+    BotGroup room,
+    ProfileColorChoice color,
+    Uint8List? picture, {
+    required bool Function() canUse,
   }) async =>
       await _mutate(
         (active, sent) async {
-          if (!_ready.contains(identity)) {
-            throw StateError('Group driver is unavailable');
-          }
-          final source = repository(identity);
-          await source.createGroup(roomId, name, members, active, sent);
-          if (!active()) return false;
-          await source.saveGroupIcon(
-            roomId,
-            0,
-            iconColor,
-            picture,
-            active,
-            sent,
-          );
+          final source = repository(room.scope.connectionIdentity);
+          final checked = await source.peerRoomState(room);
+          if (checked.ended) throw const BotGroupPeerFailure('room_ended');
+          if (!active() || !source.isCurrent) return false;
+          await source.saveGroupIcon(room.id, 0, color, picture, active, sent);
           return true;
         },
         canUse: canUse,
-        groupSource: identity,
+        groupSource: room.scope.connectionIdentity,
       ) ==
       true;
   Future<bool> editGroup(
@@ -1542,6 +1691,16 @@ class BotsSession extends ChangeNotifier implements BotGroupAppearanceSource {
             sent,
             name: name,
           );
+          if (action == 'disband' && active()) {
+            final identity = group.scope.connectionIdentity;
+            _groups[identity] = List.unmodifiable(
+              (_groups[identity] ?? const <BotGroup>[]).where(
+                (room) => room.id != group.id,
+              ),
+            );
+            repository(identity).groupObservations.forget(group.id);
+            notifyListeners();
+          }
           return true;
         },
         canUse: canUse,

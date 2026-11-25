@@ -67,6 +67,7 @@ import '../widgets/mention_suggestions.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'chat_account_usage_screen.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import '../services/background_monitoring_service.dart';
 import 'package:flutter/services.dart';
@@ -111,6 +112,9 @@ import 'chat_outputs_screen.dart';
 import '../widgets/app_drawer.dart';
 import 'bots/bots_content.dart';
 import '../services/bots_session.dart';
+import '../models/bot_delivery.dart';
+import '../services/bot_deliveries_session.dart';
+import '../widgets/bot_deliveries_panel.dart';
 import '../services/bots_repository.dart';
 import 'app_settings_content.dart';
 import 'analytics_content.dart';
@@ -333,7 +337,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         origin: AppDestination.chats,
       );
     });
-    controller.setRouteVisibility(this, _hasChatFocus);
+    _syncRouteVisibility();
     try {
       final key = await resolve(current);
       if (!current()) return;
@@ -367,7 +371,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                   _pendingBot = null;
                   _retryChatEntry = null;
                 });
-                controller.setRouteVisibility(this, _hasChatFocus);
+                _syncRouteVisibility();
               },
             )
           : controller.current?.chat;
@@ -381,7 +385,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         _pendingBot = null;
         _retryChatEntry = null;
       });
-      controller.setRouteVisibility(this, _hasChatFocus);
+      _syncRouteVisibility();
     } catch (error) {
       if (!current()) return;
       setState(
@@ -440,6 +444,77 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     };
   }
 
+  BotDeliveriesSession? _deliveries;
+  ProfileSessionKey? _deliveriesChat;
+
+  void _releaseDeliveries() {
+    _deliveries?.removeListener(_deliveriesChanged);
+    _deliveries?.dispose();
+    _deliveries = null;
+    _deliveriesChat = null;
+  }
+
+  void _deliveriesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _bindDeliveries(ProfileChat chat, BotRecord? bot) {
+    final repository = bot == null
+        ? null
+        : _bots.availableRepository(bot.scope);
+    if (bot == null ||
+        repository == null ||
+        !bot.describesConversation(chat.key)) {
+      _releaseDeliveries();
+      return;
+    }
+    if (_deliveriesChat != chat.key ||
+        !identical(_deliveries?.repository, repository)) {
+      _releaseDeliveries();
+      _deliveriesChat = chat.key;
+      _deliveries = BotDeliveriesSession(sender: bot, repository: repository)
+        ..addListener(_deliveriesChanged);
+    }
+    _syncDeliveriesVisibility();
+  }
+
+  void _syncDeliveriesVisibility() {
+    final chat = controller.notificationChat ?? controller.current?.chat;
+    _deliveries?.setActive(
+      _hasChatFocus &&
+          chat != null &&
+          chat.key == _deliveriesChat &&
+          !chat.runtime.offline &&
+          !chat.runtime.opening &&
+          !chat.runtime.reconnecting,
+    );
+  }
+
+  void _syncRouteVisibility() {
+    controller.setRouteVisibility(this, _hasChatFocus);
+    _syncDeliveriesVisibility();
+  }
+
+  Future<void> _openTeammateChat(
+    BotDeliveriesSession session,
+    BotDelivery delivery,
+  ) {
+    final sender = session.sender;
+    final repository = session.repository;
+    return _openConversationDestination(
+      (_) => repository.existingTeammateChat(sender, delivery.target),
+      title: delivery.targetHandle,
+      label: 'Opening teammate chat',
+      owner: WorkspaceScope(
+        connectionId: sender.scope.connectionId,
+        connectionIdentity: sender.scope.connectionIdentity,
+        profileName: delivery.target,
+      ),
+      resumeStoredChat: true,
+      origin: AppDestination.chats,
+    );
+  }
+
   ProfileSupervisionSession? _supervision;
   ProfileChat? _supervisionChat;
   ProfileSupervisionSession _supervisionFor(ProfileChat chat) {
@@ -455,6 +530,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   }
 
   void _supervisionWorkspaceChanged() {
+    _syncDeliveriesVisibility();
     final current = controller.notificationChat ?? controller.current?.chat;
     if (_supervision != null &&
         (!identical(current, _supervisionChat) || !_supervision!.active)) {
@@ -869,7 +945,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           _restoreComposerFocus = MediaQuery.viewInsetsOf(context).bottom > 0;
           _composerFocus.unfocus();
         }
-        controller.setRouteVisibility(this, _hasChatFocus);
+        _syncRouteVisibility();
         if (wasObscured && !obscured) {
           // Recheck actual answer visibility once the normal transcript is
           // revealed. Captures and passive cards never acknowledge a read.
@@ -901,7 +977,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     super.didChangeDependencies();
     final isCurrent = ModalRoute.isCurrentOf(context) ?? true;
     _routeIsCurrent = isCurrent;
-    controller.setRouteVisibility(this, _hasChatFocus);
+    _syncRouteVisibility();
   }
 
   @override
@@ -936,7 +1012,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     controller.addListener(_supervisionWorkspaceChanged);
     WidgetsBinding.instance.addObserver(this);
     controller.setRouteMounted(this, true);
-    controller.setRouteVisibility(this, _hasChatFocus);
+    _syncRouteVisibility();
     // Shortcut navigation can reuse an owner still observed by the outgoing
     // route. Start its notifications after both routes finish building.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1029,7 +1105,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       // on resume so the transcript checks its visibility again.
       setState(() => _appIsActive = active);
     }
-    controller.setRouteVisibility(this, _hasChatFocus);
+    _syncRouteVisibility();
   }
 
   Future<void> _run(
@@ -1061,6 +1137,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   @override
   void dispose() {
+    _releaseDeliveries();
     _disposeRecentVisit();
     _recentsOwner?.dispose();
     _botsOwner?.dispose();
@@ -1212,6 +1289,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         _composer.text != (chat?.composer.observation.displayedText ?? '')) {
       final changedChat = _composerKey != chat?.key;
       if (changedChat) {
+        _releaseDeliveries();
         _clearConversationRendering();
         _liveWorkDock = GlobalKey();
         _conversationBot = null;
@@ -1304,6 +1382,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             final bot = candidate?.describesConversation(chat.key) == true
                 ? candidate
                 : null;
+            _bindDeliveries(chat, bot);
             return _conversationPage(context, chat, bot);
           },
         ),
@@ -1354,7 +1433,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         label: _pendingChatLoadingLabel,
         child: _pendingChatError == null
             ? const SizedBox.expand()
-            : Padding(
+            : SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1447,8 +1526,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
       mood: BotAvatarMood.idle,
     );
     final canOpenBotSettings =
-        bot != null &&
-        _bots.repository(bot.scope.connectionIdentity).server != null;
+        bot != null && _bots.availableRepository(bot.scope)?.server != null;
     final parentSessionId = controller.parentSessionId(chat);
     final landscape = ConversationReadingScope.compact(context);
     final reading = ConversationReadingScope.maybeOf(context)?.active == true;
@@ -1548,6 +1626,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 ),
               ),
             )
+          : bot != null
+          ? title
           : Tooltip(
               message: 'Rename chat',
               child: Semantics(
@@ -1674,6 +1754,19 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                 unawaited(_run(controller.refresh));
               } else if (action == 'find') {
                 unawaited(_openFind(chat));
+              } else if (action == 'account-usage') {
+                final session = controller.openAccountUsage(chat);
+                final title = chat.title;
+                unawaited(
+                  Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => ChatAccountUsageScreen(
+                        session: session,
+                        chatTitle: title,
+                      ),
+                    ),
+                  ),
+                );
               } else if (action == 'outputs') {
                 unawaited(_run(() => _openOutputs(chat)));
               } else if (action == 'git') {
@@ -1712,6 +1805,10 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
               const StudioPopupMenuItem(
                 value: 'git',
                 child: Text('Git review'),
+              ),
+              const StudioPopupMenuItem(
+                value: 'account-usage',
+                child: Text('Account usage'),
               ),
               if (parentSessionId != null)
                 const StudioPopupMenuItem(
@@ -1965,13 +2062,16 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     ChatOutput output,
   ) async {
     final owner = chat.key;
+    final capturedController = controller;
     final files = _retainTraceResources(chat);
     try {
       return await files.files.downloadAndSave(
         output.path!,
         admitPresentation: () =>
             mounted &&
-            controller.current?.chat?.key == owner &&
+            identical(controller, capturedController) &&
+            identical(capturedController.current?.chat, chat) &&
+            chat.key == owner &&
             ModalRoute.of(context)?.isCurrent == true,
       );
     } finally {
@@ -1981,18 +2081,73 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
 
   Future<void> _shareToolResource(ProfileChat chat, ChatOutput output) async {
     final owner = chat.key;
+    final capturedController = controller;
     final files = _retainTraceResources(chat);
     try {
       await files.files.downloadAndShare(
         output.path!,
         admitPresentation: () =>
             mounted &&
-            controller.current?.chat?.key == owner &&
+            identical(controller, capturedController) &&
+            identical(capturedController.current?.chat, chat) &&
+            chat.key == owner &&
             ModalRoute.of(context)?.isCurrent == true,
       );
     } finally {
       _releaseTraceResources(files);
     }
+  }
+
+  (ProfileWorkspaceController, ProfileChat, ProfileSessionKey)?
+  _resourceCallbackOwner;
+  ({
+    Future<Uint8List> Function(String) image,
+    Future<void> Function(ChatOutput) open,
+    Future<void> Function(ChatOutput) share,
+    Future<bool> Function(ChatOutput) save,
+  })?
+  _resourceCallbackBundle;
+
+  ({
+    Future<Uint8List> Function(String) image,
+    Future<void> Function(ChatOutput) open,
+    Future<void> Function(ChatOutput) share,
+    Future<bool> Function(ChatOutput) save,
+  })
+  _resourceCallbacks(ProfileChat chat) {
+    final capturedController = controller;
+    final owner = (capturedController, chat, chat.key);
+    if (_resourceCallbackOwner == owner) return _resourceCallbackBundle!;
+    void requireOwner() {
+      if (!mounted ||
+          !identical(controller, capturedController) ||
+          !identical(capturedController.current?.chat, chat) ||
+          chat.key != owner.$3) {
+        throw StateError('This conversation resource owner is closed.');
+      }
+    }
+
+    _resourceCallbackOwner = owner;
+    return _resourceCallbackBundle = (
+      image: (path) async {
+        requireOwner();
+        final bytes = await _loadAttachmentImage(chat, path);
+        requireOwner();
+        return bytes;
+      },
+      open: (output) async {
+        requireOwner();
+        await _openAnswerOutput(chat, output);
+      },
+      share: (output) async {
+        requireOwner();
+        await _shareToolResource(chat, output);
+      },
+      save: (output) async {
+        requireOwner();
+        return _downloadAnswerOutput(chat, output);
+      },
+    );
   }
 
   Future<Uint8List> _loadAttachmentImage(ProfileChat chat, String path) async {
@@ -2126,9 +2281,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
         builder: (context, snapshot) => ProfileMessage(
           message: entry.message,
           senderAppearance: snapshot.data,
-          loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
-          onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
-          onDownloadRemoteFile: (output) => _downloadAnswerOutput(chat, output),
+          loadAttachmentImage: _resourceCallbacks(chat).image,
+          onOpenRemoteFile: _resourceCallbacks(chat).open,
+          onDownloadRemoteFile: _resourceCallbacks(chat).save,
         ),
       );
     }
@@ -2170,15 +2325,15 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           : null,
       readingAloud:
           _voiceOutput.owner == controller.voiceReplyKey(chat, message),
-      loadAttachmentImage: (path) => _loadAttachmentImage(chat, path),
+      loadAttachmentImage: _resourceCallbacks(chat).image,
       attachmentImagesAvailable:
           controller.connectionStatus.access ==
               ConnectionAvailability.available &&
           controller.connectionStatus.phase !=
               ServerConnectionPhase.reconnecting,
-      onOpenRemoteFile: (output) => _openAnswerOutput(chat, output),
-      onShareRemoteFile: (output) => _shareToolResource(chat, output),
-      onDownloadRemoteFile: (output) => _downloadAnswerOutput(chat, output),
+      onOpenRemoteFile: _resourceCallbacks(chat).open,
+      onShareRemoteFile: _resourceCallbacks(chat).share,
+      onDownloadRemoteFile: _resourceCallbacks(chat).save,
     );
     if (chat.reading.isVoiceTaskReply(message)) {
       return AnchoredExpansionTile(
@@ -2585,9 +2740,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
           onBackToLatest: _readingFocus(chat) == null
               ? null
               : () => controller.backToLatest(chat),
-          loadImage: (path) => _loadAttachmentImage(chat, path),
-          onOpenResource: (output) => _openAnswerOutput(chat, output),
-          onShareResource: (output) => _shareToolResource(chat, output),
+          loadImage: _resourceCallbacks(chat).image,
+          onOpenResource: _resourceCallbacks(chat).open,
+          onShareResource: _resourceCallbacks(chat).share,
           activity: activity,
           additionalActivityTabs: liveAnswering
               ? const []
@@ -2632,7 +2787,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
             if (chat.composer.observation.error case final error?
                 when error != chat.runtime.error)
               StudioError(error),
-            if (chat.runtime.error != null)
+            if (chat.runtime.error != null &&
+                (chat.runtime.failure?.contentRefused != true ||
+                    chat.reading.notificationReadTarget?.kind == 'status'))
               chat.reading.notificationReadTarget?.kind == 'status'
                   ? _notificationAnchor(
                       chat,
@@ -2716,7 +2873,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                     'approval',
                     request.requestId,
                     GatewayApprovalPanel(
-                      key: ValueKey((chat.key, request.requestId)),
+                      key: ValueKey((chat.key, request.correlation)),
                       request: request.request,
                       position: chat.runtime.approvalPosition,
                       total: chat.runtime.approvalTotal,
@@ -2724,7 +2881,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                           !chat.runtime.approvalResponding &&
                           !chat.runtime.reconnecting,
                       error: error != null && error.$1 == key ? error.$2 : null,
-                      onRespond: (choice) {
+                      busy: chat.runtime.approvalResponding,
+                      onRespond: (choice, reason) {
                         if (_approvalError != null) {
                           setState(() => _approvalError = null);
                         }
@@ -2733,6 +2891,8 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                             chat,
                             choice.wireValue,
                             requestId: request.requestId,
+                            correlation: request.correlation,
+                            reason: reason,
                           ),
                           onFailure: (message) {
                             if (!_hasChatFocus ||
@@ -2870,20 +3030,44 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     taskCount: chat.todoRevision == null ? null : chat.currentTodos.length,
     agentCount: chat.subagentsAvailable ? chat.currentSubagents.length : null,
     processCount:
-        chat.currentProcesses.isNotEmpty || chat.processesError != null
-        ? chat.currentProcesses.length
+        chat.currentProcesses.isNotEmpty ||
+            chat.processesError != null ||
+            (_deliveries?.state.visible ?? false)
+        ? chat.currentProcesses.length +
+              (_deliveries?.state.deliveries.length ?? 0)
         : null,
-    processes: ProfileProcessPanel(session: _supervisionFor(chat)),
+    processes: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_deliveries case final deliveries?)
+          BotDeliveriesPanel(
+            session: deliveries,
+            onOpen: (delivery) =>
+                unawaited(_openTeammateChat(deliveries, delivery)),
+          ),
+        ProfileProcessPanel(session: _supervisionFor(chat)),
+      ],
+    ),
     processSummary: ListenableBuilder(
       listenable: _supervisionFor(chat),
       builder: (context, _) {
-        final summary = _supervisionFor(chat).state.processSummary;
+        final summary = [
+          _supervisionFor(chat).state.processSummary,
+          _deliveries?.state.summary ?? '',
+        ].where((text) => text.isNotEmpty).join(' · ');
         return summary.isEmpty
             ? const SizedBox.shrink()
             : ActivityDetailFacts(facts: [summary]);
       },
     ),
-    onProcessesSelected: _supervisionFor(chat).refreshProcesses,
+    onProcessesSelected: () async {
+      await Future.wait([
+        _supervisionFor(chat).refreshProcesses(),
+        // The dock owns explicit selection feedback for this combined read.
+        if (_deliveries case final deliveries?)
+          deliveries.refresh(explicit: false),
+      ]);
+    },
   );
 
   bool _showLiveWorkDock(ProfileChat chat) =>
@@ -2904,7 +3088,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget? _workDock;
   Widget _composerWorkDock(ProfileChat chat) {
     final session = _supervisionFor(chat);
-    final inputs = (chat, chat.workRevision, session, _liveWorkDock);
+    final inputs = (
+      chat,
+      chat.workRevision,
+      session,
+      _liveWorkDock,
+      _deliveries?.state,
+    );
     if (_workDockInputs == inputs) return _workDock!;
     _workDockInputs = inputs;
     return _workDock = _conversationActivity(chat).dock(key: _liveWorkDock);
@@ -2916,6 +3106,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     final inputs = (
       chat,
       chat.context,
+      chat.promptCache,
       chat.contextCompressions,
       chat.contextRefreshPending,
       chat.contextError,
@@ -2925,6 +3116,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     return _contextRing = ContextRing(
       key: ValueKey(('context-ring', chat.key)),
       occupancy: chat.context,
+      promptCache: chat.promptCache,
       compressions: chat.contextCompressions,
       loading: chat.contextRefreshPending,
       error: chat.contextError,
@@ -3373,6 +3565,13 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
   Widget _failureView(ProfileChat chat) {
     final failure = chat.runtime.failure;
     if (failure == null) return StudioError(chat.runtime.error!);
+    if (failure.contentRefused) {
+      return StudioError(
+        '${failure.title}. ${failure.recovery}',
+        severity: StudioErrorSeverity.noResult,
+        framed: false,
+      );
+    }
     return TurnFailureView(
       key: ValueKey(('failure', chat.key, failure)),
       failure: failure,
@@ -3846,7 +4045,9 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
                                   'Delivery is unconfirmed. Check conversation history before retrying.',
                                 ),
                               if (selected.text.isNotEmpty)
-                                viewportSelection(SelectableText(selected.text)),
+                                viewportSelection(
+                                  SelectableText(selected.text),
+                                ),
                               if (selected.attachments.isNotEmpty)
                                 Text(
                                   selected.attachments
@@ -4038,7 +4239,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     } else {
       _botsOwner?.setVisible(false);
     }
-    controller.setRouteVisibility(this, _hasChatFocus);
+    _syncRouteVisibility();
     if (destination == AppDestination.activity) {
       unawaited(_run(_recents.refresh));
     }
@@ -4052,7 +4253,7 @@ class ProfileWorkspaceScreenState extends State<ProfileWorkspaceScreen>
     if (_destination != AppDestination.chats) {
       _selectDestination(AppDestination.chats);
     }
-    controller.setRouteVisibility(this, _hasChatFocus);
+    _syncRouteVisibility();
   }
 
   Widget _instanceHeader() => Align(

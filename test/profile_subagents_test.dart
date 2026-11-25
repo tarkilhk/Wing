@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -15,12 +16,6 @@ import 'profile_workspace_controller_test.dart' show Host;
 
 class _SubagentHost extends Host {
   Map<String, dynamic> listResponse = {'subagents': <Map<String, dynamic>>[]};
-  Map<String, dynamic> tailResponse = {
-    'subagent_id': 'child',
-    'available': true,
-    'text': 'tail',
-    'truncated': false,
-  };
   Map<String, dynamic> steerResponse = {
     'status': 'queued',
     'subagent_id': 'child',
@@ -29,8 +24,8 @@ class _SubagentHost extends Host {
     'found': true,
     'subagent_id': 'child',
   };
+  Map<String, dynamic>? transcriptResponse;
   Completer<Map<String, dynamic>>? pendingList;
-  Completer<Map<String, dynamic>>? pendingTail;
   Completer<Map<String, dynamic>>? pendingControl;
 
   @override
@@ -38,6 +33,7 @@ class _SubagentHost extends Host {
     final base = super.gateway(scope);
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       connect: () async {
@@ -47,13 +43,19 @@ class _SubagentHost extends Host {
       close: base.close,
       get: base.read,
       rpc: (method, params) {
+        if (method == 'session.transcript' && transcriptResponse != null) {
+          calls.add((scope.profileName, method, params));
+          return Future.value({
+            'session_id': params['session_id'],
+            'subagent_id': params['subagent_id'],
+            ...transcriptResponse!,
+          });
+        }
         if (method.startsWith('subagent.')) {
           calls.add((scope.profileName, method, params));
           return switch (method) {
             'subagent.list' =>
               pendingList?.future ?? Future.value(listResponse),
-            'subagent.tail' =>
-              pendingTail?.future ?? Future.value(tailResponse),
             'subagent.steer' || 'subagent.interrupt' =>
               pendingControl?.future ??
                   Future.value(
@@ -101,6 +103,54 @@ void main() {
     controller.dispose();
     appPreferences.dispose();
   });
+
+  test(
+    'issued durable child reading survives removal from the live roster',
+    () async {
+      host.event('a', 'subagent.start', {
+        'subagent_id': 'child',
+        'goal': 'Read saved work',
+      });
+      host.transcriptResponse = {
+        'available': true,
+        'running': false,
+        'child_session_id': 'saved-child',
+        'rows': [
+          {
+            'row_kind': 'message',
+            'row_id': 1,
+            'role': 'assistant',
+            'text': 'Saved child',
+          },
+        ],
+        'next_cursor': null,
+        'reset': true,
+      };
+      final reader = controller.openSubagentTimeline(chat, 'child');
+      addTearDown(reader.dispose);
+      await reader.refresh();
+      expect(reader.messages.single['content'], 'Saved child');
+      host.event('a', 'subagent.complete', {
+        'subagent_id': 'child',
+        'status': 'completed',
+      });
+      host.event('a', 'message.complete', {'text': 'Parent finished'});
+      host.transcriptResponse!['rows'] = [
+        {
+          'row_kind': 'message',
+          'row_id': 2,
+          'role': 'assistant',
+          'text': 'Finished saved child',
+        },
+      ];
+      await reader.refresh();
+      expect(reader.messages.single['content'], 'Finished saved child');
+      expect(
+        host.calls.where((c) => c.$2 == 'session.transcript'),
+        hasLength(2),
+      );
+    },
+  );
 
   test('completed agent leaves the drawer when its parent turn ends', () async {
     final session = ProfileSupervisionSession(
@@ -561,40 +611,6 @@ void main() {
     expect(chat.subagents.map((item) => item.id), ['child']);
   });
 
-  test('tail ignores unrelated subagent progress', () async {
-    host.event('a', 'subagent.start', {'subagent_id': 'child'});
-    host.pendingTail = Completer<Map<String, dynamic>>();
-    final tail = controller.loadSubagentTail(chat, 'child');
-    host.event('a', 'subagent.progress', {
-      'subagent_id': 'other',
-      'text': 'Unrelated progress',
-    });
-    host.pendingTail!.complete({
-      'subagent_id': 'child',
-      'available': true,
-      'text': 'older tail',
-      'truncated': false,
-    });
-    expect((await tail)?.text, 'older tail');
-  });
-
-  test('completion invalidates a pending tail for that subagent', () async {
-    host.event('a', 'subagent.start', {'subagent_id': 'child'});
-    host.pendingTail = Completer<Map<String, dynamic>>();
-    final staleTail = controller.loadSubagentTail(chat, 'child');
-    host.event('a', 'subagent.complete', {
-      'subagent_id': 'child',
-      'status': 'completed',
-    });
-    host.pendingTail!.complete({
-      'subagent_id': 'child',
-      'available': true,
-      'text': 'pre-completion tail',
-      'truncated': false,
-    });
-    expect(await staleTail, isNull);
-  });
-
   test(
     'completion before interrupt acknowledgement preserves acceptance',
     () async {
@@ -687,22 +703,6 @@ void main() {
       expect(chat.subagents.single.recentActivity, before);
     },
   );
-
-  test('tail read enforces the text resource budget', () async {
-    host.event('a', 'subagent.start', {
-      'subagent_id': 'child',
-      'goal': 'Owned child',
-    });
-    host.tailResponse = {
-      'subagent_id': 'child',
-      'available': true,
-      'text': List.filled(GatewaySubagentTail.maxTextLength + 8, 'x').join(),
-      'truncated': false,
-    };
-    final clipped = await controller.loadSubagentTail(chat, 'child');
-    expect(clipped!.text, hasLength(GatewaySubagentTail.maxTextLength));
-    expect(clipped.truncated, isTrue);
-  });
 
   test('steer trims the instruction and sends exact scoped identity', () async {
     host.event('a', 'subagent.start', {'subagent_id': 'child'});

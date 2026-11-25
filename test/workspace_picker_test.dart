@@ -32,7 +32,8 @@ import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/server_connection_label.dart';
 import 'package:wing/main.dart';
 
-import 'home_config_restore_test.dart' show createHomeFixture, homeEntryFactory;
+import 'home_config_restore_test.dart'
+    show createHomeFixture, homeEntryFactory, profileController;
 import 'support/profile_browser_fixture.dart';
 import 'support/administration_fixture.dart';
 
@@ -1092,19 +1093,10 @@ void main() {
       final b = await manager.saveConnection('Travel', 'localhost', 2, '');
       final owners = <String, ProfileWorkspaceController>{};
       ProfileWorkspaceController owner(SavedConnection connection) =>
-          owners.putIfAbsent(connection.id, () {
-            final value = ProfileWorkspaceController(
-              access: ConnectionAccess(
-                connection: connection,
-                dashboardOAuth: null,
-              ),
-              connectionIdentity: connection.id,
-              preferences: manager.prefs,
-              appPreferences: appPreferences,
-              gatewayFactory: ProfileBrowserFixture().gateway,
-            );
-            return value;
-          });
+          owners.putIfAbsent(
+            connection.id,
+            () => profileController(connection, manager.prefs, appPreferences),
+          );
       await manager.prefs.setString('last_connection_id', a.id);
       await tester.pumpWidget(
         MaterialApp(

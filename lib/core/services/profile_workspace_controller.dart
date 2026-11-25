@@ -1,4 +1,6 @@
 import '../models/email_draft.dart';
+import '../models/chat_account_usage.dart';
+import 'chat_account_usage_session.dart';
 import '../models/model_catalog_details.dart';
 import '../models/canonical_session.dart';
 import 'package:uuid/uuid.dart';
@@ -105,6 +107,7 @@ part 'profile_workspace_deleted_drafts.dart';
 
 class ProfileChat {
   ContextOccupancy? _context;
+  PromptCacheWindow? _promptCache;
   int _contextGeneration = 0;
   int _contextUsageRevision = 0;
   int? _contextCompressions;
@@ -195,6 +198,7 @@ class ProfileChat {
 
   // Canonical facts are written only by this containing workspace library.
   ContextOccupancy? get context => _context;
+  PromptCacheWindow? get promptCache => _promptCache;
   int? get contextCompressions => _contextCompressions;
   bool get contextLoading => _contextLoading;
   bool get contextRefreshPending => _contextLoading && _contextExplicitRefresh;
@@ -3480,6 +3484,41 @@ class ProfileWorkspaceController extends ChangeNotifier {
     );
   }
 
+  /// Captures the effective route, independently of a deferred Next turn choice.
+  ChatAccountUsageSession openAccountUsage(ProfileChat chat) {
+    final resource = _owned(chat);
+    final key = chat.key;
+    final runtime = chat.runtime.runtimeId;
+    final model = chat.model, provider = chat.provider;
+    final authority = resource.gateway.canonical.session(runtime);
+    bool current() {
+      final now = resource.gateway.canonical.session(runtime);
+      return !_closed &&
+          identical(_current, resource) &&
+          identical(resource.chat, chat) &&
+          identical(_resources[key.workspace], resource) &&
+          identical(resource._chats[key.sessionId], chat) &&
+          !resource.blocksSession(key.sessionId) &&
+          chat.key == key &&
+          chat.runtime.runtimeId == runtime &&
+          chat.model == model &&
+          chat.provider == provider &&
+          !resource.gateway.canonical.needsSnapshot(runtime) &&
+          now?.replayEpoch == authority?.replayEpoch &&
+          now?.generation == authority?.generation &&
+          now?.authorityEpoch == authority?.authorityEpoch;
+    }
+
+    return ChatAccountUsageSession(this, current, () async {
+      if (!current()) throw StateError('Account report visit retired');
+      return ChatAccountUsage.fromJson(
+        await resource.gateway.call('session.account_usage', {
+          'session_id': runtime,
+        }),
+      );
+    });
+  }
+
   Future<void> refreshContext(
     ProfileChat chat, {
     bool userInitiated = false,
@@ -3493,15 +3532,16 @@ class ProfileWorkspaceController extends ChangeNotifier {
     final usageRevision = chat._contextUsageRevision;
     chat._contextExplicitRefresh = userInitiated || chat.contextRefreshPending;
     chat._contextLoading = true;
-    chat._contextError = null;
     _changed();
     ContextOccupancy? value;
+    PromptCacheWindow? cache;
     String? error;
     try {
       final observations = await Future.wait([
         gateway.call('session.context_breakdown', {'session_id': runtime}),
         gateway.call('session.stats', {'session_id': runtime}),
       ]);
+      cache = PromptCacheWindow.fromJson(observations[0]['prompt_cache']);
       value = ContextOccupancy.fromJson(
         _contextUsage({
           ...observations[0],
@@ -3525,6 +3565,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._context = chat._contextUsageRevision == usageRevision
           ? value
           : chat._context?.withCategories(value?.categories ?? const []);
+      chat._promptCache = cache;
     }
     chat._contextLoading = false;
     chat._contextError = error;
@@ -3617,50 +3658,39 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
   }
 
-  Future<GatewaySubagentTail?> loadSubagentTail(
-    ProfileChat chat,
-    String id,
-  ) async {
-    final resource = _ownedSubagent(chat, id);
-    final runtime = chat.runtime.runtimeId;
-    final before = chat._subagents.firstWhere((item) => item.id == id);
-    final response = await resource.gateway.call('subagent.tail', {
-      'session_id': runtime,
-      'subagent_id': id,
-    });
-    if (!_subagentTailIsCurrent(resource, chat, runtime, before)) {
-      return null;
-    }
-    final tail = GatewaySubagentTail.fromJson(response);
-    return tail?.subagentId == id ? tail : null;
-  }
-
   SubagentTimelineSession openSubagentTimeline(ProfileChat chat, String id) {
     final resource = _ownedSubagent(chat, id);
     final child = chat.subagents
         .firstWhere((item) => item.id == id)
         .childSessionId;
-    if (child == null) {
-      throw StateError('Hermes did not provide a child session.');
-    }
     final runtime = chat.runtime.runtimeId;
-    bool current() => _subagentTargetIsCurrent(resource, chat, runtime, id);
+    final key = chat.key;
+    bool current() =>
+        !_closed &&
+        identical(_current, resource) &&
+        identical(resource.chat, chat) &&
+        identical(_resources[key.workspace], resource) &&
+        identical(resource._chats[key.sessionId], chat) &&
+        chat.runtime.runtimeId == runtime;
+    final protocol = resource.gateway.canonical;
+    final authority = protocol.session(runtime);
+    bool admitted() =>
+        current() &&
+        chat.key == key &&
+        !resource.blocksSession(key.sessionId) &&
+        !protocol.needsSnapshot(runtime) &&
+        protocol.session(runtime)?.replayEpoch == authority?.replayEpoch &&
+        protocol.session(runtime)?.authorityEpoch == authority?.authorityEpoch;
     return SubagentTimelineSession(
       onOperationalError: reportOperationalError,
-      scope: chat.key.workspace,
-      sessionId: child,
-      isCurrent: current,
+      scope: key.workspace,
+      parentSessionId: runtime,
+      subagentId: id,
+      initialChildSessionId: child,
+      isCurrent: admitted,
       read: (method, params) async {
-        if (!current()) throw StateError('Subagent inspection retired');
+        if (!admitted()) throw StateError('Subagent inspection retired');
         return resource.gateway.call(method, params);
-      },
-      history: (session, offset) async {
-        if (!current()) throw StateError('Subagent inspection retired');
-        return resource.gateway.history(
-          session,
-          offset: offset,
-          inlineImages: false,
-        );
       },
     );
   }
@@ -3745,25 +3775,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
       identical(resource._chats[chat._key.sessionId], chat) &&
       chat.runtime.runtimeId == runtime &&
       chat._subagents.any((item) => item.id == id);
-
-  bool _subagentTailIsCurrent(
-    ProfileWorkspaceData resource,
-    ProfileChat chat,
-    String runtime,
-    GatewaySubagentActivity before,
-  ) {
-    if (_closed ||
-        !identical(_resources[chat._key.workspace], resource) ||
-        !identical(resource._chats[chat._key.sessionId], chat) ||
-        chat.runtime.runtimeId != runtime) {
-      return false;
-    }
-    final currentActivity = chat._subagents
-        .where((item) => item.id == before.id)
-        .firstOrNull;
-    return currentActivity != null &&
-        (before.isTerminal || !currentActivity.isTerminal);
-  }
 
   Timer? _processWatchTimer;
   (ProfileChat, String)? _processWatchTarget;
@@ -4300,6 +4311,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
   void _invalidateContextDetails(ProfileChat chat) {
     chat._contextGeneration++;
     chat._context = chat._context?.withoutCategories();
+    chat._promptCache = null;
     chat._contextLoading = false;
     chat._contextError = null;
   }
@@ -7036,8 +7048,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     return acknowledged;
   }
 
-  void _hydrateIntelligence(ProfileChat chat, Map<String, dynamic> response) {
+  bool _hydrateIntelligence(ProfileChat chat, Map<String, dynamic> response) {
     final info = response['info'];
+    var routeChanged = false;
     if (info is Map) {
       if (const [
         'model',
@@ -7050,8 +7063,11 @@ class ProfileWorkspaceController extends ChangeNotifier {
           info['stored_session_id'] == chat._key.sessionId) {
         _hydrateTitle(chat, info['title']);
       }
-      chat._model = info['model']?.toString() ?? chat._model;
-      chat._provider = info['provider']?.toString() ?? chat._provider;
+      routeChanged = _updateEffectiveRoute(
+        chat,
+        model: info['model']?.toString(),
+        provider: info['provider']?.toString(),
+      );
       chat._reasoningEffort =
           info['reasoning_effort']?.toString() ?? chat._reasoningEffort;
       if (info['yolo'] is bool) chat._yolo = info['yolo'] as bool;
@@ -7064,6 +7080,24 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat._pendingIntelligence = null;
       }
     }
+    return routeChanged;
+  }
+
+  bool _updateEffectiveRoute(
+    ProfileChat chat, {
+    String? model,
+    String? provider,
+  }) {
+    final nextModel = model ?? chat._model;
+    final nextProvider = provider ?? chat._provider;
+    if (nextModel == chat._model && nextProvider == chat._provider) {
+      return false;
+    }
+    chat._model = nextModel;
+    chat._provider = nextProvider;
+    chat._context = null;
+    _invalidateContextDetails(chat);
+    return true;
   }
 
   void _hydrateTitle(ProfileChat chat, Object? title) {
@@ -7312,9 +7346,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat._pendingIntelligence = selection;
       } else {
         chat._pendingIntelligence = null;
-        chat._model = selection.choice.model;
-        chat._provider = selection.choice.provider;
+        _updateEffectiveRoute(
+          chat,
+          model: selection.choice.model,
+          provider: selection.choice.provider,
+        );
         chat._reasoningEffort = selection.reasoningEffort;
+        // Publish route retirement before the separately awaited Fast write.
+        _changed();
       }
       chat._intelligenceRevision++;
       modelChangeAccepted = true;
@@ -7381,11 +7420,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
         confirmModelChange: confirmModelChange,
       );
       if (!applied) return false;
-      if (chat.model != previousModel || chat.provider != previousProvider) {
-        chat._context = null;
-        _invalidateContextDetails(chat);
-        unawaited(refreshContext(chat));
-      }
       return true;
     } on JsonRpcError catch (error) {
       final refusal = SettingsWriteRejected.fromFailure(error);
@@ -7394,6 +7428,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     } finally {
       _observeCanonicalPending(chat);
       chat._changingIntelligence = false;
+      if (chat.model != previousModel || chat.provider != previousProvider) {
+        unawaited(refreshContext(chat));
+      }
       _changed();
     }
   }
@@ -8486,6 +8523,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     if (state == null) return;
     for (final receipt in state.pending) {
       _observeVoiceAdmission(chat, receipt);
+      chat.reading.observePromptAdmission(receipt.inputId, receipt.id);
     }
     chat.reading.observePendingReplyAdmissions(
       state.pending.where((row) => !row.queued).map((row) => row.id),
@@ -8528,6 +8566,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
   final _canonicalRecoveries = <ProfileChat>{};
   Future<void> _recoverCanonicalSnapshot(ProfileChat chat) async {
     if (!_canonicalRecoveries.add(chat)) return;
+    // Borrowed reads must observe lost authority before its replacement awaits I/O.
+    _changed(saveReading: false);
     try {
       final resource = _owned(chat);
       final read = _captureResume(resource, chat);
@@ -8938,6 +8978,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     String choice, {
     required String requestId,
     required String command,
+    Object? correlation,
   }) async {
     final runtime = chat.runtime.runtimeId;
     final resource = _commandOwner(chat);
@@ -8959,12 +9000,23 @@ class ProfileWorkspaceController extends ChangeNotifier {
           chat.runtime.reconnecting) {
         throw StateError('Reconnect to review this approval.');
       }
+      if ((chat.runtime.approval?.request.isSandbox == true &&
+              correlation == null) ||
+          (correlation != null &&
+              !identical(chat.runtime.approval?.correlation, correlation))) {
+        throw StateError('Request changed. Review the current request.');
+      }
       if (choice != 'deny' &&
           chat.runtime.approval != null &&
           chat.runtime.approval!.request.command.trim() != command) {
         throw StateError('Command changed. Review the current request.');
       }
-      await approve(chat, choice, requestId: requestId);
+      await approve(
+        chat,
+        choice,
+        requestId: requestId,
+        correlation: correlation,
+      );
     } catch (_) {
       if (!_closed && chat.runtime.approval?.requestId == requestId) {
         chat._runtime.reportDecisionError(
@@ -8981,9 +9033,15 @@ class ProfileWorkspaceController extends ChangeNotifier {
     ProfileChat chat,
     String choice, {
     required String requestId,
+    Object? correlation,
+    String? reason,
   }) async {
     final gateway = _commandOwner(chat).gateway;
     final request = chat.runtime.approval;
+    if (correlation != null && !identical(request?.correlation, correlation)) {
+      throw StateError('Request changed. Review the current request.');
+    }
+    final answer = request?.request.answer(choice, reason: reason);
     final capture = chat._runtime.beginApprovalAnswer(requestId, choice);
     _changed();
     var accepted = false;
@@ -8997,7 +9055,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
       final response = request.serverRequestId != null
           ? await gateway.call('request.answer', {
               'id': request.serverRequestId,
-              'result': {'choice': choice},
+              'result': answer,
             })
           : await gateway.call('approval.respond', {
               'session_id': capture.runtimeId,
@@ -9344,7 +9402,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
     }
     // Only facts a resume snapshot can replace invalidate its read. Independent
     // usage/control/review observations must not hold execution in recovery.
-    if (event.data['turn_id'] is String) {
+    if (event.data['turn_id'] is String &&
+        !((event.type == 'message.complete' || event.type == 'turn.end') &&
+            isContentRefusedCompletion(event.data))) {
       chat.reading.observeReplyAdmission(
         event.envelope['admission_id'],
         turn: event.data['turn_id'],
@@ -9379,13 +9439,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
             'The next-turn model choice could not be applied: ${event.data['reason'] ?? 'choose another model'}.',
           );
         }
-        _hydrateIntelligence(chat, {
+        final routeChanged = _hydrateIntelligence(chat, {
           'info': {
             ...event.data,
             if (event.data.containsKey('effort'))
               'reasoning_effort': event.data['effort'],
           },
         });
+        if (routeChanged) unawaited(refreshContext(chat));
         unawaited(_observeModelControls(chat));
       case 'session.title':
         if (event.data['session_id'] == chat._key.sessionId) {
@@ -9411,8 +9472,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         if (event.data.containsKey('open_requests')) {
           chat._runtime.reconcileOpenRequests(event.data['open_requests']);
-          chat._runtime.observeExecutionSnapshot(event.data);
         }
+        // Canonical execution updates do not carry prompt inventory or a
+        // transcript turn ID. Fence older completion reads when work resumes.
+        if (event.data['running'] == true && !chat.runtime.executionActive) {
+          chat._runtime.beginTurn(submitting: false);
+          chat.reading.cancelReads();
+        }
+        chat._runtime.observeExecutionSnapshot(event.data);
         if (event.data['usage'] is Map) {
           _updateContext(chat, event.data['usage'] as Map);
         }
@@ -9603,7 +9670,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
         }
         if (chat.runtime.blocksTurnAdmission) {
           unawaited(
-            _settle(resource, chat, event.data).catchError((Object e) {
+            _settle(
+              resource,
+              chat,
+              event.data,
+              admission: event.envelope['admission_id'],
+            ).catchError((Object e) {
               chat._runtime.reportError(e.toString());
               _changed();
             }),
@@ -9614,6 +9686,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
         chat.reading.retireReply();
         chat._runtime.failTurn(
           event.data['message']?.toString() ?? 'Turn failed',
+          executionGeneration: resource.gateway.canonical
+              .session(chat.runtime.runtimeId)
+              ?.generation,
         );
         _notify(
           chat,
@@ -9647,13 +9722,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> _settle(
     ProfileWorkspaceData resource,
     ProfileChat chat,
-    Map<String, dynamic> completion,
-  ) async {
+    Map<String, dynamic> completion, {
+    Object? admission,
+  }) async {
     _pendingCompletions++;
     final privateWorker = chat.source == 'bot_room';
     if (privateWorker) _pendingPrivateCompletions++;
     try {
-      await _settleTurn(resource, chat, completion);
+      await _settleTurn(resource, chat, completion, admission: admission);
     } finally {
       _pendingCompletions--;
       if (privateWorker) _pendingPrivateCompletions--;
@@ -9664,8 +9740,14 @@ class ProfileWorkspaceController extends ChangeNotifier {
   Future<void> _settleTurn(
     ProfileWorkspaceData resource,
     ProfileChat chat,
-    Map<String, dynamic> completion,
-  ) async {
+    Map<String, dynamic> completion, {
+    Object? admission,
+  }) async {
+    final refused = isContentRefusedCompletion(completion);
+    if (refused &&
+        chat.reading.isSupersededReplyCompletion(completion, admission)) {
+      return;
+    }
     final handoffStarted = CompletionDiagnostics.enabled
         ? CompletionDiagnostics.start()
         : 0;
@@ -9680,6 +9762,9 @@ class ProfileWorkspaceController extends ChangeNotifier {
       cancelled: cancelled,
       error: failure,
       failure: turnFailure,
+      executionGeneration: resource.gateway.canonical
+          .session(chat.runtime.runtimeId)
+          ?.generation,
     );
     if ((failed || cancelled) && chat.composer.observation.queue.isNotEmpty) {
       chat.composer.recordRuntimeFailure();
@@ -9712,7 +9797,10 @@ class ProfileWorkspaceController extends ChangeNotifier {
             '${chat.runtime.runtimeId}:${DateTime.now().microsecondsSinceEpoch}',
       ),
     );
-    if (finalText.isNotEmpty) {
+    if (refused) {
+      chat.reading.refuseReply(completion, admission: admission);
+      chat._runtime.finishActivity();
+    } else if (finalText.isNotEmpty) {
       chat.reading.appendAssistant(
         finalText,
         turnGeneration: chat._runtime.turnRevision,
@@ -9803,10 +9891,12 @@ class ProfileWorkspaceController extends ChangeNotifier {
       if (!isCurrentTurn()) return;
     } catch (_) {
       if (!isCurrentTurn()) return;
-      chat._runtime.reportError(
-        failure ??
-            'Turn finished. History refresh failed; reconnect to reload.',
-      );
+      if (!refused) {
+        chat._runtime.reportError(
+          failure ??
+              'Turn finished. History refresh failed; reconnect to reload.',
+        );
+      }
     }
     if ((failed || cancelled) && chat.composer.observation.queue.isNotEmpty) {
       await chat.composer.saveWork();
@@ -9840,7 +9930,13 @@ class ProfileWorkspaceController extends ChangeNotifier {
 
   void _notifyRecoveredResult(ProfileChat chat) {
     if (chat.runtime.execution == ChatExecution.failed) {
-      _notify(chat, ChatNotificationContent.failed);
+      final failure = chat.runtime.failure;
+      _notify(
+        chat,
+        failure == null
+            ? ChatNotificationContent.failed
+            : ChatNotificationContent.failure(failure),
+      );
       return;
     }
     if (chat.runtime.execution == ChatExecution.cancelled) {
@@ -10911,10 +11007,8 @@ class ProfileWorkspaceController extends ChangeNotifier {
       chat._connectionOperationAction = null;
       chat._intelligenceRevision++;
       chat._context = null;
-      chat._contextGeneration++;
+      _invalidateContextDetails(chat);
       chat._contextCompressions = null;
-      chat._contextLoading = false;
-      chat._contextError = null;
       chat._runtime.finishActivity();
       chat._taskState = GatewayTodoState();
       chat._subagents = [];
@@ -10945,6 +11039,7 @@ class ProfileWorkspaceController extends ChangeNotifier {
     // Publish notifications only after this complete snapshot has been installed.
     _observeCanonicalPending(chat, notify: false);
     unawaited(_reconcileCanonicalSubmissions(chat));
+    _hydrateIntelligence(chat, result);
     final usage = (result['info'] as Map?)?['usage'];
     if (usage is Map) _updateContext(chat, usage);
     chat._notificationInputsQuiet = true;
@@ -10952,7 +11047,6 @@ class ProfileWorkspaceController extends ChangeNotifier {
         _notificationInputsFor?.call(chat.key).isNotEmpty == true) {
       _publishNotificationInputs(chat, alert: false, confirmedSnapshot: true);
     }
-    _hydrateIntelligence(chat, result);
     chat._fastMode = null;
     unawaited(_observeModelControls(chat));
     _applyTodoSnapshot(chat, result['todo_state']);

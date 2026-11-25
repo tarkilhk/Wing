@@ -93,6 +93,92 @@ class NativeExecution(unittest.TestCase):
             self.runner.run('complete', self.command(events()), expected=expected)
             self.assertTrue(self.runner.steps[-1]['passed'])
 
+    def test_scheduled_task_frames_use_dev_before_retirement_and_preserve_verdict(self):
+        target = 'scheduled_tasks_native_test.dart'
+        expected = next(iter(nightly.DIRECT_SUITES[target]))
+        real_popen = subprocess.Popen
+        for failed, export_error, has_frame in (
+                (False, False, True), (True, False, True),
+                (False, True, True), (True, True, True), (False, False, False)):
+            with self.subTest(failed=failed, export_error=export_error, has_frame=has_frame):
+                trace = []
+                output = self.output / f'{failed}-{export_error}-{has_frame}'
+                log = events(failed=failed).replace('owning outcome', expected)
+                if has_frame:
+                    log += '\n' + json.dumps({'type': 'print',
+                        'message': 'Journey frame: /data/user/0/dev/screen.png'})
+
+                @contextlib.contextmanager
+                def emulator():
+                    trace.append('boot')
+                    try:
+                        yield 'emulator-5562'
+                    finally:
+                        trace.append('retire')
+
+                def run_flutter(command, **kwargs):
+                    trace.append('test')
+                    self.assertIn('--dart-define=CAPTURE_JOURNEYS=true', command)
+                    self.assertIn('integration_test/' + target, command)
+                    return real_popen(self.command(log), **kwargs)
+
+                def export(command, **kwargs):
+                    trace.append('export')
+                    self.assertEqual(command, ['/owned/sdk/adb', '-s', 'emulator-5562',
+                        'exec-out', 'run-as', nightly.DEV, 'cat', '/data/user/0/dev/screen.png'])
+                    self.assertEqual(kwargs['timeout'], 25)
+                    self.assertTrue(kwargs['check'])
+                    if export_error:
+                        raise subprocess.CalledProcessError(1, command)
+                    kwargs['stdout'].write(b'frame bytes')
+
+                with patch.object(sys, 'argv', ['nightly', 'scheduled-tasks', '--output', str(output)]), \
+                     patch.dict(os.environ, {'GITHUB_ACTIONS': 'false'}), \
+                     patch.object(nightly.android, 'owned_emulator', side_effect=emulator), \
+                     patch.object(nightly.android, 'require_emulator'), \
+                     patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+                     patch.object(nightly, 'fingerprint', return_value='stable'), \
+                     patch.object(nightly.Runner, 'install'), \
+                     patch.object(nightly.Runner, 'capture_failure'), \
+                     patch.object(nightly.subprocess, 'Popen', side_effect=run_flutter), \
+                     patch.object(nightly.subprocess, 'run', side_effect=export), \
+                     contextlib.redirect_stdout(io.StringIO()), \
+                     contextlib.redirect_stderr(io.StringIO()):
+                    code = nightly.main()
+                passed = not failed and not export_error and has_frame
+                self.assertEqual(code, 0 if passed else 1)
+                self.assertEqual(trace, ['boot', 'test'] + (['export'] if has_frame else []) + ['retire'])
+                receipt = json.loads((output / 'scheduled-tasks/receipt.json').read_text())
+                step = receipt['steps'][-1]
+                self.assertEqual(receipt['passed'], passed)
+                self.assertEqual(step['passed'], passed)
+                self.assertEqual(step['failed'], [expected] if failed else [])
+                if failed:
+                    self.assertIn('scheduled_tasks_native_test failed;', receipt['error'])
+                if export_error or not has_frame:
+                    self.assertTrue(step['capture_errors'])
+                    self.assertEqual(step['frames'], [])
+                else:
+                    self.assertEqual(len(step['frames']), 1)
+                    self.assertEqual(Path(step['frames'][0]).read_bytes(), b'frame bytes')
+
+    def test_frame_export_error_cannot_replace_flutter_timeout(self):
+        self.runner.device = 'emulator-5562'
+
+        def timeout(name, command, **kwargs):
+            self.runner.steps.append({'name': name, 'passed': False})
+            (self.output / (name + '.log')).write_text('Journey frame: /tmp/failure.png\n')
+            raise TimeoutError('original execution deadline')
+
+        with patch.object(self.runner, 'run', side_effect=timeout), \
+             patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
+             patch.object(nightly.subprocess, 'run', side_effect=OSError('export unavailable')):
+            with self.assertRaisesRegex(TimeoutError, 'original execution deadline'):
+                self.runner.flutter('scheduled_tasks_native_test.dart',
+                    nightly.DIRECT_SUITES['scheduled_tasks_native_test.dart'], capture_package=nightly.DEV)
+        self.assertFalse(self.runner.steps[-1]['passed'])
+        self.assertEqual(self.runner.steps[-1]['capture_errors'], ['export unavailable'])
+
     def test_skipped_failed_missing_empty_and_nonzero_cannot_pass(self):
         cases = [(events(skipped=True), 0), (events(failed=True), 0),
                  (events(omitted=True), 0), ('{"type":"done","success":true}', 0),
@@ -354,6 +440,7 @@ class Catalog(unittest.TestCase):
             runner.device = 'emulator-5562'
             for family in nightly.FAMILIES:
                 def run_suite(*args, **kwargs):
+                    runner.steps.append({'name': args[0], 'passed': True})
                     if family != 'administration' or 'checkpoint' not in kwargs:
                         return
                     for theme in ('dark', 'light'):
@@ -376,6 +463,7 @@ class Catalog(unittest.TestCase):
                 with self.subTest(family=family), \
                      patch.object(nightly.android, 'adb_path', return_value='/owned/sdk/adb'), \
                      patch.object(runner, 'run', side_effect=run_suite) as run, \
+                     patch.object(nightly, 'export_journey_frames'), \
                      patch.object(runner, 'adb', return_value=''), \
                      patch.object(runner, 'shell', side_effect=lambda *args:
                                   '123' if args[0] == 'pidof' else 'webview_devtools_remote_123'), \

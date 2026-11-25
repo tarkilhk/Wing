@@ -1,3 +1,5 @@
+import 'support/canonical_gateway_fixture.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -9,12 +11,17 @@ void main() {
   test('delivers a server-initiated clarify request to the app', () async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final connected = Completer<WebSocket>();
-    final subscription = server
-        .transform(WebSocketTransformer())
-        .listen(connected.complete);
+    final subscription = server.transform(WebSocketTransformer()).listen((
+      socket,
+    ) {
+      announceTestGatewayReady(socket);
+      connected.complete(socket);
+    });
     final events = <StreamEvent>[];
-    final client = WsClient('http://127.0.0.1:${server.port}')
-      ..onStreamEvent = events.add;
+    final client = WsClient(
+      'http://127.0.0.1:${server.port}',
+      clientIdentity: testWingClientIdentity,
+    )..onStreamEvent = events.add;
     try {
       await client.connect();
       final socket = await connected.future;

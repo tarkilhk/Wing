@@ -1,3 +1,5 @@
+import 'support/canonical_gateway_fixture.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -1253,8 +1255,10 @@ void main() {
             .listen((socket) {
               socket.add(jsonEncode(readyFrame));
             });
-        final client = WsClient('http://127.0.0.1:${server.port}')
-          ..onStreamEvent = applicationEvents.add;
+        final client = WsClient(
+          'http://127.0.0.1:${server.port}',
+          clientIdentity: testWingClientIdentity,
+        )..onStreamEvent = applicationEvents.add;
 
         try {
           await client.connect();
@@ -1295,10 +1299,13 @@ void main() {
           .listen((socket) {
             socketSeen.complete(socket);
           });
-      final client = WsClient('http://127.0.0.1:${server.port}');
+      final client = WsClient(
+        'http://127.0.0.1:${server.port}',
+        clientIdentity: testWingClientIdentity,
+      );
 
       try {
-        await client.connect();
+        final connecting = client.connect();
         final readyFuture = client.waitForGatewayReady();
         final socket = await socketSeen.future;
         socket.add(
@@ -1312,6 +1319,7 @@ void main() {
           }),
         );
 
+        await connecting;
         final frame = await readyFuture.timeout(const Duration(seconds: 5));
         expect((frame['params'] as Map<String, dynamic>)['payload'], {
           'generation': 1,
@@ -1331,10 +1339,17 @@ void main() {
           .listen((socket) {
             socketSeen.complete(socket);
           });
-      final client = WsClient('http://127.0.0.1:${server.port}');
+      final client = WsClient(
+        'http://127.0.0.1:${server.port}',
+        clientIdentity: testWingClientIdentity,
+      );
 
       try {
-        await client.connect();
+        final connecting = client.connect();
+        final connectFailed = expectLater(
+          connecting,
+          throwsA(isA<JsonRpcError>()),
+        );
         final failed = expectLater(
           client.waitForGatewayReady(timeout: const Duration(seconds: 5)),
           throwsA(
@@ -1346,6 +1361,7 @@ void main() {
         final socket = await socketSeen.future;
         await socket.close(WebSocketStatus.goingAway, 'no ready');
         await failed;
+        await connectFailed;
       } finally {
         client.close();
         await socketSubscription.cancel();
@@ -1374,17 +1390,21 @@ void main() {
         final eventTexts = <String>[];
         final newEventSeen = Completer<void>();
         final connectionChanges = <bool>[];
-        final client = WsClient('http://127.0.0.1:${server.port}')
-          ..onStreamEvent = (event) {
-            eventTexts.add(event.data['text'] as String);
-            if (event.data['text'] == 'new' && !newEventSeen.isCompleted) {
-              newEventSeen.complete();
-            }
-          }
-          ..onConnectionChanged = connectionChanges.add;
+        final client =
+            WsClient(
+                'http://127.0.0.1:${server.port}',
+                clientIdentity: testWingClientIdentity,
+              )
+              ..onStreamEvent = (event) {
+                eventTexts.add(event.data['text'] as String);
+                if (event.data['text'] == 'new' && !newEventSeen.isCompleted) {
+                  newEventSeen.complete();
+                }
+              }
+              ..onConnectionChanged = connectionChanges.add;
 
         try {
-          await client.connect();
+          final firstConnection = client.connect();
           final firstSocket = await firstSocketSeen.future;
           firstSocket.add(
             jsonEncode({
@@ -1396,6 +1416,7 @@ void main() {
               },
             }),
           );
+          await firstConnection;
           firstSocket.add(
             jsonEncode({
               'jsonrpc': '2.0',
@@ -1409,7 +1430,7 @@ void main() {
           );
           client.close();
 
-          await client.connect();
+          final secondConnection = client.connect();
           final secondSocket = await secondSocketSeen.future;
           secondSocket.add(
             jsonEncode({
@@ -1433,6 +1454,7 @@ void main() {
             }),
           );
 
+          await secondConnection;
           final ready = await client.waitForGatewayReady();
           await newEventSeen.future.timeout(const Duration(seconds: 5));
           expect(
@@ -1460,6 +1482,7 @@ void main() {
       final socketSubscription = server
           .transform(WebSocketTransformer())
           .listen((socket) {
+            announceTestGatewayReady(socket);
             gatewayApplicationRequests(socket).listen(
               (_) {},
               onDone: () {
@@ -1470,11 +1493,15 @@ void main() {
             );
           });
       final connectionChanges = <bool>[];
-      final client = WsClient('http://127.0.0.1:${server.port}')
-        ..onConnectionChanged = (connected) {
-          connectionChanges.add(connected);
-          throw StateError('synthetic connection observer failure');
-        };
+      final client =
+          WsClient(
+              'http://127.0.0.1:${server.port}',
+              clientIdentity: testWingClientIdentity,
+            )
+            ..onConnectionChanged = (connected) {
+              connectionChanges.add(connected);
+              throw StateError('synthetic connection observer failure');
+            };
 
       try {
         await client.connect();
@@ -1523,15 +1550,19 @@ void main() {
               socket.add(jsonEncode(firstFrame));
               socketSeen.complete(socket);
             });
-        final client = WsClient('http://127.0.0.1:${server.port}')
-          ..onStreamEvent = applicationEvents.add
-          ..onConnectionChanged = (connected) {
-            connectionChanges.add(connected);
-            if (!connected && !disconnected.isCompleted) {
-              disconnected.complete();
-              throw StateError('synthetic observer failure');
-            }
-          };
+        final client =
+            WsClient(
+                'http://127.0.0.1:${server.port}',
+                clientIdentity: testWingClientIdentity,
+              )
+              ..onStreamEvent = applicationEvents.add
+              ..onConnectionChanged = (connected) {
+                connectionChanges.add(connected);
+                if (!connected && !disconnected.isCompleted) {
+                  disconnected.complete();
+                  throw StateError('synthetic observer failure');
+                }
+              };
 
         try {
           await client.connect();

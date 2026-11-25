@@ -1,3 +1,5 @@
+import 'support/canonical_gateway_fixture.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/services/ws_client.dart';
@@ -62,12 +64,15 @@ void main() {
     final sockets = <WebSocket>[];
     server.listen((request) async {
       final socket = await WebSocketTransformer.upgrade(request);
+      announceTestGatewayReady(socket);
       sockets.add(socket);
       socket.listen((_) {});
     });
     final client = WsClient(
       'http://127.0.0.1:${server.port}',
       token: 'local-test',
+
+      clientIdentity: testWingClientIdentity,
     );
     addTearDown(() async {
       client.close();

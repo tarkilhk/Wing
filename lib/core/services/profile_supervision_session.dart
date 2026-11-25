@@ -1,8 +1,6 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/gateway_insight.dart';
 import '../models/profile_supervision.dart';
-import '../models/operational_error.dart';
 import '../models/session_control.dart';
 import 'profile_workspace_controller.dart';
 import 'subagent_timeline_session.dart';
@@ -317,37 +315,30 @@ final class GoalCriterionEditor {
   }
 }
 
-/// One issued detail retains only this route's live tail; it never duplicates
+/// One issued detail retains this route's reader and commands; it never duplicates
 /// the parent roster or execution owner. Closing revokes further polling/send.
 final class SubagentSupervisionDetail extends ChangeNotifier
     implements SubagentInspectionDetail {
   SubagentSupervisionDetail._(this._owner, this._initial) {
     _owner.addListener(_changed);
-    timeline = _initial.childSessionId == null
-        ? null
-        : _owner._controller.openSubagentTimeline(_owner._chat, _initial.id);
+    timeline = _owner._controller.openSubagentTimeline(
+      _owner._chat,
+      _initial.id,
+    );
   }
   @override
-  late final SubagentTimelineSession? timeline;
+  late final SubagentTimelineSession timeline;
   final ProfileSupervisionSession _owner;
   final GatewaySubagentActivity _initial;
-  Timer? _timer;
-  bool _closed = false,
-      _active = false,
-      _loading = false,
-      _steering = false,
-      _interrupting = false;
-  int _failures = 0, _notificationDepth = 0;
+  bool _closed = false, _steering = false, _interrupting = false;
+  int _notificationDepth = 0;
   bool _notifierDisposed = false;
-  GatewaySubagentTail? _tail, _lastTail;
-  String? _error, _controlMessage;
-  bool _controlFailed = false, _passiveTailFailure = false;
+  String? _controlMessage;
+  bool _controlFailed = false;
   bool get _current => !_closed && _owner.active;
   GatewaySubagentActivity? get _activity => _owner._chat.subagents
       .where((item) => item.id == _initial.id)
       .firstOrNull;
-  @override
-  bool get supportsTail => true;
   @override
   SubagentSupervisionObservation get state {
     final activity = _activity ?? _initial;
@@ -361,12 +352,6 @@ final class SubagentSupervisionDetail extends ChangeNotifier
       unconfirmed: unconfirmed,
       canControl: controllable,
       acceptsSteer: controllable && activity.acceptingSteer,
-      tail: _tail,
-      lastAvailableTail: _lastTail,
-      tailError: _error,
-      inlineTailError: _passiveTailFailure ? null : _error,
-      tailFailures: _failures,
-      loadingTail: _loading,
       steering: _steering,
       interrupting: _interrupting,
       controlMessage: _controlMessage,
@@ -389,93 +374,7 @@ final class SubagentSupervisionDetail extends ChangeNotifier
   }
 
   @override
-  void setActive(bool value) {
-    if (timeline case final child?) {
-      child.setActive(value);
-      return;
-    }
-    _active = value;
-    if (!value || !_current) {
-      _timer?.cancel();
-      _timer = null;
-      return;
-    }
-    if (_timer != null) return;
-    unawaited(refreshTail(explicit: false));
-    if (!_current || !_active) return;
-    _timer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) => unawaited(refreshTail(explicit: false)),
-    );
-  }
-
-  @override
-  Future<void> refreshTail({bool explicit = true}) async {
-    if (!_current || _loading) return;
-    _loading = true;
-    _changed();
-    try {
-      if (!_current) return;
-      final tail = await _owner._controller.loadSubagentTail(
-        _owner._chat,
-        _initial.id,
-      );
-      if (!_current) return;
-      if (tail == null) throw StateError('Live output is unavailable.');
-      _tail = tail;
-      if (tail.available && tail.text.isNotEmpty) _lastTail = tail;
-      _error = null;
-      _failures = 0;
-      if (tail.available || _activity?.isTerminal == true) {
-        _reportTailOutcome(null);
-      }
-      if (!tail.available && _activity?.isTerminal == true) {
-        _timer?.cancel();
-        _timer = null;
-      }
-    } catch (_) {
-      if (_current) {
-        _failures++;
-        _error = 'Could not refresh live output.';
-        _passiveTailFailure = !explicit && _lastTail != null;
-        _reportTailOutcome(_error);
-        if (_failures >= 3) {
-          _timer?.cancel();
-          _timer = null;
-        }
-      }
-    } finally {
-      _loading = false;
-      _changed();
-    }
-  }
-
-  void _reportTailOutcome(String? error) =>
-      _owner._controller.reportOperationalError(
-        OperationalErrorObservation(
-          connectionIdentity: _owner._chat.key.workspace.connectionIdentity,
-          profileName: _owner._chat.key.workspace.profileName,
-          operation:
-              'subagent-tail:${_owner._chat.key.workspace.profileName}:'
-              '${_owner._chat.key.sessionId}:${_initial.id}',
-          title: 'Live output unavailable',
-          error: error,
-        ),
-      );
-
-  @override
-  Future<void> retryTail() async {
-    if (!_current) return;
-    _failures = 0;
-    _error = null;
-    _timer?.cancel();
-    _timer = null;
-    if (_active) {
-      final read = refreshTail();
-      setActive(true);
-      await read;
-    }
-  }
+  void setActive(bool value) => timeline.setActive(value);
 
   @override
   Future<bool> steer(String text) async {
@@ -543,8 +442,7 @@ final class SubagentSupervisionDetail extends ChangeNotifier
   void dispose() {
     if (_closed) return;
     _closed = true;
-    _timer?.cancel();
-    timeline?.dispose();
+    timeline.dispose();
     _owner.removeListener(_changed);
     _owner._details.remove(this);
     if (_notificationDepth == 0 && !_notifierDisposed) {

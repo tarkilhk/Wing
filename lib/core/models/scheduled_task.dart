@@ -1,5 +1,31 @@
 import 'hermes_profile.dart';
 
+/// A stored per-task override, not the profile's effective delivery setting.
+enum TaskOutputWrapping {
+  inherit,
+  on,
+  off;
+
+  static TaskOutputWrapping fromWire(Object? value) => switch (value) {
+    null => inherit,
+    true => on,
+    false => off,
+    _ => throw const FormatException('Invalid task output wrapping'),
+  };
+
+  bool? get wireValue => switch (this) {
+    inherit => null,
+    on => true,
+    off => false,
+  };
+
+  String get label => switch (this) {
+    inherit => 'Hermes default',
+    on => 'On',
+    off => 'Off',
+  };
+}
+
 /// Captured failure and destination; navigation never borrows ambient selection.
 class ScheduledTaskInvestigationRequest {
   const ScheduledTaskInvestigationRequest({
@@ -23,6 +49,7 @@ class ScheduledTask {
     }
     TaskExecution.decode(value['live_execution']);
     TaskExecution.decode(value['latest_execution']);
+    TaskOutputWrapping.fromWire(value['wrap_response']);
   }
 
   final Map<String, dynamic> data;
@@ -47,6 +74,8 @@ class ScheduledTask {
     false => 'Skip missed runs',
     _ => 'Hermes default',
   };
+  TaskOutputWrapping get outputWrapping =>
+      TaskOutputWrapping.fromWire(data['wrap_response']);
   String get graceLabel => data['grace_minutes'] == null
       ? 'Computed window'
       : data['grace_minutes'] == 0

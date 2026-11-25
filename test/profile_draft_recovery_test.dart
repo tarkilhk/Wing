@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/services/bots_session.dart';
@@ -39,6 +40,7 @@ class _ColdDraftHost {
   );
 
   ProfileGateway gateway(WorkspaceScope scope) => ProfileGateway(
+    loadClientIdentity: loadTestWingClientIdentity,
     scope: scope,
     discover: discover,
     get: (endpoint, query) async {

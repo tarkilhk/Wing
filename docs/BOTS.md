@@ -32,10 +32,10 @@ recent Hermes heartbeats. The Running status keeps its Wing pulse and
 expires after 150 seconds without a heartbeat. **Needs input** takes precedence
 when a live chat is waiting for you.
 
-Members of a running discussion show **Group running** with a work Wing. This identifies participation in an active room; Hermes does
-not report which member is currently writing. Individual Running and Needs
-input states keep their priority. A completed or unavailable room clears the
-group indication.
+Members reported as queued, running or stopping show **Group running** with a
+work Wing. A working room does not mark every member active. Individual Running
+and Needs input states keep their priority. A completed or unavailable room
+clears the group indication.
 
 Once a Bot Chat conversation identity is confirmed, previously loaded messages
 remain readable while Wing checks for updates. The header shows progress until
@@ -310,10 +310,10 @@ confirmed, Wing keeps the screen open for recovery. Backgrounding or losing the
 connection leaves control held until you explicitly hand it back. Taking or
 releasing another device's control requires confirmation.
 
-Wing does not currently configure RoomLink peer groups, desktop Direct
-conversations, pet avatars or automatic screen opening. Hosted groups use bots
-from one instance, although the bot roster and ordinary settings work across
-saved instances.
+Wing supports hosted groups with bots from saved instances whose Hermes
+RoomLink endpoints are already enabled and reachable. Wing does not configure
+those endpoints. Desktop Direct conversations, pet avatars and automatic screen
+opening remain outside Wing’s current scope.
 
 ## Bot messages and delivery
 
@@ -343,9 +343,22 @@ The shared discussion contains the room’s public history. Open **Group options
 Member activity** for reported member progress. Private group-worker transcripts
 are not exposed by the current canonical Hermes API or Desktop group view.
 
-New group offers only local bots the gateway currently permits as members.
-Create checks the list again; if eligibility changes, reopen New group to choose
-members again. Existing groups retain their fixed membership.
+In New group, choose the host and two to six bots. Bots from other saved instances
+show their instance names and any reason they cannot join. The host and each
+selected instance are checked again before creation. If access changes, the draft
+stays open so you can correct the selection.
+
+A group keeps its original host and members. A failed peer join leaves the created
+room available; open the member list and use that member’s Retry icon. Joining
+and retry show progress beside the member. Wing renews access while a group is
+open, including after restarting the app. A text send can wait briefly for that
+renewal; Stop prevents that waiting send from starting.
+
+Groups containing bots from other instances accept text only. Restored unsent
+files remain visible and removable; remove them before sending a new message.
+A message already sent without confirmation retains its exact files and offers
+Retry. Text-only Android shares can still fill the draft. Disband removes a room
+only after Hermes confirms it; a failed confirmation stays open for recovery.
 
 [Administration](ADMINISTRATION.md) · [Chats](CHATS.md)
 
@@ -355,3 +368,17 @@ Normal chats, Bot Chats and groups share page framing, transcript layout, readin
 mode and the responsive composer. Groups retain their room-specific execution,
 member mentions, reply threads and available actions.
 Reading mode hides context and footer; Back restores them before leaving.
+
+## Teammate requests in Background
+
+A Bot Chat's Background drawer shows requests that bot sent to teammates. Each
+row names its target and reports Queued, Claimed, Working, Needs your answer,
+Needs approval or Failed. Expand it for the request preview, supplied error and
+receipt-update time. The icon-only Open teammate chat action opens that exact
+existing Bot Chat on the same instance; an unavailable target offers Retry.
+
+An unknown outcome means the teammate may already have acted. Do not resend it.
+Successful deliveries leave this current list. Failed reads preserve last
+received status and stop polling until Retry or reopening Background. Automatic
+refresh runs only while this Bot Chat is visible and connected. Receipt time
+does not measure how long the teammate has been working.

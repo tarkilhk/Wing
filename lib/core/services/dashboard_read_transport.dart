@@ -30,6 +30,7 @@ class DashboardReadTransport {
     required Map<String, String> headers,
     String? body,
     int? maxBytes,
+    Duration? inactivityTimeout,
   }) async {
     for (var attempt = 0; ; attempt++) {
       try {
@@ -39,6 +40,7 @@ class DashboardReadTransport {
           headers: headers,
           body: body,
           maxBytes: maxBytes,
+          inactivityTimeout: inactivityTimeout ?? timeout,
         );
       } on http.ClientException catch (failure) {
         // A pooled HTTP connection can fail independently of the live chat.
@@ -60,6 +62,7 @@ class DashboardReadTransport {
     required Map<String, String> headers,
     String? body,
     int? maxBytes,
+    required Duration inactivityTimeout,
   }) async {
     if (_closed) throw http.RequestAbortedException(uri);
     final abort = Completer<void>();
@@ -78,9 +81,9 @@ class DashboardReadTransport {
     void progress() {
       if (abort.isCompleted || result.isCompleted) return;
       inactivity?.cancel();
-      inactivity = Timer(timeout, () {
+      inactivity = Timer(inactivityTimeout, () {
         if (result.isCompleted) return;
-        result.completeError(DashboardReadTimeout(timeout));
+        result.completeError(DashboardReadTimeout(inactivityTimeout));
         cancel();
       });
     }

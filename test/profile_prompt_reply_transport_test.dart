@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -73,7 +74,10 @@ void main() {
             }
             final params = frame['params'] as Map;
             if (method == 'client.capabilities') {
-              expect(params, {'server_requests': true});
+              expect(params, {
+                'server_requests': true,
+                'client': testWingClientIdentity.wire,
+              });
               socket.add(
                 jsonEncode({
                   'jsonrpc': '2.0',
@@ -163,8 +167,11 @@ void main() {
             final wire = ProfileGateway.forConnection(
               ConnectionAccess(connection: connection, dashboardOAuth: null),
               scope,
+
+              loadClientIdentity: loadTestWingClientIdentity,
             );
             final gateway = ProfileGateway(
+              loadClientIdentity: loadTestWingClientIdentity,
               scope: scope,
               discover: base.discover,
               get: base.read,

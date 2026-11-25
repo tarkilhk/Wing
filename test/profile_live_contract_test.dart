@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,7 +10,7 @@ import 'package:wing/core/services/profiles_repository.dart';
 /// Opt-in, no model calls. Uses existing disposable profiles on the unmodified
 /// local Desktop-managed server. Authentication is fetched, never logged/saved.
 void main() {
-  // Canonical gateway/session_policy.py CREATE_FIELDS at e5ea5fd9, plus
+  // Canonical gateway/session_policy.py CREATE_FIELDS at 2506f5b0, plus
   // profile routing and title/hidden consumed by session_controls.create.
   const createFields = {
     'profile',
@@ -41,6 +42,7 @@ void main() {
     'verbose',
     'row_cwd',
     'client_env',
+    'client',
   };
   for (final project in [false, true]) {
     test(
@@ -52,6 +54,7 @@ void main() {
         );
         var creates = 0;
         final gateway = ProfileGateway(
+          loadClientIdentity: loadTestWingClientIdentity,
           scope: scope,
           discover: () async => const ProfileDiscovery(
             profiles: [HermesProfile(name: 'default', isDefault: true)],
@@ -68,6 +71,7 @@ void main() {
             creates++;
             expect(params['profile'], 'default');
             expect(params['source'], 'gui');
+            expect(params['client'], testWingClientIdentity.wire);
             expect(
               params['request_id'],
               isA<String>().having(
@@ -125,6 +129,8 @@ void main() {
         final gateway = ProfileGateway.forConnection(
           ConnectionAccess(connection: connection, dashboardOAuth: null),
           WorkspaceScope(connectionId: connection.id, profileName: profile),
+
+          loadClientIdentity: loadTestWingClientIdentity,
         );
         addTearDown(gateway.close);
         expect((await gateway.discover()).named(profile), isNotNull);

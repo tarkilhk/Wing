@@ -61,6 +61,126 @@ void main() {
   });
 
   test(
+    'typed server request retains subject, scopes, lifetime and exact denial reason',
+    () async {
+      final raw = {
+        'request_id': 'folder',
+        'server_request_id': 'srq-folder',
+        'kind': 'access',
+        'path': ' /srv/private  folder ',
+        'access': 'read',
+        'risk': 'Private files',
+        'choices': ['once', 'always', 'deny'],
+      };
+      host.event('a', 'approval', raw);
+      final issued = chat.runtime.approval!;
+      expect(issued.request.path, raw['path']);
+      host.event('a', 'message.complete', {'text': 'Turn finished'});
+      expect(chat.runtime.approval?.requestId, 'folder');
+      final gate = Completer<void>();
+      host.onClarifyResponse = () => gate.future;
+      final sending = controller.approve(
+        chat,
+        'deny',
+        requestId: 'folder',
+        correlation: issued.correlation,
+        reason: '  Keep these files private  ',
+      );
+      expect(chat.runtime.approvalResponding, isTrue);
+      gate.complete();
+      await sending;
+      final sent = host.calls.lastWhere((c) => c.$2 == 'request.answer').$3;
+      expect(sent['id'], 'srq-folder');
+      expect(sent['result'], {
+        'choice': 'deny',
+        'reason': 'Keep these files private',
+      });
+      expect(chat.runtime.approval, isNull);
+    },
+  );
+
+  test(
+    'typed server request retires with its authoritative open-request snapshot',
+    () {
+      final raw = {
+        'request_id': 'site',
+        'server_request_id': 'srq-site',
+        'kind': 'network',
+        'host': 'example.org',
+        'choices': ['once', 'deny'],
+      };
+      host.event('a', 'approval', raw);
+      host.event('a', 'message.complete', {'text': 'Finished'});
+      expect(chat.runtime.approval?.requestId, 'site');
+      host.event('a', 'session.info', {
+        'open_requests': [
+          {
+            'id': 'srq-site',
+            'method': 'approval',
+            'params': {...raw, 'session_id': chat.runtime.runtimeId},
+          },
+        ],
+      });
+      expect(chat.runtime.approval?.request.host, 'example.org');
+      host.event('a', 'session.info', {'open_requests': []});
+      expect(chat.runtime.approval, isNull);
+    },
+  );
+
+  test(
+    'same ID changed exact target invalidates captured notification grant',
+    () async {
+      final raw = {
+        'request_id': 'site',
+        'server_request_id': 'srq-site',
+        'kind': 'network',
+        'host': 'example.org',
+        'choices': ['once', 'deny'],
+      };
+      host.event('a', 'approval', raw);
+      final original = chat.runtime.approval!;
+      host.event('a', 'approval', {...raw, 'host': ' example.org'});
+      await expectLater(
+        controller.approveNotification(
+          chat,
+          'once',
+          requestId: 'site',
+          command: '',
+          correlation: original.correlation,
+        ),
+        throwsStateError,
+      );
+      expect(host.calls.where((c) => c.$2 == 'request.answer'), isEmpty);
+      expect(chat.runtime.approval?.request.host, ' example.org');
+    },
+  );
+
+  test(
+    'replayed missing subject cannot inherit an earlier grant target',
+    () async {
+      host.event('a', 'approval', {
+        'request_id': 'site',
+        'server_request_id': 'srq-site',
+        'kind': 'network',
+        'host': 'example.org',
+        'choices': ['once', 'deny'],
+      });
+      host.event('a', 'approval', {
+        'request_id': 'site',
+        'server_request_id': 'srq-site',
+        'kind': 'network',
+        'choices': ['once', 'deny'],
+      });
+      expect(chat.runtime.approval!.request.valid, isFalse);
+      await expectLater(
+        controller.approve(chat, 'once', requestId: 'site'),
+        throwsArgumentError,
+      );
+      expect(host.calls.where((c) => c.$2 == 'request.answer'), isEmpty);
+    },
+  );
+
+  test(
     'unconfirmed feedback stays with its request when the FIFO advances',
     () async {
       host.pendingApprovals = [approval('one'), approval('two')];

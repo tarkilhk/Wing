@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -45,6 +46,7 @@ class _FamilyFixture extends ProfileActionsFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: base.read,
@@ -62,11 +64,22 @@ class _FamilyFixture extends ProfileActionsFixture {
           ],
           'delegations': [],
         },
-        'subagent.tail' => {
-          'subagent_id': 'agent',
+        'session.transcript' => {
+          'session_id': params['session_id'],
+          'subagent_id': params['subagent_id'],
           'available': true,
-          'text': 'Read report.py\nFound two records to review.\n',
-          'truncated': false,
+          'running': true,
+          'child_session_id': 'family-child',
+          'rows': [
+            {
+              'row_kind': 'message',
+              'row_id': 1,
+              'role': 'assistant',
+              'text': 'Read report.py\nFound two records to review.\n',
+            },
+          ],
+          'next_cursor': null,
+          'reset': true,
         },
         'process.list' => {
           'processes': [
@@ -568,6 +581,8 @@ void main() {
             } else if (entry.key == 'agents') {
               await tester.tap(find.text(_agentHeading));
               await tester.pumpAndSettle();
+              await tester.tap(find.text('Task'));
+              await tester.pumpAndSettle();
             } else if (entry.key == 'processes') {
               await tester.ensureVisible(find.text('python report.py'));
               await tester.pumpAndSettle();
@@ -787,7 +802,9 @@ void main() {
               });
             }
             if (entry.key == 'agents') {
-              Navigator.of(tester.element(find.text('Live output'))).pop();
+              Navigator.of(
+                tester.element(find.byTooltip('Refresh subagent activity')),
+              ).pop();
               await tester.pumpAndSettle();
             }
             if (entry.key == 'skill') {

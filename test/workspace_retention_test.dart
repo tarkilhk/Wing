@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/chat_runtime.dart';
 import 'dart:async';
 import 'dart:io';
@@ -44,6 +45,7 @@ class RetentionFixture extends ProfilePagingFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final wire = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: wire.discover,
       get: wire.read,

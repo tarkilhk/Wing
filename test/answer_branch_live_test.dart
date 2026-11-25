@@ -1,3 +1,5 @@
+import 'package:wing/core/services/profile_gateway.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -17,9 +19,8 @@ void main() {
       final preferences = await SharedPreferences.getInstance();
       final appPreferences = AppPreferences(preferences);
       addTearDown(appPreferences.dispose);
-      final controller = ProfileWorkspaceController(
-        connectionIdentity: 'fork-qa-settings',
-        access: ConnectionAccess(
+      final identityGatewayOwner = ProfileGatewayConnection(
+        ConnectionAccess(
           connection: SavedConnection(
             id: 'fork-qa',
             label: 'Fork QA',
@@ -30,6 +31,13 @@ void main() {
           ),
           dashboardOAuth: null,
         ),
+        loadClientIdentity: loadCandidateWingClientIdentity,
+      );
+      addTearDown(identityGatewayOwner.close);
+      final controller = ProfileWorkspaceController(
+        connectionIdentity: 'fork-qa-settings',
+        access: identityGatewayOwner.access,
+        gatewayFactory: identityGatewayOwner.create,
         preferences: preferences,
         appPreferences: appPreferences,
       );

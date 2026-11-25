@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -45,6 +46,7 @@ class ReaderFixture extends ProfilePagingFixture {
     owners[id] = scope.profileName;
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       connect: () async {
@@ -577,6 +579,7 @@ void main() {
     () async {
       final base = fixture.gateway(controller.current!.scope);
       final gateway = ProfileGateway(
+        loadClientIdentity: loadTestWingClientIdentity,
         scope: base.scope,
         discover: base.discover,
         get: base.read,

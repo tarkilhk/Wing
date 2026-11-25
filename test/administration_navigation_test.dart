@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -39,6 +40,7 @@ class _AdministrationProfilesFixture extends ProfileBrowserFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final wire = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: () async => discovery,
       get: wire.read,

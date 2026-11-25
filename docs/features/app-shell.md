@@ -10,7 +10,7 @@ Feature ID: `app-shell`.
   The first workspace frame remains independent of Recents preparation. Once
   initialization completes, its shared catalog warms quietly for later entry.
 - `app-shell.return` — Return to its canonical list.
-- `app-shell.restore` — Reopen with the separate draft retained.
+- `app-shell.restore` — Reopen with the separate draft retained. Passive Recents previews keep refused prompts and their explanations through the shared conversation renderer.
 
 ## How to get to it (user POV)
 
@@ -36,6 +36,17 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```sh
   python3 scripts/test_nightly_native.py journeys --output build/feature-verification/app-shell
   ```
+
+The passive refusal preview and its excerpt use:
+
+```sh
+flutter test --no-pub test/recent_conversation_switcher_test.dart --plain-name 'passive Recents preserves refused'
+flutter test --no-pub test/profile_recents_test.dart --plain-name 'message excerpts keep'
+```
+
+These fixtures render both themes at normal and doubled text without acquiring
+message actions or a live runtime. See [conversation](conversation.md#gotchas) for
+the connected refusal/reopening recipe.
 
 ## Gotchas
 

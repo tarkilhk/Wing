@@ -105,6 +105,7 @@ void main() {
             'groups.state' => {
               'room': {...fixture.room, 'latest_seq': 0},
               'driver_status': {
+          'peer_routes': <Object>[],
                 'working': working,
                 'blocked': false,
                 'counts': working ? {'running': 1} : {'completed': 1},

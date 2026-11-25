@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/android_voice.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:wing/core/models/settings_edit.dart';
@@ -31,6 +32,8 @@ void main() {
         ),
         'review',
         connectionStatus: status,
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       final profile = server.profile('voice_review');
       final repository = ProfileVoiceRepository(profile);

@@ -1,3 +1,5 @@
+import 'transcript_notice.dart';
+
 /// Immutable facts from stock message.complete.error_surface. Recovery remains
 /// a user action; a descriptor never authorizes a resend or credit purchase.
 final class TurnFailure {
@@ -6,6 +8,7 @@ final class TurnFailure {
     required this.layer,
     required this.code,
     required this.retryable,
+    required this.contentRefused,
     this.provider,
     this.providerLabel,
     this.description,
@@ -18,6 +21,7 @@ final class TurnFailure {
 
   final String message, layer, code;
   final bool? retryable;
+  final bool contentRefused;
   final String? provider,
       providerLabel,
       description,
@@ -32,6 +36,7 @@ final class TurnFailure {
     final surface = completion['error_surface'];
     final data = surface is Map ? surface : const {};
     return TurnFailure._(
+      contentRefused: isContentRefusedCompletion(completion),
       message:
           _text(completion['error']) ??
           _text(completion['text']) ??
@@ -50,7 +55,9 @@ final class TurnFailure {
     );
   }
 
-  String get title => usageLimit != null
+  String get title => contentRefused
+      ? 'Message refused'
+      : usageLimit != null
       ? 'Plan allowance reached'
       : switch (code) {
           'workspace_unavailable' => 'Workspace unavailable',
@@ -69,33 +76,37 @@ final class TurnFailure {
           },
         };
 
-  String? get recovery => switch (code) {
-    'workspace_unavailable' =>
-      'Restore the project folder or choose an available workspace before continuing.',
-    'launch_credentials_unavailable' =>
-      'Review this profile’s credentials, then start a new chat. This chat retains its original launch credentials.',
-    'max_iterations_no_summary' =>
-      'Continue the work, or adjust the turn budget in profile settings.',
-    'truncated' => 'Continue the reply when you are ready.',
-    'local_runtime_unavailable' =>
-      'Start the local model server or choose another model.',
-    'context_overflow' =>
-      'Compact the conversation or choose a model with a larger context window.',
-    _ => switch (layer) {
-      'auth' =>
-        authKind == 'oauth'
-            ? 'Sign in to the provider again.'
-            : 'Review this profile’s provider credentials.',
-      'endpoint' => 'Check the configured model endpoint and its connection.',
-      'disk' => 'Free server disk space before continuing.',
-      _ =>
-        retryable == true
-            ? 'You can try again after resolving the interruption.'
-            : null,
-    },
-  };
+  String? get recovery => contentRefused
+      ? 'Try a different query.'
+      : switch (code) {
+          'workspace_unavailable' =>
+            'Restore the project folder or choose an available workspace before continuing.',
+          'launch_credentials_unavailable' =>
+            'Review this profile’s credentials, then start a new chat. This chat retains its original launch credentials.',
+          'max_iterations_no_summary' =>
+            'Continue the work, or adjust the turn budget in profile settings.',
+          'truncated' => 'Continue the reply when you are ready.',
+          'local_runtime_unavailable' =>
+            'Start the local model server or choose another model.',
+          'context_overflow' =>
+            'Compact the conversation or choose a model with a larger context window.',
+          _ => switch (layer) {
+            'auth' =>
+              authKind == 'oauth'
+                  ? 'Sign in to the provider again.'
+                  : 'Review this profile’s provider credentials.',
+            'endpoint' =>
+              'Check the configured model endpoint and its connection.',
+            'disk' => 'Free server disk space before continuing.',
+            _ =>
+              retryable == true
+                  ? 'You can try again after resolving the interruption.'
+                  : null,
+          },
+        };
 
   bool get canContinue =>
+      !contentRefused &&
       const {'truncated', 'max_iterations_no_summary'}.contains(code);
   bool get blocking =>
       !canContinue &&
@@ -103,13 +114,16 @@ final class TurnFailure {
           !const {'auth', 'billing', 'endpoint'}.contains(layer)) &&
       code != 'free_tier_model_not_free';
   bool get canReviewEndpoint =>
-      layer == 'endpoint' || code == 'local_runtime_unavailable';
+      !contentRefused &&
+      (layer == 'endpoint' || code == 'local_runtime_unavailable');
 
   bool get canChooseModel =>
-      code == 'local_runtime_unavailable' ||
-      usageLimit != null ||
-      const {'provider', 'auth', 'billing', 'endpoint'}.contains(layer);
+      !contentRefused &&
+      (code == 'local_runtime_unavailable' ||
+          usageLimit != null ||
+          const {'provider', 'auth', 'billing', 'endpoint'}.contains(layer));
   bool get canReviewProvider =>
+      !contentRefused &&
       const {'auth', 'billing'}.contains(layer) &&
       code != 'local_runtime_unavailable';
 }

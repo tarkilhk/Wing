@@ -15,6 +15,8 @@ void main() {
   setUp(() {
     observations = GroupObservations(scope);
     room = BotGroup(
+      authorityGatewayId: 'install:install-1',
+      authorityEpoch: 1,
       scope: scope,
       instance: 'Host',
       id: 'room',
@@ -40,7 +42,7 @@ void main() {
         'cursor': sequence,
         'latest_seq': sequence,
         'has_more': false,
-        'authority': {'gateway_id': 'gateway', 'epoch': 1},
+        'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
       }, since: sequence - 1);
 
   test(
@@ -69,7 +71,7 @@ void main() {
       expect(value.message!.text, 'Newer');
       expect(value.answer!.sequence, 3);
       expect(value.coverage, 3);
-      expect(value.gatewayId, 'gateway');
+      expect(value.gatewayId, 'install:install-1');
       expect(value.epoch, 1);
     },
   );
@@ -89,6 +91,8 @@ void main() {
 
   test('captured authenticated identity rejects foreign observations', () {
     final other = BotGroup(
+      authorityGatewayId: 'install:install-1',
+      authorityEpoch: 1,
       scope: WorkspaceScope(
         connectionId: 'host',
         connectionIdentity: 'replacement',
@@ -125,6 +129,62 @@ void main() {
       observations.forget(room.id);
       fresh.publish();
       expect(observations.values, isEmpty);
+    },
+  );
+  test('authority replacement retires accumulation and held old reads', () {
+    observations.record(
+      room,
+      page(8, 'message.member', 'Old answer'),
+      since: 7,
+    );
+    final held = observations.beginRead(room)
+      ..add(page(9, 'message.member', 'Late old answer'), since: 8);
+    final replacement = BotGroup(
+      scope: scope,
+      instance: 'Host',
+      id: room.id,
+      authorityGatewayId: 'install:new',
+      authorityEpoch: 2,
+      name: 'Replacement',
+      members: const [],
+      observationComplete: false,
+    );
+    final notificationRead = observations.capture(room.id);
+    observations.discover(replacement, 0);
+    observations.discover(room, 100, ifCurrent: notificationRead);
+    observations.forget(room.id, ifCurrent: notificationRead);
+    held.publish();
+    final current = observations.forRoom(room.id)!;
+    expect(current.room.authorityGatewayId, 'install:new');
+    expect(current.message, isNull);
+    expect(current.answer, isNull);
+    expect(current.coverage, isNull);
+    expect(() => observations.beginRead(room), throwsStateError);
+    expect(current.project(room), same(room));
+    final replaced = current.project(room.withCatalogObservation(replacement));
+    expect(replaced.authorityGatewayId, 'install:new');
+    expect(replaced.lastMessageSequence, 0);
+    expect(replaced.preview, isEmpty);
+    expect(
+      () => observations.record(
+        replacement,
+        page(1, 'message.member', 'Wrong authority'),
+        since: 0,
+      ),
+      throwsArgumentError,
+    );
+  });
+  test(
+    'first catalog binding retires an earlier discovery token without demand',
+    () {
+      final captured = observations.capture(room.id);
+      observations.bind(room);
+      observations.discover(room, 30, ifCurrent: captured);
+      observations.forget(room.id, ifCurrent: captured);
+      expect(observations.isCurrent(room.id, captured), false);
+      expect(observations.values, isEmpty);
+      observations.record(room, page(1, 'message.member', 'Current'), since: 0);
+      expect(observations.forRoom(room.id)!.message!.text, 'Current');
     },
   );
 }

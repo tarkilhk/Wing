@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/chat_runtime.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/transcript_reading.dart';
@@ -29,6 +30,7 @@ class _PresentationHost extends ProfileHistoryFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final delegate = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: delegate.discover,
       get: (endpoint, query) async {

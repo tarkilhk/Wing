@@ -184,27 +184,66 @@ class _BotsContentState extends State<BotsContent> {
     }
     if (!mounted) return;
     if (action == 'delete') {
-      final confirmed = await showDialog<bool>(
+      var pending = false;
+      String? failure;
+      await showDialog<void>(
         context: context,
-        builder: (context) => StudioDialog(
-          title: Text('Disband ${group.name}?'),
-          content: const Text(
-            'Stops group work and removes this room. The bots and their private chats stay available.',
-          ),
-          actions: [
-            StudioFormActions(
-              onCancel: () => Navigator.pop(context, false),
-              onConfirm: () => Navigator.pop(context, true),
-              confirmLabel: 'Disband group',
-              confirmIcon: Icons.group_remove_outlined,
-              destructive: true,
+        barrierDismissible: false,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, update) => PopScope(
+            canPop: !pending,
+            child: StudioDialog(
+              title: Text('Disband ${group.name}?'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Stops group work and removes this room. The bots and their private chats stay available.',
+                  ),
+                  if (failure != null) ...[
+                    const SizedBox(height: 12),
+                    StudioError(failure!),
+                  ],
+                ],
+              ),
+              actions: [
+                StudioFormActions(
+                  onCancel: pending ? null : () => Navigator.pop(dialogContext),
+                  onConfirm: pending
+                      ? null
+                      : () async {
+                          update(() => pending = true);
+                          final saved = await widget.session.groupAction(
+                            group,
+                            'disband',
+                            canUse: () =>
+                                mounted &&
+                                dialogContext.mounted &&
+                                ModalRoute.of(dialogContext)?.isCurrent == true,
+                          );
+                          if (!dialogContext.mounted) return;
+                          if (saved) {
+                            Navigator.pop(dialogContext);
+                            return;
+                          }
+                          update(() {
+                            pending = false;
+                            failure =
+                                'Disband could not be confirmed. The group is kept. Retry.';
+                          });
+                        },
+                  busy: pending,
+                  progressLabel: 'Disbanding group',
+                  confirmLabel: 'Disband group',
+                  confirmIcon: Icons.group_remove_outlined,
+                  destructive: true,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       );
-      if (mounted && confirmed == true) {
-        await widget.session.groupAction(group, 'disband', canUse: _canUse);
-      }
     }
   }
 

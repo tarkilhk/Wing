@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/profile_skills.dart';
 import '../models/skill_reader.dart';
@@ -36,6 +37,12 @@ class ProfileSkillsSession extends ChangeNotifier {
   bool _libraryChecked = false, _catalogChecked = false;
   int _generation = 0, _notificationDepth = 0;
   bool _disposed = false, _pendingRefresh = false;
+  bool _explicitRead = false, _pendingRefreshAutomatic = true;
+  List<HubSkillUpdate>? _updates;
+  String? _updatesError;
+  Future<void>? _updatesPending;
+  bool _updatesExplicit = false;
+  int _updatesGeneration = 0;
   ProfileSkillsState get state => ProfileSkillsState(
     installed: _installed,
     catalog: _catalog,
@@ -55,7 +62,79 @@ class ProfileSkillsSession extends ChangeNotifier {
     reviewRequired: _review,
     error: _error,
     notice: _notice,
+    explicitRead: _explicitRead,
+    hubUpdates: HubUpdatesObservation(
+      updates: _updates,
+      pending: _updatesPending != null,
+      explicit: _updatesExplicit,
+      canCheck:
+          !_disposed &&
+          _hub &&
+          (_phase == SkillsPhase.idle || _phase == SkillsPhase.reading) &&
+          !(_updatesPending != null && _updatesExplicit),
+      error: _updatesError,
+    ),
   );
+
+  Future<void> checkUpdates({bool automatic = false}) {
+    if (_disposed ||
+        !_hub ||
+        (_phase != SkillsPhase.idle && _phase != SkillsPhase.reading)) {
+      return Future.value();
+    }
+    if (_updatesPending case final pending?) {
+      if (!automatic && !_updatesExplicit) {
+        _updatesExplicit = true;
+        _emit();
+      }
+      return pending;
+    }
+    final completed = Completer<void>();
+    final generation = ++_updatesGeneration;
+    _updatesPending = completed.future;
+    _updatesExplicit = !automatic;
+    _profile.server.retain();
+    _emit();
+    unawaited(_checkUpdates(generation, completed));
+    return completed.future;
+  }
+
+  Future<void> _checkUpdates(int generation, Completer<void> completed) async {
+    bool live() => !_disposed && generation == _updatesGeneration;
+    try {
+      if (!live()) return;
+      final updates = HubSkillUpdate.decode(
+        await _profile.read('skills/hub/updates'),
+      );
+      if (live()) {
+        _updates = updates;
+        _updatesError = null;
+      }
+    } catch (error) {
+      if (live()) {
+        _updatesError =
+            'Hub update check failed. ${administrationError(error)}';
+      }
+    } finally {
+      _profile.server.release();
+      if (live()) {
+        _updatesPending = null;
+        _updatesExplicit = false;
+        _emit();
+      }
+      completed.complete();
+    }
+  }
+
+  void _retireUpdates() {
+    ++_updatesGeneration;
+    _updates = null;
+    _updatesError = null;
+    _updatesPending = null;
+    _updatesExplicit = false;
+    _emit();
+  }
+
   bool get canRecoverRead =>
       !_disposed && _phase == SkillsPhase.idle && _retryable;
   bool _owns(int generation) => !_disposed && generation == _generation;
@@ -92,15 +171,19 @@ class ProfileSkillsSession extends ChangeNotifier {
     return (rows, timedOut is List && timedOut.isNotEmpty);
   }
 
-  Future<void> refresh({String? query}) async {
+  Future<void> refresh({String? query, bool automatic = false}) async {
     if (_disposed) return;
     if (query != null) _query = query.trim();
     if (_phase != SkillsPhase.idle && _phase != SkillsPhase.reading) {
+      _pendingRefreshAutomatic =
+          (!_pendingRefresh || _pendingRefreshAutomatic) && automatic;
       _pendingRefresh = true;
       return;
     }
     final generation = ++_generation;
     final search = _query;
+    _explicitRead =
+        !automatic || _phase == SkillsPhase.reading && _explicitRead;
     _phase = SkillsPhase.reading;
     _verified = false;
     _error = null;
@@ -449,8 +532,10 @@ class ProfileSkillsSession extends ChangeNotifier {
         _phase = SkillsPhase.idle;
         _emit();
         if (_pendingRefresh && live()) {
+          final automatic = _pendingRefreshAutomatic;
           _pendingRefresh = false;
-          await refresh();
+          _pendingRefreshAutomatic = true;
+          await refresh(automatic: automatic);
         }
       }
     }
@@ -569,6 +654,7 @@ class ProfileSkillsSession extends ChangeNotifier {
     final expected = verb == 'update'
         ? 'skills-update'
         : skillHubActionName(verb, key);
+    var updateDispatched = false;
     await _mutation(
       confirm: confirm,
       child: child,
@@ -591,6 +677,12 @@ class ProfileSkillsSession extends ChangeNotifier {
               ? 'Install'
               : 'Uninstall'} started.',
       result: showResult,
+      onDispatched: verb == 'update'
+          ? () {
+              updateDispatched = true;
+              _retireUpdates();
+            }
+          : null,
       after: () async {
         final rows = await _readInstalled();
         final hub = verb == 'update' ? await _readHub(_query) : null;
@@ -609,6 +701,7 @@ class ProfileSkillsSession extends ChangeNotifier {
         };
       },
     );
+    if (updateDispatched && !_disposed) await checkUpdates();
   }
 
   Future<bool> _mutation({
@@ -622,6 +715,7 @@ class ProfileSkillsSession extends ChangeNotifier {
     required String notice,
     required Future<void Function()> Function() after,
     Future<void> Function(AdministrationOperationSession)? result,
+    VoidCallback? onDispatched,
   }) async {
     if (_disposed || !state.canMutate) return false;
     final generation = ++_generation;
@@ -640,13 +734,10 @@ class ProfileSkillsSession extends ChangeNotifier {
       if (!active()) return false;
       await preflight();
       if (!active()) return false;
-      final receipt = await _send(
-        method,
-        path,
-        body,
-        active,
-        () => dispatched = true,
-      );
+      final receipt = await _send(method, path, body, active, () {
+        dispatched = true;
+        onDispatched?.call();
+      });
       if (!ack(receipt)) {
         throw const FormatException('Skill command was not acknowledged');
       }
@@ -692,8 +783,10 @@ class ProfileSkillsSession extends ChangeNotifier {
         _phase = SkillsPhase.idle;
         _emit();
         if (_pendingRefresh && live()) {
+          final automatic = _pendingRefreshAutomatic;
           _pendingRefresh = false;
-          await refresh();
+          _pendingRefreshAutomatic = true;
+          await refresh(automatic: automatic);
         }
       }
     }
@@ -704,6 +797,7 @@ class ProfileSkillsSession extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     ++_generation;
+    ++_updatesGeneration;
     _profile.server.release();
     if (_notificationDepth == 0) super.dispose();
   }

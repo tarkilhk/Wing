@@ -1,3 +1,5 @@
+import '../models/wing_client_identity.dart';
+import 'installed_wing_client_identity.dart';
 import '../models/chat_list_view.dart' show ProjectFolderSuggestion;
 import 'profile_model_catalog.dart';
 import 'canonical_session_protocol.dart';
@@ -108,7 +110,12 @@ DashboardClient _dashboardFor(ConnectionAccess access) {
 /// Authentication and HTTP pooling belong to one saved connection, not to each
 /// profile or short-lived project reader. Gateways still own separate sockets.
 class ProfileGatewayConnection {
-  ProfileGatewayConnection(this.access);
+  ProfileGatewayConnection(
+    this.access, {
+    WingClientIdentityLoader loadClientIdentity =
+        loadInstalledWingClientIdentity,
+  }) : _loadClientIdentity = loadClientIdentity;
+  final WingClientIdentityLoader _loadClientIdentity;
   final ConnectionAccess access;
   SavedConnection get connection => access.connection;
   late final DashboardClient _dashboard = _dashboardFor(access);
@@ -138,6 +145,7 @@ class ProfileGatewayConnection {
       scope,
       _dashboard,
       ownsDashboard: false,
+      loadClientIdentity: _loadClientIdentity,
     );
   }
 
@@ -156,6 +164,8 @@ class ProfileGatewayConnection {
 /// immutable scope. Host discovery can name explicit target profiles without
 /// granting their runtime authority. There is no experimental recovery fallback.
 class ProfileGateway {
+  final WingClientIdentityLoader _loadClientIdentity;
+  late final Future<WingClientIdentity> _clientIdentity = _loadClientIdentity();
   final canonical = CanonicalSessionProtocol();
   bool canonicalClarifyBatch = false;
   static const commandTimeout = Duration(seconds: 60);
@@ -310,6 +320,8 @@ class ProfileGateway {
   ConnectionCallback? onConnectionChanged;
 
   ProfileGateway({
+    WingClientIdentityLoader loadClientIdentity =
+        loadInstalledWingClientIdentity,
     ApiPricingRead? apiPricing,
     required this.scope,
     required ScopedGet get,
@@ -324,7 +336,8 @@ class ProfileGateway {
     Future<void> Function()? connect,
     void Function()? close,
     void Function()? disconnect,
-  }) : _apiPricing = apiPricing,
+  }) : _loadClientIdentity = loadClientIdentity,
+       _apiPricing = apiPricing,
        _getRequest = get,
        _discover = discover,
        _rpcRequest = rpc,
@@ -343,8 +356,10 @@ class ProfileGateway {
 
   factory ProfileGateway.forConnection(
     ConnectionAccess access,
-    WorkspaceScope scope,
-  ) {
+    WorkspaceScope scope, {
+    WingClientIdentityLoader loadClientIdentity =
+        loadInstalledWingClientIdentity,
+  }) {
     final connection = access.connection;
     if (scope.connectionId != connection.id) {
       throw ArgumentError('Connection does not own this workspace');
@@ -354,6 +369,7 @@ class ProfileGateway {
       scope,
       _dashboardFor(access),
       ownsDashboard: true,
+      loadClientIdentity: loadClientIdentity,
     );
   }
 
@@ -362,6 +378,7 @@ class ProfileGateway {
     WorkspaceScope scope,
     DashboardClient dashboard, {
     required bool ownsDashboard,
+    required WingClientIdentityLoader loadClientIdentity,
   }) {
     if (scope.connectionId != connection.id) {
       throw ArgumentError('Connection does not own this workspace');
@@ -401,6 +418,8 @@ class ProfileGateway {
         }
       }
 
+      final clientIdentity = await gateway._clientIdentity;
+      requireCurrent();
       logConnectionDiagnostic(
         'gateway.credentials_requested',
         details: {
@@ -423,6 +442,7 @@ class ProfileGateway {
       );
       final candidate = WsClient(
         connection.desktopGatewayUrl ?? dashboard.baseUrl,
+        clientIdentity: clientIdentity,
         token: credentials.token,
         ticket: credentials.ticket,
         gatewayHeaders: connection.gatewayHeaders,
@@ -505,6 +525,7 @@ class ProfileGateway {
     }
 
     gateway = ProfileGateway(
+      loadClientIdentity: loadClientIdentity,
       apiPricing: ModelsDevPricing.shared.load,
       scope: scope,
       // The dashboard transport bounds and aborts the actual response read.
@@ -745,12 +766,47 @@ class ProfileGateway {
     String method, [
     Map<String, dynamic> params = const {},
   ]) async {
+    final prepared = method == 'session.create'
+        ? await _prepareCreation(params)
+        : params;
+    return _callPrepared(method, prepared);
+  }
+
+  Future<Map<String, dynamic>> _prepareCreation(
+    Map<String, dynamic> params,
+  ) async {
+    // Capture caller data before platform preparation can yield. A creation
+    // attempt owns this label and payload through its single dispatch.
+    final generation = _connectionGeneration;
+    final captured = Map<String, dynamic>.of(params);
+    final identity = await _clientIdentity;
+    if (_closed || generation != _connectionGeneration) {
+      throw DashboardRequestNotSentException(
+        StateError('Connection retired during creation preparation'),
+      );
+    }
+    return Map<String, dynamic>.unmodifiable({
+      ...captured,
+      'client': identity.wire,
+    });
+  }
+
+  Future<Map<String, dynamic>> _callPrepared(
+    String method,
+    Map<String, dynamic> params,
+  ) async {
     final id = params['session_id'];
     final outgoing = method == 'session.interrupt' && id is String
         ? canonical.interrupt(id)
         : params;
     try {
-      return await _rpc(method, {...outgoing, 'profile': scope.profileName});
+      return await _rpc(
+        method,
+        Map<String, dynamic>.unmodifiable({
+          ...outgoing,
+          'profile': scope.profileName,
+        }),
+      );
     } on JsonRpcError catch (error) {
       if (id is String) canonical.refused(id, error);
       rethrow;
@@ -1588,13 +1644,16 @@ class ProfileGateway {
     Map<String, dynamic> params,
     bool Function() canDispatch,
   ) async {
+    final prepared = method == 'session.create'
+        ? await _prepareCreation(params)
+        : params;
     await connect();
     if (!canDispatch()) {
       throw DashboardRequestNotSentException(
         StateError('Profile changed. Open the menu again.'),
       );
     }
-    return call(method, params);
+    return _callPrepared(method, prepared);
   }
 
   /// Bot workflows capture a profile before awaiting connection preparation.
@@ -1627,6 +1686,9 @@ class ProfileGateway {
       'display.lease.release',
     };
     if (!allowed.contains(method)) throw ArgumentError('Unknown bot command');
+    final prepared = method == 'session.create'
+        ? await _prepareCreation(params)
+        : params;
     await connect();
     if (!canDispatch()) {
       throw DashboardRequestNotSentException(
@@ -1637,7 +1699,7 @@ class ProfileGateway {
     // Image generation is connection-wide; the stock schema forbids profile.
     // Keep the captured transport and admission without adding scoped params.
     if (method == 'image.generate') return _rpc(method, params);
-    return call(method, params);
+    return _callPrepared(method, prepared);
   }
 
   Future<Map<String, dynamic>> createProject(

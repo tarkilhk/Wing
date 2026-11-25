@@ -1,3 +1,4 @@
+import 'installed_wing_client_identity.dart';
 import 'profile_model_catalog.dart';
 import 'connector_inventory.dart';
 import 'models_dev_pricing.dart';
@@ -162,6 +163,8 @@ class AdministrationRepository {
     ConnectionAccess access,
     String identity, {
     required ServerConnectionStatus connectionStatus,
+    WingClientIdentityLoader loadClientIdentity =
+        loadInstalledWingClientIdentity,
   }) {
     final connection = access.connection;
     final dashboard = DashboardClient(
@@ -252,7 +255,11 @@ class AdministrationRepository {
           _ => throw ArgumentError('Unsupported administration request'),
         };
         return connectionStatus.observeAccess(
-          () => response.timeout(const Duration(seconds: 45)),
+          () => response.timeout(
+            method == 'GET'
+                ? dashboard.readTimeoutFor(endpoint)
+                : const Duration(seconds: 45),
+          ),
         );
       },
       gateway: (name) => gateways.putIfAbsent(
@@ -265,6 +272,7 @@ class AdministrationRepository {
                   connectionIdentity: identity,
                   profileName: name,
                 ),
+                loadClientIdentity: loadClientIdentity,
               )
               ..connectionStatus = connectionStatus
               ..reportsLiveChat = false,

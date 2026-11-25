@@ -88,9 +88,11 @@ class ScheduledTaskEditState {
     required this.timezone,
     required this.graceMinutes,
     required this.catchUp,
+    required this.outputWrapping,
   });
   final String name, prompt, timezone, graceMinutes;
   final TaskCatchUp catchUp;
+  final TaskOutputWrapping outputWrapping;
   final TaskScheduleDraft schedule;
   final ModelSelection selection;
   final List<TaskDestinationChoice> deliveryChoices;
@@ -205,6 +207,7 @@ class ScheduledTaskEditSession extends ChangeNotifier {
   }
 
   ScheduledTaskEditState get state => ScheduledTaskEditState(
+    outputWrapping: TaskOutputWrapping.fromWire(_policy('wrap_response')),
     timezone: _policy('timezone')?.toString() ?? '',
     graceMinutes: _graceInput ?? _policy('grace_minutes')?.toString() ?? '',
     catchUp: switch (_policy('catch_up')) {
@@ -340,6 +343,12 @@ class ScheduledTaskEditSession extends ChangeNotifier {
       TaskCatchUp.runOnce => true,
       TaskCatchUp.skip => false,
     };
+    _changed();
+  }
+
+  void setOutputWrapping(TaskOutputWrapping value) {
+    if (_disposed || _saving) return;
+    _policyEdits['wrap_response'] = value.wireValue;
     _changed();
   }
 
@@ -563,7 +572,12 @@ class ScheduledTaskEditSession extends ChangeNotifier {
               ),
             );
     }
-    for (final key in ['timezone', 'grace_minutes', 'catch_up']) {
+    for (final key in [
+      'timezone',
+      'grace_minutes',
+      'catch_up',
+      'wrap_response',
+    ]) {
       if (!retained.containsKey(key)) {
         _policyEdits.remove(key);
         if (key == 'grace_minutes') _graceInput = null;

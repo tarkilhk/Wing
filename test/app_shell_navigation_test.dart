@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/studio_error.dart';
@@ -95,7 +96,7 @@ void main() {
     PackageInfo.setMockInitialValues(
       appName: 'Wing',
       packageName: 'com.tarkilhk.wing',
-      version: '1.0.0',
+      version: testWingClientIdentity.wire['version']!,
       buildNumber: '1',
       buildSignature: '',
     );

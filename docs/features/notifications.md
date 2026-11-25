@@ -7,7 +7,7 @@ Feature ID: `notifications`.
 ## Sub-features
 
 - `notifications.route` — Open the exact notification owner. Reply alerts show the beginning of the answer, including answers longer than the screen, after formatted content settles.
-- `notifications.act` — Answer a supported request without duplication, retaining its exact request and turn identity. Command review uses the same exact-command and request-details content as normal, bot and group chats, while keeping the selected notification approval scope explicit.
+- `notifications.act` — Answer a supported request without duplication, retaining its exact request and turn identity. Review uses the same exact subject and request details as normal, bot and group chats, while keeping the selected approval scope explicit. Folder/site grants open in Wing, show the sandbox lifetime, and reject a decision if the captured target or request changes during recovery. Direct Deny remains available without a reason; open the conversation to include an optional denial reason.
 - `notifications.settle` — Seeing a saved answer clears a newly recorded reply notice even when that viewport already recorded its read receipt. Keep read, dismissed and restored notices consistent.
 - `notifications.monitor` — Watch ongoing work in a compact summary of up to
   three chats or discussions, followed by the remaining count. Unnamed sessions
@@ -58,6 +58,14 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   visible. Avatars and clipped leading space cannot acknowledge an unseen answer.
   Hidden/background readers,
   failed history and model-only rows cannot acknowledge an unseen answer.
+
+  Refused turns retain stopped/attention notification semantics with the
+  Message refused title and Try a different query guidance, including a refusal
+  received in a reconnect snapshot. An outstanding status target uses a passive
+  notice until visible; it cannot acknowledge an earlier assistant instead.
+  `profile_composer_actions_test.dart` covers that visibility receipt, and
+  `profile_workspace_controller_test.dart` covers recovered publication without
+  resubmitting or consuming the next draft.
 
   For monitoring summaries and outage recovery, run:
 
@@ -118,3 +126,9 @@ App settings shows a persistent error when background notification monitoring
 fails. Its Retry icon shows progress until the monitoring attempt settles and
 disables duplicate taps. `test/background_monitoring_settings_test.dart` covers
 failure, held retry and recovery in both themes and text sizes.
+
+Shared group observations retain the captured host installation, authority epoch
+and frozen member targets. A replacement catalog retires old message reads and
+notification discovery writes, even when the room ID is unchanged. The cache
+boundary regression is `test/group_observations_test.dart`; notification cursor
+and delivery behavior remains covered by `test/group_notification_session_test.dart`.

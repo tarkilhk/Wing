@@ -1115,7 +1115,7 @@ void main() {
     );
     await tester.pump();
     final previous = controller.current!.chat!.key;
-    await controller.createChat(canDispatch: () => true);
+    await tester.runAsync(() => controller.createChat(canDispatch: () => true));
     expect(controller.current!.chat!.key, isNot(previous));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('composer-reasoning-selector')), findsNothing);

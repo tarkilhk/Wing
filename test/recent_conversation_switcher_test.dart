@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/widgets/conversation_composer.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/services/group_observations.dart';
@@ -214,6 +215,7 @@ class _ScreenFixture extends ProfileBrowserFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: base.read,
@@ -426,6 +428,74 @@ Future<void> _captureCurrent(
 }
 
 void main() {
+  testWidgets('passive Recents preserves refused text and explanation', (
+    tester,
+  ) async {
+    final entry = RecentConversationEntry.chat(
+      key: ProfileSessionKey(
+        WorkspaceScope(connectionId: 'c', profileName: 'p'),
+        'refused-chat',
+      ),
+      title: 'Refused chat',
+      unread: false,
+    );
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    for (final brightness in Brightness.values) {
+      for (final scale in [1.0, 2.0]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: wingTheme(brightness),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: ConversationPreview(
+              connectionLabel: 'Host',
+              card: RecentConversationCard(
+                entry: entry,
+                preview: RecentConversationPreview(
+                  entry: entry,
+                  reading: TranscriptReadingSnapshot(
+                    historySessionId: 'refused-chat',
+                    messages: const [
+                      {
+                        'id': 42,
+                        'role': 'user',
+                        'content': 'Original refused text',
+                        'display_kind': 'content_refused',
+                        'display_metadata': {
+                          'content_refused': {
+                            'notice': 'Saved refusal explanation',
+                          },
+                        },
+                      },
+                    ],
+                  ),
+                  draft: 'Later draft',
+                  scopeLabel: 'p',
+                ),
+              ),
+            ),
+          ),
+        );
+        await _finishFrames(tester);
+        expect(find.text('Original refused text'), findsOneWidget);
+        expect(find.text('Saved refusal explanation'), findsOneWidget);
+        expect(
+          tester
+              .widget<ProfileMessage>(find.byType(ProfileMessage))
+              .message
+              .copyText,
+          isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+      }
+    }
+  });
   if (_export) _ReviewBinding();
   setUpAll(() async {
     if (!_export) return;
@@ -482,6 +552,7 @@ void main() {
               gatewayFactory: (scope) {
                 final base = fixture.gateway(scope);
                 return ProfileGateway(
+                  loadClientIdentity: loadTestWingClientIdentity,
                   scope: scope,
                   discover: base.discover,
                   get: (path, query) async {
@@ -1475,6 +1546,8 @@ void main() {
       (tester) async {
         final room = RecentConversationEntry.group(
           BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
             observationComplete: true,
             scope: source.entries[0].key.chat!.workspace,
             instance: 'Host',
@@ -1729,6 +1802,8 @@ void main() {
               if (group) {
                 source.entries[1] = RecentConversationEntry.group(
                   BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
                     observationComplete: true,
                     scope: source.entries.first.key.chat!.workspace,
                     instance: 'Host',
@@ -3530,6 +3605,7 @@ void main() {
       (tester) async {
         final key = source.entries[1].key;
         BotRecord appearance(String title) => BotRecord(
+    installationId: 'install:install-1',
           scope: key.chat!.workspace,
           instance: 'Host',
           profile: HermesProfile.fromJson({
@@ -3665,6 +3741,8 @@ void main() {
       ) async {
         final room = RecentConversationEntry.group(
           BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
             scope: source.entries[0].key.chat!.workspace,
             instance: 'Host',
             id: 'room-1',
@@ -3872,6 +3950,8 @@ void main() {
             ConnectionAccess(connection: roomConnection, dashboardOAuth: null),
             'instance-1',
             connectionStatus: roomStatus,
+
+            loadClientIdentity: loadTestWingClientIdentity,
           );
           addTearDown(roomServer.close);
           final botFixture = BotsFixture(server: roomServer);
@@ -4658,6 +4738,7 @@ void main() {
             gatewayFactory: (scope) {
               final base = fixture.gateway(scope);
               return ProfileGateway(
+                loadClientIdentity: loadTestWingClientIdentity,
                 scope: scope,
                 discover: base.discover,
                 get: base.read,

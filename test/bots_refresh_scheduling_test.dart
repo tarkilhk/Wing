@@ -527,6 +527,10 @@ void main() {
           return driver == null
               ? {}
               : {
+                  'authority_gateway_id': 'install:install-1',
+                  'persistent_process': true,
+                  'features': <String>[], 'room_link': <String, dynamic>{},
+                  'methods': ['groups.create'],
                   'driver': driver,
                   'seatable_profiles': ['atlas', 'mira', 'forge'],
                 };
@@ -713,7 +717,7 @@ void main() {
       await owner.refresh();
       expect(stateReads, 1);
       expect(logReads, failure == 'state' ? 0 : 1);
-      expect(owner.observedGroups.single.activeMemberProfiles, isEmpty);
+      expect(owner.observedGroups.single.activeMemberIds, isEmpty);
       broken = false;
       now = now.add(const Duration(seconds: 10));
       await owner.refresh();
@@ -758,6 +762,7 @@ void main() {
           return {
             'room': {...fixture.room, 'latest_seq': fixture.events.length},
             'driver_status': {
+          'peer_routes': <Object>[],
               'working': fixture.events.length >= 3,
               'blocked': fixture.events.length >= 4,
               'member_activity': [
@@ -804,7 +809,7 @@ void main() {
       expect(room.latestSequence, 4);
       expect(room.working, true);
       expect(room.blocked, true);
-      expect(room.activeMemberProfiles, {'atlas', 'mira'});
+      expect(room.activeMemberIds, {'atlas', 'mira'});
     },
   );
 }

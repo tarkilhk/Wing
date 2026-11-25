@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/administration_repository.dart';
 import 'package:wing/core/services/shared_draft_session.dart';
@@ -93,6 +94,7 @@ ProfileWorkspaceController profileController(
     preferences: prefs,
     appPreferences: appPreferences,
     gatewayFactory: (scope) => ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: () async => const ProfileDiscovery(
         profiles: [HermesProfile(name: 'default')],
@@ -157,6 +159,7 @@ ProfileWorkspaceController profileController(
               'Unexpected home administration mutation: $method $path',
             ),
     gateway: (profile) => ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: WorkspaceScope(
         connectionId: connection.id,
         connectionIdentity: controller.connectionIdentity,

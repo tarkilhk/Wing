@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
@@ -38,6 +39,7 @@ class _ReviewFixture extends ProfileHistoryFixture {
     final base = super.gateway(scope);
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       connect: () async {

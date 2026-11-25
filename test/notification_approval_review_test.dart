@@ -80,7 +80,7 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
     expect(find.text('Review command'), findsOneWidget);
-    expect(find.byType(ApprovalCommandDetails), findsOneWidget);
+    expect(find.byType(ApprovalRequestDetails), findsOneWidget);
     expect(
       find.text('Decision not confirmed. Check the connection, then retry.'),
       findsOneWidget,
@@ -92,6 +92,50 @@ void main() {
     await tester.pumpAndSettle();
     expect(attempts, 2);
     expect(find.text('Review command'), findsNothing);
+  });
+
+  testWidgets('typed notification review names host and saved rule', (
+    tester,
+  ) async {
+    final changes = ChangeNotifier();
+    addTearDown(changes.dispose);
+    var submitted = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (_) => NotificationApprovalReview(
+                request: GatewayApprovalRequest.fromEventData({
+                  'kind': 'network',
+                  'host': 'example.org',
+                  'label': 'Reference website',
+                  'choices': ['once', 'always', 'deny'],
+                }),
+                choice: 'always',
+                changes: changes,
+                offline: () => false,
+                pending: () => true,
+                submit: () async {
+                  submitted = true;
+                },
+              ),
+            ),
+            child: const Text('Open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Always allow?'), findsOneWidget);
+    expect(find.text('example.org'), findsOneWidget);
+    expect(find.text('Save this access rule for future use.'), findsOneWidget);
+    await tester.tap(find.byTooltip('Save access rule'));
+    await tester.pumpAndSettle();
+    expect(submitted, isTrue);
+    expect(find.byType(NotificationApprovalReview), findsNothing);
   });
 
   for (final brightness in Brightness.values) {

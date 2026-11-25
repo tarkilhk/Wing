@@ -40,8 +40,17 @@ Map<String, dynamic> captureReadingSnapshotMessage(Map<String, dynamic> row) =>
         if (row.containsKey(key)) key: row[key],
       if (row['display_metadata'] case final Map metadata)
         'display_metadata': {
-          for (final key in ['task_count', 'display_text', 'model_only'])
+          for (final key in [
+            'task_count',
+            'display_text',
+            'model_only',
+            'submission_id',
+          ])
             if (metadata.containsKey(key)) key: metadata[key],
+          if (metadata['content_refused'] case final Map refused)
+            'content_refused': {
+              if (refused['notice'] is String) 'notice': refused['notice'],
+            },
         },
       if (row['submitted_attachments'] is List)
         'submitted_attachments': [
@@ -53,7 +62,7 @@ Map<String, dynamic> captureReadingSnapshotMessage(Map<String, dynamic> row) =>
     };
 
 /// A bounded, typed JSON projection of the display fields understood by the
-/// transcript. Notice metadata retains its title/count and model-only marker;
+/// transcript. Metadata retains notice text/count, input identity and model-only marker;
 /// arbitrary nested gateway records and decision/transport fields are excluded.
 Map<String, dynamic> projectReadingSnapshotMessage(Map row) {
   final result = <String, dynamic>{};
@@ -119,6 +128,20 @@ Map<String, dynamic> projectReadingSnapshotMessage(Map row) {
   }
   final metadata = answerMessageDisplayMetadata(Map<String, dynamic>.from(row));
   final displayMetadata = <String, dynamic>{};
+  final submission = metadata['submission_id'];
+  if (result['role'] == 'user' &&
+      submission is String &&
+      submission.isNotEmpty &&
+      submission.length <= 256) {
+    displayMetadata['submission_id'] = submission;
+  }
+  final refused = metadata['content_refused'];
+  if (result['display_kind'] == 'content_refused' && refused is Map) {
+    final notice = refused['notice'];
+    if (notice is String && notice.trim().isNotEmpty && notice.length <= 4096) {
+      displayMetadata['content_refused'] = {'notice': notice};
+    }
+  }
   if (metadata['model_only'] case final bool modelOnly) {
     displayMetadata['model_only'] = modelOnly;
   }

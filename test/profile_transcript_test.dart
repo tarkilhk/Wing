@@ -860,6 +860,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
         'request_id': 'decision',
         'command': 'inspect source',
         'description': 'Allow inspection?',
+        'choices': ['once', 'deny'],
       });
       final response = runtime.beginApprovalAnswer('decision', 'once');
       runtime.finishApprovalAnswer(response, 'decision', accepted: true);
@@ -1062,7 +1063,7 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
     expect(chat.reading.historyError, isNotNull);
     await rebuildPresentation(tester);
     expect(find.byType(PlayfulPortrait), findsNothing);
-    expect(find.text('Refresh history'), findsOneWidget);
+    expect(find.byTooltip('Refresh history'), findsOneWidget);
 
     host.failHistory = false;
     host.messageCount = 0;
@@ -2205,8 +2206,8 @@ void main({Future<void> Function(WidgetTester, String)? capture}) {
       await tester.pump(const Duration(seconds: 2));
       expect(host.reads.length, reads);
       host.failHistory = false;
-      await tester.ensureVisible(find.text('Retry older messages'));
-      await tester.tap(find.text('Retry older messages'));
+      await tester.ensureVisible(find.byTooltip('Retry older messages'));
+      await tester.tap(find.byTooltip('Retry older messages'));
       await tester.pumpAndSettle();
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.messages.length, greaterThanOrEqualTo(100));

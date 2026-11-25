@@ -29,7 +29,17 @@ from scripts.test_vanilla_hermes import cleanup_signals
 from scripts.test_nightly_native import Runner, DEV
 from tools.qa import run_notification_gate as android
 
+ADDITION_MANIFESTS = {
+    'Production current chat account usage reads and refreshes the real provider report': ('account-usage',),
+    'Production prompt cache details preserve server reported lifecycle facts': ('prompt-cache',),
+    'Production child transcript reads durable history through its parent authority': ('child-transcript', 'child-descendants'),
+}
+WRAPPING_CASE = 'Production task output wrapping persists inherit on off and reset'
+SINGLE_PROFILE_SUITES = frozenset({'admin', 'context', 'additions', 'wrapping'})
+
 EXPECTED = {
+    'additions': frozenset(ADDITION_MANIFESTS),
+    'wrapping': frozenset({WRAPPING_CASE}),
     'processes': frozenset({
         'production Android discovers follows and stops background processes',
         'production Android compact activity preserves streamed order and details',
@@ -58,6 +68,8 @@ EXPECTED = {
 }
 
 TARGETS = {
+    'additions': 'upstream_additions_prod_test.dart',
+    'wrapping': 'task_wrapping_prod_test.dart',
     'processes': 'background_processes_prod_test.dart',
     'admin': 'hermes_next_admin_prod_test.dart',
     'conversation': 'hermes_next_conversation_prod_test.dart',
@@ -88,7 +100,7 @@ def main():
     if address.scheme != 'http' or address.path not in ('', '/') or address.username or address.query:
         raise ValueError('This TCP-forward recipe requires the canonical HTTP gateway origin')
     out = args.output.resolve()
-    out.mkdir(parents=True, exist_ok=False)
+    out.mkdir(parents=True, exist_ok=False, mode=0o700)
     nonce = 'wing-qa-' + uuid.uuid4().hex[:18]
     login = json.loads(args.login_file.read_bytes())
     credentials = {key: login[key] for key in ('provider', 'username', 'password')}
@@ -108,7 +120,7 @@ def main():
     if not isinstance(backend.get('commit'), str) or not re.fullmatch(r'[0-9a-f]{40}', backend['commit']):
         raise RuntimeError('Production acceptance requires the running backend commit')
     baseline = {row['name'] for row in request('/api/profiles')['profiles']}
-    owned_profiles = [nonce] if args.suite in ('admin', 'context') else (
+    owned_profiles = [nonce] if args.suite in SINGLE_PROFILE_SUITES else (
         [nonce + '-a', nonce + '-b'] if args.suite == 'groups' else [])
     if any(name in baseline for name in owned_profiles):
         raise RuntimeError('QA profile already exists')
@@ -116,7 +128,7 @@ def main():
         'runner_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'app_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         'backend_commit': backend.get('commit'), 'backend_version': backend.get('version'),
-        'profile': nonce if args.suite in ('admin', 'context') else 'default', 'nonce': nonce,
+        'profile': nonce if args.suite in SINGLE_PROFILE_SUITES else 'default', 'nonce': nonce,
         'profile_cleanup': 'not-needed', 'passed': False}
     receipt['backend_origin'] = args.url.rstrip('/')
     receipt['owned_profiles'] = owned_profiles
@@ -166,7 +178,7 @@ def main():
                 'content': '---\nname: wing-qa-skill\ndescription: Isolated Wing skill lock acceptance.\n---\nThis skill is an inert QA fixture. Do not invoke tools or change files.\n'})
             rows = request('/api/mcp/servers?profile=' + nonce)['servers']
             assert len(rows) == 1 and rows[0]['name'] == 'wing-qa-disabled' and rows[0]['enabled'] is False
-        elif args.suite in ('groups', 'context'):
+        elif args.suite in ('groups', 'context', 'additions', 'wrapping'):
             model = request('/api/model/info?profile=default')
             assert model.get('provider') and model.get('model'), 'Configured provider/model required'
             receipt['profile_cleanup'] = 'pending'
@@ -271,6 +283,23 @@ def main():
                         assert manifest.get('profiles') == owned_profiles
                         assert manifest.get('room_id') == nonce + '-' + kind
                         assert manifest.get('cleanup') == 'confirmed absent', 'Unfinished owned work: retain QA profiles'
+                elif args.suite in ('additions', 'wrapping') and device_started:
+                    assert final_capture_confirmed, 'Final ownership capture missing: retain QA profile'
+                    kinds = ({kind for name in expected for kind in ADDITION_MANIFESTS[name]}
+                        if args.suite == 'additions' else {'task-wrapping'})
+                    manifests = {path.name: path for path in out.glob('wing-prod-owned-' + nonce + '-*.json')}
+                    assert set(manifests) == {'wing-prod-owned-' + nonce + '-' + kind + '.json'
+                        for kind in kinds}, 'Unexpected or incomplete ownership receipts: retain QA profile'
+                    for kind in kinds:
+                        manifest = json.loads(manifests['wing-prod-owned-' + nonce + '-' + kind + '.json'].read_text())
+                        assert manifest.get('nonce') == nonce and manifest.get('kind') == kind
+                        assert manifest.get('profile') == nonce
+                        assert manifest.get('cleanup') == 'confirmed absent', 'Unfinished owned work: retain QA profile'
+                        ids_key = 'task_ids' if kind == 'task-wrapping' else 'session_ids'
+                        assert manifest.get(ids_key) or (kind == 'task-wrapping' and
+                            manifest.get('creation') == 'not requested' and
+                            manifest.get('empty_profile_tasks_confirmed') is True), \
+                            'No owned resource identity or confirmed unattempted creation: retain QA profile'
                 elif args.suite == 'context' and device_started:
                     assert final_capture_confirmed, 'Final ownership capture missing: retain QA profile'
                     manifest = json.loads((out / ('wing-prod-owned-' + nonce + '-context.json')).read_text())

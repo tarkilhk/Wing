@@ -181,12 +181,14 @@ class _UserMessageAttachmentTileState extends State<UserMessageAttachmentTile>
   @override
   void didUpdateWidget(covariant UserMessageAttachmentTile oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.attachment.target != widget.attachment.target) {
+    if (oldWidget.attachment.target != widget.attachment.target ||
+        oldWidget.loadImage != widget.loadImage) {
       _downloadGeneration++;
       _downloading = false;
       _downloadError = null;
     }
     if (oldWidget.attachment.target != widget.attachment.target ||
+        oldWidget.loadImage != widget.loadImage ||
         oldWidget.loadImages != widget.loadImages ||
         oldWidget.attachment.isImage != widget.attachment.isImage ||
         (!oldWidget.imageServerAvailable &&
@@ -479,6 +481,7 @@ class _UserMessageAttachmentsState extends State<UserMessageAttachments> {
   @override
   void didUpdateWidget(covariant UserMessageAttachments oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.loadImage != widget.loadImage) _previewProviders.clear();
     final targets = widget.attachments
         .where((attachment) => attachment.isImage)
         .take(5)

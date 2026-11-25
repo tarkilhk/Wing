@@ -153,7 +153,7 @@ extension ProfileNotificationState on ProfileWorkspaceController {
         NotificationInput(
           focus: NotificationFocus('approval', issued.requestId),
           content: ChatNotificationContent.approval(
-            request.command,
+            request.notificationPreview,
             request.description,
           ),
           choices: request.choices.map((v) => v.wireValue).toList(),

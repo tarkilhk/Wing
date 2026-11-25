@@ -2,6 +2,8 @@
 /// install this fixture under the production package. Hermes is entirely fake.
 library;
 
+import '../test/support/wing_client_identity_fixture.dart';
+
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:flutter/services.dart';
@@ -210,6 +212,7 @@ Future<void> main() async {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = groupHost.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: groupHost.discover,
       get: base.read,

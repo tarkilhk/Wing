@@ -694,6 +694,8 @@ void main() {
     (tester) async {
       final group = RecentConversationEntry.group(
         BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
           scope: _scope,
           instance: 'Home',
           id: 'room',

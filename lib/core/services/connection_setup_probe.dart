@@ -1,3 +1,4 @@
+import 'installed_wing_client_identity.dart';
 import 'dashboard_oauth_session.dart';
 import 'connection_access.dart';
 import 'dart:async';
@@ -23,8 +24,16 @@ abstract interface class ConnectionProbe {
 }
 
 class DashboardConnectionProbe implements ConnectionProbe {
-  DashboardConnectionProbe(this.access)
-    : _profiles = ProfilesRepository.forConnection(access);
+  DashboardConnectionProbe(
+    this.access, {
+    WingClientIdentityLoader loadClientIdentity =
+        loadInstalledWingClientIdentity,
+    // Keep the named dependency public and its stored callback private.
+    // ignore: prefer_initializing_formals
+  }) : _loadClientIdentity = loadClientIdentity,
+       _profiles = ProfilesRepository.forConnection(access);
+
+  final WingClientIdentityLoader _loadClientIdentity;
 
   final ConnectionAccess access;
   SavedConnection get connection => access.connection;
@@ -41,6 +50,7 @@ class DashboardConnectionProbe implements ConnectionProbe {
     final gateway = ProfileGateway.forConnection(
       access,
       WorkspaceScope(connectionId: connection.id, profileName: profile.name),
+      loadClientIdentity: _loadClientIdentity,
     );
     _gateway = gateway;
     await gateway.connect();

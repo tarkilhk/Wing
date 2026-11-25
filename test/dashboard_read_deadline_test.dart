@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -83,6 +84,8 @@ void main() {
           dashboardOAuth: null,
         ),
         WorkspaceScope(connectionId: 'slow-history', profileName: 'personal'),
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       addTearDown(() async {
         for (final advance in advances) {
@@ -320,6 +323,8 @@ void main() {
           ),
           dashboardOAuth: null,
         ),
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       final gateway = owner.create(
         WorkspaceScope(connectionId: 'origins', profileName: 'default'),

@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'package:wing/core/widgets/source_code_text.dart';
@@ -262,6 +263,7 @@ void main() {
     final reading = TranscriptReading(
       gateway: attachTiming(
         ProfileGateway(
+          loadClientIdentity: loadTestWingClientIdentity,
           scope: chat.key.workspace,
           discover: base.discover,
           get: base.read,
@@ -307,6 +309,7 @@ void main() {
       final reading = TranscriptReading(
         gateway: attachTiming(
           ProfileGateway(
+            loadClientIdentity: loadTestWingClientIdentity,
             scope: chat.key.workspace,
             discover: base.discover,
             get: base.read,
@@ -393,6 +396,7 @@ void main() {
         late final ProfileGateway gateway;
         gateway = attachTiming(
           ProfileGateway(
+            loadClientIdentity: loadTestWingClientIdentity,
             scope: scope,
             discover: base.discover,
             get: base.read,
@@ -660,6 +664,7 @@ void main() {
     final reading = TranscriptReading(
       gateway: attachTiming(
         ProfileGateway(
+          loadClientIdentity: loadTestWingClientIdentity,
           scope: chat.key.workspace,
           discover: base.discover,
           get: base.read,
@@ -711,6 +716,7 @@ void main() {
       final reading = TranscriptReading(
         gateway: attachTiming(
           ProfileGateway(
+            loadClientIdentity: loadTestWingClientIdentity,
             scope: chat.key.workspace,
             discover: base.discover,
             get: base.read,
@@ -788,6 +794,7 @@ void main() {
         final reading = TranscriptReading(
           gateway: attachTiming(
             ProfileGateway(
+              loadClientIdentity: loadTestWingClientIdentity,
               scope: chat.key.workspace,
               discover: base.discover,
               get: base.read,

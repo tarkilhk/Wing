@@ -51,7 +51,18 @@ extension _RuntimeQuestions on ChatRuntime {
         kind: HermesQuestionKind.approval,
         status: HermesQuestionStatus.pending,
         timestamp: DateTime.now(),
-        description: request.description,
+        description: request.isSandbox
+            ? [
+                request.title,
+                request.displaySubject,
+                ?request.accessLabel,
+                if (request.label != null)
+                  GatewayApprovalRequest.displayName(request.label!),
+                if (request.risk != null)
+                  GatewayApprovalRequest.displayName(request.risk!),
+                request.description,
+              ].where((line) => line.isNotEmpty).join('\n')
+            : request.description,
         command: request.command,
       ),
     );

@@ -31,6 +31,8 @@ final class GroupMessageObservation {
       scope: room.scope,
       instance: room.instance,
       id: room.id,
+      authorityGatewayId: room.authorityGatewayId,
+      authorityEpoch: room.authorityEpoch,
       name: room.name,
       members: room.members,
       observationComplete: (coverage ?? -1) >= latestSequence,
@@ -48,6 +50,8 @@ BotGroup _identity(BotGroup room) => BotGroup(
   scope: room.scope,
   instance: room.instance,
   id: room.id,
+  authorityGatewayId: room.authorityGatewayId,
+  authorityEpoch: room.authorityEpoch,
   name: room.name,
   members: room.members,
   observationComplete: false,
@@ -75,6 +79,10 @@ final class GroupObservationRead {
   bool _hasPage = false;
   int? _start, _end;
   void add(BotGroupPage page, {required int since}) {
+    if (page.gatewayId != room.authorityGatewayId ||
+        page.epoch != room.authorityEpoch) {
+      throw ArgumentError('Wrong group observation authority');
+    }
     if (since < 0 || page.cursor < since) {
       throw ArgumentError('Invalid group coverage');
     }
@@ -130,15 +138,42 @@ final class GroupObservations extends ChangeNotifier {
   final WorkspaceScope scope;
   final _rooms = <String, GroupMessageObservation>{};
   final _tokens = <String, Object>{};
+  final _bindings = <String, BotGroup>{};
   bool _closed = false;
   Iterable<GroupMessageObservation> get values =>
       List.unmodifiable(_rooms.values);
   GroupMessageObservation? forRoom(String id) => _rooms[id];
 
+  /// Capture before asynchronous discovery so a retired identity cannot rebind.
+  Object capture(String id) => _tokens.putIfAbsent(id, Object.new);
+  bool isCurrent(String id, Object token) =>
+      !_closed && identical(_tokens[id], token);
+
+  /// Bind every admitted catalog identity without inventing message demand.
+  void bind(BotGroup room) {
+    if (_closed) return;
+    if (room.scope != scope) {
+      throw ArgumentError('Wrong group observation owner');
+    }
+    final previous = _bindings[room.id];
+    if (previous != null && previous.sameRoster(room)) return;
+    if (_rooms.containsKey(room.id)) {
+      discover(room, room.latestSequence ?? 0);
+    } else {
+      _bindings[room.id] = _identity(room);
+      _tokens[room.id] = Object();
+    }
+  }
+
   GroupObservationRead beginRead(BotGroup room) {
     if (room.scope != scope) {
       throw ArgumentError('Wrong group observation owner');
     }
+    final bound = _bindings[room.id];
+    if (bound != null && !bound.sameRoster(room)) {
+      throw StateError('Group observation identity retired');
+    }
+    _bindings.putIfAbsent(room.id, () => _identity(room));
     return GroupObservationRead._(
       this,
       room,
@@ -146,13 +181,23 @@ final class GroupObservations extends ChangeNotifier {
     );
   }
 
-  void discover(BotGroup room, int latestSequence) {
-    if (_closed) return;
+  void discover(BotGroup room, int latestSequence, {Object? ifCurrent}) {
+    if (_closed || (ifCurrent != null && !isCurrent(room.id, ifCurrent))) {
+      return;
+    }
     if (room.scope != scope) {
       throw ArgumentError('Wrong group observation owner');
     }
-    if (_rooms.containsKey(room.id)) return;
-    _tokens.putIfAbsent(room.id, Object.new);
+    final bound = _bindings[room.id];
+    if (bound != null &&
+        bound.sameRoster(room) &&
+        _rooms.containsKey(room.id)) {
+      return;
+    }
+    if (bound == null || !bound.sameRoster(room)) {
+      _tokens[room.id] = Object();
+    }
+    _bindings[room.id] = _identity(room);
     _rooms[room.id] = GroupMessageObservation(
       room: _identity(room),
       message: null,
@@ -160,8 +205,8 @@ final class GroupObservations extends ChangeNotifier {
       messageThrough: null,
       answerThrough: null,
       latestSequence: latestSequence,
-      gatewayId: '',
-      epoch: 0,
+      gatewayId: room.authorityGatewayId,
+      epoch: room.authorityEpoch,
     );
     notifyListeners();
   }
@@ -190,11 +235,23 @@ final class GroupObservations extends ChangeNotifier {
     bool sameMembers(BotGroup a, BotGroup b) => listEquals(
       [
         for (final member in a.members)
-          (member.id, member.profile, member.handle, member.name),
+          (
+            member.id,
+            member.profile,
+            member.handle,
+            member.name,
+            member.target,
+          ),
       ],
       [
         for (final member in b.members)
-          (member.id, member.profile, member.handle, member.name),
+          (
+            member.id,
+            member.profile,
+            member.handle,
+            member.name,
+            member.target,
+          ),
       ],
     );
     if (old != null &&
@@ -219,12 +276,14 @@ final class GroupObservations extends ChangeNotifier {
     final before = _rooms.length;
     _rooms.removeWhere((id, _) => !ids.contains(id));
     _tokens.removeWhere((id, _) => !ids.contains(id));
+    _bindings.removeWhere((id, _) => !ids.contains(id));
     if (_rooms.length != before) notifyListeners();
   }
 
-  void forget(String id) {
-    if (_closed) return;
+  void forget(String id, {Object? ifCurrent}) {
+    if (_closed || (ifCurrent != null && !isCurrent(id, ifCurrent))) return;
     _tokens.remove(id);
+    _bindings.remove(id);
     if (_rooms.remove(id) != null) notifyListeners();
   }
 
@@ -233,6 +292,7 @@ final class GroupObservations extends ChangeNotifier {
     _closed = true;
     _rooms.clear();
     _tokens.clear();
+    _bindings.clear();
     super.dispose();
   }
 }

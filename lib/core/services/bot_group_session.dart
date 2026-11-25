@@ -9,9 +9,11 @@ import '../models/transcript_position.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/bots.dart';
+import '../models/bot_group_peer.dart';
 import '../models/transcript_reader.dart';
 import '../models/transcript_message.dart';
 import 'bots_repository.dart';
+import 'bot_group_peer_access.dart';
 import 'bots_preferences.dart';
 import '../models/hermes_question.dart';
 import 'bot_group_read_state.dart';
@@ -40,6 +42,18 @@ final class BotGroupVoiceDraft {
   final String text;
 }
 
+/// Process-lifetime freshness observations, shared by successive room visits.
+/// A restart intentionally renews on first open; no background timer lives here.
+final class BotGroupPeerRenewalTimes {
+  final _due = <(String, String, int, String), DateTime>{};
+  (String, String, int, String) _key(BotGroup room, BotGroupMember member) =>
+      (room.key, room.authorityGatewayId, room.authorityEpoch, member.id);
+  bool due(BotGroup room, BotGroupMember member, DateTime now) =>
+      !(_due[_key(room, member)]?.isAfter(now) ?? false);
+  void record(BotGroup room, BotGroupMember member, DateTime next) =>
+      _due[_key(room, member)] = next;
+}
+
 /// The stock gateway drives group discussion, including while Wing is away.
 /// This owner replays its log and retains one immutable idempotent send attempt.
 class BotGroupSession extends ChangeNotifier {
@@ -47,6 +61,9 @@ class BotGroupSession extends ChangeNotifier {
     this.repository,
     BotGroup group, {
     required this.appearances,
+    this.peerAccess,
+    BotGroupPeerRenewalTimes? peerRenewals,
+    DateTime Function()? now,
     required this.reads,
     required this.groupMessages,
     required this.preferences,
@@ -56,6 +73,8 @@ class BotGroupSession extends ChangeNotifier {
     this.onOperationalError,
     AttachmentDraftService? attachmentService,
   }) : _group = group,
+       _peerRenewals = peerRenewals ?? BotGroupPeerRenewalTimes(),
+       _now = now ?? DateTime.now,
        _attachmentService = attachmentService ?? AttachmentDraftService() {
     repository.retain();
     _appearance = appearances.appearanceForGroup(group);
@@ -103,6 +122,9 @@ class BotGroupSession extends ChangeNotifier {
       }
     }
   }
+  final BotGroupPeerAccess? peerAccess;
+  final BotGroupPeerRenewalTimes _peerRenewals;
+  final DateTime Function() _now;
   final BotGroupAppearanceSource appearances;
   final OperationalErrorReporter? onOperationalError;
   final BotsPreferences preferences;
@@ -112,6 +134,7 @@ class BotGroupSession extends ChangeNotifier {
     final next = appearances.appearanceForGroup(group);
     if (_appearance == next) return;
     _appearance = next;
+    _renewPeers();
     notifyListeners();
   }
 
@@ -141,20 +164,7 @@ class BotGroupSession extends ChangeNotifier {
   BotGroup _group;
   BotGroup get group => _group;
   void updateDetails(BotGroup next) {
-    if (_closed ||
-        next.scope != group.scope ||
-        next.id != group.id ||
-        next.members.length != group.members.length ||
-        next.members.any(
-          (m) => !group.members.any(
-            (old) =>
-                old.id == m.id &&
-                old.profile == m.profile &&
-                old.handle == m.handle,
-          ),
-        )) {
-      return;
-    }
+    if (_closed || !group.sameRoster(next)) return;
     _group = next;
     _appearance = appearances.appearanceForGroup(next);
     notifyListeners();
@@ -172,7 +182,7 @@ class BotGroupSession extends ChangeNotifier {
           MentionCandidate(
             label: member.name,
             detail: _memberToken(member),
-            appearance: appearance(member.profile),
+            appearance: appearance(member.id),
             reference: ComposerReference(
               kind: ComposerReferenceKind.agent,
               token: _memberToken(member),
@@ -310,7 +320,11 @@ class BotGroupSession extends ChangeNotifier {
   ComposerAttachmentPreparation? _attachmentPreparation;
   ComposerAttachmentPreparation? get attachmentPreparation =>
       _attachmentPreparation;
+  String? get attachmentRestriction =>
+      group.hasPeers ? 'Bots on other instances can receive text only.' : null;
   bool get canAddAttachments =>
+      attachmentRestriction == null && canRemoveAttachments;
+  bool get canRemoveAttachments =>
       !_closed &&
       !_sending &&
       !_acting &&
@@ -433,12 +447,17 @@ class BotGroupSession extends ChangeNotifier {
 
   /// The shared intake stays unacknowledged until its whole batch is durable.
   Future<bool> stageSharedContent(AndroidSharePayload payload) async {
-    if (!canAddAttachments) return false;
+    if (!canRemoveAttachments ||
+        (payload.files.isNotEmpty && attachmentRestriction != null)) {
+      return false;
+    }
     final alreadyStaged =
         identical(_stagedShare, payload) ||
         (payload.id != null && _stagedShare?.id == payload.id);
     if (alreadyStaged) return await _saveDraft() && !_closed;
-    if (!await addAttachments(payload.files, atomic: true) || _closed) {
+    if ((payload.files.isNotEmpty &&
+            !await addAttachments(payload.files, atomic: true)) ||
+        _closed) {
       return false;
     }
     _stagedShare = payload;
@@ -454,9 +473,14 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   Future<void> removeAttachment(BotGroupAttachment attachment) async {
-    if (!canAddAttachments) return;
+    if (!canRemoveAttachments) return;
     _attachments.removeWhere((item) => item.id == attachment.id);
     final preview = _attachmentPreviews.remove(attachment.id);
+    if (_attachments.isEmpty &&
+        _actionError ==
+            '$attachmentRestriction Remove the files before sending.') {
+      _actionError = null;
+    }
     _draftRevision++;
     notifyListeners();
     await _saveDraft();
@@ -555,8 +579,8 @@ class BotGroupSession extends ChangeNotifier {
   }
 
   final _events = <int, BotGroupEvent>{};
-  BotRecord? appearance(String profile) {
-    final matches = group.members.where((member) => member.profile == profile);
+  BotRecord? appearance(String memberId) {
+    final matches = group.members.where((member) => member.id == memberId);
     return matches.length == 1
         ? _appearance.byHandle[matches.single.handle]
         : null;
@@ -774,6 +798,111 @@ class BotGroupSession extends ChangeNotifier {
   String? _pendingWireText;
   List<BotGroupAttachment> _pendingAttachments = const [];
   String? get pendingText => _pending?.$2;
+  final _peerInFlight = <String, Future<void>>{};
+  final _peerExplicit = <String>{};
+  final _peerMissing = <String, Set<String>>{};
+  final _peerErrors = <String, String>{};
+  String peerStatus(BotGroupMember member) =>
+      switch (runtime?.peerRoutes[member.id]) {
+        'ready' => 'Joined',
+        'needs_reauthorization' => 'Access expired',
+        'unavailable' => 'Instance unavailable',
+        null || 'missing' => 'Not joined',
+        _ => 'Status unavailable',
+      };
+  String? peerError(BotGroupMember member) => _peerErrors[member.id];
+  bool peerJoining(BotGroupMember member) => _peerExplicit.contains(member.id);
+  bool canRetryPeer(BotGroupMember member) =>
+      !_closed &&
+      peerAccess != null &&
+      member.target.isPeer &&
+      !_peerInFlight.containsKey(member.id) &&
+      appearance(member.id) != null &&
+      repository.isCurrent;
+  Future<void> retryPeer(BotGroupMember member) =>
+      _joinPeer(member, explicit: true);
+  Future<void> _joinPeer(BotGroupMember member, {required bool explicit}) {
+    final pending = _peerInFlight[member.id];
+    if (pending != null) return pending;
+    if (_closed || peerAccess == null || !repository.isCurrent) {
+      return Future.value();
+    }
+    final completion = Completer<void>();
+    _peerInFlight[member.id] = completion.future;
+    if (explicit) {
+      _peerExplicit.add(member.id);
+      notifyListeners();
+    }
+    () async {
+      try {
+        await peerAccess!.join(
+          group,
+          member,
+          canUse: () =>
+              !_closed && (explicit || _visible) && repository.isCurrent,
+        );
+        if (_closed) return;
+        _peerRenewals.record(
+          group,
+          member,
+          _now().add(const Duration(hours: 20)),
+        );
+        _peerMissing.remove(member.id);
+        _peerErrors.remove(member.id);
+      } catch (error) {
+        if (_closed ||
+            (error is BotGroupPeerFailure &&
+                error.reason == 'operation_retired')) {
+          return;
+        }
+        _peerRenewals.record(
+          group,
+          member,
+          _now().add(const Duration(minutes: 5)),
+        );
+        if (error is BotGroupPeerFailure &&
+            error.reason == 'peer_connection_missing') {
+          _peerMissing[member.id] = _appearance.byHandle.values
+              .map((bot) => bot.id)
+              .toSet();
+        }
+        if (!_closed) {
+          _peerErrors[member.id] = error is BotGroupPeerFailure
+              ? error.message
+              : 'Joining could not be confirmed. Retry.';
+        }
+      } finally {
+        _peerInFlight.remove(member.id);
+        _peerExplicit.remove(member.id);
+        completion.complete();
+        if (!_closed) {
+          notifyListeners();
+          if (explicit) unawaited(refresh(explicit: false));
+        }
+      }
+    }();
+    return completion.future;
+  }
+
+  void _renewPeers() {
+    if (_closed || !_visible || peerAccess == null) return;
+    final now = _now();
+    for (final member in group.members.where(
+      (member) => member.target.isPeer,
+    )) {
+      final status = runtime?.peerRoutes[member.id];
+      if ((status == 'ready' || status == 'needs_reauthorization') &&
+          !_peerInFlight.containsKey(member.id) &&
+          (_peerRenewals.due(group, member, now) ||
+              (_peerMissing[member.id] != null &&
+                  _appearance.byHandle.values.any(
+                    (bot) => !_peerMissing[member.id]!.contains(bot.id),
+                  )))) {
+        unawaited(_joinPeer(member, explicit: false));
+      }
+    }
+  }
+
   Timer? _poll;
   bool _capturing = false;
   void setCapturing(bool value) {
@@ -864,12 +993,17 @@ class BotGroupSession extends ChangeNotifier {
 
   Future<void> _refresh(Completer<void> completion) async {
     final revision = _recoveryRevision;
-    notifyListeners();
     try {
+      // Visibility can change while an overlay is being removed during build.
+      // Publish after that build; refresh() has already reserved the wait.
+      await Future<void>.value();
+      if (_closed) return;
+      notifyListeners();
       final observed = await repository.groupRuntime(group);
       final nextRuntime = observed.runtime;
       if (_closed || _capturing || revision != _recoveryRevision) return;
       _runtime = nextRuntime;
+      _renewPeers();
       _runtimeSequence = observed.sequence;
       _savedContext = null;
       preferences.observeQuestions(group, nextRuntime, observed.sequence);
@@ -1005,6 +1139,12 @@ class BotGroupSession extends ChangeNotifier {
       return false;
     }
     final isNew = _pending == null;
+    if (isNew && _attachments.isNotEmpty && attachmentRestriction != null) {
+      _actionError = '$attachmentRestriction Remove the files before sending.';
+      notifyListeners();
+      return false;
+    }
+    final stopGeneration = _sendStopGeneration;
     final attempt = _pending ?? (const Uuid().v4(), text.trim());
     final draftRevision = _draftRevision;
     _pending = attempt;
@@ -1031,7 +1171,8 @@ class BotGroupSession extends ChangeNotifier {
                   (member) =>
                       member.id == captured.id &&
                       member.handle == captured.handle &&
-                      member.profile == captured.profile,
+                      member.profile == captured.profile &&
+                      member.target == captured.target,
                 )) {
               _pending = null;
               _pendingWireText = null;
@@ -1045,11 +1186,26 @@ class BotGroupSession extends ChangeNotifier {
         _pendingAttachments = List.unmodifiable(_attachments);
       }
       if (!await _saveDraft() || _closed) return false;
+      _renewPeers();
+      if (_peerInFlight.isNotEmpty) {
+        await Future.wait(
+          _peerInFlight.values.toList(),
+        ).timeout(const Duration(seconds: 45), onTimeout: () => <void>[]);
+      }
+      if (_closed ||
+          stopGeneration != _sendStopGeneration ||
+          awaitingStopFence) {
+        throw StateError('Send held by Stop');
+      }
       sequence = await repository.sendGroup(
         group,
         attempt.$1,
         _pendingWireText!,
-        () => !_closed,
+        () =>
+            !_closed &&
+            repository.isCurrent &&
+            stopGeneration == _sendStopGeneration &&
+            !awaitingStopFence,
         () {
           dispatched = true;
         },
@@ -1086,16 +1242,19 @@ class BotGroupSession extends ChangeNotifier {
     } catch (error) {
       if (!_closed) {
         final refused = error is BotGroupSendRefused;
-        if (!dispatched || refused) {
+        if ((!dispatched && isNew) || refused) {
           if (refused) dispatched = false;
           _pending = null;
           _pendingWireText = null;
           _pendingAttachments = const [];
           await _saveDraft();
         }
-        _actionError = refused
+        _actionError =
+            error is BotGroupPeerFailure && error.reason == 'room_ended'
+            ? 'A mentioned member is unavailable. Correct the mention before sending.'
+            : refused
             ? 'Message was refused: ${error.message} Edit your draft and send again.'
-            : dispatched
+            : dispatched || !isNew
             ? 'Message not confirmed. Retry sends the same message once.'
             : 'The message could not be sent. Your text is kept. Retry.';
       }
@@ -1212,8 +1371,10 @@ class BotGroupSession extends ChangeNotifier {
     }
   }
 
+  int _sendStopGeneration = 0;
   Future<void> stop() async {
     if (!canStopGroupWork) return;
+    _sendStopGeneration++;
     _recoveryRevision++;
     _acting = true;
     _actionError = null;

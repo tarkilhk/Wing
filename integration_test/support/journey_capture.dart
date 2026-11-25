@@ -58,6 +58,9 @@ void testJourney(String description, WidgetTesterCallback callback) {
       debugPrint(
         'Journey failure: $description; '
         'viewport=${tester.view.physicalSize / tester.view.devicePixelRatio}; '
+        'devicePixelRatio=${tester.view.devicePixelRatio}; '
+        'viewPadding=${tester.view.viewPadding}; '
+        'padding=${tester.view.padding}; '
         'keyboardInset=${tester.view.viewInsets.bottom / tester.view.devicePixelRatio}; '
         'focus=${tester.binding.focusManager.primaryFocus?.debugLabel}',
       );

@@ -1,9 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../models/chat_output.dart';
 import '../models/profile_session_key.dart';
 import '../screens/chat_outputs_screen.dart';
 import '../services/transcript_resource_session.dart';
+import '../services/skill_reader_session.dart';
+import '../presentation/skill_document.dart';
 import 'activity/skill_document_viewer.dart';
 import '../models/transcript_presentation.dart';
 import '../models/transcript_timeline.dart';
@@ -32,23 +36,88 @@ class SubagentTimeline extends StatefulWidget {
 }
 
 class _SubagentTimelineState extends State<SubagentTimeline> {
-  late TranscriptResourceSession _resources = widget.createResources(
-    widget.session.state.key,
-  );
+  ProfileSessionKey? _resourceKey;
+  TranscriptResourceSession? _resources;
+  final _skillReaders = <SkillReaderSession>[];
+  Future<Uint8List> Function(String)? _loadImage;
+  Future<void> Function(ChatOutput)? _openResource;
+  Future<void> Function(ChatOutput)? _shareResource;
+  Future<bool> Function(ChatOutput)? _saveResource;
+  SkillReaderSession Function(SkillDocument)? _createSkillReader;
   SubagentTimelineReader get session => widget.session;
+
+  @override
+  void initState() {
+    super.initState();
+    session.addListener(_bindResources);
+    _bindResources();
+  }
 
   @override
   void didUpdateWidget(SubagentTimeline oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.session, session)) {
-      _resources.dispose();
-      _resources = widget.createResources(session.state.key);
+      oldWidget.session.removeListener(_bindResources);
+      _retireResources();
+      session.addListener(_bindResources);
+      _bindResources();
     }
+  }
+
+  void _retireResources() {
+    _resources?.dispose();
+    for (final reader in _skillReaders) {
+      reader.dispose();
+    }
+    _skillReaders.clear();
+    _resourceKey = null;
+    _resources = null;
+    _loadImage = null;
+    _openResource = null;
+    _shareResource = null;
+    _saveResource = null;
+    _createSkillReader = null;
+  }
+
+  void _bindResources() {
+    final key = session.resourceKey;
+    if (key == _resourceKey) return;
+    _retireResources();
+    if (key == null) return;
+    _resourceKey = key;
+    final resources = _resources = widget.createResources(key);
+    _loadImage = resources.loadImage;
+    _openResource = (output) async {
+      if (!_canDeliver(resources)) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ChatOutputsScreen(
+            chatTitle: 'Subagent activity',
+            initialOutput: output,
+            createSession: resources.createOutputsSession,
+          ),
+        ),
+      );
+    };
+    _shareResource = (output) => resources.files.downloadAndShare(
+      output.path!,
+      admitPresentation: () => _canDeliver(resources),
+    );
+    _saveResource = (output) => resources.files.downloadAndSave(
+      output.path!,
+      admitPresentation: () => _canDeliver(resources),
+    );
+    _createSkillReader = (document) {
+      final reader = resources.skillReader(document.readerTarget);
+      _skillReaders.add(reader);
+      return reader;
+    };
   }
 
   @override
   void dispose() {
-    _resources.dispose();
+    session.removeListener(_bindResources);
+    _retireResources();
     super.dispose();
   }
 
@@ -56,35 +125,6 @@ class _SubagentTimelineState extends State<SubagentTimeline> {
       mounted &&
       identical(resources, _resources) &&
       ModalRoute.of(context)?.isCurrent == true;
-
-  Future<void> _openResource(ChatOutput output) async {
-    final resources = _resources;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => ChatOutputsScreen(
-          chatTitle: 'Subagent activity',
-          initialOutput: output,
-          createSession: resources.createOutputsSession,
-        ),
-      ),
-    );
-  }
-
-  Future<void> _shareResource(ChatOutput output) {
-    final resources = _resources;
-    return resources.files.downloadAndShare(
-      output.path!,
-      admitPresentation: () => _canDeliver(resources),
-    );
-  }
-
-  Future<bool> _saveResource(ChatOutput output) {
-    final resources = _resources;
-    return resources.files.downloadAndSave(
-      output.path!,
-      admitPresentation: () => _canDeliver(resources),
-    );
-  }
 
   @override
   Widget build(BuildContext context) => ListenableBuilder(
@@ -110,76 +150,73 @@ class _SubagentTimelineState extends State<SubagentTimeline> {
         taskCount: session.todos.length,
         agentCount: session.state.subagents.length,
       );
-      return SkillReaderScope(
-        createReader: (document) =>
-            _resources.skillReader(document.readerTarget),
-        child: StudioPageLoading(
-          active: session.historyLoading && !session.historyPaging,
-          label: 'Loading subagent activity',
-          child: LayoutBuilder(
-            builder: (context, constraints) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: ProfileTranscript(
-                    key: ObjectKey(session),
-                    presentation: TranscriptPresentation.capture(
-                      identity: ('subagent', session.state.key),
-                      reader: session,
-                      timeline: projection.timeline,
-                      needsInput: false,
-                      turnAdmissionBlocked: session.liveAnswering,
-                    ),
-                    onRefreshHistory: session.refresh,
-                    onLoadOlder: session.loadOlder,
-                    loadImage: _resources.loadImage,
-                    onOpenResource: _openResource,
-                    onShareResource: _shareResource,
-                    activity: activity,
-                    emptyContent: const Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('No subagent activity is available yet.'),
-                    ),
-                    tail: const [],
-                    messageBuilder: (entry) => ProfileMessage(
-                      message: entry.message,
-                      loadAttachmentImage: _resources.loadImage,
-                      onOpenRemoteFile: _openResource,
-                      onShareRemoteFile: _shareResource,
-                      onDownloadRemoteFile: _saveResource,
-                    ),
+      final content = StudioPageLoading(
+        active: session.historyLoading && !session.historyPaging,
+        label: 'Loading subagent activity',
+        child: LayoutBuilder(
+          builder: (context, constraints) => Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: ProfileTranscript(
+                  key: ObjectKey(session),
+                  presentation: TranscriptPresentation.capture(
+                    identity: ('subagent', session.state.key),
+                    reader: session,
+                    timeline: projection.timeline,
+                    needsInput: false,
+                    turnAdmissionBlocked: session.liveAnswering,
+                  ),
+                  onRefreshHistory: session.refresh,
+                  onLoadOlder: session.loadOlder,
+                  loadImage: _loadImage,
+                  onOpenResource: _openResource,
+                  onShareResource: _shareResource,
+                  activity: activity,
+                  emptyContent: const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text('No subagent activity is available yet.'),
+                  ),
+                  tail: const [],
+                  messageBuilder: (entry) => ProfileMessage(
+                    message: entry.message,
+                    loadAttachmentImage: _loadImage,
+                    onOpenRemoteFile: _openResource,
+                    onShareRemoteFile: _shareResource,
+                    onDownloadRemoteFile: _saveResource,
                   ),
                 ),
-                if (session.qualification case final text?)
-                  _boundedFeedback(
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Text(text),
+              ),
+              if (session.qualification case final text?)
+                _boundedFeedback(
+                  Padding(padding: const EdgeInsets.all(8), child: Text(text)),
+                  constraints.maxHeight * 0.2,
+                ),
+              if (session.liveError case final error?)
+                Row(
+                  children: [
+                    Expanded(
+                      child: _boundedFeedback(
+                        StudioError(error),
+                        constraints.maxHeight * 0.35,
+                      ),
                     ),
-                    constraints.maxHeight * 0.2,
-                  ),
-                if (session.liveError case final error?)
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _boundedFeedback(
-                          StudioError(error),
-                          constraints.maxHeight * 0.35,
-                        ),
-                      ),
-                      ActivityDetailAction(
-                        label: 'Retry subagent activity',
-                        icon: Icons.refresh,
-                        onPressed: session.refresh,
-                      ),
-                    ],
-                  ),
-                activity.dock(),
-              ],
-            ),
+                    ActivityDetailAction(
+                      label: 'Retry subagent activity',
+                      icon: Icons.refresh,
+                      onPressed: session.refresh,
+                    ),
+                  ],
+                ),
+              activity.dock(),
+            ],
           ),
         ),
       );
+      final createReader = _createSkillReader;
+      return createReader == null
+          ? content
+          : SkillReaderScope(createReader: createReader, child: content);
     },
   );
   Widget _boundedFeedback(Widget child, double height) => ConstrainedBox(

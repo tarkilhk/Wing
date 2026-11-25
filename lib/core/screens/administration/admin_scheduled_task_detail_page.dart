@@ -271,6 +271,7 @@ class _AdminScheduledTaskDetailPageState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _fact('Results', task.destinationsDisplay),
+                        _fact('Output wrapping', task.outputWrapping.label),
                         _fact('Model', task.modelDisplay),
                         _fact('Missed runs', task.catchUpLabel),
                         if (task.schedule['kind'] == 'cron')

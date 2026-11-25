@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/doctor_finding_draft_session.dart';
@@ -66,6 +67,7 @@ class _Fixture {
       gatewayFactory: (scope) {
         final source = browser.gateway(scope);
         return ProfileGateway(
+          loadClientIdentity: loadTestWingClientIdentity,
           scope: scope,
           discover: source.discover,
           get: source.read,

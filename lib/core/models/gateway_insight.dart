@@ -309,35 +309,3 @@ class GatewaySubagentActivity {
   static String? _opaqueId(dynamic value) =>
       value is String && value.trim().isNotEmpty ? value : null;
 }
-
-class GatewaySubagentTail {
-  static const maxTextLength = 16384;
-
-  final String subagentId;
-  final bool available;
-  final String text;
-  final bool truncated;
-
-  const GatewaySubagentTail({
-    required this.subagentId,
-    required this.available,
-    required this.text,
-    required this.truncated,
-  });
-
-  static GatewaySubagentTail? fromJson(Map<String, dynamic> data) {
-    final value = data['subagent_id'];
-    final id = value is String && value.trim().isNotEmpty ? value : null;
-    if (id == null || data['available'] is! bool) return null;
-    final raw = data['text']?.toString().replaceAll('\u0000', '') ?? '';
-    final clipped = raw.length > maxTextLength
-        ? raw.substring(raw.length - maxTextLength)
-        : raw;
-    return GatewaySubagentTail(
-      subagentId: id,
-      available: data['available'] == true,
-      text: clipped,
-      truncated: data['truncated'] == true || clipped.length != raw.length,
-    );
-  }
-}

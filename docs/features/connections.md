@@ -58,6 +58,17 @@ for the captured instance. It does not switch the selected workspace.
 
 ## Gotchas
 
+Wing identifies itself to Hermes as a mobile client with its installed app version.
+It repeats that announcement on each connection, after the server greeting and
+before connected observers can send work. This descriptive label grants no access.
+The same identity accompanies new chats, including project and Bot Chats.
+
+Focused attribution and transport checks:
+
+```sh
+flutter test --no-pub test/wing_client_identity_test.dart test/approval_capability_transport_test.dart test/profile_live_contract_test.dart test/gateway_headers_transport_test.dart
+```
+
 A successful probe does not establish a saved connection. Reopen from Android secure storage. Cancelled or replaced setup must not acquire the next route.
 
 Rejected HTTP writes record their method, endpoint family and status in phone
@@ -114,3 +125,8 @@ Transport outages use the existing Alerts presentation, so acknowledgement or
 snooze does not leave a duplicate outage banner in the workspace. The status
 indicator still opens connection details. A failure specific to opening a chat
 keeps local recovery beside the affected view.
+
+Saved access also identifies [cross-instance group members](bots.md). Replacing or
+removing that access retires pending peer work. Another saved connection with the
+same profile name cannot substitute for the member’s installation. Wing reads
+existing RoomLink capabilities; endpoint setup remains an operator task.

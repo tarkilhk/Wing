@@ -213,11 +213,13 @@ void main() {
             await controller.switchProfile('personal');
             final assignedResource = controller.current!;
             final assignedProject = assignedResource.projects.first;
-            await controller.createChat(
-              inProject: assignedProject,
-              canDispatch: () =>
-                  identical(controller.current, assignedResource) &&
-                  assignedResource.projects.contains(assignedProject),
+            await tester.runAsync(
+              () => controller.createChat(
+                inProject: assignedProject,
+                canDispatch: () =>
+                    identical(controller.current, assignedResource) &&
+                    assignedResource.projects.contains(assignedProject),
+              ),
             );
             emitChatEvent(
               controller,

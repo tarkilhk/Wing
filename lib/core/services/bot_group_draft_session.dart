@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/bots.dart';
@@ -33,6 +34,7 @@ class BotGroupDraftSession extends ChangeNotifier {
         ? null
         : _roster.groupPicturePrompt(_identity!, _roomId);
     _initialColor = _iconColor;
+    if (existing == null) unawaited(prepare());
     if (existing != null && existing!.iconRevision == null) {
       _error =
           'Group picture is unavailable. Refresh Bots and reopen Edit group.';
@@ -67,15 +69,52 @@ class BotGroupDraftSession extends ChangeNotifier {
       existing?.instance ??
       hosts.where((host) => host.identity == _identity).firstOrNull?.label ??
       '';
+  BotGroupSelection? _selection;
+  bool _preparing = false;
+  String? _preparationError;
+  String? get preparationError => _preparationError;
+  int _preparation = 0;
+  bool get preparing => _preparing;
+  String? memberProblem(BotRecord bot) => _selection?.problems[bot.id];
+  Future<void> prepare() async {
+    if (_closed || editing || _identity == null || _saving || _frozen) return;
+    final generation = ++_preparation;
+    final identity = _identity!;
+    _preparing = true;
+    notifyListeners();
+    try {
+      final selection = await _roster.prepareGroupSelection(
+        identity,
+        _opening.bots,
+        canUse: () =>
+            !_closed && generation == _preparation && identity == _identity,
+      );
+      if (!_closed && generation == _preparation) {
+        _selection = selection.selection;
+        _preparationError = null;
+      }
+    } catch (_) {
+      if (!_closed && generation == _preparation) {
+        _preparationError = 'Members could not be checked.';
+      }
+    } finally {
+      if (!_closed && generation == _preparation) {
+        _preparing = false;
+        notifyListeners();
+      }
+    }
+  }
+
   List<BotRecord> get bots => _opening.bots
       .where(
         (bot) =>
-            bot.scope.connectionIdentity == _identity &&
-            (editing ||
-                _opening.seatableProfiles[_identity]?.contains(
-                      bot.profile.name,
-                    ) ==
-                    true),
+            editing ||
+            bot.scope.connectionIdentity != _identity ||
+            _members.contains(bot.id) ||
+            (_selection?.owner.seatableProfiles ??
+                    _opening.seatableProfiles[_identity] ??
+                    const <String>{})
+                .contains(bot.profile.name),
       )
       .toList();
   List<BotRecord> get selected =>
@@ -103,7 +142,8 @@ class BotGroupDraftSession extends ChangeNotifier {
       _attemptName ??
       (!editing && _name.trim().isEmpty ? suggestedName : _name.trim());
   Uint8List? get picture => _picture;
-  String? get error => _picturePromptError ?? _error;
+  String? get actionError => _picturePromptError ?? _error;
+  String? get error => actionError ?? _preparationError;
   bool get saving => _saving;
   bool get pictureBusy => _pictureBusy;
   bool get editable =>
@@ -118,9 +158,17 @@ class BotGroupDraftSession extends ChangeNotifier {
       _iconColor != _initialColor ||
       !listEquals(_picture, existing!.picture);
   bool get canSave =>
+      _preparationError == null &&
       !_closed &&
       !_saving &&
       !_pictureBusy &&
+      !_preparing &&
+      (editing ||
+          _frozen ||
+          (_selection != null &&
+              selected.every(
+                (bot) => _selection!.targets.containsKey(bot.id),
+              ))) &&
       _identity != null &&
       memberCount >= 2 &&
       memberCount <= 6 &&
@@ -133,12 +181,15 @@ class BotGroupDraftSession extends ChangeNotifier {
 
   bool contains(BotRecord bot) => _members.contains(bot.id);
   BotRecord? appearance(BotGroupMember member) =>
-      bots.where((bot) => bot.profile.name == member.profile).firstOrNull;
+      existing == null ? null : matchBotGroupMember(existing!, member, bots);
   bool canSelect(BotRecord bot) =>
       editable &&
       !editing &&
+      !_preparing &&
       bots.any((candidate) => candidate.id == bot.id) &&
-      (contains(bot) || _members.length < 6);
+      (contains(bot) ||
+          (_selection?.targets.containsKey(bot.id) == true &&
+              _members.length < 6));
   void chooseColor(ProfileColorChoice value) {
     if (!editable || value.slot == null) return;
     _iconColor = value;
@@ -173,6 +224,9 @@ class BotGroupDraftSession extends ChangeNotifier {
     _pictureGeneration++;
     _pictureBusy = false;
     _error = null;
+    _selection = null;
+    _preparationError = null;
+    unawaited(prepare());
     notifyListeners();
   }
 
@@ -328,46 +382,130 @@ class BotGroupDraftSession extends ChangeNotifier {
     }
   }
 
+  BotGroupCreateIntent? _intent;
+  bool Function()? _firstAdmission;
+  BotGroup? _created;
+  final _joined = <String>{};
   Future<bool> save({required bool Function() canUse}) async {
     if (!canSave || !canUse()) return false;
-    _attemptName ??= effectiveName;
-    _frozen = true;
     _saving = true;
     _error = null;
     notifyListeners();
-    final saved = editing
-        ? await _roster.editGroup(
-            existing!,
-            _attemptName!,
-            iconColor,
-            _picture,
-            _renameEvent,
-            canUse: () => !_closed && canUse(),
-          )
-        : await _roster.createGroup(
-            _identity!,
-            _roomId,
-            _attemptName!,
-            selected,
-            picture: _picture,
-            iconColor: iconColor,
-            canUse: () => !_closed && canUse(),
-          );
-    if (_closed) return false;
-    _saving = false;
-    if (!saved) {
-      _error =
-          _roster.state.errors.firstOrNull ??
-          'Group save could not be confirmed. Try again.';
+    bool current() => !_closed && canUse();
+    try {
+      if (editing) {
+        _attemptName ??= effectiveName;
+        _frozen = true;
+        final saved = await _roster.editGroup(
+          existing!,
+          _attemptName!,
+          iconColor,
+          _picture,
+          _renameEvent,
+          canUse: current,
+        );
+        if (!saved && !_closed) {
+          _error =
+              _roster.state.errors.firstOrNull ??
+              'Group save could not be confirmed. Retry.';
+        }
+        return saved;
+      }
+      if (_intent == null) {
+        final fresh = await _roster.prepareGroupSelection(
+          _identity!,
+          selected,
+          canUse: current,
+        );
+        if (!current()) return false;
+        if (fresh.selection.owner.gateway != _selection?.owner.gateway ||
+            selected.any(
+              (bot) =>
+                  fresh.selection.targets[bot.id] !=
+                  _selection?.targets[bot.id],
+            )) {
+          _error =
+              'A selected bot’s availability changed. Review the members and retry.';
+          _selection = fresh.selection;
+          return false;
+        }
+        _attemptName = effectiveName;
+        _firstAdmission = fresh.isCurrent;
+        _intent = fresh.selection.intent(_roomId, _attemptName!, selected);
+      }
+      if (_created == null) {
+        _created = await _roster.createGroup(
+          _intent!,
+          _identity!,
+          canUse: () =>
+              current() && (_frozen || (_firstAdmission?.call() ?? false)),
+          onDispatched: () => _frozen = true,
+        );
+        if (_created == null) {
+          if (!_frozen) {
+            _intent = null;
+            _attemptName = null;
+          }
+          if (!_closed) {
+            _error =
+                _roster.state.errors.firstOrNull ??
+                'Group creation could not be confirmed. Retry.';
+          }
+          return false;
+        }
+      }
+      final room = _created!;
+      final access = _roster.peerAccess(_identity!);
+      await Future.wait(
+        room.members
+            .where(
+              (member) => member.target.isPeer && !_joined.contains(member.id),
+            )
+            .map((member) async {
+              try {
+                await access.join(room, member, canUse: current);
+                _joined.add(member.id);
+                _roster.peerJoined(room, member);
+              } catch (_) {
+                /* The room remains available with member-local recovery. */
+              }
+            }),
+      );
+      if (!current()) return false;
+      final saved = await _roster.saveCreatedGroupIcon(
+        room,
+        iconColor,
+        _picture,
+        canUse: current,
+      );
+      if (!saved && !_closed) {
+        _error = 'The group exists. Its picture could not be saved. Retry.';
+      }
+      return saved;
+    } catch (error) {
+      if (!_frozen) {
+        _intent = null;
+        _attemptName = null;
+      }
+      if (!_closed) {
+        _error = error is BotGroupCreateRefused
+            ? error.message
+            : 'Group preparation failed. Retry.';
+      }
+      return false;
+    } finally {
+      if (!_closed) {
+        _saving = false;
+        notifyListeners();
+      }
     }
-    notifyListeners();
-    return saved;
   }
 
   @override
   void dispose() {
     _closed = true;
     _pictureGeneration++;
+    _preparation++;
     super.dispose();
   }
 }

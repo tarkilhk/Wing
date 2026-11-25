@@ -151,7 +151,15 @@ final class _WorkspaceRecentConversationSource
         group?.iconRevision,
         jsonEncode([
           for (final member in group?.members ?? const <BotGroupMember>[])
-            [member.id, member.profile, member.handle, member.name],
+            [
+              member.id,
+              member.profile,
+              member.handle,
+              member.name,
+              member.target.toJson(),
+              group?.authorityGatewayId,
+              group?.authorityEpoch,
+            ],
         ]),
       );
     }
@@ -185,6 +193,7 @@ final class _WorkspaceRecentConversationSource
       bot.scope.connectionId,
       bot.scope.connectionIdentity,
       bot.scope.profileName,
+      bot.installationId,
       bot.title,
       bot.shape,
       bot.color,
@@ -199,7 +208,9 @@ final class _WorkspaceRecentConversationSource
           : jsonEncode([
               for (final member in group.members)
                 [
-                  member.profile,
+                  member.target.toJson(),
+                  group.authorityGatewayId,
+                  group.authorityEpoch,
                   members.byHandle[member.handle] == null
                       ? null
                       : token(members.byHandle[member.handle]!),
@@ -222,11 +233,9 @@ final class _WorkspaceRecentConversationSource
       for (final key in keys)
         if (_group(key) case final group?)
           for (final member in group.members)
-            WorkspaceScope(
-              connectionId: group.scope.connectionId,
-              connectionIdentity: group.scope.connectionIdentity,
-              profileName: member.profile,
-            ),
+            if (bots.appearanceForGroup(group).byHandle[member.handle]
+                case final bot?)
+              bot.scope,
     };
     if (demand.isEmpty && profiles.isEmpty) {
       _preparedAvatars?.replaceDemand({});

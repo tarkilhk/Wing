@@ -21,6 +21,17 @@ final class _BotAvatarCache {
     final previous = entry.bot;
     entry.bot = bot;
     if (previous == null) return;
+    if (previous.installationId != bot.installationId) {
+      entry.generation++;
+      entry.version++;
+      entry.bytes = null;
+      entry.signature = null;
+      entry.knownSize = 0;
+      entry.negative = false;
+      entry.due = true;
+      entry.validatedAt = null;
+      entry.failedAt = null;
+    }
     if (previous.hasAvatar != bot.hasAvatar) {
       if (bot.hasAvatar || entry.signature != null) {
         entry.generation++;

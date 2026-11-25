@@ -56,3 +56,10 @@ Chat alerts use Android conversation notifications. Tap an alert to open its ori
 Wing monitors connected work and reconciles reported changes while it remains connected. It does not subscribe to every historical chat. Detached-work discovery covers the connected gateway process, not every process on the server. It establishes ongoing work, not its eventual result. Very short work in unopened chats and missing server events can leave alert gaps. Temporary disconnections retain drafts and recent reading, but do not guarantee replay of every missed outcome.
 
 Opening a chat refreshes its server state. Notifications help you return to work; the conversation on Hermes remains the record to check. Unsent follow-ups still need a running, connected Wing client. See [Queues and pending input](SUPERVISION_AND_QUEUES.md).
+
+Folder and website requests show their exact target, access mode and any supplied
+risk. Allow grants access until the sandbox is switched off. Save access rule
+keeps the rule for future use. In the conversation, Reject opens an optional reason
+field; leaving it empty still rejects the request. Notification Deny submits
+directly without a reason. Notification grants for these requests
+open in Wing for review. A changed target requires reviewing the current request.

@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/notification_delivery_ledger.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -128,6 +129,7 @@ Future<NotificationHarness> _harness({
       settingsWrite: resources.server.settingsWrite,
       ownedMutation: resources.server.ownedMutation,
       gateway: (profile) => ProfileGateway(
+        loadClientIdentity: loadTestWingClientIdentity,
         scope: WorkspaceScope(
           connectionId: connection.id,
           connectionIdentity: identity,
@@ -144,6 +146,10 @@ Future<NotificationHarness> _harness({
           },
           'groups.list' => {'rooms': <Map<String, dynamic>>[]},
           'groups.capabilities' => {
+            'authority_gateway_id': 'install:$identity',
+            'persistent_process': true,
+            'features': <String>[],
+            'room_link': {'enabled': false},
             'driver': true,
             'seatable_profiles': <String>[],
             'methods': <String>[],
@@ -375,6 +381,7 @@ void main() {
           makeGateway: (host, scope) {
             final base = host.gateway(scope);
             return ProfileGateway(
+              loadClientIdentity: loadTestWingClientIdentity,
               scope: scope,
               discover: host.discover,
               get: base.read,
@@ -508,6 +515,7 @@ void main() {
           makeGateway: (host, scope) {
             final base = host.gateway(scope);
             return ProfileGateway(
+              loadClientIdentity: loadTestWingClientIdentity,
               scope: scope,
               discover: host.discover,
               get: base.read,
@@ -536,6 +544,7 @@ void main() {
             );
             final base = harness.host.gateway(scope);
             return ProfileGateway(
+              loadClientIdentity: loadTestWingClientIdentity,
               scope: scope,
               discover: harness.host.discover,
               get: base.read,
@@ -912,6 +921,7 @@ void main() {
             );
             final base = harness.host.gateway(scope);
             return ProfileGateway(
+              loadClientIdentity: loadTestWingClientIdentity,
               scope: scope,
               discover: base.discover,
               // Match the production administration adapter: failed access
@@ -928,6 +938,10 @@ void main() {
                 },
                 'groups.list' => {'rooms': <Map<String, dynamic>>[]},
                 'groups.capabilities' => {
+                  'authority_gateway_id': 'install:${harness.identity}',
+                  'persistent_process': true,
+                  'features': <String>[],
+                  'room_link': {'enabled': false},
                   'driver': true,
                   'seatable_profiles': <String>[],
                   'methods': <String>[],

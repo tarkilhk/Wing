@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/composer_fixture.dart' show stockChatReply;
 import 'support/canonical_gateway_fixture.dart';
 import 'dart:convert';
@@ -74,6 +75,7 @@ class NotificationCoverageHost {
   ProfileGateway gateway(WorkspaceScope scope) {
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: discover,
       connect: () async {
@@ -163,10 +165,13 @@ class NotificationCoverageHost {
           return {
             ...state,
             'room': {
+              'authority_gateway_id': 'install:install-1',
+              'authority_epoch': 1,
               'members': <Map<String, dynamic>>[],
               ...Map<String, dynamic>.from(state['room']),
             },
             'driver_status': {
+          'peer_routes': <Object>[],
               'pending_actions': <Map<String, dynamic>>[],
               ...Map<String, dynamic>.from(state['driver_status'] ?? {}),
             },
@@ -182,7 +187,7 @@ class NotificationCoverageHost {
             'cursor': latest,
             'latest_seq': latest,
             'has_more': false,
-            'authority': {'gateway_id': 'fixture', 'epoch': 1},
+            'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
           };
         }
         if (method == 'session.active_list') {

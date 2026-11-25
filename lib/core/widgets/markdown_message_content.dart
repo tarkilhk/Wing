@@ -143,11 +143,9 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         widget.documentPath != oldWidget.documentPath ||
         widget.initialFragment != oldWidget.initialFragment ||
         (widget.onHeadings == null) != (oldWidget.onHeadings == null) ||
-        (widget.loadImage == null) != (oldWidget.loadImage == null) ||
-        (widget.onOpenRemoteFile == null) !=
-            (oldWidget.onOpenRemoteFile == null) ||
-        (widget.onDownloadRemoteFile == null) !=
-            (oldWidget.onDownloadRemoteFile == null)) {
+        widget.loadImage != oldWidget.loadImage ||
+        widget.onOpenRemoteFile != oldWidget.onOpenRemoteFile ||
+        widget.onDownloadRemoteFile != oldWidget.onDownloadRemoteFile) {
       _content = null;
       if (CompletionDiagnostics.enabled) {
         CompletionDiagnostics.event(
@@ -161,12 +159,10 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
     }
     if (widget.deliverables != oldWidget.deliverables ||
         widget.loadImages != oldWidget.loadImages ||
-        (widget.loadImage == null) != (oldWidget.loadImage == null) ||
+        widget.loadImage != oldWidget.loadImage ||
         widget.documentPath != oldWidget.documentPath ||
-        (widget.onOpenRemoteFile == null) !=
-            (oldWidget.onOpenRemoteFile == null) ||
-        (widget.onDownloadRemoteFile == null) !=
-            (oldWidget.onDownloadRemoteFile == null)) {
+        widget.onOpenRemoteFile != oldWidget.onOpenRemoteFile ||
+        widget.onDownloadRemoteFile != oldWidget.onDownloadRemoteFile) {
       _markdownBuilders = null;
       _refreshSegments = true;
       _parsers.clear();
@@ -339,23 +335,15 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
           url: null,
           label: title,
         ),
-        onOpen: widget.onOpenRemoteFile == null
-            ? null
-            : (output) => widget.onOpenRemoteFile!(output),
-        onDownload: widget.onDownloadRemoteFile == null
-            ? null
-            : (output) => widget.onDownloadRemoteFile!(output),
-        loadImage: widget.loadImage == null
-            ? null
-            : (path) => widget.loadImage!(path),
+        onOpen: widget.onOpenRemoteFile,
+        onDownload: widget.onDownloadRemoteFile,
+        loadImage: widget.loadImage,
       );
     }
     return ChatInlineImage(
       target: href,
       title: title,
-      loadImage: widget.loadImage == null
-          ? null
-          : (path) => widget.loadImage!(path),
+      loadImage: widget.loadImage,
     );
   }
 
@@ -439,17 +427,11 @@ class _MarkdownMessageContentState extends State<MarkdownMessageContent> {
         _headingAnchorTag: _HeadingAnchorBuilder(_headingKeys),
       if (widget.deliverables)
         deliverableElementTag: _DeliverableBuilder(
-          widget.onOpenRemoteFile == null
-              ? null
-              : (output) => widget.onOpenRemoteFile!(output),
-          widget.onDownloadRemoteFile == null
-              ? null
-              : (output) => widget.onDownloadRemoteFile!(output),
+          widget.onOpenRemoteFile,
+          widget.onDownloadRemoteFile,
           maxWidth: MediaQuery.sizeOf(context).width,
           loadImages: widget.loadImages,
-          loadImage: widget.loadImage == null
-              ? null
-              : (path) => widget.loadImage!(path),
+          loadImage: widget.loadImage,
         ),
     };
     _headingKeys.clear();

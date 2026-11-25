@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/theme/project_icon_glyphs.dart';
 import 'package:wing/core/models/chat_list_view.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
@@ -819,6 +820,7 @@ class _ProjectFixture extends ProfileBrowserFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: (path, query) async {

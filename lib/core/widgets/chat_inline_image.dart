@@ -50,7 +50,7 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
   void didUpdateWidget(ChatInlineImage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.target != widget.target ||
-        (oldWidget.loadImage == null) != (widget.loadImage == null)) {
+        oldWidget.loadImage != widget.loadImage) {
       _attempt++;
       _image = _imageProvider();
     }
@@ -133,6 +133,7 @@ class _ChatInlineImageState extends State<ChatInlineImage> {
   Widget build(BuildContext context) {
     if (widget.headerBuilder != null) {
       return FutureBuilder<ImageProvider>(
+        key: ValueKey((widget.target, _attempt)),
         future: _image,
         builder: (context, snapshot) {
           final provider = snapshot.data;

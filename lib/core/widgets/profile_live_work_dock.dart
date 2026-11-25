@@ -767,7 +767,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                                                     strokeWidth: 1.5,
                                                     semanticsLabel: index == 0
                                                         ? 'Refreshing subagents'
-                                                        : 'Refreshing background processes',
+                                                        : 'Refreshing background work',
                                                   )
                                                 : Icon(switch (index) {
                                                     0 => Icons.people_outline,
@@ -797,7 +797,7 @@ class ProfileLiveWorkDockState extends State<ProfileLiveWorkDock>
                                               strokeWidth: 1.5,
                                               semanticsLabel: index == 0
                                                   ? 'Refreshing subagents'
-                                                  : 'Refreshing background processes',
+                                                  : 'Refreshing background work',
                                             ),
                                           )
                                         else

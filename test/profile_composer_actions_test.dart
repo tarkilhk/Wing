@@ -1,5 +1,7 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/widgets/profile_queued_messages.dart';
 import 'package:wing/core/models/transcript_message.dart';
+import 'package:wing/core/models/transcript_notice.dart';
 import 'package:wing/core/widgets/studio_loading.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'package:wing/core/widgets/profile_message.dart';
@@ -31,6 +33,7 @@ import 'profile_connection_identity_test.dart' show identityTestConnection;
 import 'support/profile_actions_fixture.dart';
 import 'package:wing/core/models/composer_action.dart';
 import 'package:wing/core/widgets/composer_action_button.dart';
+import 'package:wing/core/widgets/turn_failure_view.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/theme/wing_icons.dart';
 
@@ -43,6 +46,7 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
   bool stalePostSubmitResume = false;
   int postSubmitResumes = 0;
   List<Map<String, dynamic>> transcript = [];
+  bool includeBackgroundWork = false;
 
   @override
   List<Map<String, dynamic>> historyRows(String profile, String id) =>
@@ -52,10 +56,34 @@ class _ComposerActionsFixture extends ProfileActionsFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: base.read,
       rpc: (method, params) => switch (method) {
+        'subagent.list' when includeBackgroundWork => Future.value({
+          'subagents': [
+            {
+              'subagent_id': 'child',
+              'goal': 'Inspect release',
+              'status': 'running',
+              'model': 'gpt-5.6-sol',
+              'last_tool': 'read_file',
+              'accepting_steer': true,
+            },
+          ],
+          'delegations': [],
+        }),
+        'process.list' when includeBackgroundWork => Future.value({
+          'processes': [
+            {
+              'session_id': 'process',
+              'command': 'dart run worker.dart',
+              'status': 'running',
+              'pid': 4242,
+            },
+          ],
+        }),
         'session.resume' when stalePostSubmitResume && heldSubmission != null =>
           () async {
             postSubmitResumes++;
@@ -103,10 +131,12 @@ void main() {
   late _ComposerActionsFixture fixture;
   late ProfileWorkspaceController controller;
   late AppPreferences appPreferences;
+  late List<String> notificationReads;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     fixture = _ComposerActionsFixture();
+    notificationReads = [];
     final preferences = await SharedPreferences.getInstance();
     appPreferences = AppPreferences(preferences);
     controller = ProfileWorkspaceController(
@@ -118,6 +148,7 @@ void main() {
       preferences: preferences,
       appPreferences: appPreferences,
       gatewayFactory: fixture.gateway,
+      onNotificationRead: (_, id) async => notificationReads.add(id),
     );
     await controller.initialize();
   });
@@ -283,8 +314,394 @@ void main() {
     }
   }
 
+  testWidgets(
+    'unmatched refusal retires exact partial output and late refusal leaves successor running',
+    (tester) async {
+      final chat = await show(tester, draft: 'Retain this draft');
+      chat.reading.installSavedHistory([
+        {'id': 17, 'role': 'user', 'content': 'Unidentified saved prompt'},
+      ]);
+      final gateway = controller.current!.gateway;
+      var sequence = 0;
+      void event(String type, Map<String, dynamic> data, String admission) =>
+          gateway.onEvent!(
+            StreamEvent(
+              type: type,
+              sessionId: chat.runtime.runtimeId,
+              data: data,
+              envelope: {
+                'replay_epoch': 'fixture-epoch',
+                'seq': ++sequence,
+                'admission_id': admission,
+              },
+            ),
+          );
+      event('message.start', {'turn_id': 'old-turn'}, 'old-admission');
+      event('message.interim', {
+        'turn_id': 'old-turn',
+        'segment': 0,
+        'text': 'Unmatched refused partial',
+      }, 'old-admission');
+      event('message.delta', {
+        'turn_id': 'old-turn',
+        'segment': 1,
+        'offset': 0,
+        'text': 'Unmatched refused tail',
+      }, 'old-admission');
+      fixture.failHistory = true;
+      const completion = {
+        'turn_id': 'old-turn',
+        'status': 'error',
+        'failure_reason': 'content_policy_blocked',
+        'text': 'Provider refusal',
+      };
+      event('message.complete', completion, 'old-admission');
+      await pumpFrames(tester);
+      expect(chat.reading.messages.single['id'], 17);
+      expect(chat.reading.messages.single['display_kind'], isNull);
+      expect(chat.reading.streaming, isEmpty);
+      expect(find.text('Unmatched refused partial'), findsNothing);
+      expect(find.text('Message refused'), findsOneWidget);
+      expect(find.text('Something went wrong'), findsNothing);
+      expect(find.byType(TurnFailureView), findsNothing);
+      expect(chat.runtime.execution, ChatExecution.failed);
+      expect(chat.runtime.failure?.contentRefused, isTrue);
+      expect(chat.composer.observation.text, 'Retain this draft');
+      event('message.start', {'turn_id': 'new-turn'}, 'new-admission');
+      event('message.delta', {
+        'turn_id': 'new-turn',
+        'segment': 0,
+        'offset': 0,
+        'text': 'Successor answer',
+      }, 'new-admission');
+      event('message.complete', completion, 'old-admission');
+      await pumpFrames(tester);
+      expect(chat.runtime.executionActive, isTrue);
+      expect(chat.reading.streaming, 'Successor answer');
+      expect(chat.composer.observation.text, 'Retain this draft');
+    },
+  );
+
+  testWidgets('refusal notification reads only its visible status target', (
+    tester,
+  ) async {
+    final chat = await show(tester, draft: 'Keep my next draft');
+    fixture.transcript = [
+      {'id': 1, 'role': 'user', 'content': 'Earlier prompt'},
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': List.filled(80, 'Earlier answer text').join('\n\n'),
+      },
+      {'id': 3, 'role': 'user', 'content': 'Unknown refused prompt'},
+    ];
+    await tester.runAsync(() => controller.refreshHistory(chat));
+    await pumpFrames(tester);
+    await tester.settleMarkdown();
+    await pumpFrames(tester);
+    final gate = fixture.historyDelays[(chat.key.sessionId, 0)] =
+        Completer<void>();
+    emitChatEvent(controller, chat, 'message.start');
+    emitChatEvent(controller, chat, 'message.complete', {
+      'status': 'error',
+      'failure_reason': 'content_policy_blocked',
+      'text': 'Provider refusal detail',
+      'mobile_push_event_id': 'refusal-receipt',
+      'error_surface': {
+        'code': 'content_policy_blocked',
+        'layer': 'provider',
+        'retryable': false,
+      },
+    });
+    await pumpFrames(tester);
+    final scroll = tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('profile-transcript')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+    scroll.jumpTo(scroll.maxScrollExtent);
+    await pumpFrames(tester);
+    expect(notificationReads, isEmpty);
+    gate.complete();
+    await pumpFrames(tester);
+    expect(notificationReads, isEmpty);
+    expect(
+      chat.reading.notificationReadTarget?.identity,
+      'status:refusal-receipt',
+    );
+    expect(find.text('Message refused'), findsOneWidget);
+    expect(find.byType(TurnFailureView), findsNothing);
+    final previousAnswer = find.byWidgetPredicate(
+      (widget) => widget is ProfileMessage && widget.message.id == 2,
+    );
+    expect(
+      tester
+          .getRect(previousAnswer)
+          .overlaps(
+            tester.getRect(find.byKey(const ValueKey('profile-transcript'))),
+          ),
+      isTrue,
+    );
+    await tester.tap(find.byKey(const ValueKey('jump-to-latest')));
+    await pumpFrames(tester, count: 16);
+    expect(notificationReads, ['status:refusal-receipt']);
+    expect(chat.reading.notificationReadTarget, isNull);
+    expect(find.text('Message refused. Try a different query.'), findsNothing);
+    expect(find.byTooltip('Choose model'), findsNothing);
+    expect(chat.runtime.execution, ChatExecution.failed);
+    expect(chat.composer.observation.text, 'Keep my next draft');
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final refused in [false, true]) {
+    testWidgets(
+      'Find return fits native viewport during keyboard dismissal refused=$refused',
+      (tester) async {
+        const prompt = 'Keep this refused request visible';
+        const notice = 'This request was refused. Try a different question.';
+        final chat = await show(
+          tester,
+          scale: 1.30,
+          brightness: Brightness.dark,
+          draft: 'Keep my next draft',
+        );
+        tester.view.devicePixelRatio = 2.625;
+        tester.view.physicalSize = const Size(1080, 1920);
+        tester.view.viewPadding = const FakeViewPadding(top: 63);
+        tester.view.padding = const FakeViewPadding(top: 63);
+        fixture.transcript = [
+          {
+            'id': 42,
+            'role': 'user',
+            'content': refused ? prompt : '$prompt\n$notice',
+            if (refused) 'display_kind': 'content_refused',
+            'display_metadata': {
+              'content_refused': {'notice': notice},
+            },
+          },
+        ];
+        await tester.runAsync(() => controller.refreshHistory(chat));
+        emitChatEvent(controller, chat, 'message.complete', {
+          'status': 'error',
+          'error': 'Provider safety refusal',
+        });
+        fixture.includeBackgroundWork = true;
+        await tester.runAsync(() async {
+          await controller.refreshSubagents(chat);
+          await controller.refreshProcesses(chat);
+        });
+        await pumpFrames(tester);
+        await tester.tap(find.byTooltip('Chat actions'));
+        await pumpFrames(tester);
+        await tester.tap(find.text('Find in chat'));
+        await pumpFrames(tester);
+        await tester.enterText(find.byType(TextField).last, 'refused request');
+        tester.view.viewInsets = const FakeViewPadding(bottom: 872);
+        tester.view.padding = const FakeViewPadding(top: 63);
+        await pumpFrames(tester);
+        await tester.tap(find.textContaining(notice).last);
+        await pumpFrames(tester);
+        await tester.ensureVisible(find.text('View in chat'));
+        await tester.tap(find.text('View in chat'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 50));
+        expect(tester.takeException(), isNull);
+        // The recorded IME still occupies 332.19dp. Scroll only the short
+        // pinned header so the whole Back to latest target remains reachable.
+        await tester.pump(const Duration(milliseconds: 300));
+        Future<void> checkBackTarget({bool nativeInitial = false}) async {
+          final back = find.byTooltip('Back to latest');
+          await tester.ensureVisible(back);
+          await tester.pump();
+          final actionBounds = tester.getRect(back);
+          final headerBounds = tester.getRect(
+            find
+                .ancestor(
+                  of: back,
+                  matching: find.byType(SingleChildScrollView),
+                )
+                .first,
+          );
+          expect(actionBounds.height, greaterThanOrEqualTo(48));
+          if (nativeInitial && const bool.fromEnvironment('CAPTURE_COMPOSER')) {
+            expect(headerBounds.height, greaterThanOrEqualTo(48));
+          }
+          // Ahem gives the composer a larger height than native Roboto. A
+          // viewport smaller than the target cannot expose it all at once;
+          // its full geometry stays intact until the keyboard releases space.
+          if (headerBounds.height >= actionBounds.height) {
+            expect(
+              actionBounds.top,
+              greaterThanOrEqualTo(headerBounds.top - .01),
+            );
+            expect(
+              actionBounds.bottom,
+              lessThanOrEqualTo(headerBounds.bottom + .01),
+            );
+            expect(back.hitTestable(), findsOneWidget);
+          }
+          expect(tester.takeException(), isNull);
+        }
+
+        await checkBackTarget(nativeInitial: true);
+        for (final inset in [600.0, 450.0, 300.0, 150.0, 0.0]) {
+          tester.view.viewInsets = FakeViewPadding(bottom: inset);
+          await tester.pump(const Duration(milliseconds: 50));
+          await checkBackTarget();
+        }
+        await pumpFrames(tester);
+        expect(find.text('Search result'), findsOneWidget);
+        expect(chat.composer.observation.text, 'Keep my next draft');
+      },
+    );
+  }
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
+      testWidgets('refused Send settles before history and keeps the new draft '
+          '${brightness.name} $scale', (tester) async {
+        const prompt = 'Refused original prompt';
+        final chat = await show(
+          tester,
+          draft: prompt,
+          brightness: brightness,
+          scale: scale,
+        );
+        controller.connectionStatus.accessAvailable();
+        controller.connectionStatus.liveChanged(
+          chat.key.workspace.profileName,
+          true,
+        );
+        final reply = fixture.submitReply = Completer<Map<String, dynamic>>();
+        await pumpFrames(tester);
+        await tester.tap(find.byTooltip('Send'));
+        await tester.runAsync(() async {
+          await chat.composer.admittedWrites;
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        });
+        await pumpFrames(tester);
+        final submitted = fixture.heldSubmission!;
+        final receipt = canonicalReceipt(
+          submitted,
+          admissionId: 'refused-admission',
+        );
+        reply.complete(receipt);
+        await pumpFrames(tester);
+        final gateway = controller.current!.gateway;
+        var sequence = 0;
+        void event(String type, Map<String, dynamic> data) => gateway.onEvent!(
+          StreamEvent(
+            type: type,
+            sessionId: chat.runtime.runtimeId,
+            data: data,
+            envelope: {
+              'replay_epoch': 'fixture-epoch',
+              'seq': ++sequence,
+              'admission_id': 'refused-admission',
+            },
+          ),
+        );
+        event('message.start', {'turn_id': 'refused-turn'});
+        event('message.interim', {
+          'turn_id': 'refused-turn',
+          'segment': 0,
+          'text': 'Partial answer to remove',
+        });
+        event('tool.start', {
+          'tool_id': 'refused-tool',
+          'name': 'terminal',
+          'args': 'pwd',
+        });
+        await pumpFrames(tester);
+        await tester.enterText(
+          find.byKey(const Key('profile-message-composer')),
+          'New unrelated draft',
+        );
+        tester.binding.focusManager.primaryFocus?.unfocus();
+        final gate = fixture.historyDelays[(chat.key.sessionId, 0)] =
+            Completer<void>();
+        fixture.transcript = [
+          {
+            'id': 42,
+            'role': 'user',
+            'content': prompt,
+            'display_kind': 'content_refused',
+            'display_metadata': {
+              'submission_id': submitted['submission_id'],
+              'content_refused': {'notice': 'Saved refusal explanation'},
+            },
+          },
+        ];
+        event('message.complete', {
+          'turn_id': 'refused-turn',
+          'status': 'error',
+          'failure_reason': 'content_policy_blocked',
+          'text': 'Provider refusal detail',
+          'error_surface': {
+            'code': 'content_policy_blocked',
+            'layer': 'provider',
+            'retryable': false,
+          },
+        });
+        await pumpFrames(tester);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('content-refused-message')),
+            matching: find.text(prompt),
+          ),
+          findsOneWidget,
+        );
+        expect(find.text(liveContentRefusedNotice), findsOneWidget);
+        expect(find.text('Message refused'), findsOneWidget);
+        expect(find.text('Something went wrong'), findsNothing);
+        expect(find.byType(TurnFailureView), findsNothing);
+        expect(find.byTooltip('Choose model'), findsNothing);
+        expect(chat.runtime.execution, ChatExecution.failed);
+        expect(find.text('Partial answer to remove'), findsNothing);
+        expect(find.byTooltip('Edit message'), findsNothing);
+        expect(find.byTooltip('Restore checkpoint'), findsNothing);
+        expect(chat.runtime.toolActivities, isEmpty);
+        expect(chat.composer.observation.text, 'New unrelated draft');
+        await capture(tester, 'refused-held-${brightness.name}-$scale');
+        fixture.failHistory = true;
+        gate.complete();
+        await pumpFrames(tester);
+        expect(find.text(liveContentRefusedNotice), findsOneWidget);
+        fixture.failHistory = false;
+        expect(chat.runtime.failure?.contentRefused, isTrue);
+        expect(find.text('Message refused'), findsOneWidget);
+        expect(find.byType(TurnFailureView), findsNothing);
+        fixture.historyDelays.clear();
+        await tester.runAsync(() => controller.refreshHistory(chat));
+        await pumpFrames(tester);
+        expect(find.text('Saved refusal explanation'), findsOneWidget);
+        expect(find.text('Message refused'), findsOneWidget);
+        expect(find.byType(TurnFailureView), findsNothing);
+        expect(chat.reading.messages.single['id'], 42);
+        expect(chat.reading.messages.single['role'], 'user');
+        final search = controller.openReadingSession(chat);
+        await tester.runAsync(search.start);
+        search.search(prompt);
+        expect(search.observation.matches.single.role, 'system');
+        expect(
+          search.observation.matches.single.text,
+          contains('Saved refusal explanation'),
+        );
+        search.dispose();
+        expect(
+          fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+          hasLength(1),
+        );
+        expect(chat.composer.observation.text, 'New unrelated draft');
+        await capture(tester, 'refused-saved-${brightness.name}-$scale');
+        expect(tester.takeException(), isNull);
+      });
+
       testWidgets('queue starts compact and opens exact message details '
           '${brightness.name} $scale', (tester) async {
         final text =
@@ -554,6 +971,7 @@ void main() {
           expect(row['display_kind'], 'async_delegation_complete');
           expect(row['display_metadata'], {
             'display_text': 'Subagent Tasks Completed: retailer checks',
+            'submission_id': 'automation-input',
           });
           expect(row['content'], raw);
           expect(find.text(raw), findsNothing);

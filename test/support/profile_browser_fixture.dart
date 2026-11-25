@@ -1,3 +1,4 @@
+import 'wing_client_identity_fixture.dart';
 import 'canonical_gateway_fixture.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
@@ -173,6 +174,7 @@ class ProfileBrowserFixture {
         ];
 
   ProfileGateway gateway(WorkspaceScope scope) => ProfileGateway(
+    loadClientIdentity: loadTestWingClientIdentity,
     scope: scope,
     discover: () async => const ProfileDiscovery(
       profiles: [
@@ -269,6 +271,9 @@ class ProfileBrowserFixture {
       };
     },
     rpc: (method, params) async {
+      if (method == 'bot_delivery.list') {
+        return {'sender': scope.profileName, 'deliveries': <Object>[]};
+      }
       if (method == 'process.list') return {'processes': <Object>[]};
       calls.add((scope.profileName, method, params));
       if (method == 'profiles.list') {

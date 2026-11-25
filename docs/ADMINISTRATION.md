@@ -40,6 +40,15 @@ Installed skills offers instruction reading, recorded usage and available edit, 
 your existing manual editing rights and does not change the skill’s origin.
 Bundled instructions are read-only. The instruction reader supports raw/formatted views, copying, sharing and Contents. Hold or drag its grip to browse sections and release to jump. Skill discovery, the library and agent plugins have separate destinations.
 
+In Discover skills, the installed-Hub section lists skills for which Hermes
+reports an update. Use the check icon to refresh availability or retry a failed
+check while continuing to browse. “No Hub skill updates reported” does not mean
+all installs are current; unreachable sources and invalid installs are omitted
+by Hermes. Checks can take up to two minutes per request. The update icon runs
+the existing group update for the selected profile after confirmation. Review its
+operation result; Wing refreshes the library and checks availability again.
+Cancelling confirmation preserves the existing check and result.
+
 In Agent plugins, **Update installed plugins** checks and updates eligible installed
 plugins in the selected profile. The receipt separates updated, current, failed,
 review-required and skipped items. Held or pinned installs stay under Hermes'

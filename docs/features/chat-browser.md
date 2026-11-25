@@ -161,4 +161,9 @@ and excludes the generated group from project actions and move destinations.
 
 ## Gotchas
 
+New chats carry Wing's mobile client identity and installed version, including
+ordinary, project, replacement and canonical Bot Chat creation. See the
+[connection attribution checks](connections.md#gotchas). Existing chats retain
+their server-owned creation metadata.
+
 Bot chats are hidden from the ordinary list unless Show automated chats is enabled. A completed row mutation and a successful background refresh are separate observations. Move and delete use a fresh owner-issued revision and execution generation; a concurrent turn or edit can refuse the action without changing the row. Delete retires the runtime through the same stock owner transaction that removes its history.

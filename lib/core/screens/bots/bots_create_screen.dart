@@ -311,13 +311,28 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
       ),
       body: Column(
         children: [
+          StudioPageLoading(
+            active: draft.preparing && draft.preparationError == null,
+            label: 'Checking group members',
+            child: const SizedBox.shrink(),
+          ),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.all(WingSpacing.lg),
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               children: [
-                if (draft.error != null) ...[
-                  StudioError(draft.error!),
+                if (draft.preparationError != null) ...[
+                  StudioRetryNotice(
+                    message: draft.preparationError!,
+                    busy: draft.preparing,
+                    onRetry: draft.frozen || draft.saving
+                        ? null
+                        : draft.prepare,
+                  ),
+                  const SizedBox(height: WingSpacing.lg),
+                ],
+                if (draft.actionError != null) ...[
+                  StudioError(draft.actionError!),
                   const SizedBox(height: WingSpacing.lg),
                 ],
                 LayoutBuilder(
@@ -380,7 +395,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                 if (!draft.editing && draft.hosts.length > 1)
                   StudioSelect<String>(
                     value: draft.identity,
-                    label: 'Hermes instance',
+                    label: 'Group host',
                     options: [
                       for (final host in draft.hosts)
                         (value: host.identity, label: host.label),
@@ -492,6 +507,9 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                           child: ListTile(
                             key: ValueKey('group-member-${bot.id}'),
                             enabled: draft.canSelect(bot),
+                            subtitle: draft.memberProblem(bot) == null
+                                ? null
+                                : Text(draft.memberProblem(bot)!),
                             onTap: draft.canSelect(bot)
                                 ? () => draft.select(bot, true)
                                 : null,
@@ -522,7 +540,7 @@ class _BotsCreateScreenState extends State<BotsCreateScreen> {
                                         ),
                                       ),
                                       Text(
-                                        '@bot_${bot.profile.name}',
+                                        '@bot_${bot.profile.name} · ${bot.instance}',
                                         style: theme.textTheme.bodySmall,
                                       ),
                                     ],

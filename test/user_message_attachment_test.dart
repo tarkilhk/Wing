@@ -568,21 +568,28 @@ void main() {
     'confirmed reconnection repairs failure without reloading success',
     (tester) async {
       var requests = 0;
-      Widget app({required bool online}) => MaterialApp(
-        home: Scaffold(
-          body: ProfileMessage(
-            message: TranscriptMessage.fromRow(
-              saved(image: '/server/photo.png'),
+      var serverOnline = false;
+      Future<Uint8List> loadImage(String path) async {
+        requests++;
+        if (!serverOnline) throw StateError('Offline');
+        return bytes;
+      }
+
+      Widget app({required bool online}) {
+        serverOnline = online;
+        return MaterialApp(
+          home: Scaffold(
+            body: ProfileMessage(
+              message: TranscriptMessage.fromRow(
+                saved(image: '/server/photo.png'),
+              ),
+              attachmentImagesAvailable: online,
+              loadAttachmentImage: loadImage,
             ),
-            attachmentImagesAvailable: online,
-            loadAttachmentImage: (_) async {
-              requests++;
-              if (!online) throw StateError('Offline');
-              return bytes;
-            },
           ),
-        ),
-      );
+        );
+      }
+
       await tester.pumpWidget(app(online: false));
       await settleImages(tester);
       expect(find.text('Can’t load image'), findsOneWidget);

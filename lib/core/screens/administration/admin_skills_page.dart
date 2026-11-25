@@ -440,15 +440,18 @@ class AdminSkillHubPage extends StatefulWidget {
 
 class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
   late final _session = widget.createSession();
+  final _updateNamesScroll = ScrollController();
   @override
   void initState() {
     super.initState();
-    _session.refresh();
+    _session.refresh(automatic: true);
+    _session.checkUpdates(automatic: true);
   }
 
   @override
   void dispose() {
     _session.dispose();
+    _updateNamesScroll.dispose();
     super.dispose();
   }
 
@@ -462,7 +465,7 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
     } finally {
       _session.releasePreview(route);
     }
-    await _session.refresh();
+    await _session.refresh(automatic: true);
   }
 
   Future<void> _update() => _session.update(
@@ -481,43 +484,150 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
     },
   );
   @override
-  Widget build(BuildContext context) => AdminPage(
-    title: 'Skill Hub',
-    scope: _session.scopeLabel,
-    child: Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: viewportSelection(
-            TextField(
-              decoration: const InputDecoration(
-                labelText: 'Search catalogs',
-                helperMaxLines: 4,
-                helperText: 'Submit to search configured sources.',
-              ),
-              onSubmitted: (value) => _session.refresh(query: value),
-            ),
-          ),
-        ),
-        Expanded(
-          child: _SkillsRead(
-            session: _session,
-            retry: _session.refresh,
-            builder: (state) => ListView(
-              padding: const EdgeInsets.all(16),
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _session,
+    builder: (context, _) {
+      final state = _session.state;
+      final updates = state.hubUpdates;
+      return AdminPage(
+        title: 'Skill Hub',
+        scope: _session.scopeLabel,
+        child: StudioPageLoading(
+          active:
+              updates.showingProgress ||
+              state.showingReadProgress ||
+              state.saving ||
+              state.phase == SkillsPhase.result,
+          label: state.saving || state.phase == SkillsPhase.result
+              ? 'Updating Hub skills'
+              : state.showingReadProgress
+              ? 'Loading skills'
+              : 'Checking Hub skill updates',
+          child: ReadRecovery(
+            shouldRetry: () => _session.canRecoverRead,
+            retry: () => _session.refresh(automatic: true),
+            child: ListView(
               children: [
-                StudioButtonPress(
-                  child: TextButton(
-                    onPressed: state.canMutate ? _update : null,
-                    child: const Text('Update installed Hub skills'),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: viewportSelection(
+                    TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Search catalogs',
+                        helperMaxLines: 4,
+                        helperText: 'Submit to search configured sources.',
+                      ),
+                      onSubmitted: (value) => _session.refresh(query: value),
+                    ),
                   ),
                 ),
-                if (state.partial)
-                  const AdminNotice(
-                    'Some sources did not respond. Showing partial results.',
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Installed Hub skills',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          ),
+                          StudioButtonPress(
+                            child: IconButton(
+                              tooltip: updates.error == null
+                                  ? 'Check Hub skill updates'
+                                  : 'Retry Hub update check',
+                              onPressed: updates.canCheck
+                                  ? () => _session.checkUpdates()
+                                  : null,
+                              icon: const Icon(Icons.refresh),
+                            ),
+                          ),
+                          StudioButtonPress(
+                            child: IconButton(
+                              tooltip: 'Update installed Hub skills',
+                              onPressed: state.canMutate ? _update : null,
+                              icon: const Icon(Icons.system_update_alt),
+                            ),
+                          ),
+                        ],
+                      ),
+                      ConstrainedBox(
+                        key: const ValueKey('hub-update-status'),
+                        constraints: BoxConstraints(
+                          minHeight: MediaQuery.textScalerOf(context).scale(72),
+                        ),
+                        child: updates.error != null
+                            ? AdminNotice.error(updates.error!)
+                            : updates.updates == null
+                            ? const AdminNotice('Updates not checked')
+                            : updates.updates!.isEmpty
+                            ? const AdminNotice('No Hub skill updates reported')
+                            : SizedBox(
+                                height: MediaQuery.textScalerOf(
+                                  context,
+                                ).scale(72),
+                                child: Scrollbar(
+                                  controller: _updateNamesScroll,
+                                  thumbVisibility: true,
+                                  child: SingleChildScrollView(
+                                    controller: _updateNamesScroll,
+                                    primary: false,
+                                    padding: const EdgeInsets.only(right: 12),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          '${updates.updates!.length} Hub skill ${updates.updates!.length == 1 ? 'update' : 'updates'} reported',
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyMedium,
+                                        ),
+                                        for (final update in updates.updates!)
+                                          Padding(
+                                            padding: const EdgeInsets.only(
+                                              top: 4,
+                                            ),
+                                            child: Text(update.name),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ],
                   ),
-                if (state.catalog.isEmpty)
-                  const AdminNotice('No skills found.'),
+                ),
+                const SizedBox(key: ValueKey('hub-catalog')),
+                if (state.error case final error?)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice.error(
+                      error,
+                      retry: state.busy ? null : _session.refresh,
+                    ),
+                  ),
+                if (state.notice case final notice?)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice(notice),
+                  ),
+                if (state.partial)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice(
+                      'Some sources did not respond. Showing partial results.',
+                    ),
+                  ),
+                if (state.hasObservation && state.catalog.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16),
+                    child: AdminNotice('No skills found.'),
+                  ),
                 for (final skill in state.catalog)
                   StudioButtonPress(
                     child: ListTile(
@@ -531,8 +641,8 @@ class _AdminSkillHubPageState extends State<AdminSkillHubPage> {
             ),
           ),
         ),
-      ],
-    ),
+      );
+    },
   );
 }
 

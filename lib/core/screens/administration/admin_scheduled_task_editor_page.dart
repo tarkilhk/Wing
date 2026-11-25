@@ -546,6 +546,29 @@ class _AdminScheduledTaskEditorPageState
                           subtitle: Text(destination.description),
                         ),
                       ),
+                    if (template == null) ...[
+                      const SizedBox(height: 16),
+                      StudioSelect<TaskOutputWrapping>(
+                        label: 'Output wrapping',
+                        value: state.outputWrapping,
+                        options: [
+                          for (final value in TaskOutputWrapping.values)
+                            (value: value, label: value.label),
+                        ],
+                        onChanged: saving
+                            ? null
+                            : (value) {
+                                if (value != null) {
+                                  session.setOutputWrapping(value);
+                                }
+                              },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Include the task header and footer in delivered results.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -649,6 +672,8 @@ class _AdminScheduledTaskEditorPageState
                               TaskConflictField.timezone => 'Timezone',
                               TaskConflictField.grace => 'Late-run window',
                               TaskConflictField.catchUp => 'Missed runs',
+                              TaskConflictField.outputWrapping =>
+                                'Output wrapping',
                               TaskConflictField.modelRouting => 'Model routing',
                             },
                             child: Column(

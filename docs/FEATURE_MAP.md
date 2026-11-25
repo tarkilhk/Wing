@@ -36,7 +36,7 @@ Use the order below for a broad pass; finish with [connected journeys](features/
 
 <a id="bots"></a>
 
-- [Chat with bots and coordinate discussions](features/bots.md) — `bots`.
+- [Chat with bots and coordinate discussions](features/bots.md) — `bots`; includes cross-instance group discussions, sender teammate deliveries and exact existing-chat navigation.
 
 <a id="connections"></a>
 
@@ -60,11 +60,11 @@ Use the order below for a broad pass; finish with [connected journeys](features/
 
 <a id="conversation"></a>
 
-- [Read and search conversation history](features/conversation.md) — `conversation`.
+- [Read and search conversation history](features/conversation.md) — `conversation`; includes refused prompts and their retained explanations.
 
 <a id="chat-activity"></a>
 
-- [Inspect and supervise agent work](features/chat-activity.md) — `chat-activity`.
+- [Inspect and supervise agent work](features/chat-activity.md) — `chat-activity`; includes typed command, folder and website approval review, plus saved child transcripts with bounded refresh and older-history reading.
 
 <a id="chat-inputs"></a>
 
@@ -92,7 +92,7 @@ Use the order below for a broad pass; finish with [connected journeys](features/
 
 <a id="model-selection"></a>
 
-- [Choose a model and reasoning settings](features/model-selection.md) — `model-selection`.
+- [Choose a model and reasoning settings](features/model-selection.md) — `model-selection`; includes the current chat's account usage report and reported prompt-cache timing.
 
 <a id="voice"></a>
 
@@ -132,11 +132,11 @@ Use the order below for a broad pass; finish with [connected journeys](features/
 
 <a id="administration-skills-tools"></a>
 
-- [Inspect and configure skills and tools](features/administration-skills-tools.md) — `administration-skills-tools`; includes locks against agent edits.
+- [Inspect and configure skills and tools](features/administration-skills-tools.md) — `administration-skills-tools`; includes locks against agent edits and reported Hub skill update checks.
 
 <a id="scheduled-tasks"></a>
 
-- [Schedule and inspect recurring work](features/scheduled-tasks.md) — `scheduled-tasks`.
+- [Schedule and inspect recurring work](features/scheduled-tasks.md) — `scheduled-tasks`; includes inherited/on/off delivery headers and footers.
 
 <a id="usage-analytics"></a>
 

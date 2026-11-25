@@ -28,6 +28,84 @@ class ContextCategory {
   }
 }
 
+enum PromptCacheConfidence { proven, declared, assumed, unknown }
+
+/// A server report about a cached prompt prefix, independent of occupancy.
+/// Dates describe the reported event; this value does not infer current warmth.
+class PromptCacheWindow {
+  PromptCacheWindow._({
+    required this.guaranteedUntil,
+    required this.estimatedUntil,
+    required this.refreshedAt,
+    required this.tier,
+    required this.confidence,
+    required this.reason,
+    required Map<String, DateTime> coverage,
+    required this.warmingOff,
+    required this.tierPending,
+    required this.learned,
+  }) : coverage = Map.unmodifiable(coverage);
+
+  final DateTime? guaranteedUntil, estimatedUntil, refreshedAt;
+  final String? tier, reason, learned;
+  final PromptCacheConfidence confidence;
+  final Map<String, DateTime> coverage;
+  final bool? warmingOff, tierPending;
+
+  static PromptCacheWindow? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final coverage = <String, DateTime>{};
+    if (value['coverage'] case final Map supplied) {
+      for (final entry in supplied.entries) {
+        final tier = _text(entry.key);
+        final deadline = _date(entry.value);
+        if (tier != null && deadline != null) coverage[tier] = deadline;
+      }
+    }
+    return PromptCacheWindow._(
+      guaranteedUntil: _date(value['guaranteed_until']),
+      estimatedUntil: _date(value['estimated_until']),
+      refreshedAt: _date(value['refreshed_at']),
+      tier: _text(value['tier']),
+      confidence: switch (value['confidence']) {
+        'proven' => PromptCacheConfidence.proven,
+        'declared' => PromptCacheConfidence.declared,
+        'assumed' => PromptCacheConfidence.assumed,
+        _ => PromptCacheConfidence.unknown,
+      },
+      reason: _text(value['reason']),
+      coverage: coverage,
+      warmingOff: value['warming_off'] is bool
+          ? value['warming_off'] as bool
+          : null,
+      tierPending: value['tier_pending'] is bool
+          ? value['tier_pending'] as bool
+          : null,
+      learned: _text(value['learned']),
+    );
+  }
+
+  static String? _text(Object? value) =>
+      value is String && value.trim().isNotEmpty ? value.trim() : null;
+
+  static DateTime? _date(Object? value) {
+    if (value is! num ||
+        !value.isFinite ||
+        value < -8640000000000 ||
+        value > 8640000000000) {
+      return null;
+    }
+    final milliseconds = value * 1000;
+    if (!milliseconds.isFinite || milliseconds.abs() > 8640000000000000) {
+      return null;
+    }
+    return DateTime.fromMillisecondsSinceEpoch(
+      milliseconds.round(),
+      isUtc: true,
+    );
+  }
+}
+
 /// Server-reported occupancy and estimated composition for one session.
 class ContextOccupancy {
   final int used;

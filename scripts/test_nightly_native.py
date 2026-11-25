@@ -21,7 +21,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.test import fingerprint, stop_process_group  # noqa: E402
-from scripts.test_journeys import verdict  # noqa: E402
+from scripts.test_journeys import export_journey_frames, verdict  # noqa: E402
 from scripts.test_vanilla_hermes import cleanup_signals  # noqa: E402
 from scripts.test_native_bots import input_view_visible  # noqa: E402
 from tools.qa import run_notification_gate as android  # noqa: E402
@@ -163,11 +163,24 @@ class Runner:
         self.shell('am', 'force-stop', package)
         self.shell('am', 'start', '-W', '-n', package + '/com.tarkilhk.wing.MainActivity')
 
-    def flutter(self, target, expected, *, defines=(), checkpoint=None):
-        self.run(Path(target).stem, [
-            'flutter', 'test', '--no-pub', '--no-uninstall', '-d', self.device,
-            '--reporter=json', 'integration_test/' + target, *defines,
-        ], expected=expected, checkpoint=checkpoint)
+    def flutter(self, target, expected, *, defines=(), checkpoint=None,
+                capture_package=None):
+        name = Path(target).stem
+        if capture_package is not None:
+            defines = (*defines, '--dart-define=CAPTURE_JOURNEYS=true')
+        try:
+            self.run(name, [
+                'flutter', 'test', '--no-pub', '--no-uninstall', '-d', self.device,
+                '--reporter=json', 'integration_test/' + target, *defines,
+            ], expected=expected, checkpoint=checkpoint)
+        finally:
+            if capture_package is not None:
+                export_journey_frames(self.device, capture_package,
+                                      self.output / (name + '.log'),
+                                      self.output / (name + '-frames'),
+                                      self.steps[-1], require_frames=True)
+        if capture_package is not None and not self.steps[-1]['passed']:
+            raise RuntimeError(name + ' frame export failed; see capture_errors in receipt')
 
     @contextmanager
     def forward(self, remote):
@@ -312,7 +325,8 @@ class Runner:
                 if family == 'administration':
                     self.administration()
                 else:
-                    self.flutter(target, DIRECT_SUITES[target])
+                    self.flutter(target, DIRECT_SUITES[target],
+                                 capture_package=DEV if family == 'scheduled-tasks' else None)
             elif family in ('health-entry', 'transcript-expansion'):
                 # These entrypoints reuse complete host suites; all registered
                 # cases must finish, with no errors, skips or empty verdict.

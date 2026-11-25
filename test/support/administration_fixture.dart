@@ -1,3 +1,4 @@
+import 'wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:wing/core/models/models_dev_prices.dart';
@@ -53,6 +54,14 @@ class AdministrationFixture {
   bool ignoreSave = false;
   bool rootIsDefault = true;
   bool failReads = false;
+  List<Map<String, dynamic>> hubUpdates = [];
+  Completer<void>? hubUpdatesGate,
+      hubUpdateGate,
+      hubLibraryGate,
+      hubCatalogGate;
+  bool failHubUpdates = false, failHubCatalog = false;
+  int hubUpdateChecks = 0;
+  final hubUpdatePosts = <Map<String, dynamic>>[];
   Completer<void>? writeGate;
   AdministrationRequest? override;
   AdministrationMutation? mutationOverride;
@@ -119,6 +128,7 @@ class AdministrationFixture {
           return consoleOverride!(profile, command, confirm: confirm);
         },
     gateway: (name) => ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: WorkspaceScope(connectionId: id, profileName: name),
       get: (path, query) => send('GET', path, query, null),
       ownedPut: (path, body, canDispatch, onDispatched) => server.ownedMutation(
@@ -157,7 +167,9 @@ class AdministrationFixture {
   ) async {
     requests.add((method, path, {...query}, body == null ? null : {...body}));
     if (override != null) return override!(method, path, query, body);
-    if (method != 'GET' && !(method == 'PUT' && path == 'config')) {
+    if (method != 'GET' &&
+        !(method == 'PUT' && path == 'config') &&
+        !(method == 'POST' && path == 'skills/hub/update')) {
       throw StateError('Unexpected fixture request $method $path');
     }
     if (method == 'GET' && failReads) throw StateError('Offline');
@@ -181,6 +193,44 @@ class AdministrationFixture {
       return {'current': 'default', 'active': 'work'};
     }
     final name = query['profile'];
+    if (path == 'skills/hub/updates') {
+      hubUpdateChecks++;
+      if (hubUpdatesGate case final gate?) await gate.future;
+      if (failHubUpdates) throw TimeoutException('Hub source unavailable');
+      return {'updates': hubUpdates};
+    }
+    if (path == 'skills/hub/official' || path == 'skills/hub/search') {
+      if (hubCatalogGate case final gate?) await gate.future;
+      if (failHubCatalog) throw TimeoutException('Catalog unavailable');
+      return {
+        path.endsWith('search') ? 'results' : 'skills': [
+          {
+            'name': 'Research catalog skill',
+            'description': 'Read sources',
+            'source': 'official',
+            'identifier': 'official/research',
+          },
+        ],
+        if (path.endsWith('search')) 'timed_out': <String>[],
+      };
+    }
+    if (path == 'skills/hub/update' && method == 'POST') {
+      if (query['profile'] != body?['profile']) {
+        throw StateError('Hub update lost its captured profile');
+      }
+      hubUpdatePosts.add(Map.from(body!));
+      if (hubUpdateGate case final gate?) await gate.future;
+      return {'ok': true, 'name': 'skills-update', 'pid': 907};
+    }
+    if (path == 'actions/skills-update/status') {
+      return {
+        'name': 'skills-update',
+        'pid': 907,
+        'running': false,
+        'exit_code': 0,
+        'lines': ['Hub update operation finished.'],
+      };
+    }
     if (path == 'config') {
       if (method == 'PUT') {
         if (writeGate != null) await writeGate!.future;
@@ -216,7 +266,10 @@ class AdministrationFixture {
     if (path == 'tools/toolsets') return {'data': []};
     if (path == 'cron/jobs') return {'data': []};
     if (path == 'mcp/servers') return {'servers': []};
-    if (path == 'skills') return {'data': []};
+    if (path == 'skills') {
+      if (hubLibraryGate case final gate?) await gate.future;
+      return {'data': []};
+    }
     if (path == 'providers/oauth') return {'providers': []};
     if (path == 'env') return {};
     throw StateError('Unexpected $method $path');

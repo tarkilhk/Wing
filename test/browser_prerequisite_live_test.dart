@@ -1,3 +1,5 @@
+import 'package:wing/core/services/profile_gateway.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -21,9 +23,8 @@ void main() {
       final preferences = await SharedPreferences.getInstance();
       final appPreferences = AppPreferences(preferences);
       addTearDown(appPreferences.dispose);
-      final client = ProfileWorkspaceController(
-        connectionIdentity: 'browser-prerequisite-qa',
-        access: ConnectionAccess(
+      final identityGatewayOwner = ProfileGatewayConnection(
+        ConnectionAccess(
           connection: SavedConnection(
             id: 'browser-prerequisite-qa',
             label: 'Browser QA',
@@ -34,6 +35,13 @@ void main() {
           ),
           dashboardOAuth: null,
         ),
+        loadClientIdentity: loadCandidateWingClientIdentity,
+      );
+      addTearDown(identityGatewayOwner.close);
+      final client = ProfileWorkspaceController(
+        connectionIdentity: 'browser-prerequisite-qa',
+        access: identityGatewayOwner.access,
+        gatewayFactory: identityGatewayOwner.create,
         preferences: preferences,
         appPreferences: appPreferences,
       );

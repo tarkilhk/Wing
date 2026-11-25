@@ -682,8 +682,8 @@ void main() {
           addTearDown(tester.view.reset);
           final fixture = BotsFixture();
           Map<String, dynamic> settled(int seq, String member, bool passed) => {
-            ..._event(seq, 'turn.settled', 'gateway-1', ''),
-            'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+            ..._event(seq, 'turn.settled', 'install:install-1', ''),
+            'actor': {'kind': 'gateway', 'id': 'install:install-1'},
             'payload': {
               'member_id': member,
               'passed': passed,
@@ -1037,6 +1037,7 @@ void main() {
               return {
                 'room': fixture.room,
                 'driver_status': {
+          'peer_routes': <Object>[],
                   'working': false,
                   'blocked': false,
                   'pending_actions': fixture.pending,
@@ -1056,7 +1057,7 @@ void main() {
               fixture.pending.clear();
               if (!continuing) {
                 fixture.events.add({
-                  ..._event(2, 'room.stop_requested', 'gateway-1', ''),
+                  ..._event(2, 'room.stop_requested', 'install:install-1', ''),
                   'payload': {'cancel_id': params['cancel_id']},
                 });
               }
@@ -1238,6 +1239,7 @@ void main() {
                     'latest_seq': fixture.events.length,
                   },
                   'driver_status': {
+          'peer_routes': <Object>[],
                     'working': true,
                     'blocked': false,
                     'pending_actions': <Object>[],
@@ -1313,6 +1315,7 @@ void main() {
               return {
                 'room': {...fixture.room, 'latest_seq': fixture.events.length},
                 'driver_status': {
+          'peer_routes': <Object>[],
                   'working': true,
                   'blocked': false,
                   'pending_actions': <Object>[],
@@ -2969,6 +2972,7 @@ void main() {
           return {
             'room': fixture.room,
             'driver_status': {
+          'peer_routes': <Object>[],
               'working': working,
               'blocked': approval,
               'pending_actions': approval

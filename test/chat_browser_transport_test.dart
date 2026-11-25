@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
@@ -87,6 +88,8 @@ void main() {
         dashboardOAuth: null,
       ),
       WorkspaceScope(connectionId: 'read-receipt', profileName: 'personal'),
+
+      loadClientIdentity: loadTestWingClientIdentity,
     );
     addTearDown(() async {
       gateway.close();
@@ -456,6 +459,8 @@ void main() {
           profileName: 'personal',
           connectionIdentity: 'held-auth',
         ),
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       addTearDown(() async {
         if (!release.isCompleted) release.complete();
@@ -580,20 +585,27 @@ void main() {
       final preferences = await SharedPreferences.getInstance();
       final appPreferences = AppPreferences(preferences);
       addTearDown(appPreferences.dispose);
-      final controller = ProfileWorkspaceController(
-        access: ConnectionAccess(
-          connection: SavedConnection(
-            id: 'test',
-            label: 'Fixture',
-            host: '127.0.0.1',
-            port: server.port,
-            dashboardPortOverride: server.port,
-            apiKey: '',
-            dashboardUsername: 'fixture',
-            dashboardPassword: 'fixture',
-          ),
-          dashboardOAuth: null,
+      final access = ConnectionAccess(
+        connection: SavedConnection(
+          id: 'test',
+          label: 'Fixture',
+          host: '127.0.0.1',
+          port: server.port,
+          dashboardPortOverride: server.port,
+          apiKey: '',
+          dashboardUsername: 'fixture',
+          dashboardPassword: 'fixture',
         ),
+        dashboardOAuth: null,
+      );
+      final gateways = ProfileGatewayConnection(
+        access,
+        loadClientIdentity: loadTestWingClientIdentity,
+      );
+      addTearDown(gateways.close);
+      final controller = ProfileWorkspaceController(
+        access: access,
+        gatewayFactory: gateways.create,
         connectionIdentity: 'fixture',
         preferences: preferences,
         appPreferences: appPreferences,

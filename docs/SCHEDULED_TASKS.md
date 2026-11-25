@@ -41,6 +41,17 @@ Choose server storage, configured platform destinations, or a discovered group
 chat under Results. Wing retains the group's hosting profile independently of
 the task's profile. Existing targets remain selected if discovery is unavailable.
 
+**Output wrapping** controls the task header and footer in delivered results.
+Choose **Hermes default** to follow the profile's setting, **On** to include them,
+or **Off** to deliver the result without them. This also applies to script-only
+tasks. Selecting Hermes default clears a task override; editing another field
+preserves the saved choice. Templates keep their own settings until you edit
+the created task.
+
+Task details show the saved wrapping choice. If another client changes the same
+field, review the two choices before saving. A response that does not confirm
+your choice leaves the save uncertain; review the task before trying again.
+
 When scheduled output contains group member `@mentions`, those bots begin a round;
 `@all` addresses everyone. Without a mention, the output is posted as information.
 Failure notices never start a round. Include instructions about mentions in the

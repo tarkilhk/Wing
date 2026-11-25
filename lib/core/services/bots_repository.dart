@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import '../models/bots.dart';
+import '../models/bot_group_peer.dart';
+import '../models/bot_delivery.dart';
 import '../models/profile_colors.dart';
 import '../models/hermes_profile.dart';
 import '../models/profile_session_key.dart';
@@ -59,9 +61,11 @@ class BotsRepository {
     void Function()? retain,
     void Function()? release,
     DateTime Function()? now,
+    bool Function()? isCurrent,
   }) : _retain = retain ?? _noop,
        _release = release ?? _noop,
-       _now = now ?? DateTime.now;
+       _now = now ?? DateTime.now,
+       _isCurrent = isCurrent ?? (() => true);
 
   factory BotsRepository.forServer(
     AdministrationRepository server, {
@@ -76,6 +80,7 @@ class BotsRepository {
     instance: server.connectionLabel,
     groupObservations: groupObservations,
     server: server,
+    isCurrent: isCurrent,
     displayConnect: server.displayConnect,
     retain: server.retain,
     release: server.release,
@@ -133,6 +138,10 @@ class BotsRepository {
   final BotsOwnership _ownership;
   final void Function() _retain, _release;
   final DateTime Function() _now;
+  final bool Function() _isCurrent;
+  bool get isCurrent => _isCurrent();
+  String? _installationId;
+  String? get installationId => _installationId;
   void retain() => _retain();
   void release() => _release();
   void _owns(BotRecord bot) {
@@ -150,11 +159,11 @@ class BotsRepository {
 
   // Only concurrent readers share this wire response. Completed roster models
   // retain bot-namespace metadata; group artwork stays with the catalog owner.
-  Future<List<Map<String, dynamic>>>? _pendingProfiles;
+  Future<({String installationId, List<Map<String, dynamic>> rows})>?
+  _pendingProfiles;
 
-  Future<List<Map<String, dynamic>>> _profileRows({
-    bool joinPending = false,
-  }) async {
+  Future<({String installationId, List<Map<String, dynamic>> rows})>
+  _profileRows({bool joinPending = false}) async {
     // Only catalog work joins a roster read. An explicit roster reread after a
     // mutation must never join an older, still-pending response.
     final pending = joinPending && _pendingProfiles != null
@@ -167,7 +176,14 @@ class BotsRepository {
                 result['install_id'] is! String) {
               throw const FormatException('Invalid Bots roster');
             }
-            return _rows(result['profiles']);
+            final installationId = (result['install_id'] as String).isEmpty
+                ? ''
+                : 'install:${result['install_id']}';
+            if (isCurrent) _installationId = installationId;
+            return (
+              installationId: installationId,
+              rows: _rows(result['profiles']),
+            );
           }();
     try {
       return await pending;
@@ -177,7 +193,8 @@ class BotsRepository {
   }
 
   Future<List<BotRecord>> bots() async {
-    final rows = await _profileRows();
+    final observation = await _profileRows();
+    final rows = observation.rows;
     return List.unmodifiable(
       rows.map((row) {
         final profile = HermesProfile.fromJson(row);
@@ -216,6 +233,7 @@ class BotsRepository {
         return BotRecord(
           scope: profileScope,
           instance: instance,
+          installationId: observation.installationId,
           profile: profile,
           title: _text(meta['title']).trim().isEmpty
               ? profile.label
@@ -293,6 +311,37 @@ class BotsRepository {
     } catch (_) {
       return BotPresenceObservation(unavailable, validated: false);
     }
+  }
+
+  Future<List<BotDelivery>> senderDeliveries(BotRecord sender) async {
+    _owns(sender);
+    final result = await _read(sender.profile.name, 'bot_delivery.list', {});
+    if (result['sender'] != sender.profile.name ||
+        result['deliveries'] is! List) {
+      throw const FormatException('Invalid sender delivery response');
+    }
+    return List.unmodifiable(
+      _rows(result['deliveries']).map(BotDelivery.fromJson),
+    );
+  }
+
+  /// Existing exact profile identity from this instance's canonical roster.
+  /// This read never creates a chat or guesses a target from a title/search.
+  Future<ProfileSessionKey> existingTeammateChat(
+    BotRecord sender,
+    String target,
+  ) async {
+    _owns(sender);
+    final targetBot = (await bots())
+        .where((bot) => bot.profile.name == target)
+        .firstOrNull;
+    final key = targetBot?.resolvedChat ?? targetBot?.chat;
+    if (key == null) {
+      throw StateError(
+        'This teammate has no available Bot Chat on ${sender.instance}. Retry after it becomes available.',
+      );
+    }
+    return key;
   }
 
   BotPresence _presenceFor(
@@ -607,25 +656,133 @@ class BotsRepository {
   Set<String> _groupMethods = const {};
   Set<String> _seatableProfiles = const {};
   Set<String> get seatableProfiles => _seatableProfiles;
-  Future<bool> groupsReady() async {
-    final capabilities = await _read('default', 'groups.capabilities', {});
-    final driver = capabilities['driver'];
-    final seatable = capabilities['seatable_profiles'];
-    _seatableProfiles = const {};
-    if (seatable is! List ||
-        seatable.any((name) => name is! String || name.isEmpty)) {
-      throw const FormatException('Invalid group member eligibility');
+  BotGroupCapabilities? _groupCapabilities;
+  BotGroupCapabilities? get observedGroupCapabilities => _groupCapabilities;
+  Future<BotGroupCapabilities> groupCapabilities(String profile) async {
+    final value = BotGroupCapabilities.fromJson(
+      await _read(profile, 'groups.capabilities', {}),
+      profile,
+    );
+    if (!isCurrent) throw StateError('Group source retired');
+    if (profile == 'default') {
+      _groupCapabilities = value;
+      _seatableProfiles = value.seatableProfiles;
+      _groupMethods = value.methods;
     }
-    _seatableProfiles = Set.unmodifiable(seatable.cast<String>());
-    final methods = capabilities['methods'];
-    _groupMethods =
-        methods is List && methods.every((method) => method is String)
-        ? Set.unmodifiable(methods.cast<String>())
-        : const {};
-    if (driver is! bool) {
-      throw const FormatException('Invalid group driver readiness');
+    return value;
+  }
+
+  Future<bool> groupsReady() async =>
+      (await groupCapabilities('default')).canCreate;
+
+  Future<({BotGroup room, bool ended, Map<String, String> routes})>
+  peerRoomState(BotGroup group) async {
+    _ownsGroup(group);
+    final value = await _read('default', 'groups.state', {
+      'room_id': group.id,
+      'include_disbanded': true,
+    });
+    final row = _map(value['room']);
+    final room = decodeGroup(scope, instance, row);
+    if (!isCurrent || !group.sameRoster(room)) {
+      throw const BotGroupPeerFailure('room_ended');
     }
-    return driver;
+    final ended = row['disbanded_at'];
+    if (ended != null && (ended is! num || !ended.isFinite)) {
+      throw const FormatException('Invalid tombstone');
+    }
+    return (
+      room: room,
+      ended: ended != null,
+      routes: ended != null
+          ? const <String, String>{}
+          : _peerRoutes(_map(value['driver_status']), group.id),
+    );
+  }
+
+  Future<BotGroupPeerInvitation> invitePeer(
+    BotGroup group,
+    BotGroupMember member, {
+    required bool renewalHorizon,
+    required bool Function() canUse,
+  }) async => BotGroupPeerInvitation.fromJson(
+    await _command(
+      member.profile,
+      'groups.peer.invite',
+      {
+        'room_id': group.id,
+        'member_id': member.id,
+        'home_install_id': group.authorityGatewayId,
+        'authority_gateway_id': group.authorityGatewayId,
+        'authority_epoch': group.authorityEpoch,
+        'ttl_seconds': 86400,
+        if (renewalHorizon) 'status_ttl_seconds': 2592000,
+      },
+      () => isCurrent && canUse(),
+      () {},
+    ),
+  );
+
+  Future<void> registerPeer(
+    BotGroup group,
+    BotGroupMember member,
+    BotGroupPeerInvitation invitation, {
+    required bool Function() canUse,
+  }) async {
+    _ownsGroup(group);
+    if (!invitation.matches(member.target)) {
+      throw const BotGroupPeerFailure('peer_gateway_changed');
+    }
+    final value = await _command(
+      'default',
+      'groups.peer.register',
+      {
+        'room_id': group.id,
+        'member_id': member.id,
+        'target_url': invitation.url,
+        'target_profile': invitation.profile,
+        'grant': invitation.grant,
+        'catalog': invitation.catalog,
+      },
+      () => isCurrent && canUse(),
+      () {},
+    );
+    if (value['registered'] != true ||
+        value['target_install_id'] != member.target.installationId ||
+        value['target_profile'] != member.profile ||
+        value['mode'] != 'direct') {
+      throw const BotGroupPeerFailure('registration_unconfirmed');
+    }
+  }
+
+  Future<void> revokePeer(
+    BotGroupPeerInvitation invitation, {
+    required bool Function() canUse,
+  }) async {
+    final value = await _command(
+      invitation.profile,
+      'groups.peer.revoke',
+      {'grant': invitation.grant},
+      () => isCurrent && canUse(),
+      () {},
+    );
+    if (value['revoked'] != true) {
+      throw const BotGroupPeerFailure('registration_unconfirmed');
+    }
+  }
+
+  static Map<String, String> _peerRoutes(
+    Map<String, dynamic> status,
+    String roomId,
+  ) {
+    final routes = <String, String>{};
+    for (final row in _rows(status['peer_routes'])) {
+      if (row['room_id'] != roomId) {
+        throw const FormatException('Wrong peer route room');
+      }
+      routes[_requiredText(row['member_id'])] = _requiredText(row['status']);
+    }
+    return Map.unmodifiable(routes);
   }
 
   // Stock profiles.configure caps each incoming ui_meta document at 65,536
@@ -746,7 +903,7 @@ class BotsRepository {
 
   /// Catalog discovery carries identities and pictures, never runtime or logs.
   Future<List<BotGroup>> groupCatalog() async {
-    final profiles = await _profileRows(joinPending: true);
+    final profiles = (await _profileRows(joinPending: true)).rows;
     final groups = await readRoomCatalog(
       read: _read,
       scope: scope,
@@ -801,7 +958,7 @@ class BotsRepository {
         'room_id': group.id,
       });
       final decoded = decodeGroupState(scope, instance, group.id, result);
-      if (decoded.room == null) {
+      if (decoded.room == null || !group.sameRoster(decoded.room!)) {
         return BotGroupState(room: group, roomAvailable: false);
       }
       final runtime = decoded.runtime;
@@ -835,6 +992,8 @@ class BotsRepository {
       scope: current.scope,
       instance: current.instance,
       id: current.id,
+      authorityGatewayId: current.authorityGatewayId,
+      authorityEpoch: current.authorityEpoch,
       name: current.name,
       members: current.members,
       observationComplete: false,
@@ -844,7 +1003,7 @@ class BotsRepository {
       preview: current.preview,
       working: current.working,
       blocked: current.blocked,
-      activeMemberProfiles: current.activeMemberProfiles,
+      activeMemberIds: current.activeMemberIds,
       lastMessageAt: current.lastMessageAt,
       lastMessageSequence: current.lastMessageSequence,
       lastAnswerSequence: current.lastAnswerSequence,
@@ -856,7 +1015,8 @@ class BotsRepository {
     if (!observed.roomAvailable || latest == null || !canPublish()) {
       return unavailable();
     }
-    if (group.observationComplete && group.messageCoverageSequence == latest) {
+    if (current.observationComplete &&
+        current.messageCoverageSequence == latest) {
       return current;
     }
     final recentMessages = <BotGroupEvent>[];
@@ -888,6 +1048,8 @@ class BotsRepository {
         scope: current.scope,
         instance: current.instance,
         id: current.id,
+        authorityGatewayId: current.authorityGatewayId,
+        authorityEpoch: current.authorityEpoch,
         name: current.name,
         members: current.members,
         observationComplete: true,
@@ -897,7 +1059,7 @@ class BotsRepository {
         preview: message?.text ?? '',
         working: current.working,
         blocked: current.blocked,
-        activeMemberProfiles: current.activeMemberProfiles,
+        activeMemberIds: current.activeMemberIds,
         lastMessageAt: message?.timestamp,
         lastMessageSequence: message?.sequence ?? 0,
         lastAnswerSequence: answer?.sequence ?? 0,
@@ -927,12 +1089,15 @@ class BotsRepository {
     scope: scope,
     instance: instance,
     id: _requiredText(row['room_id']),
+    authorityGatewayId: _requiredText(row['authority_gateway_id']),
+    authorityEpoch: _groupEpoch(row['authority_epoch']),
     name: _requiredText(row['name']),
     observationComplete: false,
     members: _rows(row['members']).map(
       (m) => BotGroupMember(
         id: _requiredText(m['member_id']),
         profile: _requiredText(m['profile']),
+        target: _memberTarget(m),
         handle: _requiredText(m['handle']),
         name: _text(m['display_name']).isEmpty
             ? _requiredText(m['profile'])
@@ -940,6 +1105,21 @@ class BotsRepository {
       ),
     ),
   );
+  static int _groupEpoch(Object? value) {
+    if (value is! int || value < 1) {
+      throw const FormatException('Invalid group epoch');
+    }
+    return value;
+  }
+
+  static BotGroupTarget _memberTarget(Map<String, dynamic> member) {
+    final target = BotGroupTarget.fromJson(_map(member['target']));
+    if (target.profile != member['profile']) {
+      throw const FormatException('Group target profile mismatch');
+    }
+    return target;
+  }
+
   void _ownsGroup(BotGroup group) {
     if (group.scope != scope) {
       throw StateError('Group belongs to another instance');
@@ -1135,53 +1315,33 @@ class BotsRepository {
     return List.unmodifiable(events);
   }
 
-  Future<void> createGroup(
-    String id,
-    String name,
-    List<BotRecord> members,
+  Future<BotGroup> createGroup(
+    BotGroupCreateIntent intent,
     bool Function() canDispatch,
     void Function() onDispatched,
   ) async {
-    if (members.length < 2 || members.length > 6 || name.trim().isEmpty) {
-      throw ArgumentError('Choose 2–6 bots and name the group.');
+    if (!isCurrent || !canDispatch()) {
+      throw StateError('Group creation retired');
     }
-    for (final bot in members) {
-      _owns(bot);
+    final capabilities = await groupCapabilities('default');
+    if (capabilities.gateway != intent.gateway || !capabilities.canCreate) {
+      throw const BotGroupPeerFailure('peer_gateway_changed');
     }
-    if (!await groupsReady() || !_groupMethods.contains('groups.create')) {
-      throw const BotGroupCreateRefused(
-        'Group creation is unavailable. Refresh Bots and try again.',
-      );
+    if (!isCurrent || !canDispatch()) {
+      throw StateError('Group creation retired');
     }
-    if (members.any((bot) => !_seatableProfiles.contains(bot.profile.name))) {
-      throw const BotGroupCreateRefused(
-        'A selected bot cannot join this group. Reopen New group to choose its members again.',
-      );
-    }
-    if (!canDispatch()) throw StateError('Group creation is no longer active');
     final result = await _command(
       'default',
       'groups.create',
-      {
-        'room_id': id,
-        'name': name.trim(),
-        'members': [
-          for (final bot in members)
-            {
-              'member_id': bot.profile.name,
-              'profile': bot.profile.name,
-              'handle': 'bot_${bot.profile.name}',
-              'display_name': bot.title,
-              'target': {'kind': 'local', 'profile': bot.profile.name},
-            },
-        ],
-      },
-      canDispatch,
+      intent.toJson(),
+      () => isCurrent && canDispatch(),
       onDispatched,
     );
-    if (_map(result['room'])['room_id'] != id) {
+    final room = decodeGroup(scope, instance, _map(result['room']));
+    if (!intent.matches(room)) {
       throw const FormatException('Group creation identity mismatch');
     }
+    return room;
   }
 
   /// Stock hashes the immutable client retry key into its user-event namespace.
@@ -1307,6 +1467,9 @@ class BotsRepository {
       methods: _groupMethods,
     );
     final runtime = decoded.runtime;
+    if (decoded.room == null || !group.sameRoster(decoded.room!)) {
+      throw const FormatException('Group authority or roster changed');
+    }
     if (runtime == null) {
       throw const FormatException('Group runtime unavailable');
     }
@@ -1339,7 +1502,7 @@ class BotsRepository {
     }
     BotGroupRuntime? runtime;
     try {
-      runtime = _decodeGroupRuntime(result, methods);
+      runtime = _decodeGroupRuntime(result, methods, roomId);
     } on FormatException {
       /* Room facts remain usable. */
     }
@@ -1349,6 +1512,7 @@ class BotsRepository {
   static BotGroupRuntime _decodeGroupRuntime(
     Map<String, dynamic> result,
     Set<String> methods,
+    String roomId,
   ) {
     final status = _map(result['driver_status']);
     if (status['working'] is! bool || status['blocked'] is! bool) {
@@ -1398,6 +1562,7 @@ class BotsRepository {
       working: status['working'] == true,
       blocked: status['blocked'] == true,
       actions: actions,
+      peerRoutes: _peerRoutes(status, roomId),
       methods: methods,
       context: result['context'] is Map
           ? _decodeGroupContext(_map(result['context']))
@@ -1517,8 +1682,8 @@ class BotsRepository {
       'room_id': group.id,
     });
     final current = _group(_map(result['room']));
-    if (current.id != group.id) {
-      throw const FormatException('Wrong group member owner');
+    if (!group.sameRoster(current)) {
+      throw const BotGroupPeerFailure('room_ended');
     }
     return current.members;
   }
@@ -1630,6 +1795,15 @@ class BotsRepository {
       canDispatch,
       onDispatched,
     );
+    if (action == 'disband') {
+      final tombstone = _map(result['tombstone']);
+      final at = tombstone['disbanded_at'];
+      if (tombstone['room_id'] != group.id || at is! num || !at.isFinite) {
+        throw StateError(
+          'Disband could not be confirmed. The group is kept. Retry.',
+        );
+      }
+    }
     if (action == 'stop' &&
         (result['cancelled'] is! int || (result['cancelled'] as int) < 0)) {
       throw StateError('Group stop could not be confirmed');

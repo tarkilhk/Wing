@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/hermes_question.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -21,6 +22,7 @@ class ReopenHost extends Host {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       connect: base.connect,

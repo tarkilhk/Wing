@@ -121,6 +121,8 @@ void main() {
   });
 
   BotGroup group(String id, {String identity = 'host'}) => BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
     scope: WorkspaceScope(
       connectionId: 'connection',
       connectionIdentity: identity,

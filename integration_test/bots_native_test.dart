@@ -25,6 +25,7 @@ import 'package:wing/core/widgets/studio_loading.dart';
 import '../test/support/administration_fixture.dart';
 import '../test/support/bots_fixture.dart';
 import '../test/support/profile_browser_fixture.dart';
+import '../test/bot_group_peer_view_test.dart' show runPeerGroupUiJourney;
 
 /// The host injects Android input and captures the actual window. Backend
 /// responses come from owned fixtures, including the drawer's loopback HTTP.
@@ -648,7 +649,7 @@ void main() {
             'seq': (fixture.events.last['seq'] as int) + 1,
             'event_id': id,
             'kind': kind,
-            'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+            'actor': {'kind': 'gateway', 'id': 'install:install-1'},
             'payload': payload,
             'created_at': 1791756000.0,
           };
@@ -883,6 +884,18 @@ void main() {
         expect(find.byType(BotsContent), findsOneWidget);
         expect(find.widgetWithText(Tab, 'Groups'), findsOneWidget);
         expect(tester.takeException(), isNull);
+        await runPeerGroupUiJourney(
+          tester,
+          brightness: brightness,
+          large: large,
+          native: (name, {action = 'capture', text, keyboard}) => _native(
+            tester,
+            name,
+            action: action,
+            text: text,
+            keyboard: keyboard,
+          ),
+        );
         await _native(tester, '$label-complete');
       });
     }

@@ -1,7 +1,7 @@
 import 'answer_versions.dart';
 import 'user_message_delivery.dart';
 
-/// Hermes Desktop's display kinds describe timeline events, not human prompts.
+/// Hermes display kinds distinguish timeline events and display-only prompts.
 /// Keep this projection separate from the stored history and its row IDs.
 String? transcriptNoticeKind(Map<String, dynamic> message) {
   final kind = message['display_kind'];
@@ -17,6 +17,7 @@ UserMessageDelivery? transcriptUserDelivery(Map<String, dynamic> message) =>
     : null;
 
 const _noticeKinds = {
+  'content_refused',
   'async_delegation_complete',
   'process_complete',
   'model_switch',
@@ -24,8 +25,29 @@ const _noticeKinds = {
   'personality_switch',
 };
 
+/// The current stock live completion carries a code, not the stored notice.
+bool isContentRefusedCompletion(Map<String, dynamic> completion) =>
+    completion['failure_reason'] == 'content_policy_blocked' ||
+    completion['error_surface'] is Map &&
+        completion['error_surface']['code'] == 'content_policy_blocked';
+
+const liveContentRefusedNotice =
+    'This message was refused by the model’s safety filter. Try a different query.';
+
+/// A refused row is display-only even when its optional notice is malformed.
+String? contentRefusedNotice(Map<String, dynamic> message) {
+  if (message['display_kind'] != 'content_refused') return null;
+  final refused = answerMessageDisplayMetadata(message)['content_refused'];
+  final notice = refused is Map ? refused['notice'] : null;
+  return notice is String && notice.trim().isNotEmpty
+      ? notice
+      : 'Message refused';
+}
+
 String? transcriptNoticeText(Map<String, dynamic> message) {
   switch (transcriptNoticeKind(message)) {
+    case 'content_refused':
+      return contentRefusedNotice(message);
     case 'model_switch':
       return 'Model changed';
     case 'auto_continue':
@@ -58,6 +80,9 @@ String? transcriptNoticeText(Map<String, dynamic> message) {
 /// Desktop exposes result bodies on demand, never the model-facing preamble,
 /// task goals, or full-transcript footer. Malformed envelopes fail closed.
 String? transcriptNoticeResult(Map<String, dynamic> message) {
+  if (message['display_kind'] == 'content_refused') {
+    return answerMessageDisplayText(message);
+  }
   final delivery = transcriptUserDelivery(message);
   if (delivery != null) return delivery.detail.isEmpty ? null : delivery.detail;
   if (transcriptNoticeKind(message) == 'process_complete') {

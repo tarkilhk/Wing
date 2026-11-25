@@ -1,15 +1,24 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:image/image.dart' as img;
 import 'package:wing/core/models/profile_session_key.dart';
+import 'package:wing/core/models/chat_output.dart';
+import 'package:wing/core/presentation/skill_document.dart';
+import 'package:wing/core/screens/profile_transcript.dart';
+import 'package:wing/core/widgets/activity/skill_document_viewer.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/services/connection_manager.dart';
 import 'package:wing/core/services/owned_remote_files.dart';
 import 'package:wing/core/services/remote_files_client.dart';
 import 'package:wing/core/services/transcript_resource_session.dart';
 import 'package:wing/core/screens/chat_outputs_screen.dart';
 import 'package:wing/core/widgets/chat_image_preview.dart';
+import 'package:wing/core/widgets/chat_inline_image.dart';
+import 'package:wing/core/widgets/user_message_attachment.dart';
+import 'package:wing/core/models/user_message_content.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -46,18 +55,20 @@ import 'helpers/pump_markdown_widget.dart';
 class _SubagentFixture extends ProfileActionsFixture {
   List<Map<String, dynamic>>? childMessages;
   List<Map<String, dynamic>>? nestedMessages;
+  Completer<void>? transcriptGate;
+  Completer<void>? skillGate;
+  Completer<void>? replayGate;
+  bool transcriptAvailable = true;
+  bool transcriptFails = false;
+  String childResourceId = 'child-session';
   final childEvents = <Map<String, dynamic>>[];
   int listCalls = 0;
-  int tailCalls = 0;
-  int tailFailures = 0;
-  Completer<void>? tailGate;
   Completer<void>? steerGate;
   bool acceptSteer = false;
   bool failSteer = false;
   bool findInterrupt = false;
   bool failInterrupt = false;
   bool emptyList = false;
-  bool tailAvailable = true;
   double? startedAt;
   List<Map<String, dynamic>>? rows;
   final requests = <(String, Map<String, dynamic>)>[];
@@ -66,9 +77,11 @@ class _SubagentFixture extends ProfileActionsFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: (path, query) async {
+        if (path == 'skills') await skillGate?.future;
         if (path == 'sessions/child-session/messages' ||
             path == 'sessions/nested-session/messages') {
           final nested = path.contains('nested-session');
@@ -96,15 +109,59 @@ class _SubagentFixture extends ProfileActionsFixture {
       },
       rpc: (method, params) async {
         requests.add((method, params));
+        if (method == 'session.transcript') {
+          expectSync(params['order'], 'latest');
+          expectSync(params['limit'], 100);
+          expectSync(params['subagent_id'], isNotNull);
+          await transcriptGate?.future;
+          if (transcriptFails) {
+            throw StateError('Transcript storage unavailable');
+          }
+          final nested = params['subagent_id'] == 'nested-agent';
+          final messages =
+              (nested ? nestedMessages : childMessages) ??
+              [
+                {
+                  'id': 101,
+                  'role': 'assistant',
+                  'content': 'Child saved evidence',
+                },
+              ];
+          return {
+            'session_id': params['session_id'],
+            'subagent_id': params['subagent_id'],
+            'available': transcriptAvailable,
+            'running': true,
+            'child_session_id': transcriptAvailable
+                ? (nested ? 'nested-session' : childResourceId)
+                : null,
+            'rows': [
+              if (transcriptAvailable)
+                for (final row in messages)
+                  {
+                    ...row,
+                    'row_id': row['id'],
+                    'row_kind': 'message',
+                    'text': row['content'] ?? '',
+                  },
+            ],
+            'next_cursor': null,
+            'reset': true,
+          };
+        }
         final id = params['session_id'];
-        final isChild = id == 'child-session' || id == 'nested-session';
+        final isChild = {
+          'child-session',
+          'child-successor',
+          'nested-session',
+        }.contains(id);
         final events = id == 'nested-session'
             ? <Map<String, dynamic>>[]
             : childEvents;
         if (method == 'session.resume' && isChild) {
-          expect(params['display_projection'], isTrue);
-          expect(params.containsKey('lazy'), isFalse);
-          expect(params.containsKey('omit_messages'), isFalse);
+          expectSync(params['display_projection'], isTrue);
+          expectSync(params.containsKey('lazy'), isFalse);
+          expectSync(params.containsKey('omit_messages'), isFalse);
           return {
             'session_id': id,
             'stored_session_id': id,
@@ -114,7 +171,8 @@ class _SubagentFixture extends ProfileActionsFixture {
           };
         }
         if (method == 'session.events.since' && isChild) {
-          expect(params['replay_epoch'], 'child-epoch');
+          await replayGate?.future;
+          expectSync(params['replay_epoch'], 'child-epoch');
           return {
             'replay_epoch': 'child-epoch',
             'events': [
@@ -151,19 +209,6 @@ class _SubagentFixture extends ProfileActionsFixture {
                       },
                   ],
               'delegations': const [],
-            };
-          case 'subagent.tail':
-            tailCalls += 1;
-            await tailGate?.future;
-            if (tailCalls <= tailFailures) {
-              throw StateError('tail unavailable');
-            }
-            return {
-              'subagent_id': 'child-1',
-              'available': tailAvailable,
-              'text': tailAvailable ? 'latest child output' : '',
-              'truncated': false,
-              'snapshot_required': false,
             };
           case 'subagent.steer':
             if (failSteer) throw StateError('Steering transport failed');
@@ -302,6 +347,7 @@ void main() {
       RepaintBoundary(
         key: frame,
         child: MaterialApp(
+          debugShowCheckedModeBanner: false,
           theme: wingTheme(brightness),
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
@@ -341,6 +387,8 @@ void main() {
     await tester.tap(find.text('Inspect the release'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Task').first);
+    await tester.pumpAndSettle();
   }
 
   TranscriptResourceSession resourcesFor(
@@ -535,6 +583,531 @@ void main() {
           await tester.tap(find.byTooltip('Close subagent activity'));
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 300));
+          await tester.pumpWidget(const SizedBox());
+        },
+      );
+    }
+  }
+
+  testWidgets(
+    'attachment gallery clears old previews during same-path owner rotation',
+    (tester) async {
+      final bytes = Uint8List.fromList(
+        img.encodePng(img.Image(width: 2, height: 2)),
+      );
+      final successor = Completer<Uint8List>();
+      var calls = 0;
+      Future<Uint8List> Function(String) loader = (_) async => bytes;
+      late StateSetter change;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, update) {
+                change = update;
+                return UserMessageAttachments(
+                  width: 300,
+                  attachments: [
+                    for (var i = 0; i < 6; i++)
+                      UserMessageAttachment(
+                        name: '$i.png',
+                        target: '$i.png',
+                        isImage: true,
+                      ),
+                  ],
+                  loadImage: loader,
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      for (final element in find.byType(Image).evaluate()) {
+        await tester.runAsync(
+          () => precacheImage((element.widget as Image).image, element),
+        );
+      }
+      await tester.pump();
+      expect(find.byType(Image), findsWidgets);
+      change(
+        () => loader = (_) {
+          calls++;
+          return successor.future;
+        },
+      );
+      await tester.pump();
+      expect(calls, 5);
+      expect(find.byType(Image), findsNothing);
+      await tester.tap(find.text('+1'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byType(Image), findsNothing);
+      successor.complete(bytes);
+      await tester.pump();
+      await tester.pump();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'rotated image header cannot open previously decoded owner bytes',
+    (tester) async {
+      final bytes = Uint8List.fromList(
+        img.encodePng(img.Image(width: 2, height: 2)),
+      );
+      final successor = Completer<Uint8List>();
+      Future<Uint8List> Function(String) loader = (_) async => bytes;
+      late StateSetter change;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, update) {
+                change = update;
+                return ChatInlineImage(
+                  target: 'same.png',
+                  title: 'Evidence',
+                  loadImage: loader,
+                  headerBuilder: (context, open) => IconButton(
+                    tooltip: 'Open captured image',
+                    onPressed: open,
+                    icon: const Icon(Icons.open_in_full),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton &&
+                    widget.tooltip == 'Open captured image',
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      change(() => loader = (_) => successor.future);
+      await tester.pump();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton &&
+                    widget.tooltip == 'Open captured image',
+              ),
+            )
+            .onPressed,
+        isNull,
+      );
+      successor.complete(bytes);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        tester
+            .widget<IconButton>(
+              find.byWidgetPredicate(
+                (widget) =>
+                    widget is IconButton &&
+                    widget.tooltip == 'Open captured image',
+              ),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'explicit child replacement reaches Latest while live replay remains held',
+    (tester) async {
+      fixture.childMessages = [
+        for (var i = 1; i <= 30; i++)
+          {'id': i, 'role': 'assistant', 'content': 'Saved evidence $i. ' * 8},
+      ];
+      await showPanel(tester, scale: 1, size: const Size(390, 844));
+      await openChild(tester);
+      final reader = tester
+          .widget<SubagentTimeline>(find.byType(SubagentTimeline))
+          .session;
+      reader.setActive(false);
+      final scrollable = find
+          .descendant(
+            of: find.byType(ProfileTranscript),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      await tester.drag(scrollable, const Offset(0, 700));
+      await tester.pumpAndSettle();
+      await until(
+        tester,
+        () => reader.readingPosition.resume != null,
+        'older reading bookmark',
+      );
+      final bookmark = reader.readingPosition.resume!;
+      fixture.childMessages = [
+        for (var i = 100; i < 130; i++)
+          {'id': i, 'role': 'assistant', 'content': 'Replacement evidence $i.'},
+      ];
+      reader.setActive(true);
+      await until(
+        tester,
+        () =>
+            reader.qualification?.contains('Newer activity is available') ==
+            true,
+        'deferred automatic replacement',
+      );
+      reader.setActive(false);
+      expect(reader.readingPosition.resume!.messageId, bookmark.messageId);
+      expect(reader.messages.first['id'], 1);
+      fixture.replayGate = Completer<void>();
+      await tester.tap(find.byTooltip('Refresh subagent activity'));
+      await until(
+        tester,
+        () => reader.messages.first['id'] == 100,
+        'committed replacement while replay held',
+      );
+      expect(reader.historyLoading, isTrue);
+      await tester.pumpAndSettle();
+      await tester.settleMarkdown();
+      await capture(tester, 'canonical-replacement-before-assert');
+      expect(
+        find
+            .textContaining('Replacement evidence 129.', findRichText: true)
+            .hitTestable(),
+        findsOneWidget,
+      );
+      expect(reader.readingPosition.resume, isNull);
+      await capture(tester, 'canonical-replaced-latest-live-held');
+      fixture.replayGate!.complete();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close subagent activity'));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  for (final attachment in [false, true]) {
+    testWidgets(
+      'same child image path reloads only when its committed owner changes ${attachment ? 'attachment' : 'markdown'}',
+      (tester) async {
+        fixture.childMessages = [
+          {
+            'id': 1,
+            'role': attachment ? 'user' : 'assistant',
+            'content': attachment
+                ? '@image:evidence.png'
+                : '![Evidence](evidence.png)',
+          },
+        ];
+        final requests = <http.Request>[];
+        final oldResponse = Completer<http.Response>();
+        await showPanel(
+          tester,
+          scale: 1,
+          resources: (key) => resourcesFor(key, (request) {
+            requests.add(request);
+            return key.sessionId == 'child-session'
+                ? oldResponse.future
+                : Future.value(
+                    http.Response.bytes(
+                      img.encodePng(
+                        img.fill(
+                          img.Image(width: 16, height: 16),
+                          color: img.ColorRgb8(37, 103, 120),
+                        ),
+                      ),
+                      200,
+                    ),
+                  );
+          }),
+        );
+        await openChild(tester);
+        await until(tester, () => requests.length == 1, 'initial child image');
+        await tester.tap(find.byTooltip('Refresh subagent activity'));
+        await tester.pumpAndSettle();
+        expect(requests, hasLength(1));
+        fixture.childResourceId = 'child-successor';
+        await tester.tap(find.byTooltip('Refresh subagent activity'));
+        await until(
+          tester,
+          () => requests.length == 2,
+          'same-path successor image',
+        );
+        expect(
+          requests.map((request) => request.url.queryParameters['session_id']),
+          ['child-session', 'child-successor'],
+        );
+        await until(
+          tester,
+          () => find.byType(Image).evaluate().isNotEmpty,
+          'successor image provider',
+        );
+        for (final element in find.byType(Image).evaluate()) {
+          await tester.runAsync(
+            () => precacheImage((element.widget as Image).image, element),
+          );
+        }
+        await tester.pump();
+        expect(tester.widget<RawImage>(find.byType(RawImage)).image, isNotNull);
+        oldResponse.complete(http.Response.bytes([1, 2, 3], 200));
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 10)),
+        );
+        await tester.pump();
+        expect(find.text('This image could not be previewed.'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byTooltip('Close subagent activity'));
+        await tester.pumpAndSettle();
+        await tester.pumpWidget(const SizedBox());
+      },
+    );
+  }
+
+  testWidgets('committed child resource rotation fences all old consumers', (
+    tester,
+  ) async {
+    fixture.childMessages = [
+      {'id': 1, 'role': 'assistant', 'content': '[Report](report.md)'},
+    ];
+    final bindings = <ProfileSessionKey>[];
+    final requests = <http.Request>[];
+    final pending = Completer<http.Response>();
+    await showPanel(
+      tester,
+      scale: 1,
+      resources: (key) {
+        bindings.add(key);
+        return resourcesFor(key, (request) {
+          requests.add(request);
+          return key.sessionId == 'child-session'
+              ? pending.future
+              : Future.value(http.Response.bytes([4, 5, 6], 200));
+        });
+      },
+    );
+    await openChild(tester);
+    final old = tester.widget<ProfileTranscript>(
+      find.byType(ProfileTranscript),
+    );
+    final oldMessage = tester.widget<ProfileMessage>(
+      find.byType(ProfileMessage),
+    );
+    final oldSkills = tester.widget<SkillReaderScope>(
+      find.byType(SkillReaderScope),
+    );
+    final document = SkillDocument.fromReceived(
+      name: 'review',
+      content: '# Review',
+    );
+    fixture.skillGate = Completer<void>();
+    final oldSkill = oldSkills.createReader(document);
+    final skillLoad = oldSkill.load();
+    const output = ChatOutput(
+      kind: ChatOutputKind.file,
+      path: 'report.md',
+      url: null,
+      label: 'report.md',
+    );
+    final image = expectLater(old.loadImage!('image.png'), throwsA(anything));
+    final share = expectLater(old.onShareResource!(output), throwsA(anything));
+    final save = expectLater(
+      oldMessage.onDownloadRemoteFile!(output),
+      throwsA(anything),
+    );
+
+    // An unchanged owner preserves the exact callback objects across reads.
+    await tester.tap(find.byTooltip('Refresh subagent activity'));
+    await tester.pumpAndSettle();
+    final unchanged = tester.widget<ProfileTranscript>(
+      find.byType(ProfileTranscript),
+    );
+    expect(identical(old.loadImage, unchanged.loadImage), isTrue);
+    expect(identical(old.onShareResource, unchanged.onShareResource), isTrue);
+    expect(bindings.map((key) => key.sessionId), ['child-session']);
+
+    fixture.childResourceId = 'child-successor';
+    await tester.tap(find.byTooltip('Refresh subagent activity'));
+    await tester.pumpAndSettle();
+    final current = tester.widget<ProfileTranscript>(
+      find.byType(ProfileTranscript),
+    );
+    expect(identical(old.loadImage, current.loadImage), isFalse);
+    expect(bindings.map((key) => key.sessionId), [
+      'child-session',
+      'child-successor',
+    ]);
+    pending.complete(http.Response.bytes([1, 2, 3], 200));
+    fixture.skillGate!.complete();
+    var oldSettled = false;
+    unawaited(
+      Future.wait([
+        image,
+        share,
+        save,
+        skillLoad,
+      ]).then((_) => oldSettled = true),
+    );
+    await until(tester, () => oldSettled, 'retired resource completions');
+    expect(oldSkill.observation, isNull);
+    expect(() => oldSkills.createReader(document), throwsStateError);
+    Uint8List? currentImage;
+    unawaited(
+      current.loadImage!('image.png').then((bytes) => currentImage = bytes),
+    );
+    await until(
+      tester,
+      () => currentImage != null,
+      'successor resource completion',
+    );
+    expect(currentImage, [4, 5, 6]);
+    expect(requests.last.url.queryParameters['session_id'], 'child-successor');
+    expect(requests.last.url.queryParameters['path'], 'image.png');
+
+    fixture.transcriptAvailable = false;
+    await tester.tap(find.byTooltip('Refresh subagent activity'));
+    await tester.pumpAndSettle();
+    final unavailable = tester.widget<ProfileTranscript>(
+      find.byType(ProfileTranscript),
+    );
+    expect(unavailable.loadImage, isNull);
+    expect(unavailable.onOpenResource, isNull);
+    expect(unavailable.onShareResource, isNull);
+    expect(find.byType(SkillReaderScope), findsNothing);
+    await expectLater(current.loadImage!('image.png'), throwsA(anything));
+    expect(bindings, hasLength(2));
+    await tester.tap(find.byTooltip('Close subagent activity'));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'canonical child held read retry and departure ${brightness.name} $scale',
+        (tester) async {
+          fixture.transcriptGate = Completer<void>();
+          final bindings = <ProfileSessionKey>[];
+          await showPanel(
+            tester,
+            brightness: brightness,
+            scale: scale,
+            size: scale == 1 ? const Size(390, 844) : const Size(320, 640),
+            resources: (key) {
+              bindings.add(key);
+              return resourcesFor(
+                key,
+                (_) async => http.Response.bytes([], 200),
+              );
+            },
+          );
+          await openChild(tester);
+          expect(find.byType(SubagentTimeline), findsOneWidget);
+          expect(
+            find.bySemanticsLabel('Loading subagent activity'),
+            findsWidgets,
+          );
+          expect(bindings, isEmpty);
+          await until(
+            tester,
+            () =>
+                ModalRoute.of(
+                  tester.element(find.byType(SubagentTimeline)),
+                )?.animation?.status ==
+                AnimationStatus.completed,
+            'fully presented child sheet while canonical read remains held',
+          );
+          await tester.pump();
+          expect(fixture.transcriptGate!.isCompleted, isFalse);
+          expect(find.text('Subagent activity').hitTestable(), findsOneWidget);
+          expect(
+            find.byTooltip('Close subagent activity').hitTestable(),
+            findsOneWidget,
+          );
+          final loading = find.byWidgetPredicate(
+            (widget) =>
+                widget is StudioLoading &&
+                widget.label == 'Loading subagent activity',
+          );
+          expect(loading, findsOneWidget);
+          final paint = find.descendant(
+            of: loading,
+            matching: find.byType(CustomPaint),
+          );
+          expect(paint, findsOneWidget);
+          final bounds = tester.getRect(paint);
+          final viewport =
+              Offset.zero &
+              (tester.view.physicalSize / tester.view.devicePixelRatio);
+          expect(bounds.isEmpty, isFalse);
+          expect(viewport.intersect(bounds), bounds);
+
+          await capture(
+            tester,
+            'canonical-initial-held-${brightness.name}-$scale',
+          );
+          fixture.transcriptGate!.complete();
+          await tester.pumpAndSettle();
+          expect(bindings, hasLength(1));
+          fixture.transcriptGate = Completer<void>();
+          fixture.transcriptFails = true;
+          await tester.tap(find.byTooltip('Refresh subagent activity'));
+          await tester.pump();
+          await tester.pump();
+          expect(
+            find.bySemanticsLabel('Loading subagent activity'),
+            findsWidgets,
+          );
+          await capture(
+            tester,
+            'canonical-refresh-held-${brightness.name}-$scale',
+          );
+          fixture.transcriptGate!.complete();
+          await tester.pumpAndSettle();
+          expect(find.byType(StudioError), findsWidgets);
+          await tester.ensureVisible(find.byType(StudioError).first);
+          await tester.pumpAndSettle();
+          await capture(
+            tester,
+            'canonical-refresh-failed-${brightness.name}-$scale',
+          );
+          fixture.transcriptFails = false;
+          fixture.transcriptGate = Completer<void>();
+          final retry = find.byTooltip('Refresh history');
+          await Scrollable.ensureVisible(
+            tester.element(retry),
+            alignment: 0.5,
+          );
+          await tester.pumpAndSettle();
+          expect(retry.hitTestable(), findsOneWidget);
+          await tester.tap(retry);
+          await tester.pump();
+          await tester.pump();
+          expect(
+            find.bySemanticsLabel('Loading subagent activity'),
+            findsWidgets,
+          );
+          await capture(
+            tester,
+            'canonical-retry-held-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byTooltip('Close subagent activity'));
+          await tester.pumpAndSettle();
+          fixture.transcriptGate!.complete();
+          await tester.pumpAndSettle();
+          expect(find.byType(SubagentTimeline), findsNothing);
+          expect(bindings, hasLength(1));
+          expect(tester.takeException(), isNull);
           await tester.pumpWidget(const SizedBox());
         },
       );
@@ -803,7 +1376,10 @@ void main() {
       tester.testTextInput.hide();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
-      expect(fixture.tailCalls, 0);
+      expect(
+        fixture.requests.where((request) => request.$1 == 'subagent.tail'),
+        isEmpty,
+      );
       expect(
         fixture.requests.where(
           (call) => call.$1 == 'prompt.submit' || call.$1 == 'session.close',
@@ -1306,6 +1882,8 @@ void main() {
           await tester.tap(find.text(heading));
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 100));
+          await tester.tap(find.text('Task').first);
+          await tester.pumpAndSettle();
           expect(find.text(longGoal), findsOneWidget);
           expect(find.byTooltip('Copy Task'), findsOneWidget);
           Navigator.of(tester.element(find.text(longGoal))).pop();
@@ -1334,7 +1912,7 @@ void main() {
       expect(find.byTooltip('Copy Current activity'), findsNothing);
       expect(find.byTooltip('Steer'), findsNothing);
       expect(find.byTooltip('Interrupt'), findsNothing);
-      Navigator.of(tester.element(find.text('Task'))).pop();
+      Navigator.of(tester.element(find.text('Task').first)).pop();
       await tester.pumpAndSettle();
     },
   );
@@ -1359,7 +1937,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('Copy Task'), findsOneWidget);
-    expect(find.byTooltip('Copy Live output'), findsOneWidget);
+    expect(find.byTooltip('Refresh subagent activity'), findsOneWidget);
     Navigator.of(tester.element(find.text('Raw details'))).pop();
     await tester.pumpAndSettle();
   });
@@ -1388,159 +1966,42 @@ void main() {
     expect(find.text('1 finished'), findsNothing);
   });
 
-  testWidgets(
-    'detail shows received activity when the server has no transcript',
-    (tester) async {
-      fixture.tailAvailable = false;
-      emitChatEvent(controller, chat, 'subagent.start', {
-        'subagent_id': 'child-1',
-        'goal': 'Inspect the release',
-      });
-      emitChatEvent(controller, chat, 'subagent.tool', {
-        'subagent_id': 'child-1',
-        'tool_name': 'read_file',
-        'tool_preview': 'Checking android/app/build.gradle.kts',
-      });
-      await openDetails(tester);
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.text('Recent activity'),
-        160,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView).last,
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      expect(find.text('Recent activity'), findsOneWidget);
-      expect(find.byTooltip('Copy Live output'), findsNothing);
-      expect(find.byTooltip('Open Live output'), findsNothing);
-      expect(find.byTooltip('Copy Current activity'), findsNothing);
-      expect(find.byTooltip('Refresh live output'), findsOneWidget);
-      expect(find.byTooltip('Copy Recent activity'), findsNothing);
-      expect(
-        find.textContaining('Checking android/app/build.gradle.kts').last,
-        findsOneWidget,
-      );
-      Navigator.of(tester.element(find.text('Live output'))).pop();
-      await tester.pumpAndSettle();
-    },
-  );
+  testWidgets('unavailable canonical child keeps received task context', (
+    tester,
+  ) async {
+    fixture.transcriptAvailable = false;
+    emitChatEvent(controller, chat, 'subagent.start', {
+      'subagent_id': 'child-1',
+      'goal': 'Inspect the release',
+    });
+    emitChatEvent(controller, chat, 'subagent.tool', {
+      'subagent_id': 'child-1',
+      'tool_name': 'read_file',
+      'tool_preview': 'Checking android/app/build.gradle.kts',
+    });
+    await openDetails(tester);
+    expect(
+      find.textContaining('Checking android/app/build.gradle.kts'),
+      findsWidgets,
+    );
+    expect(find.byTooltip('Refresh subagent activity'), findsOneWidget);
+    expect(find.byTooltip('Steer'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close subagent activity'));
+    await tester.pumpAndSettle();
+  });
 
-  testWidgets(
-    'an unavailable tail refresh preserves the output already received',
-    (tester) async {
-      await openDetails(tester);
-      await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is SourceCodeText && widget.text == 'latest child output',
-        ),
-        160,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView).last,
-              matching: find.byType(Scrollable),
-            )
-            .first,
-      );
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is SourceCodeText && widget.text == 'latest child output',
-        ),
-        findsOneWidget,
-      );
-      fixture.tailAvailable = false;
-      await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is SourceCodeText && widget.text == 'latest child output',
-        ),
-        findsOneWidget,
-      );
-      fixture.tailFailures = fixture.tailCalls + 1;
-      await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
-      expect(find.text('Could not refresh live output.'), findsNothing);
-      expect(find.text('Showing the last received output.'), findsOneWidget);
-
-      final refresh = find.byTooltip('Refresh live output');
-      await tester.ensureVisible(refresh);
-      await tester.pumpAndSettle();
-      final gate = Completer<void>();
-      fixture.tailGate = gate;
-      fixture.tailFailures = fixture.tailCalls + 1;
-      await tester.tap(refresh);
-      await tester.pump();
-      expect(
-        find.descendant(
-          of: refresh,
-          matching: find.byType(CircularProgressIndicator),
-        ),
-        findsOneWidget,
-      );
-      gate.complete();
-      await tester.pumpAndSettle();
-      expect(
-        find.descendant(
-          of: find.byType(StudioError),
-          matching: find.text('Could not refresh live output.'),
-        ),
-        findsOneWidget,
-      );
-      expect(find.text('Showing the last received output.'), findsOneWidget);
-      Navigator.of(tester.element(find.text('Live output'))).pop();
-      await tester.pumpAndSettle();
-    },
-  );
-
-  testWidgets('shows live tail and keeps rejected steering text', (
+  testWidgets('canonical child reader keeps rejected steering text', (
     tester,
   ) async {
     await openDetails(tester);
 
-    expect(fixture.tailCalls, 1);
-    await tester.scrollUntilVisible(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is SourceCodeText && widget.text == 'latest child output',
-      ),
-      160,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView).last,
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    expect(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is SourceCodeText && widget.text == 'latest child output',
-      ),
-      findsOneWidget,
-    );
-    expect(find.byType(SourceCodeText), findsWidgets);
+    expect(find.byType(SubagentTimeline), findsOneWidget);
     expect(find.byTooltip('Steer'), findsOneWidget);
     expect(find.byTooltip('Interrupt'), findsOneWidget);
 
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     await tester.pump();
-    await tester.scrollUntilVisible(
-      find.byType(TextField),
-      -160,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView).last,
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
+    await tester.ensureVisible(find.byType(TextField));
     await tester.enterText(find.byType(TextField), 'Check the Android path');
     final steerButton = find.byTooltip('Steer');
     await tester.ensureVisible(steerButton);
@@ -1550,16 +2011,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('Steer rejected'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.byType(TextField),
-      -160,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView).last,
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
+    await tester.ensureVisible(find.byType(TextField));
     expect(
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       'Check the Android path',
@@ -1603,96 +2055,50 @@ void main() {
     },
   );
 
-  for (final brightness in Brightness.values) {
-    for (final scale in [1.0, 2.0]) {
-      testWidgets(
-        'tail polling stops after three failures and one refresh action restarts it ${brightness.name} $scale',
-        (tester) async {
-          fixture.tailFailures = 3;
-          await openDetails(
-            tester,
-            brightness: brightness,
-            scale: scale,
-            size: scale == 1 ? const Size(390, 844) : const Size(320, 640),
-          );
-          await tester.pump(const Duration(seconds: 2));
-          await tester.pump(const Duration(seconds: 2));
-
-          expect(fixture.tailCalls, 3);
-          await tester.scrollUntilVisible(
-            find.text('Could not refresh live output.'),
-            160,
-            scrollable: find
-                .descendant(
-                  of: find.byType(ListView).last,
-                  matching: find.byType(Scrollable),
-                )
-                .first,
-          );
-          expect(
-            find.descendant(
-              of: find.byType(StudioError),
-              matching: find.text('Could not refresh live output.'),
-            ),
-            findsOneWidget,
-          );
-          await tester.ensureVisible(find.byType(StudioError));
-          await tester.pump();
-          await capture(tester, 'tail-error-${brightness.name}-$scale');
-          expect(find.byTooltip('Retry'), findsNothing);
-          expect(find.byTooltip('Refresh live output'), findsOneWidget);
-          await tester.pump(const Duration(seconds: 4));
-          expect(fixture.tailCalls, 3);
-
-          await tester.ensureVisible(find.byTooltip('Refresh live output'));
-          await tester.pumpAndSettle();
-          final held = fixture.tailGate = Completer<void>();
-          await tester.tap(find.byTooltip('Refresh live output'));
-          await tester.pump();
-          expect(
-            find.descendant(
-              of: find.byTooltip('Refresh live output'),
-              matching: find.byType(CircularProgressIndicator),
-            ),
-            findsOneWidget,
-          );
-          expect(find.byTooltip('Retry'), findsNothing);
-          final reads = fixture.tailCalls;
-          await tester.tap(find.byTooltip('Refresh live output'));
-          await tester.pump();
-          expect(fixture.tailCalls, reads);
-          held.complete();
-          await tester.pump();
-          await tester.pump(const Duration(milliseconds: 100));
-          await tester.scrollUntilVisible(
-            find.byWidgetPredicate(
-              (widget) =>
-                  widget is SourceCodeText &&
-                  widget.text == 'latest child output',
-            ),
-            160,
-            scrollable: find
-                .descendant(
-                  of: find.byType(ListView).last,
-                  matching: find.byType(Scrollable),
-                )
-                .first,
-          );
-          expect(
-            find.byWidgetPredicate(
-              (widget) =>
-                  widget is SourceCodeText &&
-                  widget.text == 'latest child output',
-            ),
-            findsOneWidget,
-          );
-
-          Navigator.of(tester.element(find.text('Live output'))).pop();
-          await tester.pumpAndSettle();
-        },
+  testWidgets(
+    'main transcript resource callbacks stay stable across streamed chunks',
+    (tester) async {
+      chat.reading.installSavedHistory([
+        {'id': 1, 'role': 'assistant', 'content': 'Saved report context.'},
+      ]);
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: ProfileWorkspaceScreen(
+            createBotsSession: () => BotsSession((_) async => const []),
+            controller: controller,
+          ),
+        ),
       );
-    }
-  }
+      await tester.pumpAndSettle();
+      final before = tester.widget<ProfileTranscript>(
+        find.byType(ProfileTranscript),
+      );
+      emitChatEvent(controller, chat, 'message.delta', {
+        'text': 'First streamed chunk.',
+      });
+      await tester.pumpAndSettle();
+      final after = tester.widget<ProfileTranscript>(
+        find.byType(ProfileTranscript),
+      );
+      expect(identical(before.loadImage, after.loadImage), isTrue);
+      expect(identical(before.onOpenResource, after.onOpenResource), isTrue);
+      expect(identical(before.onShareResource, after.onShareResource), isTrue);
+      expect(
+        identical(
+          tester
+              .widget<ProfileMessage>(find.byType(ProfileMessage).first)
+              .loadAttachmentImage,
+          after.loadImage,
+        ),
+        isTrue,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   for (final status in ['running', 'completed']) {
     testWidgets(
@@ -1763,6 +2169,8 @@ void main() {
         await tester.pumpAndSettle();
         await tester.settleMarkdown();
         expect(find.text('Task'), findsOneWidget);
+        await tester.tap(find.text('Task'));
+        await tester.pumpAndSettle();
         expect(find.byTooltip('Copy Task'), findsOneWidget);
         await tester.binding.handlePopRoute();
         await tester.pumpAndSettle();

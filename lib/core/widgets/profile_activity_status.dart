@@ -45,7 +45,9 @@ class ProfileActivityStatus extends StatelessWidget {
       case ChatExecution.submitting:
         return null;
       case ChatExecution.failed:
-        return 'Something went wrong';
+        return runtime.failure?.contentRefused == true
+            ? runtime.failure!.title
+            : 'Something went wrong';
       default:
         break;
     }

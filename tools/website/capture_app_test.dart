@@ -1,3 +1,4 @@
+import '../../test/support/wing_client_identity_fixture.dart';
 // Export real Wing widgets with authored, public-safe demo content.
 // Run manually; this is asset tooling, not a production application change.
 import 'dart:convert';
@@ -141,6 +142,7 @@ class _WebsiteFixture extends ProfileBrowserFixture {
   ProfileGateway gateway(scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: (path, query) async => path == 'model/info'

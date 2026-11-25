@@ -1034,6 +1034,12 @@ class DashboardClient {
 
   String get baseUrl => _baseUrl;
 
+  /// Hub availability fetches each installed skill's source, like stock Desktop.
+  /// Both the administration deadline and physical read use this one policy.
+  Duration readTimeoutFor(String endpoint) => endpoint == 'skills/hub/updates'
+      ? const Duration(seconds: 120)
+      : readTimeout;
+
   bool get _usesPasswordAuth =>
       (_username?.isNotEmpty ?? false) && (_password?.isNotEmpty ?? false);
 
@@ -1287,7 +1293,12 @@ class DashboardClient {
         '$_baseUrl/api/$endpoint',
       ).replace(queryParameters: queryParameters);
       stage = 'request';
-      final res = await _reads.request('GET', uri, headers: headers);
+      final res = await _reads.request(
+        'GET',
+        uri,
+        headers: headers,
+        inactivityTimeout: readTimeoutFor(endpoint),
+      );
       stage = 'response';
       if (res.statusCode == 401 && !retried) {
         logConnectionDiagnostic(

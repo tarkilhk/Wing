@@ -9,19 +9,24 @@ Feature ID: `bots`.
 - `bots.chat` — Open the exact bot conversation. Registry lookup follows the root title and opens the current compression tip. First open creates the named hidden Bot Chat atomically; reopening or recovering a lost acknowledgement adopts the confirmed server conversation.
 - `bots.groups` — Read and manage a hosted discussion with the same conversation frame, responsive composer, reading mode and approval review as other chats. Exact member activity distinguishes queued, running and stopping work; a working room does not mark every member active.
 - Discussion composers keep the [shared message-box identity](chat-inputs.md): attachments at the left, dictation in the field and Send/Stop at the right. Recents preserves those positions while remaining passive.
-- New group lists only the gateway’s eligible local members. Create rechecks eligibility; a changed member list retains the draft without sending a create request. Reopen New group to choose again.
+- New group chooses an immutable host and two to six eligible bots across saved instances. Local eligibility and each peer’s installation, profile and advertised RoomLink capability are rechecked before the first write. Changed access retains the editable draft. Uncertain creation retries the original room and roster; partial peer joins keep that room and offer per-member Retry with visible progress. Wing uses already configured endpoints. Picture saving rechecks the created room and refuses an ended room without recreating it.
+- Member identity follows the exact installation and profile, including avatars, mentions, direct chat and settings. Access renewal runs while the room is open; Send journals its draft before a bounded renewal wait and Stop fences that waiting send. Confirmed Disband retires the room; missing or mismatched confirmation retains recovery.
 - Reply to message keeps the selected discussion thread and mentions a member author. The composer shows the selected message and an icon-only Cancel reply action. Selection survives reopening and uncertain-send retries; cancelling before Send starts a new discussion.
 - Failed group work offers Retry for the exact member/task attempt. Retry preserves unrelated work and your draft; it does not stop the room or create a continuation message.
 - An unknown local attempt offers Discard when Hermes advertises it. Confirmation explains that the outcome remains unknown: discarding does not undo side effects or stop a process. The action names the exact member, task and execution generation.
 - Group options → Shared settings edits the room purpose (500 characters), shared notes (4 KB UTF-8), and routing. Everyone gives each member a turn; Lead lets a selected member choose recipients; Auto makes an additional model call and falls back to everyone if selection fails. Changes apply to new discussions. Save retains rejected drafts and confirms the durable room context before closing.
 - Bounded discussions offer an icon-only Continue for that discussion's saved event, within the server's extension limit. New messages use their own discussion thread. A stopped, superseded or exhausted discussion cannot continue. Stop remains available from the menu during Send and awaits its durable room fence. A Stop that was never sent or was definitively refused does not block a discussion that later reaches its limit; an uncertain Stop remains fenced until confirmed.
 - Current member status includes the server-reported tool. Group options → Member activity shows compact avatar/name rows with explicit status, the current tool, quiet reported start/last activity times and expandable exact thread/round details. Polling does not refresh those timestamps or imply that a quiet bot has stalled.
-- Group attachments use the same Attach file bottom sheet as normal chats for Camera, Photos and Files, and groups appear as destinations in Android share review. Review the draft before Send. Preparation shows the shared pending attachment strip; Send waits until all selected files finish. Group messages allow up to eight attachments, 15 MB each and 25 MB total. Received images retain the shared viewer and files have an icon-only Download action. A cancelled Android save leaves the conversation unchanged.
+- Groups whose members are all on the host use the same Attach file bottom sheet as normal chats for Camera, Photos and Files, and groups appear as destinations in Android share review. Mixed-instance groups accept text only: new file staging and new manifest sends are refused, editable restored files stay removable, and already-dispatched uncertain files retain exact Retry. Text-only Android shares remain supported. Review the draft before Send. Preparation shows the shared pending attachment strip; Send waits until all selected files finish. Group messages allow up to eight attachments, 15 MB each and 25 MB total. Received images retain the shared viewer and files have an icon-only Download action. A cancelled Android save leaves the conversation unchanged.
 - Unconfirmed group sends retain the exact event ID, discussion thread, text and attachment manifest on device. Reopening restores that pending attempt; matching log evidence or retry acknowledgement settles it without duplicate sends.
 - A definite pre-admission refusal restores the editable text and attachment draft. Remove an expired attachment and select it again before sending; uncertain delivery keeps the original immutable attempt.
-- Bot and group approvals use the same command review as normal chats: the review starts with the exact command visible in the transcript, request details expand separately, and the available icon actions reflect that request’s allowed scopes. While reading older messages, the waiting status remains visible and Latest returns to the review.
+- Bot and group approvals use the same review as normal chats: the review starts with the exact subject visible in the transcript, request details expand separately, and the available icon actions reflect that request’s allowed scopes. While reading older messages, the waiting status remains visible and Latest returns to the review.
 - `bots.desktop` — Observe passively, take confirmed control and hand it back. Landscape places the agent panel beside the desktop; portrait places it below. Tap clicks, one finger pans the magnified view, two fingers scroll, pinch zooms, hold right-clicks, and double-tap/hold drags. A persistent side strip also scrolls. The four main icons open the native keyboard, paste the phone clipboard, reveal more controls, and change control ownership. More holds only utility actions such as fullscreen, panel visibility, refresh, screen power and gesture help; it does not duplicate zoom or click gestures. Special keys and one-shot modifiers accompany direct typing. Paste announces plain UTF-8 text, invokes Ctrl-V without pressing Enter, and supplies the text when the remote application requests it. Its pending indicator lasts through transfer; an unaccepted paste shows a retryable error.
+- Bot Chat also renders folder and website server requests, including sandbox lifetime and optional denial reason. Current stock group approvals remain command requests with once/deny choices.
+
 - When opened from a chat, the panel shows its latest assistant message or pending request. Open Conversation to read or queue a message without consuming the main chat draft. Formal approvals and private input are answered in the main chat. Handback can include a note and continuation request; the lease is released before the message is queued. A failed message keeps the note and reports that control was already returned. A screen opened directly from the roster has no selected conversation and only returns control.
+
+- `bots.deliveries` — In a canonical Bot Chat, Background shows requests that bot sent to teammates: queued, claimed, working, waiting for your answer/approval, or failed. Expand a row and use Open teammate chat to enter the exact existing teammate on the same instance. Unavailable targets retain Retry on that destination; this action never creates a chat. A failed status read retains last received rows. Unknown outcomes may already have acted and must not be resent.
 
 ## How to get to it (user POV)
 
@@ -47,6 +52,8 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   flutter test --no-pub test/bots_contract_test.dart test/bot_group_attachments_test.dart test/conversation_assembly_test.dart test/gateway_approval_panel_test.dart test/bot_group_view_test.dart test/bot_display_client_test.dart test/bot_display_viewport_test.dart test/bot_screen_session_test.dart test/bot_screen_view_test.dart test/profile_composer_queue_test.dart
   ```
 
+  Cross-instance contracts: `flutter test --no-pub test/bot_group_peer_access_test.dart test/bot_group_peer_test.dart test/group_observations_test.dart test/bot_group_peer_view_test.dart`. These cover exact source/target matching, frozen creation, partial joins, uncertain registration, renewal/Stop ordering, retired sessions, authority-bound cache retirement, text-only admission and exact pending-file Retry. The production UI journey holds initial checks and their Retry, create revalidation, room creation, invite, registration and member recovery in both themes at normal and enlarged text, plus reduced motion.
+
   Current group-control coverage: `flutter test --no-pub test/bot_group_controls_test.dart test/bot_group_draft_session_test.dart test/bots_refresh_scheduling_test.dart test/chat_browser_data_test.dart test/studio_selection_test.dart`. It exercises eligible-member selection and revalidation, compressed Bot Chat identity, persisted reply-thread selection with cancellation and held/failed/retried sends, refused/unknown send identity, exact Discard, capability absence, Stop fences during Send and after failed attempts, shared-setting validation/retry, reported member progress and bounded Continue. `bots_contract_test.dart` also sends Shared settings, Continue and Discard through the production repository/gateway adapter, checks the captured profile and verifies unknown methods and retired operations cannot dispatch. The production screen tests open Shared settings, retain a failed draft, and drive Discard and Continue with requests held in both themes at normal and 200% text. They also open Member activity through Group options, keep long names/tools and missing timing readable, expand exact raw details, and close after scrolling in both themes at normal and 200% text. `bots_view_test.dart` also drives Refresh through the hosted group menu, verifies the exact Retry control stays reachable after dismissal, and retains the captured member-settings/private-chat checks. `bot_group_view_test.dart` holds Refresh across menu retirement and verifies immediate progress, cancellation recovery and departure.
 
   For operational observations, run
@@ -62,13 +69,18 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 
 - **Android `bots`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
 
-  The four cases are `Android Bots dark-normal`, `Android Bots dark-large`, `Android Bots light-normal`, and `Android Bots light-large`. They retain the original native entry, keyboard, uncertain Send, exact Retry and attachment checks. They also type a group purpose with the Android keyboard, retain and retry a failed settings save, follow Latest from the retained attachment to the new discussion, confirm exact Discard and continue a bounded discussion, holding each request to inspect pending feedback. These use fixture backend responses; they do not establish deployed group mutation success. For a bounded recovery run, use the existing driver with `--name '^Android Bots dark-large$'` after obtaining the emulator turn.
+  The four cases are `Android Bots dark-normal`, `Android Bots dark-large`, `Android Bots light-normal`, and `Android Bots light-large`. They retain the original native entry, keyboard, uncertain Send, exact Retry and attachment checks. They also type a group purpose with the Android keyboard, retain and retry a failed settings save, follow Latest from the retained attachment to the new discussion, confirm exact Discard and continue a bounded discussion, holding each request to inspect pending feedback. The same cases create a mixed-instance group with the real Android keyboard, hold invite/register and per-member Retry, recover one failed join, retain removable restored files and send text. These use fixture backend responses; they do not establish deployed group mutation success. For a bounded recovery run, use the existing driver with `--name '^Android Bots dark-large$'` after obtaining the emulator turn.
 
   ```sh
   python3 scripts/test_nightly_native.py bots --output build/feature-verification/bots
   ```
 
 ## Gotchas
+
+New chats carry Wing's mobile client identity and installed version, including
+ordinary, project, replacement and canonical Bot Chat creation. See the
+[connection attribution checks](connections.md#gotchas). Existing chats retain
+their server-owned creation metadata.
 
 Bot Chat and group discussions have different return destinations. Groups show the public discussion and Member activity; the current canonical API does not expose private worker transcripts. Live desktop control needs a running stock desktop and a confirmed lease; fixture lease checks do not establish a real desktop session.
 
@@ -82,3 +94,30 @@ Unsent uploaded attachments expire on Hermes after one hour. If a stale attachme
 For authorized Android + production acceptance, use the `groups` suite in the
 [existing-gateway journey](multi-surface-journeys.md#selected-hermes-features-on-an-existing-production-gateway).
 It uses fresh owned profiles, exact group/task cleanup and real provider execution.
+
+### Teammate delivery verification
+
+```sh
+flutter test --no-pub test/bot_deliveries_test.dart test/bot_deliveries_view_test.dart
+python3 scripts/test_journeys.py --case 'teammate waits retain exact targets and stale delivery status' --capture-frames --output build/feature-verification/teammate-deliveries
+```
+
+The host production route holds automatic and explicit reads separately, keeps
+nonempty process/history content, recovers failed process/delivery reads, replaces
+an unavailable source and opens an exact canonical target through held lookup,
+missing-target error and Retry. Long opening failures remain fully readable by
+scrolling, with reachable Retry/Back and header feedback through a held retry.
+It checks light/dark at normal and 200% text.
+The native case drives Background, retained failures, Retry and exact-target
+opening in both themes and text sizes, including unknown-outcome details beside
+existing processes. Its enlarged-text destination recovery also reads a long
+opening failure to its end, returns to Retry and captures the header Wing while
+the exact-target read is held. These fixture paths never send a teammate request or mutate
+a deployed backend.
+
+Status refresh runs every five seconds while the canonical Bot Chat is visible
+and connected, including after an empty result. Leaving or losing connectivity
+pauses it. A failed read stops polling; Retry or reopening Background reads again.
+Successful replies disappear from this current list without a completion claim.
+Receipt updated is the last receipt write, not an execution start time. The
+server retains failed outcomes for its own limited window.

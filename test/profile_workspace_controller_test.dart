@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/app_preferences.dart';
 import 'package:wing/core/services/live_voice_session.dart';
 import 'support/live_voice_fixture.dart';
@@ -246,6 +247,7 @@ class Host {
   Completer<void>? expiredResumeDelay;
   bool expiredResumeWasDelayed = false;
   Map<String, dynamic>? inflight;
+  int resumeGeneration = 0;
   Map<String, dynamic>? todoState;
   List<Map<String, dynamic>>? historyMessages;
   Completer<void>? heldHistoryStarted;
@@ -290,6 +292,7 @@ class Host {
     final name = scope.profileName;
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       serverResponse: (requestId, result) async {
         calls.add((
           name,
@@ -778,6 +781,7 @@ class Host {
             'messages': <Map<String, dynamic>>[],
             'running': method == 'session.resume' && running,
             'inflight': inflight,
+            'execution_generation': resumeGeneration,
             'open_requests': approvalOpenRequests,
             'prompts': [
               for (final entry in nativePrompts.entries)
@@ -1820,6 +1824,67 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(received.last.content.preview, 'The report is ready for review.');
       expect(received.last.focus?.kind, 'answer');
+    },
+  );
+
+  test(
+    'reconnect publishes received refusal without replay or generic failure',
+    () async {
+      final received = <ProfileNotification>[];
+      final connection = controller.connection;
+      controller.dispose();
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'original-settings',
+        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+        onAttention: (notice) async => received.add(notice),
+      );
+      await controller.initialize();
+      final chat = await controller.createChat(canDispatch: () => true);
+      chat.composer.editText('Original request');
+      await controller.send(chat);
+      chat.composer.editText('Keep next draft');
+      host.running = false;
+      host.inflight = {
+        'status': 'error',
+        'failure_reason': 'content_policy_blocked',
+        'error_surface': {
+          'code': 'content_policy_blocked',
+          'layer': 'provider',
+          'retryable': false,
+        },
+        'text': 'Provider refusal detail',
+      };
+      await controller.reconnect(chat.key.workspace);
+      await Future<void>.delayed(Duration.zero);
+      expect(received.last.content.status, 'Message refused');
+      expect(received.last.content.preview, 'Try a different query.');
+      expect(received.last.content.needsAttention, isTrue);
+      expect(received.last.focus?.kind, 'status');
+      expect(chat.runtime.execution, ChatExecution.failed);
+      expect(chat.runtime.failure?.contentRefused, isTrue);
+      expect(chat.composer.observation.text, 'Keep next draft');
+      final receivedFailure = chat.runtime.failure;
+      host.inflight = null;
+      controller.showList();
+      final reopened = await controller.openSession(chat.key);
+      expect(reopened, same(chat));
+      expect(chat.runtime.execution, ChatExecution.failed);
+      expect(chat.runtime.failure, same(receivedFailure));
+      expect(chat.runtime.error, 'Provider refusal detail');
+      expect(chat.composer.observation.text, 'Keep next draft');
+      host.resumeGeneration = 1;
+      controller.showList();
+      await controller.openSession(chat.key);
+      expect(chat.runtime.execution, ChatExecution.idle);
+      expect(chat.runtime.failure, isNull);
+      expect(chat.runtime.error, isNull);
+      expect(
+        host.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
     },
   );
 
@@ -3348,6 +3413,196 @@ void main() {
       );
       await controller.selectProject(controller.current!.selectedProject);
       expect(controller.current!.projectSessionsError, isNull);
+    },
+  );
+
+  test(
+    'canonical parent continuation without a stream turn id publishes its final reply',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      final gateway = host.gateways['a']!;
+      var sequence = gateway.canonical
+          .session(chat.runtime.runtimeId)!
+          .sequence;
+      void emit(String type, Map<String, dynamic> data, {int generation = 1}) {
+        gateway.onEvent!(
+          StreamEvent(
+            type: type,
+            sessionId: chat.runtime.runtimeId,
+            envelope: {
+              'seq': ++sequence,
+              'replay_epoch': 'fixture-epoch',
+              'authority_epoch': 1,
+              'execution_generation': generation,
+              'admission_id': 'parent-$generation',
+            },
+            data: data,
+          ),
+        );
+      }
+
+      host.historyMessages = [
+        {'id': 1, 'role': 'user', 'content': 'Delegate this work'},
+        {'id': 5, 'role': 'assistant', 'content': 'Child dispatched'},
+      ];
+      emit('message.start', {});
+      emit('session.info', {'running': true});
+      emit('message.complete', {'text': 'Child dispatched'});
+      emit('session.info', {'running': false});
+      await Future<void>.delayed(Duration.zero);
+      await restoreComposerFixture(
+        chat: chat,
+        preferences: controller.preferences,
+        text: 'Keep this draft',
+        appendQueued: [QueuedPromptDraft(text: 'Keep queued work')],
+        paused: true,
+      );
+      emit('session.info', {'running': false}, generation: 2);
+      emit('message.start', {
+        'display_kind': 'async_delegation_complete',
+        'display_text': 'Child completed',
+        'text': 'Child completed',
+      }, generation: 2);
+      emit('session.info', {'running': true}, generation: 2);
+      emit('session.info', {'tools': <Object>[]}, generation: 2);
+      expect(chat.runtime.execution, ChatExecution.running);
+      emit('message.delta', {
+        'turn_id': 'parent-stream-2',
+        'segment': 0,
+        'offset': 0,
+        'text': 'Parent final answer',
+      }, generation: 2);
+      host.historyMessages = [
+        ...host.historyMessages!,
+        {
+          'id': 9,
+          'role': 'user',
+          'content': 'Child completed',
+          'display_kind': 'async_delegation_complete',
+        },
+        {'id': 10, 'role': 'assistant', 'content': 'Parent final answer'},
+      ];
+      host.heldHistoryStarted = Completer<void>();
+      host.heldHistoryDelay = Completer<void>();
+      final historyDelay = host.heldHistoryDelay!;
+      addTearDown(() {
+        if (!historyDelay.isCompleted) historyDelay.complete();
+      });
+      final completion = <String, dynamic>{
+        'text': 'Parent final answer',
+        'content': 'Parent final answer',
+        'admission_id': 'parent-2',
+        'status': 'complete',
+        'outcome': 'completed',
+        'persisted_turn': {
+          'complete': true,
+          'row_ids': [9, 10],
+          'user_row_id': 9,
+          'user_row_ids': [9],
+          'final_assistant_row_id': 10,
+        },
+      };
+      emit('message.complete', completion, generation: 2);
+      emit('session.info', {'running': false}, generation: 2);
+      expect(
+        chat.reading.messages
+            .where((row) => row['role'] == 'assistant')
+            .map((row) => row['content']),
+        contains('Parent final answer'),
+      );
+      expect(chat.composer.observation.text, 'Keep this draft');
+      expect(chat.composer.observation.queue.single.text, 'Keep queued work');
+      expect(chat.composer.observation.paused, isTrue);
+      expect(chat.reading.streaming, isEmpty);
+      await host.heldHistoryStarted!.future;
+      final readsAfterCompletion = host.reads.length;
+      emit('message.complete', completion, generation: 2);
+      emit('turn.end', completion, generation: 2);
+      expect(host.reads, hasLength(readsAfterCompletion));
+      expect(
+        chat.reading.messages.where(
+          (row) =>
+              row['role'] == 'assistant' &&
+              row['content'] == 'Parent final answer',
+        ),
+        hasLength(1),
+      );
+      historyDelay.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.runtime.execution, ChatExecution.completed);
+      expect(
+        chat.reading.messages.where((row) => row['id'] == 10),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'canonical parent continuation survives an older completion history read',
+    () async {
+      final chat = await controller.createChat(canDispatch: () => true);
+      final gateway = host.gateways['a']!;
+      var sequence = gateway.canonical
+          .session(chat.runtime.runtimeId)!
+          .sequence;
+      void emit(String type, Map<String, dynamic> data, int generation) {
+        gateway.onEvent!(
+          StreamEvent(
+            type: type,
+            sessionId: chat.runtime.runtimeId,
+            envelope: {
+              'seq': ++sequence,
+              'replay_epoch': 'fixture-epoch',
+              'authority_epoch': 1,
+              'execution_generation': generation,
+              'admission_id': 'parent-$generation',
+            },
+            data: data,
+          ),
+        );
+      }
+
+      emit('message.start', {}, 1);
+      emit('session.info', {'running': true}, 1);
+      host.historyMessages = [
+        {'id': 5, 'role': 'assistant', 'content': 'Child dispatched'},
+      ];
+      host.heldHistoryStarted = Completer<void>();
+      host.heldHistoryDelay = Completer<void>();
+      final historyDelay = host.heldHistoryDelay!;
+      addTearDown(() {
+        if (!historyDelay.isCompleted) historyDelay.complete();
+      });
+      emit('message.complete', {'text': 'Child dispatched'}, 1);
+      await host.heldHistoryStarted!.future;
+      emit('session.info', {'running': false}, 1);
+      emit('message.start', {
+        'display_kind': 'async_delegation_complete',
+        'display_text': 'Child completed',
+        'text': 'Child completed',
+      }, 2);
+      emit('session.info', {'running': true}, 2);
+      emit('message.delta', {
+        'turn_id': 'parent-stream-2',
+        'segment': 0,
+        'offset': 0,
+        'text': 'Parent final answer',
+      }, 2);
+      historyDelay.complete();
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.runtime.execution, ChatExecution.running);
+      expect(chat.reading.streaming, 'Parent final answer');
+      host.historyMessages = [
+        ...host.historyMessages!,
+        {'id': 10, 'role': 'assistant', 'content': 'Parent final answer'},
+      ];
+      emit('message.complete', {'text': 'Parent final answer'}, 2);
+      await Future<void>.delayed(Duration.zero);
+      expect(chat.reading.streaming, isEmpty);
+      expect(
+        chat.reading.messages.where((row) => row['id'] == 10),
+        hasLength(1),
+      );
     },
   );
 
@@ -4901,7 +5156,11 @@ void main() {
     a.composer.editText('test');
     await controller.send(a);
     await controller.switchProfile('b');
-    host.event('a', 'approval', {'request_id': 'dummy', 'command': 'dummy'});
+    host.event('a', 'approval', {
+      'request_id': 'dummy',
+      'command': 'dummy',
+      'choices': ['once', 'deny'],
+    });
     expect(a.runtime.needsInput, isTrue);
     expect(notifications, [a.key]);
     await controller.approve(

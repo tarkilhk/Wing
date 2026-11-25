@@ -49,10 +49,13 @@ class GroupHost {
       'room': {
         'room_id': id,
         'name': 'Group $id',
+        'authority_gateway_id': 'install:install-1',
+        'authority_epoch': 1,
         'latest_seq': latest,
         'members': <Map<String, dynamic>>[],
       },
       'driver_status': {
+        'peer_routes': <Object>[],
         'working': working,
         'blocked': blocked,
         'pending_actions': <Map<String, dynamic>>[],
@@ -111,7 +114,7 @@ class GroupHost {
       'cursor': cursor,
       'latest_seq': states[id]!['room']['latest_seq'],
       'has_more': cursor < states[id]!['room']['latest_seq'],
-      'authority': {'gateway_id': 'fixture', 'epoch': 1},
+      'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
     };
   }
 }
@@ -199,6 +202,7 @@ void main() {
 
   void approval({int generation = 1}) {
     host.states['one']!['driver_status'] = {
+      'peer_routes': <Object>[],
       'working': true,
       'blocked': true,
       'pending_actions': [
@@ -426,7 +430,7 @@ void main() {
       expect(observed.message!.text, 'Read in discussion');
       expect(observed.message!.timestamp.millisecondsSinceEpoch, 1791936001000);
       expect(observed.answer!.sequence, 1);
-      expect(observed.gatewayId, 'fixture');
+      expect(observed.gatewayId, 'install:install-1');
       expect(observed.epoch, 1);
       expect(sink.shown, isEmpty);
       expect(notices.activity.value, isNull);

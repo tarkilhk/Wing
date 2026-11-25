@@ -69,16 +69,10 @@ class ChatApproval {
     required this.correlation,
     required this.requestId,
     required this.serverRequestId,
-    required GatewayApprovalRequest request,
+    required this.request,
     required this.eventId,
     this.nativeGeneration,
-  }) : request = GatewayApprovalRequest(
-         command: request.command,
-         description: request.description,
-         allowPermanent: request.allowPermanent,
-         smartDenied: request.smartDenied,
-         choices: List.unmodifiable(request.choices),
-       );
+  });
   final Object correlation;
   final String requestId;
   final String? serverRequestId;

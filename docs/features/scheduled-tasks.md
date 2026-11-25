@@ -7,7 +7,8 @@ Feature ID: `scheduled-tasks`.
 ## Sub-features
 
 - `scheduled-tasks.create` — Create or edit a typed schedule, its timezone,
-  missed-run policy, late-run window and delivery, including discovered groups.
+  missed-run policy, late-run window and delivery, including discovered groups
+  and inherited/on/off output wrapping.
 - `scheduled-tasks.inspect` — Read task details and recent runs.
 - `scheduled-tasks.control` — Pause future runs, resume, run now, or stop the
   current execution without changing its schedule.
@@ -23,6 +24,13 @@ the Hermes profile timezone. Missed runs can inherit, run one catch-up or skip.
 Late-run window applies to cron schedules and accepts 0–1440 minutes or empty
 for the computed window. Run one catch-up permits a catch-up beyond that window.
 Templates retain their own settings; edit the created task to change its policy.
+
+Results → Output wrapping chooses Hermes default, On or Off for delivery headers
+and footers, including script-only tasks. Hermes default follows the profile
+setting without claiming its effective value. Selecting it clears an override;
+untouched settings are preserved. Details show the saved choice. Conflicting
+edits use the existing Keep mine/Use server review; mismatched create or update
+readback remains uncertain and is never automatically resubmitted.
 
 Results lists discovered group chats alongside platform destinations. A result's
 `@mentions` wake the named bots (`@all` addresses all); without mentions the
@@ -55,7 +63,21 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   python3 scripts/test_nightly_native.py scheduled-tasks --output build/feature-verification/scheduled-tasks
   ```
 
-- **Native observable result:** the scenario taps `New task`, enters `Android acceptance` in `Name (optional)` and `Prepare a daily summary.` in `Instructions`, then taps the `Create task` tooltip action. The new row must exist; `Actions for Android acceptance` → `Pause schedule` disables it, and its detail offers `Resume and run`. The keyboard is actually open, and Back returns from the detail.
+- **Native observable result:** the scenario runs in light/dark at normal and
+  320 dp/200% text. It taps `New task`, enters `Android acceptance` in
+  `Name (optional)` and `Prepare a daily summary.` in `Instructions`, and selects
+  Output wrapping → On. The actual Android keyboard is open and both footer
+  actions remain above it. `Create task` shows visible progress during the held
+  write; the confirmed row appears. `Actions for Android acceptance` →
+  `Pause schedule` disables it, and its detail offers `Resume and run`. Editing
+  wrapping to Off exercises held-save failure, retained selection and successful
+  retry. Reopening confirms Off; choosing Hermes default sends an explicit reset
+  and reopens as inherited. Back returns from the detail. Captures include the
+  selector popup, detail, held create/save, failed save and reopened reset.
+
+For real-backend Android verification, use the focused `wrapping` suite in the
+[existing production gateway recipe](multi-surface-journeys.md#selected-hermes-features-on-an-existing-production-gateway).
+It requires isolated QA mutations and the stated provider prerequisites.
 
 ## Gotchas
 

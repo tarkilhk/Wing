@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/transcript_presentation.dart';
 import 'package:wing/core/models/transcript_timeline.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -54,6 +55,7 @@ void main() {
       gatewayFactory: (scope) {
         final delegate = host.gateway(scope);
         return ProfileGateway(
+          loadClientIdentity: loadTestWingClientIdentity,
           scope: scope,
           discover: delegate.discover,
           get: (endpoint, query) async {
@@ -293,9 +295,9 @@ void main() {
         find.text('History could not be loaded. Retry to reload.'),
         findsOneWidget,
       );
-      expect(find.text('Refresh history'), findsOneWidget);
+      expect(find.byTooltip('Refresh history'), findsOneWidget);
       rpcError = null;
-      await tester.tap(find.text('Refresh history'));
+      await tester.tap(find.byTooltip('Refresh history'));
       await tester.pumpAndSettle();
       expect(chat.reading.historyError, isNull);
       expect(chat.reading.messages, isEmpty);
@@ -303,7 +305,7 @@ void main() {
         find.text('History could not be loaded. Retry to reload.'),
         findsNothing,
       );
-      expect(find.text('Refresh history'), findsNothing);
+      expect(find.byTooltip('Refresh history'), findsNothing);
       expect(runtimeReads, hasLength(2));
     },
   );

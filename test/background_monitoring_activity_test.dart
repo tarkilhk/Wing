@@ -30,6 +30,7 @@ BotRecord monitoringBot(
   String title = 'Research bot',
   ProfileSessionKey? tip,
 }) => BotRecord(
+    installationId: 'install:install-1',
   scope: root.workspace,
   instance: 'Test server',
   profile: HermesProfile(name: root.workspace.profileName),
@@ -196,6 +197,7 @@ void main() {
         'latest_seq': 0,
       },
       'driver_status': {
+          'peer_routes': <Object>[],
         'working': true,
         'blocked': false,
         'pending_actions': [],

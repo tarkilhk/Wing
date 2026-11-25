@@ -29,6 +29,174 @@ void main() {
     fixture.admin.server.close();
   });
 
+  for (final editing in [false, true]) {
+    for (final desired in TaskOutputWrapping.values) {
+      test(
+        'wrapping wrong readback retains uncertainty editing=$editing desired=$desired',
+        () async {
+          fixture.jobs['morning']!['wrap_response'] =
+              desired == TaskOutputWrapping.on ? false : true;
+          await controller.refresh();
+          final session = ScheduledTaskEditSession(
+            controller,
+            original: editing ? controller.task('morning') : null,
+          );
+          addTearDown(session.dispose);
+          if (!editing) session.setText(TaskEditText.prompt, 'Keep this draft');
+          session.setOutputWrapping(desired);
+          fixture.admin.override = (method, path, query, body) async {
+            final result = await fixture.send(method, path, query, body);
+            if (method == (editing ? 'PUT' : 'POST')) {
+              // The mutation really happened; only the acknowledgement is wrong.
+              if (desired == TaskOutputWrapping.inherit) {
+                result['wrap_response'] = false;
+              } else {
+                result.remove('wrap_response');
+              }
+            }
+            return result;
+          };
+          expect(await session.save(), TaskEditOutcome.uncertain);
+          expect(session.state.outputWrapping, desired);
+          expect(session.state.dirty, isTrue);
+          expect(
+            controller.uncertain.containsKey(
+              editing ? 'morning' : '__create__',
+            ),
+            isTrue,
+          );
+          expect(await session.save(), TaskEditOutcome.blocked);
+          expect(fixture.mutations, 1);
+          final stored = fixture.jobs[editing ? 'morning' : 'new-3']!;
+          expect(stored['wrap_response'], desired.wireValue);
+        },
+      );
+    }
+  }
+
+  for (final decision in TaskConflictDecision.values) {
+    test(
+      'wrapping conflict $decision adopts only the reviewed field',
+      () async {
+        final session = ScheduledTaskEditSession(
+          controller,
+          original: controller.task('morning'),
+        );
+        addTearDown(session.dispose);
+        session.setOutputWrapping(TaskOutputWrapping.off);
+        session.setText(TaskEditText.name, 'Keep my name');
+        fixture.jobs['morning']!.addAll({
+          'wrap_response': true,
+          'prompt': 'Fresh instructions',
+        });
+        expect(await session.save(), TaskEditOutcome.failed);
+        expect(fixture.mutations, 0);
+        final cancelled = (await session.reviewConflicts())!;
+        expect(cancelled.fields.single.field, TaskConflictField.outputWrapping);
+        expect(cancelled.fields.single.mine, 'Off');
+        expect(cancelled.fields.single.server, 'On');
+        expect(session.cancelReview(cancelled), TaskReviewOutcome.cancelled);
+        expect(session.state.outputWrapping, TaskOutputWrapping.off);
+        expect(await session.save(), TaskEditOutcome.failed);
+        final review = (await session.reviewConflicts())!;
+        expect(
+          session.applyReview(review, {
+            TaskConflictField.outputWrapping: decision,
+          }),
+          TaskReviewOutcome.applied,
+        );
+        expect(
+          session.state.outputWrapping,
+          decision == TaskConflictDecision.keepMine
+              ? TaskOutputWrapping.off
+              : TaskOutputWrapping.on,
+        );
+        expect(await session.save(), TaskEditOutcome.confirmed);
+        expect(
+          fixture.admin.requests
+              .singleWhere((r) => r.$1 == 'PUT')
+              .$4!['updates'],
+          {
+            'name': 'Keep my name',
+            if (decision == TaskConflictDecision.keepMine)
+              'wrap_response': false,
+          },
+        );
+        expect(fixture.jobs['morning']!['prompt'], 'Fresh instructions');
+      },
+    );
+  }
+
+  test(
+    'wrapping reset conflicts again when the server changes after review',
+    () async {
+      fixture.jobs['morning']!['wrap_response'] = true;
+      await controller.refresh();
+      final session = ScheduledTaskEditSession(
+        controller,
+        original: controller.task('morning'),
+      );
+      addTearDown(session.dispose);
+      session.setOutputWrapping(TaskOutputWrapping.inherit);
+      fixture.jobs['morning']!['wrap_response'] = false;
+      expect(await session.save(), TaskEditOutcome.failed);
+      final review = (await session.reviewConflicts())!;
+      expect(review.fields.single.mine, 'Hermes default');
+      expect(
+        session.applyReview(review, {
+          TaskConflictField.outputWrapping: TaskConflictDecision.keepMine,
+        }),
+        TaskReviewOutcome.applied,
+      );
+      fixture.jobs['morning']!['wrap_response'] = true;
+      expect(await session.save(), TaskEditOutcome.failed);
+      expect(session.state.conflicts, ['wrap_response']);
+      expect(fixture.mutations, 0);
+    },
+  );
+
+  for (final converted in [false, true]) {
+    test('wrapping survives script-only mode converted=$converted', () async {
+      if (!converted) {
+        fixture.jobs['morning']!.addAll({
+          'no_agent': true,
+          'script': '/jobs/report.py',
+        });
+      }
+      await controller.refresh();
+      final session = ScheduledTaskEditSession(
+        controller,
+        original: controller.task('morning'),
+      );
+      addTearDown(session.dispose);
+      session.setOutputWrapping(TaskOutputWrapping.off);
+      if (converted) {
+        session.setText(TaskEditText.prompt, 'Discard only these instructions');
+        fixture.jobs['morning']!.addAll({
+          'no_agent': true,
+          'script': '/jobs/report.py',
+        });
+        expect(await session.save(), TaskEditOutcome.failed);
+        final review = (await session.reviewConflicts())!;
+        expect(review.fields.single.field, TaskConflictField.prompt);
+        expect(
+          session.applyReview(review, {
+            TaskConflictField.prompt: TaskConflictDecision.useServer,
+          }),
+          TaskReviewOutcome.applied,
+        );
+      }
+      expect(session.state.outputWrapping, TaskOutputWrapping.off);
+      expect(await session.save(), TaskEditOutcome.confirmed);
+      expect(
+        fixture.admin.requests.singleWhere((r) => r.$1 == 'PUT').$4!['updates'],
+        {'wrap_response': false},
+      );
+      expect(fixture.jobs['morning']!['no_agent'], isTrue);
+      expect(fixture.jobs['morning']!['script'], '/jobs/report.py');
+    });
+  }
+
   test(
     'unrelated edit preserves raw inherited policy without sending defaults',
     () async {

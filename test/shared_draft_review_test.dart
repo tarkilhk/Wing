@@ -1,3 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+import 'package:wing/core/widgets/studio_loading.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'package:flutter/services.dart';
 import 'package:wing/core/services/bots_session.dart';
 import 'package:wing/core/services/bots_repository.dart';
@@ -53,6 +58,7 @@ Future<ProfileWorkspaceController> _controller(
     gatewayFactory: (scope) {
       final base = fixture.gateway(scope);
       return ProfileGateway(
+        loadClientIdentity: loadTestWingClientIdentity,
         scope: scope,
         discover: base.discover,
         connect: base.connect,
@@ -93,6 +99,23 @@ class _FailingAttachments extends AttachmentDraftService {
   }
 }
 
+// Hold the actual platform write, not the draft owner's pending projection.
+class _HeldGroupDraftStore extends InMemorySharedPreferencesStore {
+  _HeldGroupDraftStore(this.key) : super.empty();
+  final String key;
+  final release = Completer<void>();
+  bool hold = false, entered = false;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    if (hold && key == this.key) {
+      entered = true;
+      await release.future;
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
 class _ReviewCredentials implements CredentialStore {
   final _values = <String, String>{};
   @override
@@ -115,6 +138,8 @@ Future<Future<bool>> _openReview(
   double textScale = 1,
   ProfileChat? initialChat,
   BotsSession Function()? createBotsSession,
+  AndroidShareIntentService? shareIntents,
+  void Function(SharedDraftSession, SharedDraftOffer)? onPrepared,
   ({ProfileSessionKey key, ComposerSavedWork draft})? recoverableDraft,
 }) async {
   final manager = await ConnectionManager.create(
@@ -138,15 +163,17 @@ Future<Future<bool>> _openReview(
     registry: registry,
     launchIntents: null,
   );
-  final shares = AndroidShareIntentService();
+  final shares = shareIntents ?? AndroidShareIntentService();
   // Recovery is discovered from the exact stock missing-session receipt and the
   // real saved draft; no fabricated owner recovery state is installed.
-  shares.pendingShare.value = AndroidSharePayload(
-    id: payload.id,
-    text: payload.text,
-    files: payload.files,
-    target: recoverableDraft?.key.toJson() ?? payload.target,
-  );
+  if (shareIntents == null) {
+    shares.pendingShare.value = AndroidSharePayload(
+      id: payload.id,
+      text: payload.text,
+      files: payload.files,
+      target: recoverableDraft?.key.toJson() ?? payload.target,
+    );
+  }
   final session = SharedDraftSession(
     connectionManager: manager,
     entrySession: entry,
@@ -161,6 +188,7 @@ Future<Future<bool>> _openReview(
     reviewDestination: initialChat?.key,
   );
   expect(needsReview, isTrue);
+  onPrepared?.call(session, offer);
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox.shrink());
     session.dispose();
@@ -221,7 +249,6 @@ void main() {
         read: fixture.read,
         command: fixture.command,
         ownership: fixture.ownership,
-
       );
       const channel = MethodChannel(AndroidShareIntentService.channelName);
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -258,6 +285,276 @@ void main() {
       );
     },
   );
+
+  for (final withFile in [false, true]) {
+    testWidgets(
+      withFile
+          ? 'mixed group share review refuses files and retains incoming content for another destination'
+          : 'mixed group share review acknowledges text only after the exact draft is durable',
+      (tester) async {
+        const storageKey =
+            'flutter.bots_group_message_draft:["share-review","room-1"]';
+        final previousPlatform = SharedPreferencesStorePlatform.instance;
+        final storage = _HeldGroupDraftStore(storageKey);
+        SharedPreferencesStorePlatform.instance = storage;
+        addTearDown(() {
+          if (!storage.release.isCompleted) storage.release.complete();
+          SharedPreferencesStorePlatform.instance = previousPlatform;
+        });
+        final browser = ProfileBrowserFixture();
+        final controller = await _controller(
+          browser,
+          appPreferences: appPreferences,
+        );
+        final fixture = BotsFixture();
+        (fixture.room['members'] as List).add({
+          'member_id': 'remote',
+          'profile': 'atlas',
+          'handle': 'bot_remote',
+          'display_name': 'Remote Atlas',
+          'target': {
+            'kind': 'peer',
+            'profile': 'atlas',
+            'peer_id': 'saved-peer',
+            'installation_id': 'install:remote',
+            'capability_digest': 'a' * 64,
+          },
+        });
+        final scope = WorkspaceScope(
+          connectionId: controller.connection.id,
+          connectionIdentity: controller.connectionIdentity,
+          profileName: 'default',
+        );
+        final repository = BotsRepository(
+          scope: scope,
+          instance: 'Review host',
+          groupObservations: GroupObservations(scope),
+          read: fixture.read,
+          command: fixture.command,
+          ownership: fixture.ownership,
+        );
+        final preferences = await BotsPreferences.load();
+        await preferences.writeMessageDraft(
+          scope.connectionIdentity,
+          'room-1',
+          'Existing group draft',
+          const [],
+        );
+        await preferences.writeMessageDraft(
+          'other-instance',
+          'room-1',
+          'Other instance draft',
+          const [],
+        );
+        await preferences.writeMessageDraft(
+          scope.connectionIdentity,
+          'other-room',
+          'Other group draft',
+          const [],
+        );
+        final before = await storage.getAll();
+        const text = 'Discuss this from my phone\nKeep this second line';
+        final nativePayload = <String, Object?>{
+          'id': withFile ? 'mixed-file-share' : 'mixed-text-share',
+          'text': text,
+          'files': [
+            if (withFile)
+              {
+                'path': '/shared/notes.txt',
+                'name': 'notes.txt',
+                'mediaType': 'text/plain',
+                'byteLength': 12,
+              },
+          ],
+        };
+        Map<String, Object?>? nativePending = nativePayload;
+        final acknowledgements = <Object?>[];
+        String? storedAtAcknowledgement;
+        const channel = MethodChannel(AndroidShareIntentService.channelName);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, (call) async {
+              switch (call.method) {
+                case 'getPendingShare':
+                  return nativePending;
+                case 'acknowledgeShare':
+                  acknowledgements.add(call.arguments);
+                  storedAtAcknowledgement =
+                      (await storage.getAll())[storageKey] as String?;
+                  nativePending = null;
+                  return null;
+                default:
+                  throw StateError(
+                    'Unexpected native share call ${call.method}',
+                  );
+              }
+            });
+        addTearDown(
+          () => TestDefaultBinaryMessengerBinding
+              .instance
+              .defaultBinaryMessenger
+              .setMockMethodCallHandler(channel, null),
+        );
+        final shares = AndroidShareIntentService();
+        await shares.initialize();
+        final payload = shares.pendingShare.value!;
+        late SharedDraftSession session;
+        late SharedDraftOffer offer;
+        final result = await _openReview(
+          tester,
+          controller,
+          payload,
+          shareIntents: shares,
+          createBotsSession: () => BotsSession((_) async => [repository]),
+          onPrepared: (owner, prepared) {
+            session = owner;
+            offer = prepared;
+          },
+        );
+        bool? routeResult;
+        unawaited(
+          result.then((value) {
+            routeResult = value;
+          }),
+        );
+        final destination = session
+            .review(offer)
+            .destinations
+            .singleWhere(
+              (row) => row.presentationId == 'share-destination-group-room-1',
+            );
+        await tester.ensureVisible(
+          find.byKey(const Key('share-destination-group-room-1')),
+        );
+        await tester.tap(
+          find.byKey(const Key('share-destination-group-room-1')),
+        );
+        await tester.pumpAndSettle();
+        expect(session.review(offer).destination, destination.id);
+        expect(acknowledgements, isEmpty);
+        storage.hold = !withFile;
+        await tester.tap(find.byKey(const Key('share-add-to-draft')));
+
+        if (withFile) {
+          await tester.pumpAndSettle();
+          expect(routeResult, isNull);
+          expect(session.navigation(offer), isNull);
+          expect(session.review(offer).destination, destination.id);
+          expect(session.review(offer).connectionLabel, 'Review host');
+          expect(find.byKey(const Key('share-review-error')), findsOneWidget);
+          expect(
+            find.text('Shared content could not be added to the group.'),
+            findsOneWidget,
+          );
+          expect((await storage.getAll())[storageKey], before[storageKey]);
+          expect(acknowledgements, isEmpty);
+          expect(nativePending, same(nativePayload));
+          expect(shares.pendingShare.value, same(payload));
+          expect(session.review(offer).text, text);
+          expect(session.review(offer).files.single.name, 'notes.txt');
+          await tester.ensureVisible(
+            find.byKey(const Key('share-destination-new')),
+          );
+          await tester.tap(find.byKey(const Key('share-destination-new')));
+          await tester.pumpAndSettle();
+          final review = session.review(offer);
+          expect(
+            review.destination,
+            review.destinations
+                .singleWhere(
+                  (row) => row.presentationId == 'share-destination-new',
+                )
+                .id,
+          );
+          expect(review.error, isNull);
+          expect(review.text, text);
+          expect(review.files.single.name, 'notes.txt');
+          await tester.scrollUntilVisible(
+            find.text('notes.txt'),
+            -200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          expect(find.text('notes.txt'), findsOneWidget);
+          expect(find.byKey(const Key('share-add-to-draft')), findsOneWidget);
+          await tester.pageBack();
+          await tester.pumpAndSettle();
+          expect(await result, isFalse);
+          expect(shares.pendingShare.value, same(payload));
+          expect(nativePending, same(nativePayload));
+          expect(acknowledgements, isEmpty);
+        } else {
+          for (var attempt = 0; attempt < 20 && !storage.entered; attempt++) {
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+          expect(storage.entered, isTrue);
+          for (
+            var attempt = 0;
+            attempt < 20 && find.byType(StudioLoading).evaluate().isEmpty;
+            attempt++
+          ) {
+            await tester.pump(const Duration(milliseconds: 20));
+          }
+          expect(routeResult, isNull);
+          expect(acknowledgements, isEmpty);
+          expect(nativePending, same(nativePayload));
+          expect(shares.pendingShare.value, same(payload));
+          expect((await storage.getAll())[storageKey], before[storageKey]);
+          expect(
+            find.descendant(
+              of: find.byKey(const ValueKey('studio-loading-slot')),
+              matching: find.byType(StudioLoading),
+            ),
+            findsOneWidget,
+          );
+          storage.release.complete();
+          await tester.pumpAndSettle();
+          expect(await result, isTrue);
+          expect(acknowledgements, [
+            {'id': payload.id},
+          ]);
+          expect(jsonDecode(storedAtAcknowledgement!), {
+            'text': 'Existing group draft\n$text',
+            'references': [],
+            'attachments': [],
+          });
+          final saved = (await BotsPreferences.load()).messageDraft(
+            scope.connectionIdentity,
+            'room-1',
+          )!;
+          expect(saved.text, 'Existing group draft\n$text');
+          expect(saved.attachments, isEmpty);
+          expect(saved.pendingEventId, isNull);
+          expect(saved.pendingText, isNull);
+          expect(nativePending, isNull);
+          expect(shares.pendingShare.value, isNull);
+          final navigation = session.navigation(offer)!;
+          expect(navigation.entry.controller, same(controller));
+          expect(navigation.group!.scope, scope);
+          expect(navigation.group!.id, 'room-1');
+          expect(navigation.group!.hasPeers, isTrue);
+        }
+        final after = await BotsPreferences.load();
+        expect(
+          after.messageDraft('other-instance', 'room-1')!.text,
+          'Other instance draft',
+        );
+        expect(
+          after.messageDraft(scope.connectionIdentity, 'other-room')!.text,
+          'Other group draft',
+        );
+        expect(fixture.commands, isEmpty);
+        expect(
+          browser.calls.where(
+            (call) =>
+                call.$2 == 'session.create' ||
+                call.$2 == 'chat.send' ||
+                call.$2.contains('upload'),
+          ),
+          isEmpty,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
 
   testWidgets(
     'reviews text and files with New chat selected on a large phone',

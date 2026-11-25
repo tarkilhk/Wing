@@ -1,3 +1,4 @@
+import 'wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -70,6 +71,7 @@ class ConnectionRequestFixture extends ProfileBrowserFixture {
     final base = super.gateway(scope);
     late final ProfileGateway result;
     result = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: base.read,

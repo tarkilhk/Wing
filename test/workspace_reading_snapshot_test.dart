@@ -98,6 +98,16 @@ void main() {
         },
         {'id': 4, 'role': 'system', 'content': 'review:Review completed'},
         {
+          'id': 6,
+          'role': 'user',
+          'content': 'Refused authored prompt',
+          'display_kind': 'content_refused',
+          'display_metadata': {
+            'submission_id': 'refused-input',
+            'content_refused': {'notice': 'Saved refusal explanation'},
+          },
+        },
+        {
           'id': 5,
           'role': 'user',
           'content': '',
@@ -122,7 +132,7 @@ void main() {
             await preferences.reload();
             final saved = jsonDecode(preferences.getString(storageKey)!);
             if ((saved['profiles'][0]['chats'][0]['messages'] as List).length ==
-                5) {
+                6) {
               return;
             }
             await Future<void>.delayed(Duration.zero);
@@ -158,6 +168,12 @@ void main() {
       expect(find.text('Model-facing context'), findsNothing);
       expect(find.text('steered'), findsNothing);
       expect(find.text('Keep searching'), findsOneWidget);
+      expect(find.text('Refused authored prompt'), findsOneWidget);
+      expect(find.text('Saved refusal explanation'), findsOneWidget);
+      expect(
+        chat.reading.messages.singleWhere((row) => row['id'] == 6)['role'],
+        'user',
+      );
       final savedSteer = tester.widget<ProfileMessage>(
         find.byWidgetPredicate(
           (widget) => widget is ProfileMessage && widget.message.id == 2,

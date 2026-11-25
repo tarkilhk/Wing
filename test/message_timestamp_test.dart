@@ -12,6 +12,7 @@ import 'package:wing/core/theme/bot_bubble_colors.dart';
 import 'package:wing/core/widgets/profile_message.dart';
 import 'package:wing/core/widgets/bot_avatar.dart';
 import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/bot_group_peer.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 
 import 'helpers/pump_markdown_widget.dart';
@@ -119,6 +120,7 @@ void main() {
               '[View issue #620](https://gitea.hollinger.asia/Tarkil-Org/homelab-infra/issues/620)';
           final text = long ? body : '**Done.** Issue #620 is open.';
           final bot = BotRecord(
+    installationId: 'install:install-1',
             scope: WorkspaceScope(
               connectionId: 'host',
               connectionIdentity: 'host-1',
@@ -465,6 +467,7 @@ void main() {
             await tester.binding.setSurfaceSize(Size(width, 844));
             addTearDown(() => tester.binding.setSurfaceSize(null));
             final bot = BotRecord(
+    installationId: 'install:install-1',
               scope: WorkspaceScope(
                 connectionId: 'host',
                 connectionIdentity: 'host-1',
@@ -482,6 +485,8 @@ void main() {
               metadata: const {},
             );
             final group = BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
               scope: bot.scope,
               instance: bot.instance,
               id: 'room-1',
@@ -489,6 +494,7 @@ void main() {
               observationComplete: true,
               members: const [
                 BotGroupMember(
+    target: BotGroupTarget.local('atlas'),
                   id: 'pace',
                   profile: 'pace',
                   handle: 'pace',

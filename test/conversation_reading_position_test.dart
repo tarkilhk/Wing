@@ -547,7 +547,7 @@ void main() {
       );
       fail = false;
       gate = Completer<void>();
-      await tester.tap(find.text('Retry older messages').hitTestable());
+      await tester.tap(find.byTooltip('Retry older messages').hitTestable());
       await tester.pump();
       expect(loads, 2);
       gate.complete();

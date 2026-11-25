@@ -23,6 +23,7 @@ String? recentChatMessagePreview(List<Map<String, dynamic>> messages) {
     if (!{
           TranscriptMessageKind.dialogue,
           TranscriptMessageKind.steering,
+          TranscriptMessageKind.refused,
           TranscriptMessageKind.botMessage,
         }.contains(message.kind) ||
         message.text.trim().isEmpty) {

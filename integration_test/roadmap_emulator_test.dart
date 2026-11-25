@@ -1,4 +1,17 @@
+import 'package:wing/core/widgets/subagent_timeline.dart';
+import 'package:wing/core/widgets/studio_error.dart';
+import 'package:wing/core/screens/chat_account_usage_screen.dart';
+import 'package:wing/core/theme/app_preferences_rendering.dart';
+import 'package:wing/core/screens/administration/admin_skills_page.dart';
+import 'package:wing/core/screens/administration/admin_operations_page.dart';
+import 'package:flutter/services.dart';
+import 'package:wing/core/widgets/bot_deliveries_panel.dart';
+import '../test/support/bots_fixture.dart';
+import 'package:wing/core/services/native_notification_sink.dart';
+import 'package:wing/core/widgets/notification_approval_review.dart';
 import 'package:wing/core/services/backend_update_store.dart';
+import 'package:wing/core/models/transcript_notice.dart';
+import 'package:wing/core/widgets/profile_message.dart';
 import 'dart:async';
 import '../test/helpers/journey_controls.dart';
 import '../test/helpers/pump_markdown_widget.dart';
@@ -68,6 +81,870 @@ void main() {
   });
 
   tearDown(() => harness.dispose());
+
+  testJourney(
+    'current chat account usage preserves route ownership through refresh and departure',
+    (tester) async {
+      await harness.launch(tester);
+      await tapJourneyControl(
+        tester,
+        find.byKey(const ValueKey('chat-personal-chat-0')),
+      );
+      await _pumpUntil(
+        tester,
+        () => harness.controller.current?.chat?.runtime.opening == false,
+      );
+      await _settle(tester);
+      final fixture = harness.fixture;
+      final chat = harness.controller.current!.chat!;
+      final report = fixture.accountUsageReport;
+      final reportText = (report['lines'] as List<String>).join('\n');
+      final page = find.byType(ChatAccountUsageScreen);
+      Finder progress() =>
+          find.descendant(of: page, matching: find.byType(StudioLoading));
+      final refresh = find.byWidgetPredicate(
+        (widget) =>
+            widget is IconButton && widget.tooltip == 'Refresh account usage',
+      );
+      final retry = find.byWidgetPredicate(
+        (widget) => widget is IconButton && widget.tooltip == 'Retry',
+      );
+      for (final theme in [AppThemePreference.light, AppThemePreference.dark]) {
+        await harness.appPreferences.setTheme(theme);
+        for (final size in [
+          AppTextSizePreference.standard,
+          AppTextSizePreference.extraLarge,
+        ]) {
+          await harness.appPreferences.setTextSize(size);
+          await _settle(tester);
+          final suffix = '${theme.name}-${size.name}';
+          final opening = fixture.accountUsageGate = Completer();
+          await tapJourneyControl(tester, find.byTooltip('Chat actions'));
+          await tapJourneyControl(tester, find.text('Account usage'));
+          await tester.pump();
+          await tester.pump();
+          expect(page, findsOneWidget);
+          expect(opening.isCompleted, isFalse);
+          await _settle(tester);
+          expect(progress(), findsOneWidget);
+          expect(tester.getSize(progress()).isEmpty, isFalse);
+          expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
+          expect(tester.widget<IconButton>(refresh).onPressed, isNull);
+          expect(fixture.accountUsageRequests.last, {
+            'profile': 'personal',
+            'session_id': chat.runtime.runtimeId,
+          });
+          await captureJourney(tester, 'account-usage-open-held-$suffix');
+          opening.complete(report);
+          await _pumpUntil(
+            tester,
+            () => find.text(reportText).evaluate().isNotEmpty,
+          );
+          await _settle(tester);
+          expect(progress(), findsNothing);
+          expect(find.text('Separate Nous account'), findsOneWidget);
+          await captureJourney(tester, 'account-usage-report-$suffix');
+          // Press feedback deliberately scales the button, not its layout slot.
+          final header = find.descendant(
+            of: page,
+            matching: find.byType(AppBar),
+          );
+          final headerBounds = tester.getRect(header);
+          final reportBounds = tester.getRect(find.text(reportText));
+          final updating = fixture.accountUsageGate = Completer();
+          await tapJourneyControl(tester, refresh);
+          await tester.pump();
+          await tester.pump();
+          expect(progress(), findsOneWidget);
+          expect(find.text(reportText), findsOneWidget);
+          expect(tester.getRect(header), headerBounds);
+          expect(tester.getRect(find.text(reportText)), reportBounds);
+          final requests = fixture.accountUsageRequests.length;
+          await tester.tap(refresh);
+          await tester.pump();
+          expect(fixture.accountUsageRequests, hasLength(requests));
+          await captureJourney(tester, 'account-usage-refresh-held-$suffix');
+          updating.complete({
+            ...report,
+            'lines': [
+              'OpenAI subscription',
+              'Session: 43% used',
+              'Resets in 2 hours',
+            ],
+          });
+          await _pumpUntil(
+            tester,
+            () =>
+                find.textContaining('Session: 43% used').evaluate().isNotEmpty,
+          );
+          await _settle(tester);
+          expect(progress(), findsNothing);
+          final failing = fixture.accountUsageGate = Completer();
+          await tapJourneyControl(tester, refresh);
+          await tester.pump();
+          await tester.pump();
+          expect(progress(), findsOneWidget);
+          failing.completeError(StateError('fixture account read failed'));
+          await _pumpUntil(tester, () => retry.evaluate().isNotEmpty);
+          await _settle(tester);
+          expect(progress(), findsNothing);
+          expect(refresh, findsNothing);
+          expect(
+            find.textContaining('Showing the last received report.'),
+            findsOneWidget,
+          );
+          expect(find.textContaining('Session: 43% used'), findsOneWidget);
+          await captureJourney(tester, 'account-usage-failed-$suffix');
+          final recovering = fixture.accountUsageGate = Completer();
+          await tapJourneyControl(tester, retry);
+          await tester.pump();
+          await tester.pump();
+          expect(progress(), findsOneWidget);
+          expect(tester.widget<IconButton>(retry).onPressed, isNull);
+          expect(
+            find.textContaining('Showing the last received report.'),
+            findsOneWidget,
+          );
+          await captureJourney(tester, 'account-usage-retry-held-$suffix');
+          recovering.complete({
+            'lines': <String>[],
+            'nous_lines': ['Nous credits', 'Daily: 55% used'],
+            'nous_route': true,
+          });
+          await _pumpUntil(
+            tester,
+            () => find.text('Nous account').evaluate().isNotEmpty,
+          );
+          await _settle(tester);
+          expect(find.text('This chat'), findsNothing);
+          expect(retry, findsNothing);
+          expect(progress(), findsNothing);
+          await captureJourney(tester, 'account-usage-nous-$suffix');
+          final departing = fixture.accountUsageGate = Completer();
+          await tapJourneyControl(tester, refresh);
+          await tester.pump();
+          await tester.pump();
+          expect(progress(), findsOneWidget);
+          await tapJourneyControl(tester, find.byTooltip('Back'));
+          await _settle(tester);
+          departing.completeError(StateError('late account failure'));
+          await tester.pump();
+          expect(page, findsNothing);
+          expect(find.textContaining('Account usage could not'), findsNothing);
+          expect(harness.controller.current!.chat, same(chat));
+          expect(tester.takeException(), isNull);
+        }
+      }
+    },
+  );
+
+  testJourney(
+    'Hub skill update checks keep browsing and group updates scoped',
+    (tester) async {
+      final admin = AdministrationFixture('Roadmap fixture');
+      var checkGate = admin.hubUpdatesGate = Completer<void>();
+      admin.hubUpdates = [
+        {
+          'name': 'Research notes',
+          'identifier': 'official/research',
+          'source': 'official',
+        },
+        {
+          'name': 'Release checklist',
+          'identifier': 'github/release',
+          'source': 'github',
+        },
+      ];
+      await harness.launchAdministration(tester, administration: admin);
+      await tester.scrollUntilVisible(
+        find.text('Skills and tools'),
+        180,
+        scrollable: find.byType(Scrollable).last,
+      );
+      await tapJourneyControl(tester, find.text('Skills and tools'));
+      await _settle(tester);
+      await tapJourneyControl(tester, find.byTooltip('Manage capabilities'));
+      await _settle(tester);
+      await tapJourneyControl(tester, find.text('Discover skills'));
+      await _pumpUntil(tester, () => admin.hubUpdateChecks > 0);
+      await _settle(tester);
+      expect(find.byType(AdminSkillHubPage), findsOneWidget);
+      expect(find.text('Research catalog skill'), findsOneWidget);
+      expect(find.byType(StudioLoading), findsNothing);
+      for (final theme in [AppThemePreference.light, AppThemePreference.dark]) {
+        await harness.appPreferences.setTheme(theme);
+        for (final size in [
+          AppTextSizePreference.standard,
+          AppTextSizePreference.extraLarge,
+        ]) {
+          await harness.appPreferences.setTextSize(size);
+          await _settle(tester);
+          final suffix = '${theme.name}-${size.name}';
+          await tapJourneyControl(
+            tester,
+            find.byTooltip('Check Hub skill updates'),
+          );
+          await tester.pump();
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.text('Research catalog skill'), findsOneWidget);
+          await captureJourney(tester, 'hub-check-held-$suffix');
+          admin.failHubUpdates = true;
+          checkGate.complete();
+          await _pumpUntil(
+            tester,
+            () =>
+                find.byTooltip('Retry Hub update check').evaluate().isNotEmpty,
+          );
+          await _settle(tester);
+          expect(find.byType(StudioLoading), findsNothing);
+          final statusFrame = tester.getRect(
+            find.byKey(const ValueKey('hub-update-status')),
+          );
+          final errorCard = tester.getRect(
+            find.descendant(
+              of: find.byKey(const ValueKey('hub-update-status')),
+              matching: find.byType(StudioError),
+            ),
+          );
+          expect(
+            statusFrame.contains(errorCard.bottomRight - const Offset(.1, .1)),
+            isTrue,
+          );
+          expect(
+            errorCard.bottom,
+            lessThanOrEqualTo(
+              tester.view.physicalSize.height / tester.view.devicePixelRatio,
+            ),
+          );
+          await captureJourney(tester, 'hub-check-failed-$suffix');
+          admin.failHubUpdates = false;
+          checkGate = admin.hubUpdatesGate = Completer<void>();
+          await tapJourneyControl(
+            tester,
+            find.byTooltip('Retry Hub update check'),
+          );
+          await tester.pump();
+          await tester.pump();
+          expect(find.byType(StudioLoading), findsOneWidget);
+          expect(find.byTooltip('Retry Hub update check'), findsOneWidget);
+          checkGate.complete();
+          await _pumpUntil(
+            tester,
+            () => find.text('Research notes').evaluate().isNotEmpty,
+          );
+          await _settle(tester);
+          expect(find.text('Release checklist'), findsOneWidget);
+          await captureJourney(tester, 'hub-check-reported-$suffix');
+          await tapJourneyControl(
+            tester,
+            find.byTooltip('Update installed Hub skills'),
+          );
+          await _settle(tester);
+          expect(find.byType(AlertDialog), findsOneWidget);
+          expect(find.byTooltip('Update skills').hitTestable(), findsOneWidget);
+          await captureJourney(tester, 'hub-update-confirmation-$suffix');
+          await tapJourneyControl(tester, find.byTooltip('Cancel'));
+          await _settle(tester);
+          expect(find.text('Research notes'), findsOneWidget);
+          expect(admin.hubUpdatePosts, isEmpty);
+          checkGate = admin.hubUpdatesGate = Completer<void>();
+        }
+      }
+      // The native keyboard must leave the newly extended page scrollable.
+      final search = find.widgetWithText(TextField, 'Search catalogs');
+      await revealJourneyControl(tester, search);
+      await tapJourneyControl(tester, search);
+      await _pumpUntil(tester, () => tester.view.viewInsets.bottom > 0);
+      await tester.enterText(search, 'research');
+      expect(tester.view.viewInsets.bottom, greaterThan(0));
+      await captureJourney(tester, 'hub-search-keyboard');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      tester.binding.focusManager.primaryFocus?.unfocus();
+      await _pumpUntil(tester, () => tester.view.viewInsets.bottom == 0);
+      await _settle(tester);
+      expect(find.text('Research catalog skill'), findsOneWidget);
+      final dispatchGate = admin.hubUpdateGate = Completer<void>();
+      await revealJourneyControl(
+        tester,
+        find.byTooltip('Update installed Hub skills'),
+      );
+      await tapJourneyControl(
+        tester,
+        find.byTooltip('Update installed Hub skills'),
+      );
+      await _settle(tester);
+      await tapJourneyControl(tester, find.byTooltip('Update skills'));
+      await _pumpUntil(tester, () => admin.hubUpdatePosts.isNotEmpty);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(StudioLoading), findsOneWidget);
+      expect(find.text('Research notes'), findsNothing);
+      expect(admin.hubUpdatePosts, [
+        {'profile': 'personal'},
+      ]);
+      await captureJourney(tester, 'hub-update-dispatch-held');
+      dispatchGate.complete();
+      await _pumpUntil(
+        tester,
+        () => find.byType(AdminActionPage).evaluate().isNotEmpty,
+      );
+      await _settle(tester);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SelectableText &&
+              widget.data == 'Hub update operation finished.',
+        ),
+        findsOneWidget,
+      );
+      await captureJourney(tester, 'hub-update-result');
+      final readback = admin.hubLibraryGate = Completer<void>();
+      await tester.pageBack();
+      await _settle(tester);
+      expect(find.byType(AdminSkillHubPage), findsOneWidget);
+      expect(find.byType(StudioLoading), findsOneWidget);
+      await captureJourney(tester, 'hub-update-readback-held');
+      admin.hubUpdates = [];
+      readback.complete();
+      await _pumpUntil(
+        tester,
+        () => admin.requests.last.$2 == 'skills/hub/updates',
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(StudioLoading), findsOneWidget);
+      checkGate.complete();
+      await _pumpUntil(
+        tester,
+        () => find.text('No Hub skill updates reported').evaluate().isNotEmpty,
+      );
+      await _settle(tester);
+      expect(find.byType(StudioLoading), findsNothing);
+      await captureJourney(tester, 'hub-check-empty-after-update');
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testJourney('teammate waits retain exact targets and stale delivery status', (
+    tester,
+  ) async {
+    final fixture = harness.fixture;
+    fixture.botRoster.addAll([
+      {
+        ...BotsFixture.profile('personal', 'Release lead'),
+        'canonical_session': {'id': 'chat-0', 'resolved_id': 'chat-0'},
+      },
+      {
+        ...BotsFixture.profile('work', 'Release reviewer'),
+        'canonical_session': {'id': 'chat-1', 'resolved_id': 'chat-2'},
+      },
+    ]);
+    fixture.compressionTips['chat-1'] = 'chat-2';
+    fixture.scopedHistories[('personal', 'chat-0')] = [
+      {'id': 1, 'role': 'user', 'content': 'Review this release'},
+      {
+        'id': 2,
+        'role': 'assistant',
+        'content': 'The release reviewer needs your approval.',
+      },
+    ];
+    fixture.scopedHistories[('work', 'chat-2')] = [
+      {'id': 1, 'role': 'user', 'content': 'Inspect the release'},
+      {'id': 2, 'role': 'assistant', 'content': 'Exact teammate conversation'},
+    ];
+    fixture.teammateDeliveries['personal'] = [
+      {
+        'delivery_id': 'roadmap-delivery',
+        'target': 'work',
+        'target_handle': '@work',
+        'state': 'waiting_on_you',
+        'waiting_on': 'approval',
+        'since': 1800000000,
+        'preview': 'Review the release and confirm the deployment environment.',
+      },
+      {
+        'delivery_id': 'roadmap-unknown',
+        'target': 'archive',
+        'target_handle': '@archive',
+        'state': 'failed',
+        'reason': 'unknown_outcome',
+        'since': 1800000001,
+        'preview': 'Prepare the release notes',
+        'error':
+            'The recipient disconnected after accepting the request. Its outcome could not be confirmed. Inspect its conversation before deciding what to do next. ' *
+            3,
+      },
+    ];
+    await harness.launch(tester);
+    await tapJourneyControl(
+      tester,
+      find.byKey(const ValueKey('chat-personal-chat-0')),
+    );
+    await _pumpUntil(
+      tester,
+      () => fixture.deliveryRequests.contains('personal'),
+    );
+    await _settle(tester);
+    final sender = harness.controller.current!.chat!;
+    await tester.enterText(
+      find.byKey(const Key('profile-message-composer')),
+      'Keep the release draft',
+    );
+    tester.binding.focusManager.primaryFocus?.unfocus();
+    await _pumpUntil(tester, () => tester.view.viewInsets.bottom == 0);
+    await _settle(tester);
+    for (final theme in [AppThemePreference.light, AppThemePreference.dark]) {
+      await harness.appPreferences.setTheme(theme);
+      for (final size in [
+        AppTextSizePreference.standard,
+        AppTextSizePreference.extraLarge,
+      ]) {
+        await harness.appPreferences.setTextSize(size);
+        await _settle(tester);
+        final suffix = '${theme.name}-${size.name}';
+        await tapJourneyControl(
+          tester,
+          find.byKey(const ValueKey(('live-work-tab', 2, false))),
+        );
+        await _settle(tester);
+        expect(find.text('@work'), findsOneWidget);
+        expect(find.text('dart run roadmap_worker.dart'), findsOneWidget);
+        await captureJourney(tester, 'teammates-collapsed-$suffix');
+        await tapJourneyControl(
+          tester,
+          find.byKey(const ValueKey('live-work-handle')),
+        );
+        await _settle(tester);
+        await tapJourneyControl(tester, find.text('@work'));
+        await _settle(tester);
+        await captureJourney(tester, 'teammates-details-$suffix');
+        await tapJourneyControl(tester, find.text('@work'));
+        await _settle(tester);
+        await tapJourneyControl(tester, find.text('@archive'));
+        await _settle(tester);
+        expect(
+          find.text('The teammate may already have acted. Do not resend.'),
+          findsOneWidget,
+        );
+        await captureJourney(tester, 'teammates-unknown-$suffix');
+        final receivedError = find.byWidgetPredicate(
+          (widget) =>
+              widget is SelectableText &&
+              (widget.textSpan?.toPlainText() ?? widget.data ?? '').startsWith(
+                'The recipient disconnected after accepting the request.',
+              ),
+        );
+        expect(receivedError, findsOneWidget);
+        await tester.ensureVisible(receivedError);
+        await _settle(tester);
+        expect(
+          tester
+              .getRect(receivedError)
+              .overlaps(
+                Offset.zero &
+                    (tester.view.physicalSize / tester.view.devicePixelRatio),
+              ),
+          isTrue,
+        );
+        await captureJourney(tester, 'teammates-error-$suffix');
+        await tapJourneyControl(tester, find.byTooltip('Expand Raw details'));
+        await _settle(tester);
+        final raw = find.byWidgetPredicate(
+          (widget) =>
+              widget is SourceCodeText &&
+              widget.text.contains('roadmap-unknown'),
+        );
+        expect(raw, findsOneWidget);
+        await tester.ensureVisible(raw);
+        await _settle(tester);
+        await captureJourney(tester, 'teammates-raw-$suffix');
+        await tester.binding.handlePopRoute();
+        await _settle(tester);
+      }
+    }
+    fixture.deliveryGate = Completer<void>();
+    await tapJourneyControl(
+      tester,
+      find.byKey(const ValueKey(('live-work-tab', 2, false))),
+    );
+    await _settle(tester);
+    final pending = find.descendant(
+      of: find.byKey(const ValueKey(('live-work-tab', 2, true))),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is CircularProgressIndicator &&
+            widget.semanticsLabel == 'Refreshing background work',
+      ),
+    );
+    expect(pending, findsOneWidget);
+    await captureJourney(tester, 'teammates-pending');
+    fixture.failDeliveries = true;
+    fixture.deliveryGate!.complete();
+    fixture.deliveryGate = null;
+    await _pumpUntil(
+      tester,
+      () => find
+          .textContaining('Teammate deliveries could not be refreshed')
+          .evaluate()
+          .isNotEmpty,
+    );
+    expect(find.text('Last received: Needs approval'), findsOneWidget);
+    await captureJourney(tester, 'teammates-stale');
+    fixture.failDeliveries = false;
+    fixture.deliveryGate = Completer<void>();
+    await tapJourneyControl(
+      tester,
+      find.descendant(
+        of: find.byType(BotDeliveriesPanel),
+        matching: find.byTooltip('Retry'),
+      ),
+    );
+    await _settle(tester);
+    final retrySpinner = find.descendant(
+      of: find.byType(BotDeliveriesPanel),
+      matching: find.byType(CircularProgressIndicator),
+    );
+    expect(retrySpinner, findsOneWidget);
+    expect(tester.getRect(retrySpinner).width, greaterThan(0));
+    expect(
+      tester
+          .getRect(retrySpinner)
+          .overlaps(
+            Offset.zero &
+                (tester.view.physicalSize / tester.view.devicePixelRatio),
+          ),
+      isTrue,
+    );
+    await captureJourney(tester, 'teammates-retry');
+    fixture.deliveryGate!.complete();
+    fixture.deliveryGate = null;
+    await _pumpUntil(
+      tester,
+      () => find
+          .textContaining('Teammate deliveries could not be refreshed')
+          .evaluate()
+          .isEmpty,
+    );
+    await tapJourneyControl(tester, find.text('@work'));
+    await _settle(tester);
+    final open = find.byTooltip('Open teammate chat');
+    await tester.ensureVisible(open);
+    await _settle(tester);
+    fixture.botRosterGate = Completer<void>();
+    await tester.tap(open);
+    await tester.pump();
+    expect(find.byType(BotDeliveriesPanel), findsNothing);
+    expect(find.text('@work'), findsOneWidget);
+    await _settle(tester);
+    final openingWing = find.byWidgetPredicate(
+      (widget) =>
+          widget is StudioLoading && widget.label == 'Opening teammate chat',
+    );
+    expect(openingWing, findsOneWidget);
+    expect(tester.getRect(openingWing).width, greaterThan(0));
+    await captureJourney(tester, 'teammates-opening');
+    final recipient = fixture.botRoster.removeLast();
+    fixture.botRosterGate!.complete();
+    fixture.botRosterGate = null;
+    await _pumpUntil(
+      tester,
+      () => find
+          .textContaining('This teammate has no available Bot Chat')
+          .evaluate()
+          .isNotEmpty,
+    );
+    await _settle(tester);
+    expect(tester.takeException(), isNull);
+    final targetRetry = find.byTooltip('Retry');
+    final errorViewport = find.ancestor(
+      of: targetRetry,
+      matching: find.byType(Scrollable),
+    );
+    void expectRecoveryVisible() {
+      final viewportBounds = tester.getRect(errorViewport);
+      final bounds = tester.getRect(targetRetry);
+      expect(bounds.width, greaterThanOrEqualTo(48));
+      expect(bounds.height, greaterThanOrEqualTo(48));
+      expect(viewportBounds.contains(bounds.topLeft), isTrue);
+      expect(
+        viewportBounds.contains(bounds.bottomRight - const Offset(.1, .1)),
+        isTrue,
+      );
+      expect(targetRetry.hitTestable(), findsOneWidget);
+      expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
+    }
+
+    expectRecoveryVisible();
+    await captureJourney(tester, 'teammates-target-unavailable');
+
+    fixture.botRosterGate = Completer<void>();
+    await tapJourneyControl(tester, targetRetry);
+    await _settle(tester);
+    final longOpeningError =
+        '${'The teammate connection could not be read. ' * 24}'
+        'Check the connection before opening this teammate again.';
+    fixture.botRosterGate!.completeError(StateError(longOpeningError));
+    fixture.botRosterGate = null;
+    await _pumpUntil(
+      tester,
+      () => find.text(longOpeningError).evaluate().isNotEmpty,
+    );
+    await _settle(tester);
+    expect(tester.takeException(), isNull);
+    final errorCopy = find.text(longOpeningError);
+    final viewportBounds = tester.getRect(errorViewport);
+    expect(
+      tester.getBottomLeft(errorCopy).dy,
+      greaterThan(viewportBounds.bottom),
+    );
+    await captureJourney(tester, 'teammates-target-long-error');
+    for (
+      var gesture = 0;
+      gesture < 24 &&
+          tester.getBottomLeft(errorCopy).dy > viewportBounds.bottom;
+      gesture++
+    ) {
+      await tester.drag(errorViewport, Offset(0, -viewportBounds.height * .7));
+      await _settle(tester);
+      expect(tester.takeException(), isNull);
+    }
+    expect(
+      tester.getBottomLeft(errorCopy).dy,
+      lessThanOrEqualTo(viewportBounds.bottom),
+    );
+    expect(tester.getBottomLeft(errorCopy).dy, greaterThan(viewportBounds.top));
+    await captureJourney(tester, 'teammates-target-long-error-end');
+    for (
+      var gesture = 0;
+      gesture < 24 && tester.getTopLeft(targetRetry).dy < viewportBounds.top;
+      gesture++
+    ) {
+      await tester.drag(errorViewport, Offset(0, viewportBounds.height * .7));
+      await _settle(tester);
+    }
+    expectRecoveryVisible();
+    fixture.botRoster.add(recipient);
+    fixture.botRosterGate = Completer<void>();
+    final headerSlot = find.byKey(const ValueKey('studio-loading-slot'));
+    final headerBounds = tester.getRect(headerSlot);
+    await tapJourneyControl(tester, targetRetry);
+    await _settle(tester);
+    final headerWing = find.descendant(of: headerSlot, matching: openingWing);
+    expect(headerWing, findsOneWidget);
+    expect(find.bySemanticsLabel('Opening teammate chat'), findsOneWidget);
+    expect(tester.getRect(headerSlot), headerBounds);
+    final wingBounds = tester.getRect(headerWing);
+    expect(wingBounds.width, greaterThan(0));
+    expect(wingBounds.height, greaterThan(0));
+    expect(headerBounds.contains(wingBounds.topLeft), isTrue);
+    expect(headerBounds.contains(wingBounds.bottomRight), isTrue);
+    expect(find.byTooltip('Back').hitTestable(), findsOneWidget);
+    await captureJourney(tester, 'teammates-target-retry-held');
+    fixture.botRosterGate!.complete();
+    fixture.botRosterGate = null;
+    await _pumpUntil(
+      tester,
+      () =>
+          harness.controller.current?.chat?.key.workspace.profileName == 'work',
+    );
+    await _settle(tester);
+    expect(harness.controller.current!.chat!.key.sessionId, 'chat-2');
+    expect(find.text('Exact teammate conversation'), findsOneWidget);
+    expect(sender.composer.observation.text, 'Keep the release draft');
+    expect(
+      fixture.calls.where(
+        (call) => {'session.create', 'prompt.submit'}.contains(call.$2),
+      ),
+      isEmpty,
+    );
+    await captureJourney(tester, 'teammates-target');
+  });
+
+  testJourney(
+    'refused turns retain their text through settlement and reopening',
+    (tester) async {
+      const prompt = 'Please review this refused request';
+      const savedNotice =
+          'The model refused this request. Try a different query.';
+      harness.fixture.scopedHistories[('personal', 'chat-0')] = [];
+      await harness.launch(tester);
+      await tapJourneyControl(
+        tester,
+        find.byKey(const ValueKey('chat-personal-chat-0')),
+      );
+      await _settle(tester);
+      final chat = harness.controller.current!.chat!;
+      await tester.enterText(
+        find.byKey(const Key('profile-message-composer')),
+        prompt,
+      );
+      await tapJourneyControl(tester, find.byTooltip('Send'));
+      await _pumpUntil(
+        tester,
+        () => harness.fixture.calls.any((call) => call.$2 == 'prompt.submit'),
+      );
+      await _settle(tester);
+      final submit = harness.fixture.calls
+          .singleWhere((call) => call.$2 == 'prompt.submit')
+          .$3;
+      final admission = 'fixture-${submit['submission_id']}';
+      void event(String type, Map<String, dynamic> data) =>
+          harness.fixture.refusalEvent(
+            'personal',
+            chat.runtime.runtimeId,
+            admission,
+            type,
+            data,
+          );
+      event('message.start', {'turn_id': 'refused-native-turn'});
+      event('message.interim', {
+        'turn_id': 'refused-native-turn',
+        'segment': 0,
+        'text': 'Partial reply to remove',
+      });
+      event('tool.start', {
+        'tool_id': 'refused-native-tool',
+        'name': 'terminal',
+        'args': 'pwd',
+      });
+      await _settle(tester);
+      await tester.enterText(
+        find.byKey(const Key('profile-message-composer')),
+        'Keep my next draft',
+      );
+      tester.binding.focusManager.primaryFocus?.unfocus();
+      final gate = harness.fixture.historyDelays[('chat-0', 0)] =
+          Completer<void>();
+      harness.fixture.scopedHistories[('personal', 'chat-0')] = [
+        {
+          'id': 42,
+          'role': 'user',
+          'content': prompt,
+          'display_kind': 'content_refused',
+          'display_metadata': {
+            'submission_id': submit['submission_id'],
+            'content_refused': {'notice': savedNotice},
+          },
+          'active': 0,
+          'compacted': 1,
+        },
+      ];
+      event('message.complete', {
+        'turn_id': 'refused-native-turn',
+        'status': 'error',
+        'failure_reason': 'content_policy_blocked',
+        'text': 'Provider safety refusal',
+        'error_surface': {
+          'code': 'content_policy_blocked',
+          'layer': 'provider',
+          'retryable': false,
+        },
+      });
+      await _pumpUntil(
+        tester,
+        () => find.text(liveContentRefusedNotice).evaluate().isNotEmpty,
+      );
+      final refused = find.byKey(const ValueKey('content-refused-message'));
+      expect(
+        find.descendant(of: refused, matching: find.text(prompt)),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: refused, matching: find.byType(IconButton)),
+        findsNothing,
+      );
+      expect(find.text('Partial reply to remove'), findsNothing);
+      void expectRefusalFeedback() {
+        expect(find.text('Message refused'), findsOneWidget);
+        expect(find.text('Something went wrong'), findsNothing);
+        expect(find.text('Turn failed'), findsNothing);
+        expect(find.byType(TurnFailureView), findsNothing);
+        expect(find.byTooltip('Choose model'), findsNothing);
+        expect(chat.runtime.execution, ChatExecution.failed);
+        expect(chat.runtime.failure?.contentRefused, isTrue);
+      }
+
+      expectRefusalFeedback();
+      expect(chat.runtime.toolActivities, isEmpty);
+      expect(chat.composer.observation.text, 'Keep my next draft');
+      await captureJourney(tester, 'refused-live-held');
+      gate.complete();
+      await _pumpUntil(
+        tester,
+        () => find.text(savedNotice).evaluate().isNotEmpty,
+      );
+      expect(chat.reading.messages.single['id'], 42);
+      expect(chat.reading.messages.single['role'], 'user');
+      for (final theme in [AppThemePreference.light, AppThemePreference.dark]) {
+        await harness.appPreferences.setTheme(theme);
+        for (final size in [
+          AppTextSizePreference.standard,
+          AppTextSizePreference.extraLarge,
+        ]) {
+          await harness.appPreferences.setTextSize(size);
+          await _settle(tester);
+          await tester.ensureVisible(refused);
+          await _settle(tester);
+          expect(
+            find.descendant(of: refused, matching: find.text(prompt)),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(of: refused, matching: find.text(savedNotice)),
+            findsOneWidget,
+          );
+          final bounds = tester.getRect(refused);
+          expect(bounds.width, greaterThan(0));
+          expect(bounds.height, greaterThan(0));
+          expect(tester.takeException(), isNull);
+          expectRefusalFeedback();
+          await captureJourney(
+            tester,
+            'refused-saved-${theme.name}-${size.name}',
+          );
+        }
+      }
+      await tapJourneyControl(tester, find.byTooltip('Chat actions'));
+      await _settle(tester);
+      await tapJourneyControl(tester, find.text('Find in chat'));
+      await _settle(tester);
+      await tester.enterText(find.byType(TextField).last, 'refused request');
+      await tester.pump();
+      expect(find.text('1 matching message'), findsOneWidget);
+      expect(find.text('system'), findsOneWidget);
+      await tapJourneyControl(tester, find.textContaining(savedNotice).last);
+      await _settle(tester);
+      await tapJourneyControl(tester, find.text('View in chat'));
+      await _settle(tester);
+      await _navigate(tester, AppDestination.chats);
+      await _revealChat(tester, 'personal', 'chat-0');
+      await tapJourneyControl(
+        tester,
+        find.byKey(const ValueKey('chat-personal-chat-0')),
+      );
+      await _settle(tester);
+      await tester.ensureVisible(refused);
+      await _settle(tester);
+      expect(find.text(savedNotice), findsOneWidget);
+      expectRefusalFeedback();
+      expect(
+        harness.controller.current!.chat!.composer.observation.text,
+        'Keep my next draft',
+      );
+      expect(
+        harness.fixture.calls.where((call) => call.$2 == 'prompt.submit'),
+        hasLength(1),
+      );
+      expect(
+        tester
+            .widgetList<ProfileMessage>(find.byType(ProfileMessage))
+            .where((message) => message.message.copyText.isNotEmpty),
+        isEmpty,
+      );
+      await captureJourney(tester, 'refused-reopened');
+    },
+  );
 
   testJourney(
     'Git review opens from chat and retains draft through held reads',
@@ -747,6 +1624,178 @@ void main() {
       expect(find.textContaining('Outputs ·'), findsOneWidget);
       expect(chat.key.sessionId, 'chat-0');
       expect(tester.takeException(), isNull);
+      await tester.binding.handlePopRoute();
+      await _settle(tester);
+
+      final fixture = harness.fixture;
+      final composer = find.byKey(const Key('profile-message-composer'));
+      final ring = find.byKey(const ValueKey('context-ring-details'));
+      final panel = find.byKey(const ValueKey('context-usage-popover'));
+      final close = find.byTooltip('Close context window');
+      const draft = 'Keep this draft while inspecting cache timing';
+      for (final theme in [AppThemePreference.light, AppThemePreference.dark]) {
+        await harness.appPreferences.setTheme(theme);
+        for (final size in [
+          AppTextSizePreference.standard,
+          AppTextSizePreference.extraLarge,
+        ]) {
+          await harness.appPreferences.setTextSize(size);
+          await _settle(tester);
+          final suffix = '${theme.name}-${size.name}';
+          fixture.contextReport = {
+            'context_used': 32768,
+            'context_max': size == AppTextSizePreference.standard ? 131072 : 0,
+            'context_percent': 25,
+            'prompt_cache': {
+              'guaranteed_until': 1795566600,
+              'estimated_until': 1795569900,
+              'refreshed_at': 1795566300,
+              'tier': '5m',
+              'confidence': 'assumed',
+              'coverage': {'5m': 1795566600, '1h': 1795569900},
+              'warming_off': true,
+              'tier_pending': true,
+              'learned': 'short-lived',
+            },
+          };
+          final opening = fixture.contextGate = Completer();
+          await tapJourneyControl(tester, composer);
+          await tester.enterText(composer, draft);
+          await _pumpUntil(tester, () => tester.view.viewInsets.bottom > 0);
+          final composerFocus = tester.widget<TextField>(composer).focusNode!;
+          final ringBounds = tester.getRect(ring);
+          await tapJourneyControl(tester, ring);
+          await _settle(tester);
+          expect(panel, findsOneWidget);
+          expect(
+            find.bySemanticsLabel('Loading context breakdown'),
+            findsOneWidget,
+          );
+          expect(
+            find
+                .descendant(
+                  of: panel,
+                  matching: find.byType(CircularProgressIndicator),
+                )
+                .hitTestable(),
+            findsOneWidget,
+          );
+          expect(opening.isCompleted, isFalse);
+          expect(tester.getRect(ring), ringBounds);
+          expect(composerFocus.hasFocus, isTrue);
+          expect(tester.view.viewInsets.bottom, greaterThan(0));
+          final keyboardTop =
+              (tester.view.physicalSize.height -
+                  tester.view.viewInsets.bottom) /
+              tester.view.devicePixelRatio;
+          expect(tester.getRect(panel).bottom, lessThanOrEqualTo(keyboardTop));
+          expect(tester.getRect(close).bottom, lessThanOrEqualTo(keyboardTop));
+          expect(fixture.contextRequests.last, {
+            'session_id': chat.runtime.runtimeId,
+            'profile': 'personal',
+          });
+          await captureJourney(tester, 'cache-open-held-$suffix');
+          opening.complete(fixture.contextReport);
+          await _pumpUntil(tester, () => !chat.contextLoading);
+          await _settle(tester);
+          if (size == AppTextSizePreference.extraLarge) {
+            expect(find.text('Context usage unknown'), findsOneWidget);
+          }
+          await tester.ensureVisible(find.text('Prompt cache'));
+          await _settle(tester);
+          expect(find.text('Assumed'), findsOneWidget);
+          expect(find.text('Guaranteed until'), findsOneWidget);
+          expect(find.text('Retention upper bound'), findsOneWidget);
+          expect(find.textContaining('expired'), findsNothing);
+          expect(tester.view.viewInsets.bottom, greaterThan(0));
+          await captureJourney(tester, 'cache-report-keyboard-$suffix');
+          await tester.ensureVisible(
+            find.text('Cache retention is shorter than expected.'),
+          );
+          await _settle(tester);
+          await captureJourney(tester, 'cache-lifecycle-keyboard-$suffix');
+          await tester.ensureVisible(close);
+          expect(tester.getRect(close).bottom, lessThanOrEqualTo(keyboardTop));
+          await tapJourneyControl(tester, close);
+          await _settle(tester);
+          expect(panel, findsNothing);
+          expect(composerFocus.hasFocus, isTrue);
+          expect(chat.composer.observation.text, draft);
+          expect(tester.view.viewInsets.bottom, greaterThan(0));
+
+          // Failure retains the dated report; Retry owns visible local progress.
+          final failed = fixture.contextGate = Completer();
+          await tapJourneyControl(tester, ring);
+          await _settle(tester);
+          failed.completeError(StateError('Cache report unavailable'));
+          await _pumpUntil(tester, () => chat.contextError != null);
+          await _settle(tester);
+          expect(chat.promptCache, isNotNull);
+          final retry = find.byWidgetPredicate(
+            (widget) => widget is IconButton && widget.tooltip == 'Retry',
+          );
+          await tester.ensureVisible(retry);
+          await _settle(tester);
+          await captureJourney(tester, 'cache-failed-$suffix');
+          final recovered = fixture.contextGate = Completer();
+          await tapJourneyControl(tester, retry);
+          await _settle(tester);
+          expect(chat.contextRefreshPending, isTrue);
+          expect(
+            find.text('Couldn’t load the context breakdown.'),
+            findsOneWidget,
+          );
+          expect(tester.widget<IconButton>(retry).onPressed, isNull);
+          expect(
+            find.bySemanticsLabel('Loading context breakdown'),
+            findsNothing,
+          );
+          expect(
+            find
+                .descendant(
+                  of: panel,
+                  matching: find.byType(CircularProgressIndicator),
+                )
+                .hitTestable(),
+            findsOneWidget,
+          );
+          await captureJourney(tester, 'cache-retry-held-$suffix');
+          recovered.completeError(StateError('Cache report still unavailable'));
+          await _pumpUntil(tester, () => !chat.contextLoading);
+          expect(chat.contextError, isNotNull);
+          expect(chat.promptCache, isNotNull);
+          expect(tester.widget<IconButton>(retry).onPressed, isNotNull);
+          final recovery = fixture.contextGate = Completer();
+          await tapJourneyControl(tester, retry);
+          await _settle(tester);
+          recovery.complete(fixture.contextReport);
+          await _pumpUntil(tester, () => !chat.contextLoading);
+          expect(chat.contextError, isNull);
+          await tester.ensureVisible(close);
+          await tapJourneyControl(tester, close);
+          await _settle(tester);
+          expect(chat.composer.observation.text, draft);
+          expect(composerFocus.hasFocus, isTrue);
+          expect(tester.takeException(), isNull);
+          fixture.contextGate = null;
+        }
+      }
+      final departing = fixture.contextGate = Completer();
+      await tapJourneyControl(tester, ring);
+      await _settle(tester);
+      await tester.ensureVisible(close);
+      await tapJourneyControl(tester, close);
+      FocusManager.instance.primaryFocus?.unfocus();
+      await _pumpUntil(tester, () => tester.view.viewInsets.bottom == 0);
+      await tester.binding.handlePopRoute();
+      await _settle(tester);
+      expect(panel, findsNothing);
+      departing.complete(fixture.contextReport);
+      fixture.contextGate = null;
+      await _settle(tester);
+      expect(panel, findsNothing);
+      expect(chat.composer.observation.text, draft);
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -881,6 +1930,209 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testJourney(
+    'typed folder and website approvals retain scope and denial feedback',
+    (tester) async {
+      await harness.launch(tester);
+      await tapJourneyControl(
+        tester,
+        find.byKey(const ValueKey('chat-personal-chat-0')),
+      );
+      await _settle(tester);
+      final chat = harness.controller.current!.chat!;
+      for (final theme in [AppThemePreference.light, AppThemePreference.dark]) {
+        await harness.appPreferences.setTheme(theme);
+        for (final enlarged in [false, true]) {
+          await harness.appPreferences.setTextSize(
+            enlarged
+                ? AppTextSizePreference.extraLarge
+                : AppTextSizePreference.standard,
+          );
+          final suffix = '${theme.name}-${enlarged ? 'large' : 'normal'}';
+          harness.fixture
+              .requestTypedApproval('personal', chat.runtime.runtimeId, {
+                'kind': 'access',
+                'path':
+                    ' /srv/research  notes/private/long-folder-name-to-review ',
+                'access': 'read_write',
+                'risk': 'May change files in this folder.',
+              });
+          await _settle(tester);
+          expect(find.text('Review folder access'), findsOneWidget);
+          expect(find.text('Read and write'), findsOneWidget);
+          expect(
+            chat.runtime.approval!.request.path,
+            ' /srv/research  notes/private/long-folder-name-to-review ',
+          );
+          emitChatEvent(harness.controller, chat, 'message.complete', {
+            'text': 'Turn finished while access waits.',
+          });
+          await tester.pump();
+          expect(chat.runtime.approval, isNotNull);
+          final allow = find.byTooltip('Allow until sandbox is switched off');
+          await revealJourneyControl(tester, allow);
+          await captureJourney(tester, 'typed-folder-$suffix');
+          harness.fixture.typedApprovalGate = Completer<void>();
+          final grantHeader = tester.getRect(
+            find.byKey(const ValueKey('studio-loading-slot')),
+          );
+          await tapJourneyControl(tester, allow);
+          expect(chat.runtime.approvalResponding, isTrue);
+          await _expectApprovalHeader(tester, grantHeader);
+          await captureJourney(tester, 'typed-folder-pending-$suffix');
+          harness.fixture.typedApprovalGate!.complete();
+          await _pumpUntil(tester, () => chat.runtime.approval == null);
+          expect(harness.fixture.typedApprovalResponses.last['result'], {
+            'choice': 'once',
+          });
+          harness.fixture.typedApprovalGate = null;
+
+          harness.fixture
+              .requestTypedApproval('personal', chat.runtime.runtimeId, {
+                'kind': 'network',
+                'host': 'docs.example.org',
+                'label': 'Reference website',
+                'risk': 'Connects to an external website.',
+              });
+          await _settle(tester);
+          expect(find.text('Review website access'), findsOneWidget);
+          expect(find.text('docs.example.org'), findsOneWidget);
+          await tapJourneyControl(tester, find.byTooltip('Reject'));
+          await tester.pump();
+          final reason = find.widgetWithText(TextField, 'Reason (optional)');
+          final reasonEditor = find.descendant(
+            of: reason,
+            matching: find.byType(EditableText),
+          );
+          await tapJourneyControl(tester, reason);
+          await tester.enterText(reason, 'Keep this work offline');
+          await _pumpUntil(tester, () => tester.view.viewInsets.bottom > 0);
+          final reject = find.byWidgetPredicate(
+            (widget) =>
+                widget is IconButton && widget.tooltip == 'Reject request',
+          );
+          await _revealApprovalDecisionWithKeyboard(tester, reject);
+          await captureJourney(tester, 'typed-reason-keyboard-$suffix');
+          harness.fixture.failTypedApproval = true;
+          harness.fixture.typedApprovalGate = Completer<void>();
+          final denialHeader = tester.getRect(
+            find.byKey(const ValueKey('studio-loading-slot')),
+          );
+          await tapJourneyControl(tester, find.byTooltip('Reject request'));
+          await _expectApprovalHeader(tester, denialHeader);
+          await captureJourney(tester, 'typed-denial-pending-$suffix');
+          // Disabling the pending field closes its native input connection.
+          // Let Android finish hiding that keyboard before releasing the
+          // failure and asking the same field to open a new connection.
+          await _pumpUntil(tester, () => tester.view.viewInsets.bottom == 0);
+          harness.fixture.typedApprovalGate!.complete();
+          await _pumpUntil(tester, () => !chat.runtime.approvalResponding);
+          expect(chat.runtime.approval, isNotNull);
+          expect(find.text('Keep this work offline'), findsOneWidget);
+          await _pumpUntil(
+            tester,
+            () =>
+                find
+                    .text('Decision was not accepted')
+                    .hitTestable()
+                    .evaluate()
+                    .length ==
+                1 &&
+                tester.widget<TextField>(reason).enabled == true &&
+                !tester.widget<EditableText>(reasonEditor).readOnly,
+          );
+          // Reopen once through the real field after the failure is rendered,
+          // then recover the retry footer through visible input navigation.
+          await tapJourneyControl(tester, reason);
+          await _pumpUntil(
+            tester,
+            () =>
+                tester.widget<EditableText>(reasonEditor).focusNode.hasFocus &&
+                tester.view.viewInsets.bottom > 0,
+          );
+          await _revealApprovalDecisionWithKeyboard(tester, reject);
+          await captureJourney(tester, 'typed-denial-failed-$suffix');
+          harness.fixture.failTypedApproval = false;
+          harness.fixture.typedApprovalGate = null;
+          await tester.tap(reject);
+          await _pumpUntil(tester, () => chat.runtime.approval == null);
+          expect(harness.fixture.typedApprovalResponses.last['result'], {
+            'choice': 'deny',
+            'reason': 'Keep this work offline',
+          });
+          FocusManager.instance.primaryFocus?.unfocus();
+          await _settle(tester);
+        }
+      }
+      // Production platform-adapter → coordinator → main dialog route on
+      // Android. This does not simulate tapping the OS shade or unlocking.
+      harness.fixture.requestTypedApproval('personal', chat.runtime.runtimeId, {
+        'kind': 'network',
+        'host': 'notifications.example.org',
+        'label': 'Notification website',
+        'risk': 'Saves future access.',
+      });
+      await _settle(tester);
+      final issued = chat.runtime.approval!;
+      final delivery = TestDefaultBinaryMessengerBinding
+          .instance
+          .defaultBinaryMessenger
+          .handlePlatformMessage(
+            NativeNotificationSink.channelName,
+            const StandardMethodCodec().encodeMethodCall(
+              MethodCall('interaction', {
+                'payload': jsonEncode({
+                  ...chat.key.toJson(),
+                  'focus': {'kind': 'approval', 'id': issued.requestId},
+                }),
+                'choice': 'always',
+                'review': true,
+                'command': '',
+              }),
+            ),
+            (_) {},
+          );
+      await _pumpUntil(
+        tester,
+        () => find.byType(NotificationApprovalReview).evaluate().isNotEmpty,
+      );
+      expect(find.text('notifications.example.org'), findsWidgets);
+      expect(
+        find.text('Save this access rule for future use.'),
+        findsOneWidget,
+      );
+      await captureJourney(tester, 'typed-notification-review');
+      harness.fixture.typedApprovalGate = Completer<void>();
+      await tapJourneyControl(
+        tester,
+        find.descendant(
+          of: find.byType(NotificationApprovalReview),
+          matching: find.byTooltip('Save access rule'),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find
+            .descendant(
+              of: find.byType(NotificationApprovalReview),
+              matching: find.byType(CircularProgressIndicator),
+            )
+            .hitTestable(),
+        findsOneWidget,
+      );
+      await captureJourney(tester, 'typed-notification-pending');
+      harness.fixture.typedApprovalGate!.complete();
+      await _pumpUntil(
+        tester,
+        () => find.byType(NotificationApprovalReview).evaluate().isEmpty,
+      );
+      await delivery;
+      expect(harness.fixture.typedApprovalResponses.last['result'], {
+        'choice': 'always',
+      });
+    },
+  );
 
   testJourney('activity approvals and queued work keep their chat owner', (
     tester,
@@ -1250,6 +2502,8 @@ void main() {
         {'id': 1, 'role': 'user', 'content': 'Inspect the emulator release.'},
       ];
       harness.fixture.scopedHistories[('personal', 'chat-0')] = rows;
+      harness.fixture.childTranscriptEnabled = true;
+      harness.fixture.childTranscriptGate = Completer<void>();
       await harness.launch(tester);
       await tapJourneyControl(
         tester,
@@ -1294,17 +2548,192 @@ void main() {
         find.descendant(of: child, matching: find.byIcon(Icons.chevron_right)),
       );
       await _settle(tester);
-      Finder detailAction(String label) => find.descendant(
-        of: find.byType(BottomSheet),
-        matching: find.byTooltip(label),
+      final currentSheet = find.byElementPredicate(
+        (element) =>
+            element.widget is BottomSheet &&
+            ModalRoute.of(element)?.isCurrent == true,
       );
+      Finder detailAction(String label) =>
+          find.descendant(of: currentSheet, matching: find.byTooltip(label));
+      expect(find.byType(SubagentTimeline), findsOneWidget);
+      expect(find.bySemanticsLabel('Loading subagent activity'), findsWidgets);
+      await captureJourney(tester, 'child-canonical-first-read-held');
+      harness.fixture.childTranscriptGate!.complete();
+      await _pumpUntil(
+        tester,
+        () => find
+            .textContaining(
+              'Saved child evidence before reset.',
+              findRichText: true,
+            )
+            .evaluate()
+            .isNotEmpty,
+      );
+      expect(
+        find.text(
+          'Live subagent activity could not refresh. Retry to continue.',
+        ),
+        findsNothing,
+      );
+      harness.fixture.childTranscriptGate = Completer<void>();
+      harness.fixture.childResourceId = 'roadmap-child-successor';
+      harness.fixture.childTranscriptRows = [
+        {
+          'row_id': 9,
+          'row_kind': 'message',
+          'role': 'assistant',
+          'text': 'Rewritten child evidence. [Report](report.md)',
+        },
+      ];
+      await tapJourneyControl(
+        tester,
+        detailAction('Refresh subagent activity'),
+      );
+      await _pumpUntil(
+        tester,
+        () => find
+            .bySemanticsLabel('Loading subagent activity')
+            .evaluate()
+            .isNotEmpty,
+        timeout: const Duration(seconds: 2),
+      );
+      expect(harness.fixture.childTranscriptGate!.isCompleted, isFalse);
+      expect(find.bySemanticsLabel('Loading subagent activity'), findsWidgets);
+      expect(
+        find.textContaining(
+          'Saved child evidence before reset.',
+          findRichText: true,
+        ),
+        findsOneWidget,
+      );
+      await captureJourney(tester, 'child-canonical-refresh-held');
+      harness.fixture.childTranscriptGate!.complete();
+      await _pumpUntil(
+        tester,
+        () => find
+            .textContaining('Rewritten child evidence.', findRichText: true)
+            .evaluate()
+            .isNotEmpty,
+      );
+      expect(
+        find.textContaining(
+          'Saved child evidence before reset.',
+          findRichText: true,
+        ),
+        findsNothing,
+      );
+      await tapJourneyControl(tester, detailAction('Open preview'));
+      await _pumpUntil(
+        tester,
+        () => find
+            .textContaining(
+              'Full report for roadmap-child-successor',
+              findRichText: true,
+            )
+            .evaluate()
+            .isNotEmpty,
+      );
+      await captureJourney(tester, 'child-successor-resource');
+      await tester.binding.handlePopRoute();
+      await _settle(tester);
+      await tapJourneyControl(
+        tester,
+        find.descendant(
+          of: currentSheet,
+          matching: find.byKey(const ValueKey(('live-work-tab', 0, false))),
+        ),
+      );
+      await _settle(tester);
+      harness.fixture.childTranscriptGate = Completer<void>();
+      await tapJourneyControl(
+        tester,
+        find.descendant(
+          of: currentSheet,
+          matching: find.text('Inspect nested release evidence'),
+        ),
+      );
+      await _pumpUntil(
+        tester,
+        () => find
+            .bySemanticsLabel('Loading subagent activity')
+            .evaluate()
+            .isNotEmpty,
+        timeout: const Duration(seconds: 2),
+      );
+      expect(harness.fixture.childTranscriptGate!.isCompleted, isFalse);
+      expect(find.bySemanticsLabel('Loading subagent activity'), findsWidgets);
+      await captureJourney(tester, 'nested-canonical-first-read-held');
+      harness.fixture.childTranscriptGate!.complete();
+      await _pumpUntil(
+        tester,
+        () => detailAction('Open preview').evaluate().isNotEmpty,
+      );
+      await tapJourneyControl(tester, detailAction('Open preview'));
+      await _pumpUntil(
+        tester,
+        () => find
+            .textContaining(
+              'Full report for roadmap-nested-session',
+              findRichText: true,
+            )
+            .evaluate()
+            .isNotEmpty,
+      );
+      await captureJourney(tester, 'nested-child-resource');
+      await tester.binding.handlePopRoute();
+      await _settle(tester);
+      await tapJourneyControl(tester, detailAction('Close subagent activity'));
+      await _settle(tester);
+      await tapJourneyControl(
+        tester,
+        find.descendant(
+          of: currentSheet,
+          matching: find.byKey(const ValueKey(('live-work-tab', 0, true))),
+        ),
+      );
+      await _settle(tester);
+      expect(
+        harness.fixture.childResourceRequests.map((read) => read['session_id']),
+        ['roadmap-child-successor', 'roadmap-nested-session'],
+      );
+      final transcriptParents = {
+        'roadmap-child': runtime,
+        'roadmap-nested': runtime,
+      };
+      expect(
+        harness.fixture.childTranscriptRequests
+            .map((request) => request['subagent_id'])
+            .toSet(),
+        transcriptParents.keys.toSet(),
+      );
+      for (final request in harness.fixture.childTranscriptRequests) {
+        expect(
+          request['session_id'],
+          transcriptParents[request['subagent_id']],
+        );
+        expect(request['order'], 'latest');
+        expect(request['limit'], 100);
+      }
+      expect(
+        find.text(
+          'Live subagent activity could not refresh. Retry to continue.',
+        ),
+        findsNothing,
+      );
+      expect(chat.runtime.runtimeId, runtime);
+      expect(chat.runtime.executionActive, isTrue);
+      expect(chat.composer.observation.text, draft);
+      await tapJourneyControl(
+        tester,
+        find.descendant(of: currentSheet, matching: find.text('Task')),
+      );
+      await _settle(tester);
       expect(detailAction('Steer'), findsOneWidget);
       expect(detailAction('Interrupt'), findsOneWidget);
 
       // The terminal event must update controls in an already-open inspection.
       // Saving its receipt is independent of the still-streaming parent answer.
       harness.fixture.subagentStatus = 'completed';
-      harness.fixture.subagentOutput = 'Verified the emulator release source.';
       emitChatEvent(harness.controller, chat, 'subagent.complete', {
         'subagent_id': 'roadmap-child',
         'status': 'completed',
@@ -1340,34 +2769,37 @@ void main() {
       await _settle(tester);
       expect(detailAction('Steer'), findsNothing);
       expect(detailAction('Interrupt'), findsNothing);
-      final refreshOutput = detailAction('Refresh live output');
-      await tester.ensureVisible(refreshOutput);
-      await _settle(tester);
-      await tapJourneyControl(tester, refreshOutput);
-      await _settle(tester);
+      harness.fixture.childTranscriptRows = [
+        {
+          'row_id': 9,
+          'row_kind': 'message',
+          'role': 'assistant',
+          'text': 'Verified the emulator release source.',
+        },
+      ];
+      await tapJourneyControl(
+        tester,
+        detailAction('Refresh subagent activity'),
+      );
       final output = find.descendant(
-        of: find.byType(BottomSheet),
-        matching: find.byWidgetPredicate(
-          (widget) =>
-              widget is SourceCodeText &&
-              widget.text == 'Verified the emulator release source.',
+        of: currentSheet,
+        matching: find.textContaining(
+          'Verified the emulator release source.',
+          findRichText: true,
         ),
       );
+      await _pumpUntil(tester, () => output.evaluate().isNotEmpty);
       await tester.ensureVisible(output);
       await _settle(tester);
       expect(output, findsOneWidget);
-      expect(detailAction('Copy Live output'), findsOneWidget);
-      final tailReads = harness.fixture.supervisionRequests.where(
-        (request) => request.$1 == 'subagent.tail',
+      expect(
+        harness.fixture.childTranscriptRequests.last['session_id'],
+        runtime,
       );
-      expect(tailReads, isNotEmpty);
-      for (final request in tailReads) {
-        expect(request.$2, {
-          'session_id': runtime,
-          'subagent_id': 'roadmap-child',
-          'profile': 'personal',
-        });
-      }
+      expect(
+        harness.fixture.childTranscriptRequests.last['subagent_id'],
+        'roadmap-child',
+      );
       await captureJourney(tester, 'child-completed-parent-streaming');
       await tester.binding.handlePopRoute();
       await _settle(tester);
@@ -1480,6 +2912,15 @@ void main() {
     tester,
   ) async {
     harness.fixture.supervisionEnabled = true;
+    harness.fixture.childTranscriptEnabled = true;
+    harness.fixture.childTranscriptRows = [
+      {
+        'row_id': 1,
+        'row_kind': 'message',
+        'role': 'assistant',
+        'text': 'Emulator child is checking the release.',
+      },
+    ];
     await harness.launch(tester);
     await tapJourneyControl(
       tester,
@@ -1509,25 +2950,12 @@ void main() {
       find.descendant(of: child, matching: find.byIcon(Icons.chevron_right)),
     );
     await _settle(tester);
-    final childOutput = find.byWidgetPredicate(
-      (widget) =>
-          widget is SourceCodeText &&
-          widget.text == 'Emulator child is checking the release.',
+    final childOutput = find.textContaining(
+      'Emulator child is checking the release.',
+      findRichText: true,
     );
-    await _pumpUntil(
-      tester,
-      () => find.text('Loading live output...').evaluate().isEmpty,
-    );
-    await tester.scrollUntilVisible(
-      childOutput,
-      160,
-      scrollable: find
-          .descendant(
-            of: find.byType(ListView).last,
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
+    await _pumpUntil(tester, () => childOutput.evaluate().isNotEmpty);
+    await tester.ensureVisible(childOutput);
     expect(childOutput, findsOneWidget);
     await tester.enterText(
       find.byType(TextField).last,
@@ -2280,12 +3708,34 @@ class _RoadmapHarness {
       preferences,
       credentialStore: credentialStore,
     );
+    final fixture = RoadmapEmulatorFixture();
     final dashboard = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     final unexpectedRequests = <String>[];
     dashboard.listen((request) async {
       if (request.method == 'GET' && request.uri.path == '/') {
         request.response.write(
           'window.__HERMES_SESSION_TOKEN__="roadmap-only";',
+        );
+      } else if (request.method == 'GET' &&
+          request.uri.path == '/api/fs/read-text' &&
+          fixture.childTranscriptEnabled &&
+          request.uri.queryParameters['path'] == 'report.md' &&
+          {
+            'roadmap-child-successor',
+            'roadmap-nested-session',
+          }.contains(request.uri.queryParameters['session_id'])) {
+        fixture.childResourceRequests.add(Map.of(request.uri.queryParameters));
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(
+          jsonEncode({
+            'path': 'report.md',
+            'text':
+                'Full report for ${request.uri.queryParameters['session_id']}',
+            'language': 'markdown',
+            'mimeType': 'text/markdown',
+            'binary': false,
+            'truncated': false,
+          }),
         );
       } else if (request.method == 'GET' && request.uri.path == '/api/health') {
         request.response.headers.contentType = ContentType.json;
@@ -2331,7 +3781,6 @@ class _RoadmapHarness {
       canCommit: () => true,
     );
     await preferences.setString('last_connection_id', connection.id);
-    final fixture = RoadmapEmulatorFixture();
     final appPreferences = AppPreferences(preferences);
     final registry = ProfileWorkspaceRegistry(
       identities: ProfileConnectionIdentity(credentialStore: credentialStore),
@@ -2358,8 +3807,8 @@ class _RoadmapHarness {
 
   Future<void> launch(WidgetTester tester) async {
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
-    // WingApp discovers Bots through its administration owner independently of
-    // the chat gateway. These journeys have an explicitly empty local roster.
+    // WingApp discovers the fixture's explicit stock roster through its
+    // administration owner, independently of the chat gateway.
     final base = AdministrationFixture('Roadmap fixture');
     addTearDown(base.server.close);
     final server = AdministrationRepository(
@@ -2383,14 +3832,11 @@ class _RoadmapHarness {
           scope: source.scope,
           discover: source.discover,
           close: source.close,
-          get: (path, query) async =>
-              throw StateError('Unexpected administration read: $path'),
+          get: source.read,
           rpc: (method, params) async => switch (method) {
-            'profiles.list' => {
-              'bot_mode_protocol': true,
-              'install_id': controller.connectionIdentity,
-              'profiles': <Map<String, dynamic>>[],
-            },
+            'profiles.list' => await fixture.readBotRoster(
+              controller.connectionIdentity,
+            ),
             'groups.list' => {'rooms': <Map<String, dynamic>>[]},
             _ => await source.call(method, params),
           },
@@ -2444,10 +3890,13 @@ class _RoadmapHarness {
   /// Exercise the production administration and drawer routes with both of
   /// their transport owners injected. The app's ordinary navigation is covered
   /// by the other journeys; this shell cannot contact a real server.
-  Future<void> launchAdministration(WidgetTester tester) async {
+  Future<void> launchAdministration(
+    WidgetTester tester, {
+    AdministrationFixture? administration,
+  }) async {
     addTearDown(() => tester.pumpWidget(const SizedBox.shrink()));
     await controller.initialize();
-    final base = AdministrationFixture('Roadmap fixture');
+    final base = administration ?? AdministrationFixture('Roadmap fixture');
     addTearDown(base.server.close);
     late final AdministrationRepository server;
     server = AdministrationRepository(
@@ -2555,79 +4004,94 @@ class _RoadmapHarness {
     addTearDown(server.close);
     await tester.pumpWidget(
       journeyCaptureBoundary(
-        MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: wingTheme(
-            journeyTheme == 'dark' ? Brightness.dark : Brightness.light,
-          ),
-          home: StatefulBuilder(
-            builder: (context, update) => Scaffold(
-              key: scaffold,
-              appBar: destination == AppDestination.administration
-                  ? null
-                  : AppBar(
-                      leading: IconButton(
-                        tooltip: 'Open navigation menu',
-                        icon: const Icon(Icons.menu),
-                        onPressed: () => scaffold.currentState!.openDrawer(),
+        ValueListenableBuilder<AppPreferencesState>(
+          valueListenable: appPreferences.state,
+          builder: (context, appearance, _) => MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: wingTheme(Brightness.light),
+            darkTheme: wingTheme(Brightness.dark),
+            themeMode: appearance.values.theme?.themeMode ?? ThemeMode.light,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler:
+                    appearance.values.textSize?.applyTo(
+                      MediaQuery.textScalerOf(context),
+                    ) ??
+                    MediaQuery.textScalerOf(context),
+              ),
+              child: child!,
+            ),
+            home: StatefulBuilder(
+              builder: (context, update) => Scaffold(
+                key: scaffold,
+                appBar: destination == AppDestination.administration
+                    ? null
+                    : AppBar(
+                        leading: IconButton(
+                          tooltip: 'Open navigation menu',
+                          icon: const Icon(Icons.menu),
+                          onPressed: () => scaffold.currentState!.openDrawer(),
+                        ),
+                        title: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(destination.label),
+                            Text(
+                              server
+                                  .profile(
+                                    controller.current!.scope.profileName,
+                                  )
+                                  .label,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
                       ),
-                      title: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(destination.label),
-                          Text(
-                            server
-                                .profile(controller.current!.scope.profileName)
-                                .label,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
+                drawer: AppDrawer(
+                  selected: destination,
+                  onSelected: (selected) {
+                    expectSync(const {
+                      AppDestination.administration,
+                      AppDestination.health,
+                      AppDestination.analytics,
+                    }, contains(selected));
+                    update(() => destination = selected);
+                  },
+                  access: controller.access,
+                  connectionStatus: controller.connectionStatus,
+                  versionsControllerFactory: (_) => VersionsController(
+                    gateway: server.gateway('default'),
+                    updateStore: BackendUpdateStore(
+                      SharedPreferences.getInstance(),
+                      'roadmap-updates',
                     ),
-              drawer: AppDrawer(
-                selected: destination,
-                onSelected: (selected) {
-                  expectSync(const {
-                    AppDestination.administration,
-                    AppDestination.health,
-                    AppDestination.analytics,
-                  }, contains(selected));
-                  update(() => destination = selected);
-                },
-                access: controller.access,
-                connectionStatus: controller.connectionStatus,
-                versionsControllerFactory: (_) => VersionsController(
-                  gateway: server.gateway('default'),
-                  updateStore: BackendUpdateStore(
-                    SharedPreferences.getInstance(),
-                    'roadmap-updates',
                   ),
                 ),
+                body: switch (destination) {
+                  AppDestination.health => HermesHealthContent(
+                    controller: controller,
+                    repository: server,
+                    onOpenMenu: () => scaffold.currentState!.openDrawer(),
+                    onConnections: () {},
+                    onOpenSession: (key) async {
+                      await controller.openSession(key);
+                    },
+                  ),
+                  AppDestination.analytics => HermesAnalyticsContent(
+                    controller: controller,
+                    repository: server,
+                  ),
+                  _ => HermesAdministrationContent(
+                    controller: controller,
+                    repository: server,
+                    onOpenMenu: () => scaffold.currentState!.openDrawer(),
+                    onConnections: () {},
+                    onOpenSession: (key) async {
+                      await controller.openSession(key);
+                    },
+                  ),
+                },
               ),
-              body: switch (destination) {
-                AppDestination.health => HermesHealthContent(
-                  controller: controller,
-                  repository: server,
-                  onOpenMenu: () => scaffold.currentState!.openDrawer(),
-                  onConnections: () {},
-                  onOpenSession: (key) async {
-                    await controller.openSession(key);
-                  },
-                ),
-                AppDestination.analytics => HermesAnalyticsContent(
-                  controller: controller,
-                  repository: server,
-                ),
-                _ => HermesAdministrationContent(
-                  controller: controller,
-                  repository: server,
-                  onOpenMenu: () => scaffold.currentState!.openDrawer(),
-                  onConnections: () {},
-                  onOpenSession: (key) async {
-                    await controller.openSession(key);
-                  },
-                ),
-              },
             ),
           ),
         ),
@@ -2688,6 +4152,73 @@ Future<void> _chooseComposerAction(WidgetTester tester, String action) async {
   await tester.pump();
   await gesture.up();
   await _settle(tester);
+}
+
+Future<void> _revealApprovalDecisionWithKeyboard(
+  WidgetTester tester,
+  Finder decision,
+) async {
+  final transcript = find.byKey(const ValueKey('profile-transcript'));
+  bool fullyVisible() {
+    if (decision.hitTestable().evaluate().length != 1) return false;
+    final viewport = tester.getRect(transcript);
+    final bounds = tester.getRect(decision);
+    return viewport.contains(bounds.topLeft) &&
+        viewport.contains(bounds.bottomRight - const Offset(.1, .1));
+  }
+
+  expect(tester.view.viewInsets.bottom, greaterThan(0));
+  if (!fullyVisible()) {
+    final inputNavigation = find.byKey(const ValueKey('jump-to-latest'));
+    await _pumpUntil(
+      tester,
+      () => inputNavigation.hitTestable().evaluate().isNotEmpty,
+    );
+    await tester.tap(inputNavigation);
+  }
+  await _pumpUntil(tester, fullyVisible);
+  expect(tester.view.viewInsets.bottom, greaterThan(0));
+  final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
+  final usable = Rect.fromLTWH(
+    0,
+    0,
+    screen.width,
+    screen.height -
+        tester.view.viewInsets.bottom / tester.view.devicePixelRatio,
+  );
+  final bounds = tester.getRect(decision);
+  expect(bounds.width, greaterThanOrEqualTo(48));
+  expect(bounds.height, greaterThanOrEqualTo(48));
+  expect(usable.contains(bounds.topLeft), isTrue);
+  expect(usable.contains(bounds.bottomRight - const Offset(.1, .1)), isTrue);
+  expect(tester.widget<IconButton>(decision).onPressed, isNotNull);
+}
+
+Future<void> _expectApprovalHeader(WidgetTester tester, Rect before) async {
+  await tester.pump();
+  expect(
+    tester
+        .widgetList<StudioPageLoading>(find.byType(StudioPageLoading))
+        .where((region) => region.active)
+        .map((region) => region.label),
+    contains('Sending approval decision'),
+  );
+  // StudioPageLoading publishes to its sibling slot after build. Render that
+  // elected slot once, without waiting for the held transport to settle.
+  await tester.pump();
+  final slot = find.byKey(const ValueKey('studio-loading-slot'));
+  final mark = find.descendant(of: slot, matching: find.byType(StudioLoading));
+  expect(mark, findsOneWidget);
+  expect(tester.widget<StudioLoading>(mark).label, 'Sending approval decision');
+  expect(find.bySemanticsLabel('Sending approval decision'), findsOneWidget);
+  expect(tester.getRect(slot), before);
+  final bounds = tester.getRect(mark);
+  expect(bounds.width, greaterThan(0));
+  expect(bounds.height, greaterThan(0));
+  expect(before.contains(bounds.topLeft), isTrue);
+  expect(before.contains(bounds.bottomRight), isTrue);
+  // The indicator deliberately ignores pointers; visible bounds and semantics,
+  // not an interactive hit test, establish that this header rendered it.
 }
 
 Future<void> _pumpUntil(

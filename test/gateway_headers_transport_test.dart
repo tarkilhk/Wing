@@ -1,3 +1,5 @@
+import 'support/canonical_gateway_fixture.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -261,7 +263,10 @@ void main() {
       ),
       dashboardOAuth: null,
     );
-    final workspace = ProfileGatewayConnection(access);
+    final workspace = ProfileGatewayConnection(
+      access,
+      loadClientIdentity: loadTestWingClientIdentity,
+    );
     addTearDown(workspace.close);
     final chatGateway = workspace.create(
       WorkspaceScope(
@@ -275,6 +280,8 @@ void main() {
       access,
       'fixture',
       connectionStatus: ServerConnectionStatus('Fixture'),
+
+      loadClientIdentity: loadTestWingClientIdentity,
     );
     addTearDown(administration.close);
     await administration.read('health');
@@ -454,6 +461,7 @@ void main() {
     final subscription = server.listen((request) async {
       requestSeen.complete(request);
       final socket = await WebSocketTransformer.upgrade(request);
+      announceTestGatewayReady(socket);
       await socket.done;
     });
     addTearDown(() async {
@@ -464,6 +472,8 @@ void main() {
       'http://127.0.0.1:${server.port}',
       ticket: 'ticket',
       gatewayHeaders: const {'X-Access-Secret': 'secret'},
+
+      clientIdentity: testWingClientIdentity,
     );
     addTearDown(client.close);
 
@@ -510,6 +520,8 @@ void main() {
           gatewayHeaders: customHeaders
               ? const {'X-Access-Secret': 'secret'}
               : const {},
+
+          clientIdentity: testWingClientIdentity,
         );
         addTearDown(client.close);
 
@@ -550,6 +562,8 @@ class _ProfileAdmissionHost {
     gateway = ProfileGateway.forConnection(
       ConnectionAccess(connection: connection, dashboardOAuth: null),
       WorkspaceScope(connectionId: connection.id, profileName: 'fresh-profile'),
+
+      loadClientIdentity: loadTestWingClientIdentity,
     );
     subscription = server.listen((request) async {
       if (WebSocketTransformer.isUpgradeRequest(request)) {

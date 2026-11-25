@@ -3,7 +3,8 @@
 
 Without --device, create and retire an isolated API 36 AVD. Uses injected gateway
 responses, real Android storage and production controls; never contacts Hermes.
-The required final journey force-stops Android and restores the durable outbox.
+The complete run ends by force-stopping Android and restoring the durable outbox.
+Repeat --case for focused named-case acceptance without claiming that full gate.
 """
 from __future__ import annotations
 
@@ -29,6 +30,10 @@ CRITICAL = frozenset({
     'uncertain Send survives owner recreation beside a newer draft',
 })
 ROADMAP = frozenset({
+    'current chat account usage preserves route ownership through refresh and departure',
+    'Hub skill update checks keep browsing and group updates scoped',
+    'teammate waits retain exact targets and stale delivery status',
+    'refused turns retain their text through settlement and reopening',
     'native clarification answers from the composer with its captured generation',
     'Git review opens from chat and retains draft through held reads',
     'live tool progress and plan recovery use the production conversation',
@@ -36,6 +41,7 @@ ROADMAP = frozenset({
     'draft model slash find outputs and context use the production chat',
     'a missing staged file restores as removable without sending',
     'activity approvals and queued work keep their chat owner',
+    'typed folder and website approvals retain scope and denial feedback',
     'project discovery review delivery and input jump stay native',
     'subagents goals and background work keep their chat owner',
     'completed child stays in current work while the parent streams',
@@ -46,6 +52,63 @@ SUITES = (
     ('critical', 'integration_test/critical_journeys_test.dart', CRITICAL),
     ('roadmap', 'integration_test/roadmap_emulator_test.dart', ROADMAP),
 )
+
+
+def export_journey_frames(device: str, package: str, log_path: Path,
+                          output: Path, evidence: dict, *, require_frames=False):
+    """Export declared Flutter frames before the caller retires its owned app."""
+    evidence['frames'] = []
+    try:
+        paths = sorted(set(re.findall(r'Journey frame: ([^"\\\s]+\.png)', log_path.read_text())))
+        if require_frames and not paths:
+            raise RuntimeError('Capture requested but no Journey frames were recorded')
+        for path in paths:
+            try:
+                output.mkdir(parents=True, exist_ok=True)
+                destination = output / Path(path).name
+                with destination.open('wb') as frame:
+                    subprocess.run([android.adb_path(), '-s', device, 'exec-out',
+                                    'run-as', package, 'cat', path],
+                                   stdout=frame, check=True, timeout=25)
+                evidence['frames'].append(str(destination))
+            except (OSError, subprocess.SubprocessError) as error:
+                evidence.setdefault('capture_errors', []).append(str(error))
+                evidence['passed'] = False
+    except (OSError, RuntimeError) as error:
+        evidence.setdefault('capture_errors', []).append(str(error))
+        evidence['passed'] = False
+
+
+def journey_environment():
+    return {**os.environ,
+            'ORG_GRADLE_PROJECT_notificationQa': 'true',
+            'ORG_GRADLE_PROJECT_performanceQa': 'false',
+            'ORG_GRADLE_PROJECT_nativeShareQa': 'false',
+            'ORG_GRADLE_PROJECT_wingDevelopment': 'false'}
+
+
+def prepare_roadmap(device: str, target: str, output: Path, evidence: dict):
+    """Install the owned QA package before granting roadmap prerequisites."""
+    commands = (
+        ('build', ['flutter', 'build', 'apk', '--debug', '--no-pub',
+                   '--target-platform', 'android-x64', '-t', target]),
+        ('install', [android.adb_path(), '-s', device, 'install',
+                     '--no-incremental', '-r',
+                     str(ROOT / 'build/app/outputs/flutter-apk/app-debug.apk')]),
+    )
+    for name, command in commands:
+        step = evidence[name] = {'passed': False, 'command': command}
+        with (output / f'prepare-roadmap-{name}.log').open('w') as log:
+            process = subprocess.Popen(command, cwd=ROOT, stdout=log,
+                                       stderr=subprocess.STDOUT, start_new_session=True,
+                                       env=journey_environment())
+            try:
+                step['exit_code'] = process.wait(timeout=900 if name == 'build' else 180)
+                step['passed'] = step['exit_code'] == 0
+                if not step['passed']:
+                    raise RuntimeError('Roadmap preparation ' + name + ' failed')
+            finally:
+                stop_process_group(process)
 
 
 def verdict(lines: list[str], returncode: int, expected: frozenset[str]) -> dict:
@@ -126,7 +189,14 @@ def main() -> int:
     parser.add_argument('--output', type=Path, default=ROOT / 'build/android-journeys')
     parser.add_argument('--capture-frames', action='store_true',
                         help='Export production Flutter frames from journey capture points before retiring the emulator')
+    parser.add_argument('--case', action='append',
+                        help='Exact registered critical or roadmap case; repeat for focused acceptance')
     args = parser.parse_args()
+    selected = frozenset(args.case) if args.case else CRITICAL | ROADMAP
+    if not selected <= CRITICAL | ROADMAP:
+        parser.error('--case must name an exact registered critical or roadmap case')
+    suites = [(name, target, expected & selected) for name, target, expected in SUITES
+              if expected & selected]
     os.chdir(ROOT)
     if args.device and not args.device.startswith('emulator-'):
         parser.error('Android journeys require a disposable emulator')
@@ -134,16 +204,23 @@ def main() -> int:
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
     android.OUTPUT = output
     before = fingerprint()
-    result = {'passed': False, 'source_before': before, 'suites': {}}
+    result = {'passed': False, 'scope': 'focused' if args.case else 'full',
+              'selected_cases': sorted(selected), 'source_before': before, 'suites': {}}
     try:
         with nullcontext(args.device) if args.device else android.owned_emulator() as device:
             android.require_emulator(device)
             android.device(device, 'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP')
             android.device(device, 'shell', 'wm', 'dismiss-keyguard')
             result['device'] = device
-            for name, target, expected in SUITES:
+            if suites[0][0] == 'roadmap':
+                prepare_roadmap(device, suites[0][1], output,
+                                result.setdefault('preparation', {}))
+            for name, target, expected in suites:
                 command = ['flutter', 'test', '--no-pub', '--no-uninstall', '-d', device,
                            '--reporter=json', target]
+                if args.case:
+                    command.extend(['--name', '^(?:' + '|'.join(
+                        re.escape(case) for case in sorted(expected)) + ')$'])
                 if args.capture_frames:
                     command.append('--dart-define=CAPTURE_JOURNEYS=true')
                 suite = result['suites'][name] = {'passed': False, 'command': command}
@@ -152,11 +229,7 @@ def main() -> int:
                 with setup, log_path.open('w') as log:
                     process = subprocess.Popen(command, cwd=ROOT, stdout=log,
                                                stderr=subprocess.STDOUT, start_new_session=True,
-                                               env={**os.environ,
-                                                    'ORG_GRADLE_PROJECT_notificationQa': 'true',
-                                                    'ORG_GRADLE_PROJECT_performanceQa': 'false',
-                                                    'ORG_GRADLE_PROJECT_nativeShareQa': 'false',
-                                                    'ORG_GRADLE_PROJECT_wingDevelopment': 'false'})
+                                               env=journey_environment())
                     try:
                         code = process.wait(timeout=900)
                         log.flush()
@@ -173,25 +246,16 @@ def main() -> int:
                             suite.setdefault('capture_errors', []).append(str(error))
                         finally:
                             stop_process_group(process)
-                    captures = output / (name + '-frames')
-                    suite['frames'] = []
-                    for path in sorted(set(re.findall(r'Journey frame: ([^"\\\s]+\.png)', log_path.read_text()))):
-                        captures.mkdir(exist_ok=True)
-                        destination = captures / Path(path).name
-                        try:
-                            with destination.open('wb') as frame:
-                                subprocess.run([android.adb_path(), '-s', device, 'exec-out',
-                                                'run-as', 'com.tarkilhk.wing.notificationqa', 'cat', path],
-                                               stdout=frame, check=True, timeout=25)
-                            suite['frames'].append(str(destination))
-                        except (OSError, subprocess.SubprocessError) as error:
-                            suite.setdefault('capture_errors', []).append(str(error))
-                            suite['passed'] = False
+                    export_journey_frames(device, 'com.tarkilhk.wing.notificationqa',
+                                          log_path, output / (name + '-frames'), suite)
                 if not suite['passed']:
                     break
             else:
-                result['process_recovery'] = process_recovery.run(device, output / 'process-recovery')
-                result['passed'] = result['process_recovery'].get('passed') is True
+                if args.case:
+                    result['passed'] = True
+                else:
+                    result['process_recovery'] = process_recovery.run(device, output / 'process-recovery')
+                    result['passed'] = result['process_recovery'].get('passed') is True
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         result.update(passed=False, error=str(error))
     finally:

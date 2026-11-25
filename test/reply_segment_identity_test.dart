@@ -4,6 +4,7 @@ import 'package:wing/core/models/transcript_reading.dart';
 import 'package:wing/core/models/reading_snapshot_message.dart';
 import 'package:wing/core/services/profile_gateway.dart';
 import 'package:wing/core/services/transcript_reading.dart';
+import 'package:wing/core/models/transcript_notice.dart';
 
 TranscriptReading reader() => TranscriptReading.passive(
   scope: WorkspaceScope(connectionId: 'c', profileName: 'p'),
@@ -15,6 +16,88 @@ Map<String, dynamic> delta(
   String turn = 'turn-a',
 ]) => {'turn_id': turn, 'segment': segment, 'offset': offset, 'text': text};
 void main() {
+  test(
+    'refusal targets its exact input and partial turn, preserving later text',
+    () {
+      final reading = reader();
+      reading.installSavedHistory([
+        {'id': 1, 'role': 'assistant', 'content': 'Prior answer'},
+      ]);
+      reading.appendSubmittedPrompt(inputId: 'a', text: 'Same words');
+      final original = reading.messages.last;
+      final identity = reading.messagePresentationId(original);
+      reading.observePromptAdmission('a', 'admission-a');
+      reading.observeReplyAdmission('admission-a', turn: 'turn-a');
+      reading.startReply({'turn_id': 'turn-a'});
+      reading.sealReply({
+        'turn_id': 'turn-a',
+        'segment': 0,
+        'text': 'Partial answer',
+      }, turnGeneration: 1);
+      reading.appendPrompt(text: 'Later steering', steering: true);
+      reading.appendSubmittedPrompt(inputId: 'b', text: 'Same words');
+      reading.appendReplyDelta(delta('More partial', 1, 0));
+      const completion = {
+        'turn_id': 'turn-a',
+        'status': 'error',
+        'failure_reason': 'content_policy_blocked',
+      };
+      expect(
+        reading.refuseReply(completion, admission: 'admission-other'),
+        isFalse,
+      );
+      expect(reading.refuseReply(completion, admission: 'admission-a'), isTrue);
+      expect(reading.messages.map((row) => row['content']), [
+        'Prior answer',
+        'Same words',
+        'Later steering',
+        'Same words',
+      ]);
+      final refused = reading.messages[1];
+      expect(reading.messagePresentationId(refused), same(identity));
+      expect(contentRefusedNotice(refused), liveContentRefusedNotice);
+      expect(reading.messages.last['display_kind'], isNull);
+      expect(reading.streaming, isEmpty);
+      expect(reading.appendReplyDelta(delta('late tail', 1, 12)), isFalse);
+      reading.observePromptAdmission('b', 'admission-b');
+      reading.observeReplyAdmission('admission-b', turn: 'turn-b');
+      reading.startReply({'turn_id': 'turn-b'});
+      reading.appendReplyDelta(delta('New answer', 0, 0, 'turn-b'));
+      expect(
+        reading.isSupersededReplyCompletion(completion, 'admission-a'),
+        isTrue,
+      );
+      expect(
+        reading.refuseReply(completion, admission: 'admission-a'),
+        isFalse,
+      );
+      expect(reading.streaming, 'New answer');
+    },
+  );
+
+  test('refusal without an input match waits for saved history', () {
+    final reading = reader();
+    reading.installSavedHistory([
+      {'id': 1, 'role': 'user', 'content': 'Do not guess this prompt'},
+    ]);
+    reading.observeReplyAdmission('unknown-admission', turn: 'turn-a');
+    reading.startReply({'turn_id': 'turn-a'});
+    reading.sealReply({
+      'turn_id': 'turn-a',
+      'segment': 0,
+      'text': 'Known refused partial',
+    }, turnGeneration: 1);
+    reading.appendReplyDelta(delta('Known refused tail', 1, 0));
+    expect(
+      reading.refuseReply({
+        'failure_reason': 'content_policy_blocked',
+      }, admission: 'unknown-admission'),
+      isFalse,
+    );
+    expect(reading.messages.single['display_kind'], isNull);
+    expect(reading.messages.single['content'], 'Do not guess this prompt');
+    expect(reading.streaming, isEmpty);
+  });
   test('active reply journal keeps notices between equal-text segments', () {
     final reading = reader();
     const prompt = {'id': 1, 'role': 'user', 'content': 'Prompt'};

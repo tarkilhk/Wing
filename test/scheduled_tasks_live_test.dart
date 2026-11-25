@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/scheduled_task_edit.dart';
@@ -38,6 +39,8 @@ void main() {
         ),
         'local-disposable-only',
         connectionStatus: status,
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       addTearDown(server.close);
       final repo = ScheduledTasksRepository(server.profile('mobile-test'));

@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -321,6 +322,7 @@ void main() {
             gatewayFactory: (scope) {
               final base = browser.gateway(scope);
               return ProfileGateway(
+                loadClientIdentity: loadTestWingClientIdentity,
                 scope: scope,
                 discover: base.discover,
                 get: (path, query) async => path == 'model/options'

@@ -59,6 +59,7 @@ final class NotificationApprovalReviewIntent {
       choice,
       requestId: _requestId,
       command: request.command.trim(),
+      correlation: _correlation,
     );
   }
 
@@ -392,7 +393,8 @@ final class _NotificationApplication {
       }
       final mustReview =
           value.choice != 'deny' &&
-          (value.review ||
+          (issued.request.isSandbox ||
+              value.review ||
               !notices.appPreferences.current.notificationPreviewsAllowed ||
               value.choice == 'always' ||
               value.command != issued.request.command.trim());
@@ -417,6 +419,7 @@ final class _NotificationApplication {
           value.choice,
           requestId: focus.id,
           command: value.command!,
+          correlation: issued.correlation,
         );
       }
     } catch (_) {

@@ -39,6 +39,11 @@ shown in the conversation composer and model chooser through
 [model selection](model-selection.md); those observations do not alter usage
 history or imply an invoice amount.
 
+For the account report belonging to an open chat, use **Chat actions → Account
+usage**, documented under [model selection](model-selection.md). That report
+comes from the chat's current route and keeps a separate Nous account distinct;
+it does not change analytics totals or their selected profile/time window.
+
 A failed chart or activity-calendar read shows recovery at that section. Other
 sections and retained chart data stay usable; retained data keeps its freshness
 qualification. `test/administration_usage_test.dart` checks initial failures,

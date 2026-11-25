@@ -24,14 +24,7 @@ class BotGroupIdentity extends StatelessWidget {
       size: size,
       avatars: [
         for (final member in group.members)
-          bots
-              .where(
-                (bot) =>
-                    bot.scope.connectionIdentity ==
-                        group.scope.connectionIdentity &&
-                    bot.profile.name == member.profile,
-              )
-              .firstOrNull,
+          matchBotGroupMember(group, member, bots),
       ],
     ),
   );

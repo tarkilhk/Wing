@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -110,7 +111,12 @@ void main() {
           request.response.write(jsonEncode(response));
           await request.response.close();
         });
-        final probe = ConnectionSetupProbe();
+        final probe = ConnectionSetupProbe(
+          createProbe: (access) => DashboardConnectionProbe(
+            access,
+            loadClientIdentity: loadTestWingClientIdentity,
+          ),
+        );
         try {
           final checking = probe.check(
             ConnectionAccess(

@@ -20,6 +20,10 @@ import 'package:wing/core/services/scheduled_tasks_repository.dart';
 import 'package:wing/core/theme/profile_workspace_theme.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/studio_selection_tile.dart';
+import 'package:wing/core/widgets/studio_select.dart';
+import 'package:wing/core/widgets/studio_form_actions.dart';
+import 'package:wing/core/models/scheduled_task.dart';
+import 'package:wing/core/services/administration_repository.dart';
 import 'support/scheduled_tasks_fixture.dart';
 
 void main() {
@@ -62,10 +66,11 @@ void main() {
     Brightness brightness = Brightness.light,
     WorkspaceAccent accent = WorkspaceAccent.teal,
     double width = 390,
+    double height = 900,
     double scale = 1,
     double keyboard = 0,
   }) async {
-    tester.view.physicalSize = Size(width, 900);
+    tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -161,6 +166,217 @@ void main() {
       await file.writeAsBytes(bytes!.buffer.asUint8List());
       image.dispose();
     });
+  }
+
+  Future<void> revealWrapping(WidgetTester tester) async {
+    await tester.scrollUntilVisible(
+      find.byType(StudioSelect<TaskOutputWrapping>),
+      220,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openWrapping(WidgetTester tester) async {
+    await revealWrapping(tester);
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(StudioSelect<TaskOutputWrapping>),
+            matching: find.byIcon(Icons.arrow_drop_down),
+          )
+          .hitTestable(),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('paused task remains reachable at native narrow geometry', (
+    tester,
+  ) async {
+    fixture = ScheduledTasksFixture(serverId: 'Task fixture dark true');
+    fixture.jobs['new-3'] = taskJson(id: 'new-3', name: 'Android acceptance')
+      ..['wrap_response'] = true;
+    await show(
+      tester,
+      list(),
+      brightness: Brightness.dark,
+      width: 320,
+      height: 731.4,
+      scale: 2,
+    );
+    void expectHeaderFits(String label) {
+      final appBar = tester.getRect(find.byType(AppBar));
+      final header = tester.getRect(
+        find.descendant(of: find.byType(AppBar), matching: find.text(label)),
+      );
+      expect(header.top, greaterThanOrEqualTo(appBar.top));
+      expect(header.bottom, lessThanOrEqualTo(appBar.bottom));
+      expect(header.width, lessThanOrEqualTo(appBar.width));
+    }
+
+    expectHeaderFits('Scheduled tasks');
+    await tester.tap(find.text('New task'));
+    await tester.pumpAndSettle();
+    expectHeaderFits('New task');
+    await screenshot(tester, 'wrapping-native-geometry-new-task');
+    await tester.tap(find.byTooltip('Cancel'));
+    await tester.pumpAndSettle();
+    final title = find.text('Android acceptance');
+    await tester.ensureVisible(title);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Actions for Android acceptance'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pause schedule'));
+    await tester.pumpAndSettle();
+    expect(fixture.jobs['new-3']!['enabled'], isFalse);
+    await Scrollable.ensureVisible(tester.element(title), alignment: .5);
+    await tester.pumpAndSettle();
+    expect(title.hitTestable(), findsOneWidget);
+    await tester.tap(title.hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Resume and run').hitTestable(), findsOneWidget);
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'output wrapping review and save recovery ${brightness.name} $scale',
+        (tester) async {
+          final c = await openTaskEditor(
+            tester,
+            brightness: brightness,
+            width: scale == 2 ? 320 : 390,
+            scale: scale,
+          );
+          await openWrapping(tester);
+          await screenshot(tester, 'wrapping-menu-${brightness.name}-$scale');
+          await tester.tap(find.text('Off').hitTestable());
+          await tester.pumpAndSettle();
+          expect(
+            tester
+                .widget<StudioSelect<TaskOutputWrapping>>(
+                  find.byType(StudioSelect<TaskOutputWrapping>),
+                )
+                .value,
+            TaskOutputWrapping.off,
+          );
+          await screenshot(
+            tester,
+            'wrapping-selected-${brightness.name}-$scale',
+          );
+          fixture.jobs['morning']!['wrap_response'] = true;
+          await tester.tap(find.byTooltip('Save changes'));
+          await tester.pumpAndSettle();
+          expect(fixture.mutations, 0);
+          await tester.tap(find.text('Review changes').hitTestable());
+          await tester.pumpAndSettle();
+          final mine = find.byKey(
+            const ValueKey('task-conflict-outputWrapping-mine'),
+          );
+          await tester.ensureVisible(mine);
+          await tester.pumpAndSettle();
+          await tester.tap(mine);
+          await tester.pumpAndSettle();
+          expect(find.text('Off'), findsWidgets);
+          expect(find.text('On'), findsWidgets);
+          await screenshot(
+            tester,
+            'wrapping-conflict-${brightness.name}-$scale',
+          );
+          await tester.tap(find.byTooltip('Apply decisions'));
+          await tester.pumpAndSettle();
+          await revealWrapping(tester);
+          fixture.gate = Completer<void>();
+          fixture.mutationError = const AdministrationFailure(
+            'Task save was refused. Try again.',
+          );
+          await tester.tap(find.byTooltip('Save changes'));
+          await tester.pump();
+          await tester.pump(const Duration(milliseconds: 100));
+          final footer = find.byType(StudioFormActions);
+          final progress = find.descendant(
+            of: footer,
+            matching: find.byType(CircularProgressIndicator),
+          );
+          expect(progress.hitTestable(), findsOneWidget);
+          expect(tester.widget<StudioFormActions>(footer).busy, isTrue);
+          expect(
+            tester
+                .widget<StudioSelect<TaskOutputWrapping>>(
+                  find.byType(StudioSelect<TaskOutputWrapping>),
+                )
+                .onChanged,
+            isNull,
+          );
+          expect(
+            tester.getSize(find.byTooltip('Save changes')),
+            const Size(48, 48),
+          );
+          expect(tester.getSize(find.byTooltip('Cancel')), const Size(48, 48));
+          await screenshot(tester, 'wrapping-held-${brightness.name}-$scale');
+          fixture.gate!.complete();
+          await tester.pumpAndSettle();
+          expect(
+            find.text('Task save was refused. Try again.').hitTestable(),
+            findsOneWidget,
+          );
+          expect(progress, findsNothing);
+          await screenshot(tester, 'wrapping-failed-${brightness.name}-$scale');
+          fixture.gate = null;
+          fixture.mutationError = null;
+          await revealWrapping(tester);
+          expect(
+            tester
+                .widget<StudioSelect<TaskOutputWrapping>>(
+                  find.byType(StudioSelect<TaskOutputWrapping>),
+                )
+                .value,
+            TaskOutputWrapping.off,
+          );
+          await tester.tap(find.byTooltip('Save changes'));
+          await tester.pumpAndSettle();
+          expect(find.text('Open task editor'), findsOneWidget);
+          expect(fixture.jobs['morning']!['wrap_response'], isFalse);
+          await tester.tap(find.text('Open task editor'));
+          await tester.pumpAndSettle();
+          await openWrapping(tester);
+          await tester.tap(
+            find.widgetWithText(MenuItemButton, 'Hermes default').hitTestable(),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byTooltip('Save changes'));
+          await tester.pumpAndSettle();
+          expect(fixture.jobs['morning']!['wrap_response'], isNull);
+          expect(
+            fixture.admin.requests
+                .where((r) => r.$1 == 'PUT')
+                .last
+                .$4!['updates'],
+            {'wrap_response': null},
+          );
+          await show(
+            tester,
+            AdminScheduledTaskDetailPage(
+              controller: c,
+              initial: c.task('morning')!,
+              onOpenSession: (_) async {},
+            ),
+            brightness: brightness,
+            width: scale == 2 ? 320 : 390,
+            scale: scale,
+          );
+          await tester.scrollUntilVisible(
+            find.text('Output wrapping'),
+            180,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Output wrapping').hitTestable(), findsOneWidget);
+          await screenshot(tester, 'wrapping-detail-${brightness.name}-$scale');
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
   }
 
   for (final failed in [false, true]) {
@@ -442,6 +658,8 @@ void main() {
       ) async {
         fixture.rooms.add({
           'room_id': 'release',
+          'authority_gateway_id': 'install:tasks-test',
+          'authority_epoch': 1,
           'name': 'Release team',
           'members': [],
         });
@@ -465,7 +683,7 @@ void main() {
         await tester.enterText(zone, 'Asia/Singapore');
         tester.testTextInput.hide();
         await tester.scrollUntilVisible(
-          find.text('Hermes default'),
+          find.text('Missed runs'),
           150,
           scrollable: find.byType(Scrollable).first,
         );
@@ -500,15 +718,11 @@ void main() {
           220,
           scrollable: find.byType(Scrollable).first,
         );
-        for (
-          var attempt = 0;
-          attempt < 12 &&
-              find.text('Release team').hitTestable().evaluate().isEmpty;
-          attempt++
-        ) {
-          await tester.drag(find.byType(ListView).first, const Offset(0, -180));
-          await tester.pumpAndSettle();
-        }
+        await Scrollable.ensureVisible(
+          tester.element(find.text('Release team')),
+          alignment: .5,
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Release team').hitTestable());
         await tester.pumpAndSettle();
         await screenshot(tester, 'room-delivery-${brightness.name}-$scale');

@@ -1,3 +1,5 @@
+import 'package:wing/core/services/profile_gateway.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -27,9 +29,8 @@ void main() {
         final appPreferences = AppPreferences(preferences);
         addTearDown(appPreferences.dispose);
         Future<ProfileWorkspaceController> connect(String id) async {
-          final client = ProfileWorkspaceController(
-            connectionIdentity: id,
-            access: ConnectionAccess(
+          final identityGatewayOwner = ProfileGatewayConnection(
+            ConnectionAccess(
               connection: SavedConnection(
                 id: id,
                 label: 'Answer sync QA',
@@ -40,6 +41,13 @@ void main() {
               ),
               dashboardOAuth: null,
             ),
+            loadClientIdentity: loadCandidateWingClientIdentity,
+          );
+          addTearDown(identityGatewayOwner.close);
+          final client = ProfileWorkspaceController(
+            connectionIdentity: id,
+            access: identityGatewayOwner.access,
+            gatewayFactory: identityGatewayOwner.create,
             preferences: preferences,
             appPreferences: appPreferences,
           );

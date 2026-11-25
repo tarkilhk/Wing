@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/services/app_preferences.dart';
 import 'package:wing/core/services/connection_access.dart';
@@ -25,6 +26,7 @@ class SensitivePromptHost extends Host {
     final base = super.gateway(scope);
     late final ProfileGateway wrapped;
     wrapped = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: discover,
       connect: () async {

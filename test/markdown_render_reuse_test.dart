@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart'
         ContainerLayer,
         PictureLayer;
 import 'package:wing/core/widgets/source_code_block.dart';
+import 'package:wing/core/models/chat_output.dart';
 import 'helpers/pump_markdown_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -103,16 +104,28 @@ void main() {
       tester,
     ) async {
       final calls = <String>[];
+      final opens = <String, Future<void> Function(ChatOutput)>{};
+      final downloads = <String, Future<bool> Function(ChatOutput)>{};
       MarkdownMessageContent content(String owner, {bool enabled = true}) =>
           MarkdownMessageContent(
             data: '[Report](/srv/report.md)',
             deliverables: deliverables,
-            onOpenRemoteFile: enabled ? (_) async => calls.add(owner) : null,
+            onOpenRemoteFile: enabled
+                ? opens.putIfAbsent(
+                    owner,
+                    () => (_) async {
+                      calls.add(owner);
+                    },
+                  )
+                : null,
             onDownloadRemoteFile: enabled
-                ? (_) async {
-                    calls.add('$owner download');
-                    return false;
-                  }
+                ? downloads.putIfAbsent(
+                    owner,
+                    () => (_) async {
+                      calls.add('$owner download');
+                      return false;
+                    },
+                  )
                 : null,
           );
       final value = ValueNotifier(content('old'));
@@ -130,12 +143,26 @@ void main() {
       final original = tester.widget<MarkdownBody>(
         find.bySubtype<MarkdownBody>(),
       );
-      value.value = content('new');
+      value.value = content('old');
       await tester.pump();
       await tester.settleMarkdown();
       expect(
         tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>()),
         same(original),
+      );
+      final oldOpen = deliverables
+          ? tester
+                .widget<DeliverableAttachment>(
+                  find.byType(DeliverableAttachment),
+                )
+                .onOpen
+          : null;
+      value.value = content('new');
+      await tester.pump();
+      await tester.settleMarkdown();
+      expect(
+        tester.widget<MarkdownBody>(find.bySubtype<MarkdownBody>()),
+        isNot(same(original)),
       );
       if (deliverables) {
         await tester.tap(find.byTooltip('Open preview'));
@@ -143,6 +170,15 @@ void main() {
         await tester.tap(find.byTooltip('Download'));
         await tester.pumpAndSettle();
         expect(calls, ['new', 'new download']);
+        await oldOpen!(
+          const ChatOutput(
+            kind: ChatOutputKind.file,
+            path: '/srv/report.md',
+            url: null,
+            label: 'Report',
+          ),
+        );
+        expect(calls, ['new', 'new download', 'old']);
       } else {
         await tester.tap(find.text('Report', findRichText: true));
         await tester.pump();

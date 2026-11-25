@@ -7045,6 +7045,51 @@
         "append",
         "export"
       ]
+    },
+    {
+      "id": "host-test-test/profile_skill_updates_test.dart",
+      "kind": "host-test",
+      "path": "test/profile_skill_updates_test.dart",
+      "selector": "main",
+      "purpose": "Captured Hub availability, dispatch retirement and responsive control feedback",
+      "source": "docs/features/administration-skills-tools.md",
+      "status": "supported"
+    },
+    {
+      "id": "host-test-test/hub_updates_deadline_test.dart",
+      "kind": "host-test",
+      "path": "test/hub_updates_deadline_test.dart",
+      "selector": "main",
+      "purpose": "Production Hub availability timeout and authentication retry boundary",
+      "source": "docs/features/administration-skills-tools.md",
+      "status": "supported"
+    },
+    {
+      "id": "host-test-test/wing_client_identity_test.dart",
+      "kind": "host-test",
+      "path": "test/wing_client_identity_test.dart",
+      "selector": "main",
+      "purpose": "Immutable installed client attribution, captured creation and Bot adapter dispatch",
+      "source": "docs/features/connections.md",
+      "status": "supported"
+    },
+    {
+      "id": "device-or-live-test-integration_test/upstream_additions_prod_test.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/upstream_additions_prod_test.dart",
+      "purpose": "Authorized production Android acceptance with exact owned QA resource cleanup",
+      "source": "docs/features/multi-surface-journeys.md; integration_test/upstream_additions_prod_test.dart",
+      "status": "supported",
+      "selector": "main"
+    },
+    {
+      "id": "device-or-live-test-integration_test/task_wrapping_prod_test.dart",
+      "kind": "device-or-live-test",
+      "path": "integration_test/task_wrapping_prod_test.dart",
+      "purpose": "Authorized production Android acceptance with exact owned QA resource cleanup",
+      "source": "docs/features/multi-surface-journeys.md; integration_test/task_wrapping_prod_test.dart",
+      "status": "supported",
+      "selector": "main"
     }
   ],
   "files": [
@@ -16522,6 +16567,126 @@
       "path": "test/diagnostic_export_test.dart",
       "area": "test",
       "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/bot_delivery.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/wing_client_identity.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bot_deliveries_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/installed_wing_client_identity.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/widgets/bot_deliveries_panel.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_deliveries_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_deliveries_view_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/hub_updates_deadline_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/profile_skill_updates_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/support/wing_client_identity_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/wing_client_identity_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/chat_account_usage.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/screens/chat_account_usage_screen.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/chat_account_usage_session.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/chat_account_usage_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/support/chat_account_usage_fixture.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/chat_account_usage_screen_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/models/bot_group_peer.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "lib/core/services/bot_group_peer_access.dart",
+      "area": "lib",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_peer_access_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_peer_view_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "test/bot_group_peer_test.dart",
+      "area": "test",
+      "provenance": "intentional-untracked"
+    },
+    {
+      "path": "integration_test/upstream_additions_prod_test.dart",
+      "area": "integration_test",
+      "provenance": "task-authored"
+    },
+    {
+      "path": "integration_test/task_wrapping_prod_test.dart",
+      "area": "integration_test",
+      "provenance": "task-authored"
     }
   ],
   "direct_dependencies": {
@@ -17508,6 +17673,7 @@
         "integration_test/file_transfer_native_test.dart",
         "integration_test/roadmap_emulator_test.dart",
         "lib/core/services/config_backup_io.dart",
+        "lib/core/services/installed_wing_client_identity.dart",
         "lib/core/widgets/installed_app_version_card.dart",
         "test/administration_navigation_test.dart",
         "test/app_notification_settings_test.dart",

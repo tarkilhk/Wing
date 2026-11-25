@@ -17,7 +17,8 @@ Match the toolchain in [CI](../../../.github/workflows/pr-quality.yml): Flutter 
 with bundled Dart 3.13.7, Java 17, Android SDK platform/build-tools 36 and the tracked
 Gradle wrapper. Install command-line tools, accept SDK licenses, run `flutter doctor`
 and resolve packages with `flutter pub get` while retaining `pubspec.lock`.
-Native recipes also need the API36 Google APIs x86_64 image and working KVM acceleration.
+Native recipes also need the API36 Google APIs x86_64 image, the emulator pinned
+in [CI setup](../../../.github/actions/setup-emulator/action.yml), and working KVM acceleration.
 
 ```sh
 python3 scripts/test_nightly_native.py --matrix
@@ -46,8 +47,12 @@ adb devices -l
 python3 scripts/test_nightly_native.py --matrix
 ```
 
-Confirm the intended checkout/toolchain and inspect attached devices without
-touching them. These checks establish prerequisites, not a usable app. The runner
+Confirm the intended checkout/toolchain, `JAVA_HOME` and `ANDROID_HOME`, and inspect
+attached devices without touching them. Resolve the installed emulator version
+against CI setup. If the execution sandbox hides KVM or prevents ADB from binding
+localhost, use the authorized host execution path for the owned runner; changing
+app behavior or falling back to a physical phone does not resolve that prerequisite.
+These checks establish prerequisites, not a usable app. The runner
 then checks its owned serial is an emulator, waits for Android boot, builds the
 selected entry point and requires the target's actual controls and named outcomes.
 Its receipt binds the source before/after and records build/install/test steps.
@@ -65,11 +70,27 @@ wait for observable states. Each command's supplied gateway/native responses
 limit what it proves. Host suites are useful focused checks; they do not replace
 a listed Android entry or a real-provider proof.
 
+Nested sheets can keep their parents mounted with the same tooltips. Scope
+controls to the sheet whose modal route is current, then use the shared journey
+control helper; overlay order alone does not identify the active owner.
+
 For connected Android journeys:
 
 ```sh
 python3 scripts/test_journeys.py --output build/feature-verification/journeys
 ```
+
+For a feature stage or focused recovery, select exact registered journey names
+with repeated `--case` arguments. Add `--capture-frames` when inspecting renders:
+
+```sh
+python3 scripts/test_journeys.py --case 'activity approvals and queued work keep their chat owner' --capture-frames --output build/feature-verification/approval
+```
+
+The runner prepares the owned QA package and Android prerequisites, checks only
+the selected named outcomes, exports frames and retires its emulator. Its
+`scope: focused` receipt does not establish the full journey gate or process-death
+recovery. The command without `--case` retains the complete journey requirement.
 
 For stock-backend operations use the explicit command and prerequisites in
 [connected journeys](../../../docs/features/multi-surface-journeys.md).
@@ -90,6 +111,43 @@ is the contract. For visual changes capture the actual rendered before/after
 states; a host semantics flag alone is insufficient. Label fixture Android,
 stock API, live provider and physical-phone evidence separately. Report an
 unreachable entry with its attempted route and missing prerequisite.
+
+For drawer, dialog and sheet captures, include the Navigator overlay in the
+capture boundary. A boundary around only the underlying page can export that
+page while tests still find the open overlay's controls. Inspect the exported
+image and confirm the intended surface and state are visible before accepting
+it as render evidence.
+
+For a held read, wait within a bound for the route to finish entering and the
+actual header cue to paint before capture. Wing's shared loading presentation
+publishes after a frame; one pump or body semantics alone may precede its visible
+header. Keep the request held throughout that check.
+
+The `scheduled-tasks` native family exports its declared Flutter frames from the
+owned Dev package before emulator teardown; find them in the step's `frames`
+receipt field. That capture-enabled step fails if no frame is recorded or export
+fails. Flutter frames omit the native keyboard: use the suite's bounded IME and
+action-bounds assertions for keyboard reachability, and inspect the exported
+form to assess its layout.
+
+In long forms with multiline text fields, discover offscreen controls by dragging
+the page's outer viewport using the shared gutter-drag helper. The last vertical
+Scrollable may belong to the focused text field. After native keyboard resize,
+reveal the control again and wait for its actual popup before choosing an item.
+Assert the entered value before a real backend create; a successful enterText
+call alone does not establish that the intended field retained it.
+
+When a native variant constrains the app to a narrower width, set its
+`MediaQuery.size` to those layout constraints while retaining the real View's
+keyboard and safe-area insets. Otherwise responsive headers can measure against
+the device width while painting into the narrower surface.
+
+For Android keyboard-open evidence, tap the real input and wait within a bound
+for `viewInsets.bottom > 0`; focus or `enterText` alone does not establish a native
+IME. After resize, use production navigation or scrolling to reveal the form and
+assert its complete action bounds sit above the IME before capture. Recheck the
+inset at capture. If disabling a pending input dismisses the keyboard, treat that
+capture as pending-feedback evidence and take a separate keyboard-open capture.
 
 ## Cleanup
 

@@ -8,6 +8,7 @@ Feature ID: `administration-skills-tools`.
 
 - `administration-skills-tools.lock` — Lock or unlock a skill against agent edits
   from its existing detail actions, with captured-profile acknowledgement and readback.
+- `administration-skills-tools.hub-updates` — Check reported updates for installed Hub skills and run the existing group update in the captured profile.
 - `administration-skills-tools.library` — Browse and read skill instructions.
 - `administration-skills-tools.readiness` — Inspect setup requirements and capability state.
 - `administration-skills-tools.configure` — Save supported tool settings with confirmed readback.
@@ -27,6 +28,23 @@ keep enabled and configured separate; neither asserts that a tool successfully
 executed. Manage capabilities opens the skill library, discovery, agent plugins,
 Connected apps or MCP connectors. Returning refreshes the selected inventory.
 The tool row's icon-only setup action opens its owning editor.
+
+Use Manage capabilities → Discover skills to open Skill Hub. Its installed-Hub
+section shows reported update names beside icon-only Check Hub skill updates and
+Update installed Hub skills actions. Checks leave catalog browsing and search
+usable. Automatic availability checks stay quiet; an explicit check or retry
+shows the header Wing until success or failure. Failed checks have their own
+retry and do not replace the catalog. “No Hub skill updates reported” does not
+claim every install is current: Hermes omits unavailable or invalid installs.
+Long reported-name lists scroll within a bounded frame with a visible scrollbar.
+Error and empty messages take their natural height in the page scroll.
+
+Update installed Hub skills confirms the existing profile-wide operation. Cancel
+preserves the check and its result. Dispatch retires older availability, opens
+the operation result, and shows progress through inventory/catalog readback and
+an independent availability recheck. A dispatch receipt alone is not proof that
+all updates completed. Availability checking may take up to two minutes per
+request because Hermes contacts recorded sources.
 
 For installing or updating the Wing companion across every profile, use the
 [Wing plugin section in App settings](app-preferences-backup.md).
@@ -51,6 +69,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
+  flutter test --no-pub test/profile_skill_updates_test.dart test/hub_updates_deadline_test.dart
   flutter test --no-pub test/profile_skills_session_test.dart test/administration_tool_setup_test.dart test/skill_reader_session_test.dart
   flutter test --no-pub test/profile_capabilities_screen_test.dart test/studio_selection_test.dart
   flutter test --no-pub test/profile_plugins_session_test.dart test/plugins_view_dependency_guard_test.dart
@@ -60,6 +79,15 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 
   ```sh
   python3 scripts/test_nightly_native.py slash --output build/feature-verification/administration-skills-tools
+  ```
+
+- **Android Hub updates:** drive the real administration route, held check,
+  error/retry and confirmation cancellation in both themes at standard and
+  extra-large text. Then open the native search keyboard and exercise group
+  update, result/readback and empty recheck at dark extra-large text. Fixture results do not update a deployed server.
+
+  ```sh
+  python3 scripts/test_journeys.py --case 'Hub skill update checks keep browsing and group updates scoped' --capture-frames --output build/feature-verification/hub-skill-updates
   ```
 
 ## Gotchas

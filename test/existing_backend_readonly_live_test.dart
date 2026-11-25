@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -98,6 +99,8 @@ void main() {
         final gateway = ProfileGateway.forConnection(
           ConnectionAccess(connection: connection, dashboardOAuth: null),
           WorkspaceScope(connectionId: connection.id, profileName: profile!),
+
+          loadClientIdentity: loadCandidateWingClientIdentity,
         );
         addTearDown(gateway.close);
         return gateway;
@@ -167,8 +170,14 @@ void main() {
       final preferences = await SharedPreferences.getInstance();
       final appPreferences = AppPreferences(preferences);
       addTearDown(appPreferences.dispose);
+      final identityGatewayOwner = ProfileGatewayConnection(
+        ConnectionAccess(connection: connection, dashboardOAuth: null),
+        loadClientIdentity: loadCandidateWingClientIdentity,
+      );
+      addTearDown(identityGatewayOwner.close);
       final controller = ProfileWorkspaceController(
-        access: ConnectionAccess(connection: connection, dashboardOAuth: null),
+        access: identityGatewayOwner.access,
+        gatewayFactory: identityGatewayOwner.create,
         connectionIdentity: 'existing-readonly',
         preferences: preferences,
         appPreferences: appPreferences,
@@ -216,6 +225,8 @@ void main() {
       final gateway = ProfileGateway.forConnection(
         ConnectionAccess(connection: connection, dashboardOAuth: null),
         WorkspaceScope(connectionId: connection.id, profileName: 'default'),
+
+        loadClientIdentity: loadCandidateWingClientIdentity,
       );
       addTearDown(gateway.close);
       final model = await gateway.read('model/info');
@@ -236,7 +247,11 @@ void main() {
     () async {
       final credentials = await dashboard.gatewayCredentials();
       expect(credentials.token == null && credentials.ticket != null, isTrue);
-      final socket = WsClient(dashboard.baseUrl, ticket: credentials.ticket);
+      final socket = WsClient(
+        dashboard.baseUrl,
+        ticket: credentials.ticket,
+        clientIdentity: await loadCandidateWingClientIdentity(),
+      );
       addTearDown(socket.close);
       await socket.connect();
       final ready = await socket.waitForGatewayReady();

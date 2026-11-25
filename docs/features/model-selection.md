@@ -12,10 +12,27 @@ Feature ID: `model-selection`.
   and show the supplied managed-policy field and explanation. If the model was
   accepted but the separate Fast change was refused, identify that partial result.
 - `model-selection.allowances` — Inspect supplied plan allowances and reset times, Large/Free labels and recommendations in server order. The composer shows the current task's supplied allowance; a model card shows allowances that apply to that exact route.
+- `model-selection.prompt-cache` — Open the context ring for server-reported cache timing, confidence, tier coverage and exceptional warming behavior, separately from context occupancy.
+- `model-selection.account-usage` — Open Account usage from Chat actions to read and refresh the provider report for this chat. A signed-in Nous account remains separately identified when another provider serves the chat.
 
 ## How to get to it (user POV)
 
 Tap the short model name in the composer, or open model settings for the selected profile. Choose provider/model and reasoning or fast settings, then apply or cancel the pending choice.
+
+For a current chat's account report, open **Chat actions → Account usage**.
+
+The page opens immediately with a header Wing while the read is pending. Refresh
+retains the report; a failed read offers one contained Retry and qualifies any
+retained report. Retry keeps the failure visible until a successful read.
+Back remains available while a read is held. Changing the captured chat,
+effective route, runtime or session authority retires the report; go back and
+reopen it to read the replacement. A deferred Next turn model alone does not
+change the currently effective route.
+
+The model chooser's **About** icon still shows supplied usage for pooled accounts
+and other providers you are considering. That profile-wide information is
+separate from the credential serving the current chat. Model-specific plan
+allowances remain beside the choices they apply to.
 
 A failed model catalog with no choices offers one contained icon-only Retry. Its pending read uses the existing loading cue. Read-error copy does not repeat the action name; write conflicts and uncertain saves retain their specific recovery instructions.
 
@@ -29,13 +46,62 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   flutter test --no-pub test/model_chooser_test.dart test/profile_model_edit_session_test.dart test/chat_model_confirmation_test.dart test/profile_intelligence_test.dart
   ```
 
+- **Current-chat account report:** focused host checks cover exact profile/runtime
+  scope, late results and errors, effective versus deferred choices, authority
+  gaps, empty reports and contained retry through the production menu.
+
+  ```sh
+  flutter test --no-pub test/chat_account_usage_test.dart test/chat_account_usage_screen_test.dart
+  python3 scripts/test_journeys.py --case 'current chat account usage preserves route ownership through refresh and departure' --capture-frames --output build/feature-verification/account-usage
+  ```
+
+  The named Android journey opens the real Chat actions menu, holds the initial
+  read, refresh and retry, checks retained success/failure reports and leaves
+  during a held read in both themes and standard/enlarged text. These are
+  isolated provider-report fixtures, not live account or inference evidence.
+
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
 
   ```sh
   python3 scripts/test_nightly_native.py journeys --output build/feature-verification/model-selection
   ```
 
+- **Prompt-cache details:** the host cases cover independent cache/occupancy parsing,
+  live-read ordering, route/compression/runtime retirement and retained failures.
+
+  ```sh
+  flutter test --no-pub test/context_ring_test.dart test/profile_context_usage_test.dart
+  python3 scripts/test_journeys.py --case 'draft model slash find outputs and context use the production chat' --capture-frames --output build/feature-verification/prompt-cache
+  ```
+
+  The named Android case opens the production ring with the native keyboard,
+  reads supplied cache facts in both themes and text sizes, holds opening and
+  Retry, retains the draft and leaves during a read. Fixture reports do not
+  establish real provider cache retention.
+
+For real-backend Android verification, use the focused `additions` suite in the
+[existing production gateway recipe](multi-surface-journeys.md#selected-hermes-features-on-an-existing-production-gateway).
+It requires isolated QA mutations and the stated provider prerequisites.
+
 ## Gotchas
+
+Prompt-cache dates are the server's reported bounds in UTC, not a live warmth
+prediction. Passing the guaranteed deadline alone does not establish expiry;
+a missing upper bound leaves expiry unknown. Confidence remains Proven,
+Declared, Assumed or Unknown. Cache refreshed is the server event time, not the
+latest Wing fetch. Missing cache data or warming flags do not mean cold or
+warming enabled. Cache reports remain available when context occupancy is
+unknown; successful empty reports clear earlier facts, while failed reads retain
+them with Retry. Applied model/provider changes and compression retire earlier
+reports; deferred Next turn selection alone does not. Wing adds no warming,
+compression or spending policy.
+
+Account usage preserves Hermes's provider report as text. It does not infer
+gauges, remaining limits or sign-in status from formatted or missing lines.
+The optional structured Nous dollar view is not rendered a second time.
+An empty report means no limits were reported; it does not mean unlimited usage
+or a signed-out account. This report is separate from model-choice allowances
+and historical token/cost analytics. Wing adds no top-up or spending action.
 
 Free models do not inherit paid-model limits. Subscription-billed models also
 remain exempt from window allowances, but do not carry a Free label.

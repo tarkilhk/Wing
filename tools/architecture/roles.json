@@ -56,6 +56,11 @@
       "feature": "versions-updates",
       "library": "lib/core/models/backend_update.dart"
     },
+    "lib/core/models/bot_delivery.dart": {
+      "role": "domain",
+      "feature": "bots",
+      "library": "lib/core/models/bot_delivery.dart"
+    },
     "lib/core/models/bot_display.dart": {
       "role": "domain",
       "feature": "bots",
@@ -65,6 +70,11 @@
       "role": "domain",
       "feature": "conversation",
       "library": "lib/core/models/bot_exchange.dart"
+    },
+    "lib/core/models/bot_group_peer.dart": {
+      "role": "domain",
+      "feature": "bots",
+      "library": "lib/core/models/bot_group_peer.dart"
     },
     "lib/core/models/bots.dart": {
       "role": "domain",
@@ -85,6 +95,11 @@
       "role": "domain",
       "feature": "conversation",
       "library": "lib/core/models/canonical_session.dart"
+    },
+    "lib/core/models/chat_account_usage.dart": {
+      "role": "domain",
+      "feature": "model-selection",
+      "library": "lib/core/models/chat_account_usage.dart"
     },
     "lib/core/models/chat_browser_preferences.dart": {
       "role": "domain",
@@ -591,6 +606,11 @@
       "feature": "voice",
       "library": "lib/core/models/voice_processing_settings.dart"
     },
+    "lib/core/models/wing_client_identity.dart": {
+      "role": "domain",
+      "feature": "connections",
+      "library": "lib/core/models/wing_client_identity.dart"
+    },
     "lib/core/models/wing_plugin.dart": {
       "role": "domain",
       "feature": "app-preferences-backup",
@@ -946,6 +966,11 @@
       "feature": "bots",
       "library": "lib/core/screens/bots/bots_create_screen.dart"
     },
+    "lib/core/screens/chat_account_usage_screen.dart": {
+      "role": "view",
+      "feature": "model-selection",
+      "library": "lib/core/screens/chat_account_usage_screen.dart"
+    },
     "lib/core/screens/chat_outputs_screen.dart": {
       "role": "view",
       "feature": "outputs-and-viewers",
@@ -1191,6 +1216,11 @@
       "feature": "bots",
       "library": "lib/core/services/bot_avatar_io.dart"
     },
+    "lib/core/services/bot_deliveries_session.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bot_deliveries_session.dart"
+    },
     "lib/core/services/bot_display_client.dart": {
       "role": "data",
       "feature": "bots",
@@ -1200,6 +1230,11 @@
       "role": "application",
       "feature": "bots",
       "library": "lib/core/services/bot_group_draft_session.dart"
+    },
+    "lib/core/services/bot_group_peer_access.dart": {
+      "role": "application",
+      "feature": "bots",
+      "library": "lib/core/services/bot_group_peer_access.dart"
     },
     "lib/core/services/bot_group_read_state.dart": {
       "role": "data",
@@ -1250,6 +1285,11 @@
       "role": "application",
       "feature": "conversation",
       "library": "lib/core/services/canonical_session_protocol.dart"
+    },
+    "lib/core/services/chat_account_usage_session.dart": {
+      "role": "application",
+      "feature": "model-selection",
+      "library": "lib/core/services/chat_account_usage_session.dart"
     },
     "lib/core/services/chat_browser_data.dart": {
       "role": "application",
@@ -1500,6 +1540,11 @@
       "role": "platform",
       "feature": "attachments-and-sharing",
       "library": "lib/core/services/image_clipboard.dart"
+    },
+    "lib/core/services/installed_wing_client_identity.dart": {
+      "role": "data",
+      "feature": "connections",
+      "library": "lib/core/services/installed_wing_client_identity.dart"
     },
     "lib/core/services/live_voice_protocol.dart": {
       "role": "domain",
@@ -2075,6 +2120,11 @@
       "role": "view",
       "feature": "bots",
       "library": "lib/core/widgets/bot_avatar.dart"
+    },
+    "lib/core/widgets/bot_deliveries_panel.dart": {
+      "role": "view",
+      "feature": "bots",
+      "library": "lib/core/widgets/bot_deliveries_panel.dart"
     },
     "lib/core/widgets/bot_display_surface.dart": {
       "role": "view",

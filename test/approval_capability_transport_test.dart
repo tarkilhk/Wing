@@ -1,3 +1,5 @@
+import 'support/canonical_gateway_fixture.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -15,6 +17,7 @@ void main() {
       final subscription = server.transform(WebSocketTransformer()).listen((
         socket,
       ) {
+        announceTestGatewayReady(socket);
         peer = socket;
         socket.listen((raw) {
           final frame = jsonDecode(raw as String) as Map<String, dynamic>;
@@ -39,7 +42,10 @@ void main() {
           }
         });
       });
-      final client = WsClient('http://127.0.0.1:${server.port}');
+      final client = WsClient(
+        'http://127.0.0.1:${server.port}',
+        clientIdentity: testWingClientIdentity,
+      );
       addTearDown(() async {
         client.close();
         await peer?.close();
@@ -59,10 +65,12 @@ void main() {
     () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final sockets = <WebSocket>[];
+      var opened = Completer<WebSocket>();
       final announcements = <Map<String, dynamic>>[];
       final subscription = server.transform(WebSocketTransformer()).listen((
         socket,
       ) {
+        opened.complete(socket);
         sockets.add(socket);
         var answersRequests = false;
         socket.listen((raw) {
@@ -107,7 +115,10 @@ void main() {
           );
         });
       });
-      final client = WsClient('http://127.0.0.1:${server.port}');
+      final client = WsClient(
+        'http://127.0.0.1:${server.port}',
+        clientIdentity: testWingClientIdentity,
+      );
       addTearDown(() async {
         client.close();
         for (final socket in sockets) {
@@ -131,7 +142,13 @@ void main() {
             );
           }
         };
-        await client.connect();
+        final connecting = client.connect();
+        final peer = await opened.future;
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+        expect(announcements, hasLength(connection));
+        expect(response.isCompleted, isFalse);
+        announceTestGatewayReady(peer);
+        await connecting;
         final result = await response.future;
         await client.capabilitiesReady;
         expect(client.canonicalClarifyBatch, isTrue);
@@ -145,8 +162,12 @@ void main() {
           'queue-two',
         ]);
         expect(announcements, hasLength(connection + 1));
-        expect(announcements.last['params'], {'server_requests': true});
+        expect(announcements.last['params'], {
+          'server_requests': true,
+          'client': testWingClientIdentity.wire,
+        });
         client.close();
+        opened = Completer<WebSocket>();
       }
     },
   );

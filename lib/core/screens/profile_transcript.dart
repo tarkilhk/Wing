@@ -664,6 +664,25 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
     }
     if (widget.focusedMessageId != null) return;
     if (!_scroll.hasClients) return;
+    final previousResume =
+        oldWidget.presentation.readingPosition.resume ??
+        (_latestDistance > 24 ? _departureBookmark : null);
+    final latestAfterReplacement =
+        identical(
+          oldWidget.presentation.readingIdentity,
+          widget.presentation.readingIdentity,
+        ) &&
+        _latestDistance > 24 &&
+        previousResume != null &&
+        oldWidget.presentation.timeline.entries.any(
+          (entry) => _matchesAnchor(entry, previousResume.messageId),
+        ) &&
+        widget.presentation.readingPosition.resume == null &&
+        widget.presentation.history.available &&
+        widget.presentation.history.error == null &&
+        !widget.presentation.timeline.entries.any(
+          (entry) => _matchesAnchor(entry, previousResume.messageId),
+        );
     final atBottom =
         !_scroll.hasExpansionAnchor &&
         (_jumping ||
@@ -723,6 +742,10 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
           !_scroll.hasClients ||
           generation != _layoutGeneration ||
           gesture != _gestureGeneration) {
+        return;
+      }
+      if (latestAfterReplacement) {
+        unawaited(_latest());
         return;
       }
       _scheduleReadingObservation();
@@ -797,12 +820,6 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
   // Callbacks borrow the current route configuration. Replacing an equivalent
   // closure during answer publication must not rebuild unchanged work; later
   // actions still dispatch through the current callback, never a captured one.
-  Future<Uint8List> _loadActivityImage(String path) => widget.loadImage!(path);
-  Future<void> _openActivityResource(ChatOutput output) =>
-      widget.onOpenResource!(output);
-  Future<void> _shareActivityResource(ChatOutput output) =>
-      widget.onShareResource!(output);
-
   Widget? get _liveExecution {
     final activity = widget.activity;
     if (activity == null ||
@@ -823,9 +840,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
       timing,
       activity.live,
       activity.indicatorRevision,
-      widget.loadImage != null,
-      widget.onOpenResource != null,
-      widget.onShareResource != null,
+      widget.loadImage,
+      widget.onOpenResource,
+      widget.onShareResource,
     );
     if (_liveExecutionInputs == inputs &&
         listEquals(_liveExecutionEntries, activity.entries)) {
@@ -837,13 +854,9 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
       savedActivity: _joinedLiveActivity,
       startedAt: timing.start,
       endedAt: timing.end,
-      loadImage: widget.loadImage == null ? null : _loadActivityImage,
-      onOpenResource: widget.onOpenResource == null
-          ? null
-          : _openActivityResource,
-      onShareResource: widget.onShareResource == null
-          ? null
-          : _shareActivityResource,
+      loadImage: widget.loadImage,
+      onOpenResource: widget.onOpenResource,
+      onShareResource: widget.onShareResource,
     );
   }
 
@@ -1516,86 +1529,96 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
     final timeline = widget.presentation.timeline.nearby(targetId);
     if (timeline == null) return _missingSearchResult();
     final sections = timeline.sections;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 16, right: 8),
-              child: Row(
+    return LayoutBuilder(
+      builder: (context, constraints) => Column(
+        children: [
+          ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: constraints.maxHeight),
+            child: SingleChildScrollView(
+              primary: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Search result',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                        StudioButtonPress(
+                          child: IconButton(
+                            tooltip: 'Back to latest',
+                            onPressed: widget.onBackToLatest,
+                            icon: const Icon(Icons.arrow_downward_rounded),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              key: const ValueKey('profile-transcript-search-result'),
+              controller: _scroll,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: const EdgeInsets.symmetric(vertical: WingSpacing.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(
-                    child: Text(
-                      'Search result',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall,
+                  for (final section in sections)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        left: WingSpacing.lg,
+                        right: WingSpacing.xs,
+                      ),
+                      child: section.isActivity
+                          ? ProfileToolActivitySection(
+                              section: section,
+                              noticeBuilder: widget.messageBuilder,
+                              trailing: widget.activityTrailingBuilder?.call(
+                                section,
+                              ),
+                              loadImage: widget.loadImage,
+                              onOpenResource: widget.onOpenResource,
+                              onShareResource: widget.onShareResource,
+                              expandedMessageId: targetId,
+                              focusedMessageKey: _focusedRow,
+                            )
+                          : Container(
+                              key: section.containsMessage(targetId)
+                                  ? _focusedRow
+                                  : null,
+                              decoration: section.containsMessage(targetId)
+                                  ? BoxDecoration(
+                                      border: Border.all(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                        width: 2,
+                                      ),
+                                      borderRadius: WingRadius.card,
+                                    )
+                                  : null,
+                              child: widget.messageBuilder(
+                                section.messages.last,
+                              ),
+                            ),
                     ),
-                  ),
-                  StudioButtonPress(
-                    child: IconButton(
-                      tooltip: 'Back to latest',
-                      onPressed: widget.onBackToLatest,
-                      icon: const Icon(Icons.arrow_downward_rounded),
-                    ),
-                  ),
                 ],
               ),
             ),
           ),
-        ),
-        Expanded(
-          child: SingleChildScrollView(
-            key: const ValueKey('profile-transcript-search-result'),
-            controller: _scroll,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.symmetric(vertical: WingSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (final section in sections)
-                  Padding(
-                    padding: EdgeInsets.only(
-                      left: WingSpacing.lg,
-                      right: WingSpacing.xs,
-                    ),
-                    child: section.isActivity
-                        ? ProfileToolActivitySection(
-                            section: section,
-                            noticeBuilder: widget.messageBuilder,
-                            trailing: widget.activityTrailingBuilder?.call(
-                              section,
-                            ),
-                            loadImage: widget.loadImage,
-                            onOpenResource: widget.onOpenResource,
-                            onShareResource: widget.onShareResource,
-                            expandedMessageId: targetId,
-                            focusedMessageKey: _focusedRow,
-                          )
-                        : Container(
-                            key: section.containsMessage(targetId)
-                                ? _focusedRow
-                                : null,
-                            decoration: section.containsMessage(targetId)
-                                ? BoxDecoration(
-                                    border: Border.all(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                      width: 2,
-                                    ),
-                                    borderRadius: WingRadius.card,
-                                  )
-                                : null,
-                            child: widget.messageBuilder(section.messages.last),
-                          ),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -1621,18 +1644,22 @@ class _ProfileTranscriptState extends State<ProfileTranscript>
         children: [
           StudioError(presentation.history.error!),
           StudioButtonPress(
-            child: TextButton(
-              onPressed: widget.onRefreshHistory,
-              child: const Text('Refresh history'),
+            child: IconButton(
+              tooltip: 'Refresh history',
+              onPressed: presentation.history.loading
+                  ? null
+                  : widget.onRefreshHistory,
+              icon: const Icon(Icons.refresh),
             ),
           ),
           if (presentation.history.hasOlder && widget.onLoadOlder != null)
             StudioButtonPress(
-              child: TextButton(
+              child: IconButton(
+                tooltip: 'Retry older messages',
                 onPressed: presentation.history.loading
                     ? null
                     : widget.onLoadOlder,
-                child: const Text('Retry older messages'),
+                icon: const Icon(Icons.history),
               ),
             ),
         ],

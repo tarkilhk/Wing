@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/completion_diagnostics.dart';
 import 'support/composer_fixture.dart' show stockChatReply;
 import 'package:wing/core/services/group_observations.dart';
@@ -52,6 +53,7 @@ class _RecentsFixture extends ProfileBrowserFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final delegate = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: () async {
         if (failDiscovery) throw http.ClientException('Discovery interrupted');
@@ -761,6 +763,21 @@ void main() {
   }
 
   test('message excerpts keep the start of the latest visible message', () {
+    expect(
+      recentChatMessagePreview([
+        {'role': 'assistant', 'content': 'Prior reply'},
+        {
+          'id': 42,
+          'role': 'user',
+          'content': 'Refused prompt',
+          'display_kind': 'content_refused',
+          'display_metadata': {
+            'content_refused': {'notice': 'This request was refused.'},
+          },
+        },
+      ]),
+      'This request was refused.',
+    );
     expect(
       recentChatMessagePreview([
         {'role': 'user', 'content': 'First prompt.'},
@@ -2084,7 +2101,7 @@ void main() {
         'seq': 2,
         'kind': 'turn.settled',
         'created_at': now.millisecondsSinceEpoch / 1000 + 60,
-        'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+        'actor': {'kind': 'gateway', 'id': 'install:install-1'},
         'payload': {
           'member_id': 'mira',
           'passed': true,

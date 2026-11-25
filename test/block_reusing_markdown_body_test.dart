@@ -394,7 +394,7 @@ void main() {
     },
   );
 
-  testWidgets('retained deliverable uses current open and download callbacks', (
+  testWidgets('deliverable retains stable callbacks and updates its owner', (
     tester,
   ) async {
     final calls = <String>[];
@@ -410,15 +410,31 @@ void main() {
             return false;
           },
         );
-    await tester.pumpMarkdownWidget(_host(content('old', 'Tail')));
+    final initial = content('old', 'Tail');
+    await tester.pumpMarkdownWidget(_host(initial));
     final attachment = tester.widget<DeliverableAttachment>(
       find.byType(DeliverableAttachment),
     );
     final element = tester.element(find.byType(DeliverableAttachment));
-    await tester.pumpMarkdownWidget(_host(content('new', 'Longer tail')));
+    await tester.pumpMarkdownWidget(
+      _host(
+        MarkdownMessageContent(
+          data: '[Report](/srv/report.md)\n\nLonger tail',
+          deliverables: true,
+          onOpenRemoteFile: initial.onOpenRemoteFile,
+          onDownloadRemoteFile: initial.onDownloadRemoteFile,
+        ),
+      ),
+    );
     expect(
       tester.widget<DeliverableAttachment>(find.byType(DeliverableAttachment)),
       same(attachment),
+    );
+    expect(tester.element(find.byType(DeliverableAttachment)), same(element));
+    await tester.pumpMarkdownWidget(_host(content('new', 'Longer tail')));
+    expect(
+      tester.widget<DeliverableAttachment>(find.byType(DeliverableAttachment)),
+      isNot(same(attachment)),
     );
     expect(tester.element(find.byType(DeliverableAttachment)), same(element));
     await tester.tap(find.byTooltip('Open preview'));

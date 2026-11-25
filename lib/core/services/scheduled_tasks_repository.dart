@@ -72,8 +72,20 @@ class ScheduledTasksRepository {
 
   Future<ScheduledTask> get(String id) async =>
       _task(await profile.read(path(id)), id: id);
-  Future<ScheduledTask> create(Map<String, dynamic> values) async =>
-      _mutationResult(await profile.write('POST', 'cron/jobs', values));
+  Future<ScheduledTask> create(Map<String, dynamic> values) async {
+    final result = _mutationResult(
+      await profile.write('POST', 'cron/jobs', values),
+    );
+    _verifyOutputWrapping(result, values['wrap_response']);
+    return result;
+  }
+
+  void _verifyOutputWrapping(ScheduledTask result, Object? requested) {
+    if (result.data['wrap_response'] != requested) {
+      throw const TaskMutationUncertain();
+    }
+  }
+
   Future<ScheduledTask> update(TaskEditIntent intent) async {
     final baseline = intent.baseline;
     if (baseline.profileName != profile.name) {
@@ -103,6 +115,9 @@ class ScheduledTasksRepository {
       if (updates.containsKey(key) && result.data[key] != updates[key]) {
         throw const TaskMutationUncertain();
       }
+    }
+    if (updates.containsKey('wrap_response')) {
+      _verifyOutputWrapping(result, updates['wrap_response']);
     }
     return result;
   }

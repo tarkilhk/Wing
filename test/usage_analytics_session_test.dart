@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -444,6 +445,8 @@ void main() {
         ),
         'analytics-recovery-http',
         connectionStatus: status,
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       final owner = UsageAnalyticsSession(
         UsageAnalyticsReader(repository.usageAnalytics, ['default']),
@@ -571,6 +574,8 @@ void main() {
         ),
         'analytics-http',
         connectionStatus: status,
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       final owner = UsageAnalyticsSession(
         UsageAnalyticsReader(repository.usageAnalytics, [

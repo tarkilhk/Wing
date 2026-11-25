@@ -42,6 +42,70 @@ void main() {
     expect(saved.containsKey('prompts'), isFalse);
   });
 
+  test(
+    'refused history keeps exact display notice and identity without replay',
+    () {
+      // Stock persistence/conversation/messages.py at 4c84e786: an inactive
+      // compacted user row retains the same ID and a nested refusal notice.
+      final source = <String, dynamic>{
+        'id': 42,
+        'role': 'user',
+        'content': 'Private expanded context',
+        'display_content': 'Original authored prompt',
+        'display_kind': 'content_refused',
+        'display_metadata': {
+          'submission_id': 'input-a',
+          'content_refused': {
+            'notice': 'The supplied refusal explanation.',
+            'secret': 'excluded',
+          },
+          'runtime': 'excluded',
+        },
+        'active': 0,
+        'compacted': 1,
+      };
+      final saved = roundtrip(source);
+      expect(saved['id'], 42);
+      expect(saved['role'], 'user');
+      expect(saved['content'], source['content']);
+      expect(saved['display_metadata'], {
+        'submission_id': 'input-a',
+        'content_refused': {'notice': 'The supplied refusal explanation.'},
+      });
+      expect(isHumanAnswerPrompt(saved), isFalse);
+      final message = TranscriptMessage.fromRow(saved);
+      expect(message.kind, TranscriptMessageKind.refused);
+      expect(message.text, 'The supplied refusal explanation.');
+      expect(message.noticeResult, 'Original authored prompt');
+      expect(message.copyText, isEmpty);
+      expect(source['active'], 0);
+      expect(
+        TranscriptMessage.fromRow(
+          roundtrip({...source, 'display_content': ''}),
+        ).noticeResult,
+        '',
+      );
+      for (final metadata in [
+        null,
+        'encoded metadata',
+        {'content_refused': 3},
+        {
+          'content_refused': {'notice': 7},
+        },
+        {
+          'content_refused': {'notice': 'x' * 4097},
+        },
+      ]) {
+        final invalid = roundtrip({...source, 'display_metadata': metadata});
+        expect(
+          TranscriptMessage.fromRow(invalid).kind,
+          TranscriptMessageKind.refused,
+        );
+        expect(contentRefusedNotice(invalid), 'Message refused');
+      }
+    },
+  );
+
   test('a user message cannot claim a trusted review receipt', () {
     expect(
       roundtrip({

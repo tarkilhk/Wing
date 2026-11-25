@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
@@ -1723,6 +1724,7 @@ class _ProjectFilterFixture extends ProfileBrowserFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: (path, query) async {

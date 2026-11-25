@@ -14,6 +14,12 @@ Feature ID: `attachments-and-sharing`.
 
 Use the chat attachment or camera control, paste supported content, or share to Wing from another Android app. Review the staged draft, remove or cancel an item, then Send.
 
+Groups with bots on other instances accept text only. Their attachment control
+explains the limit. Restored editable files remain removable; remove them before
+a new send. A text-only Android share can still be staged, while a refused
+file-bearing share remains available for another destination. Already-dispatched
+uncertain messages keep their original files and exact Retry action.
+
 ## Driving it with Wing harnesses
 
 Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-preconditions). Use the [verification workflow](../../.agents/skills/verify-wing/SKILL.md) for launch, readiness, evidence and cleanup.
@@ -48,6 +54,18 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   ```sh
   python3 scripts/test_nightly_native.py clipboard --output build/feature-verification/attachments-and-sharing
   ```
+
+- **Cross-instance group admission:** the [Bots recipe](bots.md#driving-it-with-wing-harnesses)
+  covers mixed-group preparation and text sending through Android controls,
+  alongside the existing local-group attachment/picker flow. The focused
+  `test/bot_group_peer_test.dart` and `test/bot_group_peer_view_test.dart` cover
+  text-only sharing, retained editable files and immutable uncertain retries.
+  `flutter test --no-pub test/shared_draft_review_test.dart` drives the production
+  share review into a mixed group: text is acknowledged only after its exact
+  draft is durable, while file refusal keeps the incoming share available for
+  another destination. These mocked native-channel cases prove routing and
+  acknowledgement ordering after intake; the Android `external-share` family
+  owns the separate OS intake boundary.
 
 ## Gotchas
 

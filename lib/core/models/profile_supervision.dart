@@ -16,11 +16,8 @@ abstract interface class SubagentInspectionSession implements Listenable {
 
 abstract interface class SubagentInspectionDetail implements Listenable {
   SubagentSupervisionObservation get state;
-  SubagentTimelineReader? get timeline;
-  bool get supportsTail;
+  SubagentTimelineReader get timeline;
   void setActive(bool value);
-  Future<void> refreshTail();
-  void retryTail();
   Future<bool> steer(String text);
   Future<void> interrupt();
   void dispose();
@@ -29,6 +26,7 @@ abstract interface class SubagentInspectionDetail implements Listenable {
 /// Read-only facts and visit commands shared by child timeline views.
 abstract interface class SubagentTimelineReader
     implements TranscriptReader, SubagentInspectionSession {
+  ProfileSessionKey? get resourceKey;
   ChatRuntimeObservation get runtime;
   Map<String, dynamic>? get streamingMessage;
   List<GatewayTodo> get todos;
@@ -168,12 +166,6 @@ final class SubagentSupervisionObservation {
     required this.unconfirmed,
     required this.canControl,
     required this.acceptsSteer,
-    required this.tail,
-    required this.lastAvailableTail,
-    required this.tailError,
-    required this.inlineTailError,
-    required this.tailFailures,
-    required this.loadingTail,
     required this.steering,
     required this.interrupting,
     required this.controlMessage,
@@ -181,10 +173,8 @@ final class SubagentSupervisionObservation {
   }) : activity = copySupervisedSubagent(activity);
   final GatewaySubagentActivity activity;
   final bool unconfirmed, canControl, acceptsSteer;
-  final GatewaySubagentTail? tail, lastAvailableTail;
-  final String? tailError, inlineTailError, controlMessage;
-  final int tailFailures;
-  final bool loadingTail, steering, interrupting, controlFailed;
+  final String? controlMessage;
+  final bool steering, interrupting, controlFailed;
 }
 
 GatewaySubagentActivity copySupervisedSubagent(GatewaySubagentActivity value) =>

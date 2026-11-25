@@ -6,12 +6,14 @@ import 'package:flutter/services.dart';
 
 import '../models/context_occupancy.dart';
 import '../theme/wing_theme.dart';
+import 'studio_error.dart';
 
 /// Session-owned occupancy and composition, independent of task progress.
 class ContextRing extends StatefulWidget {
   const ContextRing({
     super.key,
     this.occupancy,
+    this.promptCache,
     this.compressions,
     this.loading = false,
     this.error,
@@ -19,6 +21,7 @@ class ContextRing extends StatefulWidget {
   });
 
   final ContextOccupancy? occupancy;
+  final PromptCacheWindow? promptCache;
   final int? compressions;
   final bool loading;
   final String? error;
@@ -149,7 +152,8 @@ class _ContextRingState extends State<ContextRing>
                                   ),
                                   SizedBox.square(
                                     dimension: 24,
-                                    child: widget.loading
+                                    child:
+                                        widget.loading && widget.error == null
                                         ? Semantics(
                                             label: 'Loading context breakdown',
                                             child: Center(
@@ -239,22 +243,11 @@ class _ContextRingState extends State<ContextRing>
                                     ),
                                   ),
                                 ),
-                              if (widget.error != null && !widget.loading)
-                                Text(
-                                  widget.error!,
-                                  style: labelStyle.copyWith(
-                                    color: tokens.muted,
-                                  ),
-                                ),
-                              if (widget.error != null &&
-                                  !widget.loading &&
-                                  widget.onRefresh != null)
-                                StudioButtonPress(
-                                  child: IconButton(
-                                    onPressed: widget.onRefresh,
-                                    tooltip: 'Retry context breakdown',
-                                    icon: const Icon(Icons.refresh),
-                                  ),
+                              if (widget.error case final error?)
+                                StudioRetryNotice(
+                                  message: error,
+                                  onRetry: widget.onRefresh,
+                                  busy: widget.loading,
                                 ),
                               if (value != null ||
                                   widget.compressions != null) ...[
@@ -306,6 +299,11 @@ class _ContextRingState extends State<ContextRing>
                                     ],
                                   ),
                                 ),
+                              ],
+                              if (widget.promptCache case final cache?) ...[
+                                const SizedBox(height: WingSpacing.sm),
+                                Divider(height: WingSpacing.md),
+                                _PromptCacheDetails(cache: cache),
                               ],
                             ],
                           ),
@@ -405,6 +403,96 @@ class _ContextRingState extends State<ContextRing>
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Presentation of a dated report, never a local prediction of cache warmth.
+class _PromptCacheDetails extends StatelessWidget {
+  const _PromptCacheDetails({required this.cache});
+
+  final PromptCacheWindow cache;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = WingTokens.of(context);
+    final locale = MaterialLocalizations.of(context);
+    String date(DateTime? value) {
+      if (value == null) return 'Not reported';
+      String two(int number) => number.toString().padLeft(2, '0');
+      return '${locale.formatCompactDate(value)} '
+          '${two(value.hour)}:${two(value.minute)}:${two(value.second)} UTC';
+    }
+
+    final reason = switch (cache.reason) {
+      'route_changed' => 'The model or provider changed.',
+      'compacted' => 'The conversation was compressed.',
+      'session_rotated' => 'The session changed.',
+      'codex_app_server' => 'This runtime does not report cache timing.',
+      'storage_unavailable' => 'Saved cache timing could not be read.',
+      _ => null,
+    };
+    final learned = switch (cache.learned) {
+      'no-cache' => 'No cache reuse observed on this route.',
+      'write-on-hit' => 'Cache hits also rewrite the prefix.',
+      'short-lived' => 'Cache retention is shorter than expected.',
+      _ => null,
+    };
+    final rows = <(String, String)>[
+      (
+        'Confidence',
+        switch (cache.confidence) {
+          PromptCacheConfidence.proven => 'Proven',
+          PromptCacheConfidence.declared => 'Declared',
+          PromptCacheConfidence.assumed => 'Assumed',
+          PromptCacheConfidence.unknown => 'Unknown',
+        },
+      ),
+      if (cache.tier case final tier?) ('Tier', tier),
+      ('Guaranteed until', date(cache.guaranteedUntil)),
+      ('Retention upper bound', date(cache.estimatedUntil)),
+      if (cache.refreshedAt != null)
+        ('Cache refreshed', date(cache.refreshedAt)),
+      for (final entry in cache.coverage.entries)
+        ('${entry.key} coverage until', date(entry.value)),
+    ];
+    final style = tokens.typography.label.copyWith(
+      fontSize: 13,
+      letterSpacing: 0,
+      color: tokens.onSurface,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Prompt cache',
+          style: style.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: WingSpacing.sm),
+        for (final (label, value) in rows)
+          Padding(
+            padding: const EdgeInsets.only(bottom: WingSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: style.copyWith(color: tokens.muted)),
+                Text(value, style: style),
+              ],
+            ),
+          ),
+        for (final note in [
+          ?reason,
+          if (cache.warmingOff == true)
+            'Cache warming is off for this session.',
+          if (cache.tierPending == true)
+            'The 5-minute tier is awaiting an upgrade after a qualifying pause.',
+          ?learned,
+        ])
+          Padding(
+            padding: const EdgeInsets.only(bottom: WingSpacing.sm),
+            child: Text(note, style: style.copyWith(color: tokens.muted)),
+          ),
+      ],
     );
   }
 }

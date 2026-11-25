@@ -17,10 +17,11 @@ class TaskEditIntent {
             'timezone',
             'grace_minutes',
             'catch_up',
+            'wrap_response',
           }.contains(entry.key) ||
           entry.value != null &&
               !(switch (entry.key) {
-                'catch_up' => entry.value is bool,
+                'catch_up' || 'wrap_response' => entry.value is bool,
                 'grace_minutes' => entry.value is int,
                 _ => entry.value is String,
               }),
@@ -103,6 +104,7 @@ enum TaskConflictField {
   timezone,
   grace,
   catchUp,
+  outputWrapping,
   modelRouting;
 
   Set<String> get keys => switch (this) {
@@ -113,6 +115,7 @@ enum TaskConflictField {
     timezone => const {'timezone'},
     grace => const {'grace_minutes'},
     catchUp => const {'catch_up'},
+    outputWrapping => const {'wrap_response'},
     modelRouting => const {'model', 'provider', 'base_url'},
   };
 }
@@ -192,6 +195,11 @@ class TaskEditReview {
       TaskConflictField.timezone => value('timezone'),
       TaskConflictField.grace => value('grace_minutes'),
       TaskConflictField.catchUp => value('catch_up'),
+      TaskConflictField.outputWrapping => TaskOutputWrapping.fromWire(
+        desired && _intent.values.containsKey('wrap_response')
+            ? _intent.values['wrap_response']
+            : (desired ? _intent.baseline : current).data['wrap_response'],
+      ).label,
       TaskConflictField.modelRouting =>
         value('model').isEmpty
             ? 'Profile default'

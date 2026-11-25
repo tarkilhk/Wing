@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/widgets/deleted_chat_recovery_notice.dart';
 import 'package:wing/core/services/chat_browser_data.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -20,6 +21,7 @@ class _HomeFixture extends ProfileBrowserFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: base.read,

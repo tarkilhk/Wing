@@ -1,3 +1,4 @@
+import '../../test/support/wing_client_identity_fixture.dart';
 import '../../test/support/canonical_gateway_fixture.dart';
 import 'dart:async';
 
@@ -16,6 +17,38 @@ import '../../test/support/git_review_fixture.dart';
 /// are the production implementations, but this fixture cannot reach a Hermes
 /// host or submit work to a model.
 class RoadmapEmulatorFixture extends ProfileHistoryFixture {
+  Completer<Map<String, dynamic>>? contextGate;
+  final contextRequests = <Map<String, dynamic>>[];
+  Map<String, dynamic> contextReport = {
+    'context_used': 32768,
+    'context_max': 131072,
+    'context_percent': 25,
+  };
+  final accountUsageRequests = <Map<String, dynamic>>[];
+  Completer<Map<String, dynamic>>? accountUsageGate;
+  Map<String, dynamic> accountUsageReport = {
+    'lines': ['OpenAI subscription', 'Session: 42% used', 'Resets in 2 hours'],
+    'nous_lines': [
+      'Nous Portal balance (a separate account: this session runs on another provider)',
+      'Total usable: \$18.50',
+    ],
+    'nous_route': false,
+  };
+  final botRoster = <Map<String, dynamic>>[];
+  final teammateDeliveries = <String, List<Map<String, dynamic>>>{};
+  final deliveryRequests = <String>[];
+  Completer<void>? deliveryGate, botRosterGate;
+  bool failDeliveries = false;
+
+  Future<Map<String, dynamic>> readBotRoster(String installId) async {
+    await botRosterGate?.future;
+    return {
+      'bot_mode_protocol': true,
+      'install_id': installId,
+      'profiles': botRoster,
+    };
+  }
+
   final updateSource = BackendUpdateChannelFixture();
   final gitReview = GitReviewFixture();
   Completer<void>? branchGate;
@@ -29,6 +62,10 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   };
   int approvalSequence = 0;
   final approvalResponses = <Map<String, dynamic>>[];
+  final typedApprovalResponses = <Map<String, dynamic>>[];
+  Completer<void>? typedApprovalGate;
+  bool failTypedApproval = false;
+  final _typedApprovals = <String, ({String profile, String runtime})>{};
   final clarificationResponses = <Map<String, dynamic>>[];
   Completer<void>? clarificationGate;
   final clarificationLocks = <Map<String, dynamic>>[];
@@ -55,8 +92,22 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
   final answerRuntimes = <String, String>{};
   final resumedRuntimes = <(String, String), String>{};
   final scopedHistories = <(String, String), List<Map<String, dynamic>>>{};
+  final _refusalSequences = <(String, String), int>{};
+  bool childTranscriptEnabled = false;
+  Completer<void>? childTranscriptGate;
+  bool childTranscriptFails = false;
+  String childResourceId = 'roadmap-child-session';
+  final childTranscriptRequests = <Map<String, dynamic>>[];
+  final childResourceRequests = <Map<String, String>>[];
+  List<Map<String, dynamic>> childTranscriptRows = [
+    {
+      'row_id': 9,
+      'row_kind': 'message',
+      'role': 'assistant',
+      'text': 'Saved child evidence before reset.',
+    },
+  ];
   String subagentStatus = 'running';
-  String subagentOutput = 'Emulator child is checking the release.';
   String goalStatus = 'active';
   String loopStatus = 'active';
   bool runningProcess = true;
@@ -104,6 +155,7 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
     final base = super.gateway(scope);
     late final ProfileGateway fixtureGateway;
     fixtureGateway = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       serverResponse: (requestId, result) async {
@@ -135,6 +187,9 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         base.close();
       },
       get: (path, query) async {
+        if (path == 'tools/toolsets' || path == 'skills') {
+          return {'data': <Object>[]};
+        }
         if (path == 'profiles') {
           return {
             'profiles': [
@@ -296,6 +351,89 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
         };
       },
       rpc: (method, params) async {
+        if (method == 'session.transcript') {
+          childTranscriptRequests.add(Map.of(params));
+          await childTranscriptGate?.future;
+          if (childTranscriptFails) {
+            throw StateError('Child transcript unavailable');
+          }
+          final nested = params['subagent_id'] == 'roadmap-nested';
+          return {
+            'session_id': params['session_id'],
+            'subagent_id': params['subagent_id'],
+            'available': childTranscriptEnabled,
+            'running': !nested && subagentStatus == 'running',
+            'child_session_id': childTranscriptEnabled
+                ? (nested ? 'roadmap-nested-session' : childResourceId)
+                : null,
+            'rows': childTranscriptEnabled
+                ? (nested
+                      ? [
+                          {
+                            'row_id': 1,
+                            'row_kind': 'message',
+                            'role': 'assistant',
+                            'text': '[Nested report](report.md)',
+                          },
+                        ]
+                      : childTranscriptRows)
+                : [],
+            'next_cursor': null,
+            'reset': true,
+          };
+        }
+        if (childTranscriptEnabled &&
+            {
+              'roadmap-child-session',
+              'roadmap-child-successor',
+              'roadmap-nested-session',
+            }.contains(params['session_id'])) {
+          if (method == 'session.resume') {
+            return {
+              'session_id': params['session_id'],
+              'stored_session_id': params['session_id'],
+              'running': subagentStatus == 'running',
+              'replay_epoch': 'roadmap-child-epoch',
+              'last_sequence': 1,
+            };
+          }
+          if (method == 'session.events.since') {
+            return {
+              'replay_epoch': 'roadmap-child-epoch',
+              'latest_seq': 1,
+              'truncated': false,
+              'snapshot_required': false,
+              'events': [
+                if (params['session_id'] != 'roadmap-nested-session' &&
+                    (params['last_sequence'] as int) < 1)
+                  {
+                    'session_id': params['session_id'],
+                    'seq': 1,
+                    'type': 'subagent.start',
+                    'payload': {
+                      'subagent_id': 'roadmap-nested',
+                      'child_session_id': 'roadmap-nested-session',
+                      'goal': 'Inspect nested release evidence',
+                    },
+                  },
+              ],
+            };
+          }
+        }
+        if (method == 'session.account_usage') {
+          accountUsageRequests.add(Map.of(params));
+          return accountUsageGate?.future ?? accountUsageReport;
+        }
+        if (method == 'bot_delivery.list') {
+          deliveryRequests.add(scope.profileName);
+          await deliveryGate?.future;
+          if (failDeliveries) throw StateError('Delivery storage unavailable');
+          return {
+            'sender': scope.profileName,
+            'deliveries': teammateDeliveries[scope.profileName] ?? <Object>[],
+          };
+        }
+
         switch (method) {
           case 'setup.status':
             administrationRequests.add((
@@ -322,11 +460,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               'toolsets': const [],
             };
           case 'session.context_breakdown':
-            return {
-              'context_used': 32768,
-              'context_max': 131072,
-              'context_percent': 25,
-            };
+            contextRequests.add(Map.of(params));
+            return contextGate?.future ?? contextReport;
           case 'config.get':
             return switch (params['key']) {
               'reasoning' => {'value': intelligenceConfig['reasoning']},
@@ -465,6 +600,30 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             clarificationResponses.add(Map.of(params));
             await clarificationGate?.future;
             return {'status': 'resolved', 'prompt_id': params['prompt_id']};
+          case 'request.answer':
+            final pending = _typedApprovals[params['id']];
+            if (pending == null || pending.profile != scope.profileName) {
+              return base.call(method, params);
+            }
+            typedApprovalResponses.add(Map<String, dynamic>.from(params));
+            await typedApprovalGate?.future;
+            if (failTypedApproval) {
+              throw StateError('Decision was not accepted');
+            }
+            _typedApprovals.remove(params['id']);
+            _emit(
+              scope.profileName,
+              StreamEvent(
+                type: 'request.cancel',
+                sessionId: pending.runtime,
+                data: {
+                  'id': params['id'],
+                  'method': 'approval',
+                  'reason': 'resolved',
+                },
+              ),
+            );
+            return {'status': 'ok'};
           case 'approval.respond':
             if (params['prompt_id'] is! String ||
                 params['execution_generation'] is! int ||
@@ -520,6 +679,8 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
               'subagents': [
                 {
                   'subagent_id': 'roadmap-child',
+                  if (childTranscriptEnabled)
+                    'child_session_id': 'roadmap-child-session',
                   'goal': 'Inspect the emulator release',
                   'status': subagentStatus,
                   'model': 'gpt-5.6-sol',
@@ -528,17 +689,6 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
                 },
               ],
               'delegations': const [],
-            };
-          case 'subagent.tail':
-            supervisionRequests.add((
-              method,
-              Map<String, dynamic>.from(params),
-            ));
-            return {
-              'subagent_id': 'roadmap-child',
-              'available': true,
-              'text': subagentOutput,
-              'truncated': false,
             };
           case 'subagent.steer':
             supervisionRequests.add((
@@ -654,6 +804,11 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
             final response = await base.call(method, params);
             return {
               ...response,
+              'last_sequence':
+                  ?_refusalSequences[(
+                    scope.profileName,
+                    response['session_id'],
+                  )],
               if (method == 'session.resume' &&
                   resumedRuntimes.containsKey((
                     scope.profileName,
@@ -733,6 +888,32 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
     );
   }
 
+  /// Current stock terminal refusal uses its native admission, not prompt text.
+  void refusalEvent(
+    String profile,
+    String runtime,
+    String admission,
+    String type,
+    Map<String, dynamic> data,
+  ) {
+    final key = (profile, runtime);
+    final sequence = (_refusalSequences[key] ?? 0) + 1;
+    _refusalSequences[key] = sequence;
+    _emit(
+      profile,
+      StreamEvent(
+        type: type,
+        sessionId: runtime,
+        data: data,
+        envelope: {
+          'replay_epoch': 'fixture-epoch',
+          'seq': sequence,
+          'admission_id': admission,
+        },
+      ),
+    );
+  }
+
   Map<String, dynamic> get _sessionControl => !supervisionEnabled
       ? {
           'goal': null,
@@ -784,6 +965,30 @@ class RoadmapEmulatorFixture extends ProfileHistoryFixture {
           'revision': 'roadmap-supervision-revision',
           'updated_at': 3,
         };
+
+  /// Stock ApprovalRequestParams at 4c84e786; server requests carry a
+  /// separate reply identity and accept {choice, reason} for sandbox denial.
+  void requestTypedApproval(
+    String profile,
+    String runtimeId,
+    Map<String, dynamic> subject,
+  ) {
+    final id = 'typed-approval-${++approvalSequence}';
+    _typedApprovals[id] = (profile: profile, runtime: runtimeId);
+    _emit(
+      profile,
+      StreamEvent(
+        type: 'approval',
+        sessionId: runtimeId,
+        data: {
+          'request_id': id,
+          'server_request_id': id,
+          'choices': ['once', 'always', 'deny'],
+          ...subject,
+        },
+      ),
+    );
+  }
 
   void requestApproval(String profile, String runtimeId) {
     _emit(

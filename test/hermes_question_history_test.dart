@@ -272,6 +272,7 @@ void main() {
       runtime.receiveApproval({
         'request_id': choice,
         'command': 'echo $choice',
+        'choices': ['once', 'deny'],
       });
       final answer = runtime.beginApprovalAnswer(choice, choice);
       runtime.finishApprovalAnswer(answer, choice, accepted: true);

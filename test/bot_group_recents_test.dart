@@ -45,7 +45,7 @@ void main() {
           'cursor': cursor,
           'latest_seq': 150,
           'has_more': cursor < 150,
-          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+          'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
         };
       };
       final group = (await readFixtureGroups(
@@ -74,6 +74,8 @@ void main() {
         groupMessages: null,
       )).single;
       final group = BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
         observationComplete: true,
         scope: base.scope,
         instance: base.instance,
@@ -98,6 +100,8 @@ void main() {
       await restored.load();
       expect(restored.sequence(group), 9);
       final other = BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
         observationComplete: true,
         scope: WorkspaceScope(
           connectionId: 'other',
@@ -171,6 +175,8 @@ void main() {
         groupMessages: null,
       )).single;
       final notified = BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
         scope: group.scope,
         instance: group.instance,
         id: group.id,
@@ -199,6 +205,8 @@ void main() {
         groupMessages: null,
       )).single;
       final group = BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
         observationComplete: true,
         scope: base.scope,
         instance: base.instance,
@@ -233,7 +241,7 @@ void main() {
           'cursor': 201,
           'latest_seq': 201,
           'has_more': false,
-          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+          'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
         };
       };
       final preview = session.readRecentMessages(

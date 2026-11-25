@@ -151,6 +151,7 @@ void main() {
       now = now.add(const Duration(seconds: 31));
       await session.refresh();
       final draft = BotGroupDraftSession(session);
+      await draft.prepare();
       addTearDown(draft.dispose);
       expect(
         draft.bots.map((bot) => bot.profile.name),
@@ -170,16 +171,18 @@ void main() {
         fixture.commands.where((command) => command.$2 == 'groups.create'),
         isEmpty,
       );
-      expect(draft.error, contains('cannot join'));
+      expect(draft.error, contains('availability changed'));
       expect(draft.selected, hasLength(2));
       await session.refresh();
       final reopened = BotGroupDraftSession(session);
+      await reopened.prepare();
       addTearDown(reopened.dispose);
       expect(reopened.bots.map((bot) => bot.profile.name), ['atlas']);
       final editing = BotGroupDraftSession(
         session,
         existing: session.state.groups.single,
       );
+      await editing.prepare();
       addTearDown(editing.dispose);
       expect(editing.bots.map((bot) => bot.profile.name), contains('mira'));
     },
@@ -198,13 +201,8 @@ void main() {
       fixture.readHook = (_, method, _) async =>
           method == 'groups.capabilities' ? held.future : null;
       var active = true;
-      final create = fixture.repository.createGroup(
-        'new-room',
-        'New room',
-        session.state.bots.take(2).toList(),
-        () => active,
-        () {},
-      );
+      final create = session.prepareGroupSelection(session.state.instances.first.identity,
+        session.state.bots.take(2).toList(), canUse: () => active);
       active = false;
       held.complete(capabilities);
       await expectLater(create, throwsStateError);
@@ -220,6 +218,7 @@ void main() {
         session,
         existing: session.state.groups.single,
       );
+      await draft.prepare();
       const prompt = '  Teal robots, paper cut shapes.\nNo letters.  ';
       draft.setPicturePrompt(prompt);
       expect(await draft.rememberPicturePrompt(), true);
@@ -237,6 +236,7 @@ void main() {
         reopenedRoster,
         existing: reopenedRoster.state.groups.single,
       );
+      await reopened.prepare();
       addTearDown(reopened.dispose);
       expect(reopened.picturePrompt, prompt);
       reopened.setName('Renamed room');
@@ -247,6 +247,7 @@ void main() {
         reopenedRoster,
         existing: reopenedRoster.state.groups.single,
       );
+      await blank.prepare();
       addTearDown(blank.dispose);
       expect(
         blank.picturePrompt,
@@ -272,6 +273,7 @@ void main() {
         session,
         existing: session.state.groups.single,
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       final oldPicture = draft.picture;
       await draft.generatePicture(
@@ -284,6 +286,7 @@ void main() {
         session,
         existing: session.state.groups.single,
       );
+      await reopened.prepare();
       addTearDown(reopened.dispose);
       expect(reopened.picturePrompt, 'My last attempted prompt');
       expect(fixture.commands.single.$3['prompt'], 'My last attempted prompt');
@@ -304,6 +307,7 @@ void main() {
       addTearDown(session.dispose);
       await session.refresh();
       final draft = BotGroupDraftSession(session);
+      await draft.prepare();
       addTearDown(draft.dispose);
       draft.setPicturePrompt('Keep this edit');
       expect(await draft.rememberPicturePrompt(), false);
@@ -331,6 +335,7 @@ void main() {
       addTearDown(session.dispose);
       await session.refresh();
       final draft = BotGroupDraftSession(session);
+      await draft.prepare();
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
       }
@@ -351,6 +356,7 @@ void main() {
       final (fixture, session, _) = await editingRoster();
       final group = session.state.groups.single;
       final draft = BotGroupDraftSession(session, existing: group);
+      await draft.prepare();
       addTearDown(draft.dispose);
       expect(draft.name, group.name);
       expect(draft.picture, _photo());
@@ -375,6 +381,7 @@ void main() {
       final (fixture, session, backend) = await editingRoster();
       final group = session.state.groups.single;
       final draft = BotGroupDraftSession(session, existing: group);
+      await draft.prepare();
       addTearDown(draft.dispose);
       draft.setName('Field team');
       draft.chooseColor(ProfileColorChoice.rose);
@@ -408,6 +415,7 @@ void main() {
         session,
         existing: session.state.groups.single,
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       draft.setName('Evidence team');
       draft.chooseColor(ProfileColorChoice.blue);
@@ -446,6 +454,7 @@ void main() {
         session,
         existing: session.state.groups.single,
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       draft.setName('New room name');
       expect(await draft.save(canUse: () => true), false);
@@ -471,6 +480,7 @@ void main() {
         session,
         existing: session.state.groups.single,
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       draft.setName('My room name');
       draft.chooseColor(ProfileColorChoice.red);
@@ -496,6 +506,7 @@ void main() {
         session,
         existing: session.state.groups.single,
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       draft.setName('My room name');
       fixture.room['name'] = 'Changed on another device';
@@ -518,6 +529,7 @@ void main() {
         existing: session.state.groups.single,
         random: Random(25),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       // An undecorated room can already start with the requested palette color.
       final color = draft.iconColor == ProfileColorChoice.magenta
@@ -539,6 +551,7 @@ void main() {
         session,
         existing: session.state.groups.single,
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       expect(draft.editable, false);
       expect(draft.error, contains('Refresh Bots'));
@@ -550,6 +563,7 @@ void main() {
         ready,
         existing: ready.state.groups.single,
       );
+      await admitted.prepare();
       addTearDown(admitted.dispose);
       admitted.setName('Not dispatched');
       expect(await admitted.save(canUse: () => false), false);
@@ -584,6 +598,7 @@ void main() {
       expect(before.lastMessageAt, isNotNull);
       expect(before.blocked, true);
       final draft = BotGroupDraftSession(session, existing: before);
+      await draft.prepare();
       addTearDown(draft.dispose);
       draft.setName('Evidence review');
       expect(await draft.save(canUse: () => true), true);
@@ -624,6 +639,7 @@ void main() {
       final (fixture, session) = await roster();
       final backend = _PictureBackend(fixture);
       final draft = BotGroupDraftSession(session, random: Random(14));
+      await draft.prepare();
       addTearDown(draft.dispose);
       final color = draft.iconColor;
       expect(color.slot, isNotNull);
@@ -666,6 +682,7 @@ void main() {
         session,
         pictureIo: _Picker(() async => _photo()),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
@@ -707,6 +724,7 @@ void main() {
           existing: session.state.groups.single,
           pictureIo: _Picker(() async => bytes),
         );
+      await draft.prepare();
         addTearDown(draft.dispose);
         if (operation == 'upload') {
           await draft.pickPicture(canUse: () => true);
@@ -757,6 +775,7 @@ void main() {
         session,
         pictureIo: _Picker(() async => source),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       await draft.pickPicture(canUse: () => true);
       expect(draft.error, isNull);
@@ -779,6 +798,7 @@ void main() {
     addTearDown(session.dispose);
     await session.refresh();
     final draft = BotGroupDraftSession(session);
+      await draft.prepare();
     addTearDown(draft.dispose);
     return (fixture, draft);
   }
@@ -853,6 +873,7 @@ void main() {
           session,
           pictureIo: _Picker(() async => next),
         );
+      await draft.prepare();
         addTearDown(draft.dispose);
         await draft.pickPicture(canUse: () => true);
         final saved = draft.picture;
@@ -900,6 +921,7 @@ void main() {
           return next;
         }),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       await draft.pickPicture(canUse: () => true);
       final saved = draft.picture;
@@ -937,6 +959,7 @@ void main() {
         session,
         pictureIo: _Picker(() async => throw StateError('Unreadable image')),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       final previousPrint = debugPrint;
       debugPrint = (message, {wrapWidth}) => throw StateError('Printer failed');
@@ -961,6 +984,7 @@ void main() {
           ? {'success': true, 'image_data': base64Encode(_photo())}
           : null;
       final draft = BotGroupDraftSession(session);
+      await draft.prepare();
       addTearDown(draft.dispose);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
@@ -1003,6 +1027,7 @@ void main() {
         };
       };
       final draft = BotGroupDraftSession(session);
+      await draft.prepare();
       addTearDown(draft.dispose);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
@@ -1034,6 +1059,7 @@ void main() {
         session,
         pictureIo: _Picker(() async => _photo()),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
@@ -1087,6 +1113,7 @@ void main() {
         session,
         pictureIo: _Picker(() async => _photo()),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
@@ -1102,7 +1129,7 @@ void main() {
         hasLength(1),
       );
       expect(
-        fixture.commands.where((cmd) => cmd.$2 == 'groups.create').last.$3,
+        fixture.commands.where((cmd) => cmd.$2 == 'groups.create').single.$3,
         first,
       );
       final fresh = BotsSession((_) async => [fixture.repository]);
@@ -1135,6 +1162,7 @@ void main() {
         session,
         pictureIo: _Picker(() async => _photo()),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
@@ -1158,6 +1186,62 @@ void main() {
         fixture.commands.any((cmd) => cmd.$2 == 'profiles.set_asset'),
         false,
       );
+    },
+  );
+
+  test(
+    'tombstoned room during picture preflight retains draft without metadata writes',
+    () async {
+      final (fixture, session) = await roster();
+      final backend = _PictureBackend(fixture);
+      final draft = BotGroupDraftSession(
+        session,
+        pictureIo: _Picker(() async => _photo()),
+      );
+      await draft.prepare();
+      addTearDown(draft.dispose);
+      for (final bot in draft.bots.take(2)) {
+        draft.select(bot, true);
+      }
+      await draft.pickPicture(canUse: () => true);
+      final picture = draft.picture;
+      final members = draft.selected.map((bot) => bot.id).toList();
+      final held = Completer<void>();
+      final started = Completer<void>();
+      addTearDown(() {
+        if (!held.isCompleted) held.complete();
+      });
+      final inspectedRooms = <String>[];
+      fixture.readHook = (_, method, params) async {
+        if (method != 'groups.state' || params['include_disbanded'] != true) {
+          return null;
+        }
+        inspectedRooms.add(params['room_id'] as String);
+        if (!started.isCompleted) started.complete();
+        await held.future;
+        return {
+          'room': {...fixture.room, 'disbanded_at': 1795560000.0},
+        };
+      };
+      final saving = draft.save(canUse: () => true);
+      await started.future;
+      final created = fixture.commands.single;
+      expect(created.$2, 'groups.create');
+      expect(draft.saving, true);
+      expect(draft.frozen, true);
+      held.complete();
+      expect(await saving, false);
+      expect(draft.saving, false);
+      expect(draft.canSave, true);
+      expect(draft.error, contains('picture could not be saved'));
+      expect(draft.picture, same(picture));
+      expect(draft.selected.map((bot) => bot.id), members);
+      await _awaitRoster(session);
+      expect(await draft.save(canUse: () => true), false);
+      expect(inspectedRooms, [created.$3['room_id'], created.$3['room_id']]);
+      expect(fixture.commands.where((call) => call.$2 == 'groups.create'), hasLength(1));
+      expect(fixture.commands.where((call) => call.$2 == 'profiles.configure'), isEmpty);
+      expect(backend.profile['ui_meta']['wing-group-icon:${created.$3['room_id']}'], isNull);
     },
   );
 
@@ -1202,6 +1286,7 @@ void main() {
         session,
         pictureIo: _Picker(() => held.future),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
@@ -1248,6 +1333,7 @@ void main() {
         session,
         pictureIo: _Picker(() => held.future),
       );
+      await draft.prepare();
       addTearDown(draft.dispose);
       draft.select(draft.bots.first, true);
       draft.search('atlas');
@@ -1275,6 +1361,7 @@ void main() {
         return held.future;
       };
       final draft = BotGroupDraftSession(session);
+      await draft.prepare();
       for (final bot in draft.bots.take(2)) {
         draft.select(bot, true);
       }

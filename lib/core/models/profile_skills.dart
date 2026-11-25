@@ -82,6 +82,43 @@ final class SkillInstructions {
   }
 }
 
+/// Only updates reported by Hermes; omitted installations have unknown status.
+final class HubSkillUpdate {
+  const HubSkillUpdate(this.name, this.identifier, this.source);
+  final String name, identifier, source;
+
+  static List<HubSkillUpdate> decode(Map<String, dynamic> response) {
+    final rows = response['updates'];
+    if (rows is! List) throw const FormatException('Invalid Hub update check');
+    return List.unmodifiable([
+      for (final row in rows)
+        if (row is Map)
+          HubSkillUpdate(
+            _text(row, 'name'),
+            _text(row, 'identifier', empty: true),
+            _text(row, 'source', empty: true),
+          )
+        else
+          throw const FormatException('Invalid Hub update'),
+    ]);
+  }
+}
+
+final class HubUpdatesObservation {
+  HubUpdatesObservation({
+    required Iterable<HubSkillUpdate>? updates,
+    required this.pending,
+    required this.explicit,
+    required this.canCheck,
+    required this.error,
+  }) : updates = updates == null ? null : List.unmodifiable(updates);
+
+  final List<HubSkillUpdate>? updates;
+  final bool pending, explicit, canCheck;
+  final String? error;
+  bool get showingProgress => pending && explicit;
+}
+
 final class SkillPreview {
   const SkillPreview(this.name, this.source, this.trust, this.content);
   final String name, source, trust, content;
@@ -144,6 +181,8 @@ final class ProfileSkillsState {
     required this.reviewRequired,
     required this.error,
     required this.notice,
+    required this.hubUpdates,
+    required this.explicitRead,
   }) : installed = List.unmodifiable(installed),
        catalog = List.unmodifiable(catalog);
   final List<InstalledSkill> installed;
@@ -154,6 +193,10 @@ final class ProfileSkillsState {
   final SkillsPhase phase;
   final bool verified, hasObservation, partial, reviewRequired;
   final String? error, notice;
+  final HubUpdatesObservation hubUpdates;
+  final bool explicitRead;
+  bool get showingReadProgress =>
+      phase == SkillsPhase.reading && (explicitRead || !hasObservation);
   bool get busy => phase != SkillsPhase.idle;
   bool get saving => phase == SkillsPhase.saving;
   bool get canMutate => !busy && verified && !reviewRequired;

@@ -234,9 +234,7 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
           curve: Curves.easeOut,
           padding: EdgeInsets.only(bottom: keyboardInset),
           child: FractionallySizedBox(
-            heightFactor: widget.session.timeline != null && keyboardInset > 0
-                ? 1
-                : 0.85,
+            heightFactor: keyboardInset > 0 ? 1 : 0.85,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: _withTimeline(
@@ -276,16 +274,6 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
                                 '${current.isTerminal ? 'Last activity' : 'Current activity'}: $text',
                               ],
                             ),
-                        if (widget.session.timeline == null)
-                          _steeringControls(),
-                        if (widget.session.timeline == null &&
-                            widget.session.supportsTail)
-                          _tailBody(current),
-                        if (widget.session.timeline == null &&
-                            !widget.session.supportsTail)
-                          _recentActivity(current),
-                        if (widget.session.timeline == null)
-                          _statusFooter(current),
                         _SubagentMetadata(activity: current),
                       ],
                     ),
@@ -301,7 +289,6 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
 
   Widget _withTimeline(GatewaySubagentActivity current, Widget details) {
     final timeline = widget.session.timeline;
-    if (timeline == null) return details;
     return LayoutBuilder(
       builder: (context, constraints) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -481,86 +468,6 @@ class _SubagentDetailSheetState extends State<_SubagentDetailSheet>
       ],
     );
   }
-
-  Widget _recentActivity(GatewaySubagentActivity activity) =>
-      activity.recentActivity.isEmpty
-      ? const SizedBox.shrink()
-      : ActivityDetailSection(
-          copyable: false,
-          viewable: false,
-          block: ToolDetailBlock(
-            label: 'Recent activity',
-            text: activity.recentActivity.map(_recentActivityText).join('\n'),
-          ),
-        );
-
-  Widget _tailBody(GatewaySubagentActivity activity) {
-    final tail = widget.session.state.tail;
-    final readableTail = tail != null && tail.available && tail.text.isNotEmpty
-        ? tail
-        : widget.session.state.lastAvailableTail;
-    final messages = <String>[
-      if (widget.session.state.tailError == null) ...[
-        if (tail == null)
-          'Loading live output...'
-        else if (!tail.available)
-          activity.isTerminal
-              ? 'Live output is unavailable after completion.'
-              : 'Hermes has not provided a live transcript for this subagent.'
-        else if (tail.text.isEmpty)
-          'Waiting for transcript text...',
-      ],
-      if (readableTail != null &&
-          (widget.session.state.tailError != null ||
-              tail?.available != true ||
-              tail!.text.isEmpty))
-        'Showing the last received output.',
-      if (readableTail?.truncated == true)
-        'Showing the latest 16 KiB of live output.',
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (readableTail != null)
-          ActivityDetailSection(
-            block: ToolDetailBlock(
-              label: 'Live output',
-              role: ToolDetailRole.output,
-              text: readableTail.text,
-              copyable: true,
-              format: ToolDetailFormat.source,
-            ),
-            facts: messages,
-            actions: _tailActions(),
-          )
-        else
-          ActivityDetailStatus(
-            label: 'Live output',
-            icon: Icons.notes_outlined,
-            contextFacts: messages,
-            actions: _tailActions(),
-          ),
-        if (widget.session.state.inlineTailError case final error?)
-          Padding(
-            padding: const EdgeInsets.all(WingSpacing.sm),
-            // The existing Alert owns announcement of the same read failure.
-            child: StudioError(error, announce: false),
-          ),
-        _recentActivity(activity),
-      ],
-    );
-  }
-
-  List<Widget> _tailActions() => [
-    ActivityDetailAction(
-      label: 'Refresh live output',
-      icon: Icons.refresh,
-      busy: widget.session.state.loadingTail,
-      onPressed: widget.session.state.tailFailures >= 3
-          ? widget.session.retryTail
-          : widget.session.refreshTail,
-    ),
-  ];
 }
 
 String _statusLabel(GatewaySubagentActivity activity, bool unconfirmed) {
@@ -586,15 +493,6 @@ String? _activityText(GatewaySubagentActivity activity) {
     return detail == null || detail == tool ? label : '$label · $detail';
   }
   return activity.detail;
-}
-
-String _recentActivityText(String line) {
-  if (!line.startsWith('Tool: ')) return line;
-  final value = line.substring(6);
-  final split = value.indexOf(' · ');
-  final name = split < 0 ? value : value.substring(0, split);
-  final caption = ToolCallPresentation.titleFor(name, completed: false);
-  return split < 0 ? caption : '$caption${value.substring(split)}';
 }
 
 class _SubagentRow extends StatelessWidget {

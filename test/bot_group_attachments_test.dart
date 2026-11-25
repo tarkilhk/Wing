@@ -280,6 +280,7 @@ void main() {
         {
           'room': fixture.room,
           'driver_status': {
+          'peer_routes': <Object>[],
             'working': true,
             'blocked': false,
             'pending_actions': [],
@@ -296,9 +297,9 @@ void main() {
         working: true,
         memberActivity: decoded.runtime!.memberActivity,
       );
-      expect(state.activeMemberProfiles, {'atlas'});
+      expect(state.activeMemberIds, {'atlas'});
       final observed = state.applyTo(group).withCatalogObservation(group);
-      expect(observed.activeMemberProfiles, {'atlas'});
+      expect(observed.activeMemberIds, {'atlas'});
     },
   );
 

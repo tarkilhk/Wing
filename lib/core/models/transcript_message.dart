@@ -11,6 +11,7 @@ import 'user_message_content.dart';
 enum TranscriptMessageKind {
   hidden,
   notice,
+  refused,
   review,
   steering,
   system,
@@ -162,7 +163,9 @@ final class TranscriptMessage {
     if (notice != null) {
       return TranscriptMessage._(
         streaming: streaming,
-        kind: TranscriptMessageKind.notice,
+        kind: row['display_kind'] == 'content_refused'
+            ? TranscriptMessageKind.refused
+            : TranscriptMessageKind.notice,
         role: role,
         id: id,
         text: notice,

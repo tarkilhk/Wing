@@ -133,6 +133,7 @@ class ChatRuntime {
   ChatRecovery _recovery = ChatRecovery.ready;
   String? _openingError, _error, _commandError;
   TurnFailure? _failure;
+  int? _failureGeneration;
   ChatMainActivity _main = ChatMainActivity.working;
   bool _compacting = false;
   GatewayToolActivity? _mainTool;
@@ -311,19 +312,16 @@ class ChatRuntime {
   ]);
   Map<String, dynamic> _approvalWire(Map<String, dynamic> raw) {
     final id = raw['request_id'];
-    final previous = _approvals.requests
-        .where(
-          (r) =>
-              r['request_id'] == id &&
-              r['execution_generation'] == raw['execution_generation'],
-        )
-        .firstOrNull;
-    final combined = {...?previous, ...raw};
-    final parsed = GatewayApprovalRequest.fromEventData(combined);
+    final combined = raw;
+    final parsed = GatewayApprovalRequest.fromEventData({
+      ...combined,
+      if (combined['execution_generation'] is int) 'kind': 'command',
+    });
     return {
       'request_id': id,
       'prompt_id': combined['prompt_id'],
       'execution_generation': combined['execution_generation'],
+      ...parsed.subjectFields,
       'command': parsed.command,
       'description': parsed.description,
       'allow_permanent': parsed.allowPermanent,
@@ -460,6 +458,7 @@ class ChatRuntime {
       _activity.clear();
       _error = null;
       _commandError = null;
+      _failureGeneration = null;
     }
     return original;
   }
@@ -546,7 +545,7 @@ class ChatRuntime {
     }
   }
 
-  void failTurn(String error) {
+  void failTurn(String error, {int? executionGeneration}) {
     if (!_closed) {
       _retireToolProgress();
       _sealReasoning();
@@ -554,6 +553,7 @@ class ChatRuntime {
       _execution = ChatExecution.failed;
       _error = error;
       _failure = null;
+      _failureGeneration = executionGeneration;
     }
   }
 
@@ -562,6 +562,7 @@ class ChatRuntime {
     required bool cancelled,
     required String? error,
     TurnFailure? failure,
+    int? executionGeneration,
   }) {
     if (_closed) return;
     _retireToolProgress();
@@ -577,6 +578,7 @@ class ChatRuntime {
     _commandPreflight = null;
     _error = error;
     _failure = failure;
+    _failureGeneration = failed ? executionGeneration : null;
   }
 
   void reportError(String? error) {
@@ -882,6 +884,7 @@ class ChatRuntime {
     _compacting = false;
     _recovery = ChatRecovery.ready;
     _error = null;
+    _failureGeneration = null;
     _approvals.clear();
     _approvalCorrelations.clear();
     _serverQuestions = null;
@@ -1154,7 +1157,7 @@ class ChatRuntime {
     final request = observation.approval;
     if (_closed || request == null || request.requestId != id) {
       throw StateError(
-        'This approval has changed. Review the current command.',
+        'This approval has changed. Review the current request.',
       );
     }
     if (_approvalResponding) {
@@ -1534,20 +1537,35 @@ class ChatRuntime {
         ? result['inflight'] as Map
         : null;
     final failed = inflight?['status'] == 'error';
+    final generation = result['execution_generation'];
+    final newerExecution =
+        generation is int &&
+        _failureGeneration != null &&
+        generation > _failureGeneration!;
     _execution = failed
         ? ChatExecution.failed
         : result['running'] == true
         ? ChatExecution.running
+        : newerExecution
+        ? ChatExecution.idle
         : wasActive
         ? ChatExecution.completed
         : _execution == ChatExecution.submitting
         ? ChatExecution.idle
         : _execution;
-    _failure = failed
-        ? TurnFailure.fromCompletion(Map<String, dynamic>.from(inflight!))
-        : null;
-    _error = _failure?.message;
-    final generation = result['execution_generation'];
+    if (failed) {
+      _failure = TurnFailure.fromCompletion(
+        Map<String, dynamic>.from(inflight!),
+      );
+      _error = _failure?.message;
+      _failureGeneration = generation is int ? generation : null;
+    } else if (_execution != ChatExecution.failed) {
+      _failure = null;
+      _error = null;
+      _failureGeneration = null;
+    }
+    // An idle same-runtime snapshot may omit inflight. If it retains the
+    // received failed outcome above, retain that outcome's facts together.
     if (generation is int) {
       reconcileNativePrompts(result['prompts'], generation);
     }

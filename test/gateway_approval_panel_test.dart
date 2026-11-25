@@ -1,3 +1,5 @@
+import 'support/wing_client_identity_fixture.dart';
+import 'package:wing/core/models/gateway_approval.dart';
 import 'support/bots_fixture.dart';
 import 'package:wing/core/services/bots_repository.dart';
 import 'package:wing/core/models/bots.dart';
@@ -37,6 +39,7 @@ class _ApprovalHost extends Host {
     final base = super.gateway(scope);
     late final ProfileGateway gateway;
     gateway = ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       connect: () async {
@@ -111,6 +114,219 @@ void main() {
     }
   });
 
+  testWidgets('typed denial footer fits the short keyboard conversation', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(411.4, 731.4);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(top: 24);
+    tester.view.viewPadding = const FakeViewPadding(top: 24);
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final appPreferences = AppPreferences(preferences);
+    addTearDown(appPreferences.dispose);
+    final host = _ApprovalHost();
+    late ProfileWorkspaceController controller;
+    await tester.runAsync(() async {
+      controller = ProfileWorkspaceController(
+        connectionIdentity: 'fixture',
+        access: ConnectionAccess(
+          connection: SavedConnection(
+            id: 'host',
+            label: 'Home',
+            host: 'localhost',
+            port: 1,
+            apiKey: '',
+          ),
+          dashboardOAuth: null,
+        ),
+        preferences: preferences,
+        appPreferences: appPreferences,
+        gatewayFactory: host.gateway,
+      );
+      await controller.initialize();
+      await controller.createChat(canDispatch: () => true);
+      host.event('a', 'approval', {
+        'request_id': 'site',
+        'server_request_id': 'srq-site',
+        'kind': 'network',
+        'host': 'docs.example.org',
+        'label': 'Reference website',
+        'risk': 'Connects to an external website.',
+        'choices': ['once', 'always', 'deny'],
+      });
+    });
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: wingTheme(Brightness.light),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.3)),
+          child: child!,
+        ),
+        home: ProfileWorkspaceScreen(
+          controller: controller,
+          createBotsSession: () => _ApprovalBots(null),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(_decisionButton('Reject'));
+    await tester.tap(_decisionButton('Reject'));
+    await tester.pumpAndSettle();
+    final reason = find.widgetWithText(TextField, 'Reason (optional)');
+    await tester.enterText(reason, 'Keep this work offline');
+    tester.view.viewInsets = const FakeViewPadding(bottom: 332.19);
+    await tester.pumpAndSettle();
+    final latest = find.byKey(const ValueKey('jump-to-latest'));
+    if (latest.hitTestable().evaluate().isNotEmpty) {
+      await tester.tap(latest);
+      await tester.pumpAndSettle();
+    }
+    // Refocusing after a user scroll must not reveal the caret by pushing the
+    // action row underneath the composer again.
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pumpAndSettle();
+    await tester.tap(reason);
+    await tester.pumpAndSettle();
+    final editableFinder = find.descendant(
+      of: reason,
+      matching: find.byType(EditableText),
+    );
+    final editable = tester.widget<EditableText>(editableFinder);
+    expect(editable.focusNode.hasFocus, isTrue);
+    expect(tester.view.viewInsets.bottom, 332.19);
+    final decision = _decisionButton('Reject request');
+    final viewport = tester.getRect(
+      find.byKey(const ValueKey('profile-transcript')),
+    );
+    final renderEditable = tester
+        .state<EditableTextState>(editableFinder)
+        .renderEditable;
+    final caret = renderEditable
+        .getLocalRectForCaret(editable.controller.selection.extent)
+        .shift(renderEditable.localToGlobal(Offset.zero));
+    expect(viewport.contains(caret.topLeft), isTrue);
+    expect(viewport.contains(caret.bottomRight - const Offset(.1, .1)), isTrue);
+    final bounds = tester.getRect(decision);
+    expect(bounds.size, const Size(48, 48));
+    expect(tester.widget<IconButton>(decision).onPressed, isNotNull);
+    expect(
+      viewport.contains(bounds.topLeft),
+      isTrue,
+      reason: '$viewport contains $bounds',
+    );
+    expect(
+      viewport.contains(bounds.bottomRight - const Offset(.1, .1)),
+      isTrue,
+      reason: '$viewport contains $bounds',
+    );
+  });
+
+  for (final brightness in Brightness.values) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'typed denial retains keyboard draft and disables duplicate submission $brightness/$scale',
+        (tester) async {
+          tester.view.physicalSize = Size(scale == 1 ? 390 : 320, 844);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final request = GatewayApprovalRequest.fromEventData({
+            'kind': 'network',
+            'host': ' exact.example.org/private/long-target ',
+            'label': 'Reference website',
+            'risk': 'External connection',
+            'choices': ['once', 'always', 'deny'],
+          });
+          var busy = false;
+          String? error;
+          String? receivedReason;
+          late StateSetter update;
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: wingTheme(brightness),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: StatefulBuilder(
+                  builder: (context, setState) {
+                    update = setState;
+                    return SingleChildScrollView(
+                      child: GatewayApprovalPanel(
+                        request: request,
+                        enabled: !busy,
+                        busy: busy,
+                        error: error,
+                        onRespond: (choice, reason) {
+                          receivedReason = reason;
+                          setState(() => busy = true);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+          expect(find.text('Review website access'), findsOneWidget);
+          expect(
+            find.text('␣exact.example.org/private/long-target␣'),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Access lasts until the sandbox is switched off.'),
+            findsOneWidget,
+          );
+          expect(find.byTooltip('Approve once'), findsNothing);
+          await tester.tap(find.byTooltip('Reject'));
+          await tester.pumpAndSettle();
+          await tester.enterText(find.byType(TextField), 'Keep private');
+          tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+          await tester.pumpAndSettle();
+          await tester.ensureVisible(find.byTooltip('Reject request'));
+          await tester.pumpAndSettle();
+          expect(
+            find.byTooltip('Reject request').hitTestable(),
+            findsOneWidget,
+          );
+          await tester.tap(find.byTooltip('Reject request'));
+          await tester.pump();
+          expect(receivedReason, 'Keep private');
+          expect(
+            tester
+                .widget<IconButton>(_decisionButton('Reject request'))
+                .onPressed,
+            isNull,
+          );
+          update(() {
+            busy = false;
+            error = 'Decision not confirmed. Retry.';
+          });
+          await tester.pumpAndSettle();
+          expect(find.text('Keep private'), findsOneWidget);
+          expect(find.text('Decision not confirmed. Retry.'), findsOneWidget);
+          final retry = _decisionButton('Reject request');
+          await tester.ensureVisible(retry);
+          await tester.pumpAndSettle();
+          expect(retry.hitTestable(), findsOneWidget);
+          final bounds = tester.getRect(retry);
+          expect(bounds.width, greaterThanOrEqualTo(48));
+          expect(bounds.height, greaterThanOrEqualTo(48));
+          expect(bounds.bottom, lessThanOrEqualTo(844 - 300));
+          expect(tester.widget<IconButton>(retry).onPressed, isNotNull);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   for (final (botChat, brightness) in [
     for (final botChat in [false, true])
       for (final brightness in Brightness.values) (botChat, brightness),
@@ -172,6 +388,7 @@ void main() {
             final chat = controller.current!.chat!;
             final bot = botChat
                 ? BotRecord(
+    installationId: 'install:install-1',
                     scope: chat.key.workspace,
                     instance: 'Home',
                     profile: HermesProfile(
@@ -215,7 +432,7 @@ void main() {
               botChat ? findsOneWidget : findsNothing,
             );
             expect(find.text('Review command'), findsOneWidget);
-            expect(find.byType(ApprovalCommandDetails), findsOneWidget);
+            expect(find.byType(ApprovalRequestDetails), findsOneWidget);
             expect(find.text('Asking a question'), findsNothing);
             final command = find.byWidgetPredicate(
               (widget) =>
@@ -257,6 +474,15 @@ void main() {
             final headerBounds = tester.getRect(headerSlot);
             await tester.tap(_decisionButton('Approve once'));
             await tester.pump();
+            expect(
+              tester
+                  .widgetList<StudioPageLoading>(find.byType(StudioPageLoading))
+                  .where((region) => region.active)
+                  .map((region) => region.label),
+              contains('Sending approval decision'),
+            );
+            // The shared owner publishes sibling header/body changes after
+            // build; this is the first frame drawing the elected header mark.
             await tester.pump();
             expect(
               find.bySemanticsLabel('Sending approval decision'),

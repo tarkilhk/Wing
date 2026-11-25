@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/chat_notification_content.dart';
 import 'package:wing/core/models/turn_failure.dart';
+import 'package:wing/core/models/chat_runtime.dart';
+import 'package:wing/core/services/chat_runtime.dart';
 import 'package:wing/core/theme/wing_theme.dart';
 import 'package:wing/core/widgets/turn_failure_view.dart';
 
@@ -37,6 +39,119 @@ Map<String, dynamic> limitedTurn() => {
 
 void main() {
   setUpAll(loadFormFamilyFonts);
+  test(
+    'idle resume retains received failure facts until a new outcome or runtime',
+    () {
+      for (final successor in [
+        'running',
+        'replacement',
+        'success',
+        'newerIdle',
+        'newFailure',
+        'unknownFailure',
+      ]) {
+        final runtime = ChatRuntime(runtimeId: 'same');
+        final failure = TurnFailure.fromCompletion({
+          'status': 'error',
+          'text': 'Received refusal',
+          'error_surface': {'code': 'content_policy_blocked'},
+        })!;
+        runtime.completeTurn(
+          failed: true,
+          cancelled: false,
+          error: failure.message,
+          failure: failure,
+          executionGeneration: 4,
+        );
+        runtime.installResume({
+          'session_id': 'same',
+          'running': false,
+          'inflight': null,
+          'execution_generation': 4,
+        });
+        runtime.installResume({'session_id': 'same', 'running': false});
+        expect(runtime.observation.execution, ChatExecution.failed);
+        expect(runtime.observation.failure, same(failure));
+        expect(runtime.observation.error, 'Received refusal');
+        switch (successor) {
+          case 'running':
+            runtime.installResume({'session_id': 'same', 'running': true});
+          case 'replacement':
+            runtime.installResume({
+              'session_id': 'replacement',
+              'running': false,
+            });
+          case 'success':
+            runtime.beginTurn(submitting: false);
+            runtime.completeTurn(failed: false, cancelled: false, error: null);
+            runtime.installResume({'session_id': 'same', 'running': false});
+          case 'newerIdle':
+            runtime.installResume({
+              'session_id': 'same',
+              'running': false,
+              'execution_generation': 5,
+            });
+            expect(runtime.observation.execution, ChatExecution.idle);
+          case 'newFailure':
+            runtime.installResume({
+              'session_id': 'same',
+              'running': false,
+              'execution_generation': 5,
+              'inflight': {'status': 'error', 'text': 'New provider error'},
+            });
+            expect(runtime.observation.execution, ChatExecution.failed);
+            expect(runtime.observation.failure, isNot(same(failure)));
+            expect(runtime.observation.error, 'New provider error');
+            runtime.dispose();
+            continue;
+          case 'unknownFailure':
+            runtime.beginTurn(submitting: false);
+            runtime.completeTurn(
+              failed: true,
+              cancelled: false,
+              error: failure.message,
+              failure: failure,
+            );
+            runtime.installResume({
+              'session_id': 'same',
+              'running': false,
+              'execution_generation': 5,
+            });
+            expect(runtime.observation.execution, ChatExecution.failed);
+            expect(runtime.observation.failure, same(failure));
+            runtime.dispose();
+            continue;
+        }
+        expect(runtime.observation.execution, isNot(ChatExecution.failed));
+        expect(runtime.observation.failure, isNull);
+        expect(runtime.observation.error, isNull);
+        runtime.dispose();
+      }
+    },
+  );
+  test('content refusal stays a failure without provider recovery actions', () {
+    for (final byReason in [false, true]) {
+      final failure = TurnFailure.fromCompletion({
+        'status': 'error',
+        'text': 'Provider refusal detail',
+        if (byReason) 'failure_reason': 'content_policy_blocked',
+        'error_surface': {
+          'layer': 'provider',
+          if (!byReason) 'code': 'content_policy_blocked',
+          'retryable': false,
+        },
+      })!;
+      expect(failure.contentRefused, isTrue);
+      expect(failure.title, 'Message refused');
+      expect(failure.canChooseModel, isFalse);
+      expect(failure.canReviewProvider, isFalse);
+      expect(failure.canContinue, isFalse);
+      final notification = ChatNotificationContent.failure(failure);
+      expect(notification.category, ChatNotificationCategory.stopped);
+      expect(notification.needsAttention, isTrue);
+      expect(notification.status, 'Message refused');
+    }
+  });
   test('local endpoint recovery never offers provider sign-in', () {
     final failure = TurnFailure.fromCompletion({
       'status': 'error',

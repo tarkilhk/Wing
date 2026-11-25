@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 /// Fixed authority metadata for isolated stock-contract fixtures. These values
 /// are observations; tests varying fences or replay ordering supply their own.
 const canonicalSnapshotFields = <String, dynamic>{
@@ -30,3 +33,15 @@ Map<String, dynamic> canonicalReceipt(
   'text': params['text'],
   'controls': params['attachments'] == null ? ['steer', 'replace'] : <String>[],
 };
+
+/// Stock connection greeting for fixtures that are not testing greeting contents.
+void announceTestGatewayReady(WebSocket socket) => socket.add(
+  jsonEncode({
+    'jsonrpc': '2.0',
+    'method': 'event',
+    'params': {
+      'type': 'gateway.ready',
+      'payload': {'session_authority': true},
+    },
+  }),
+);

@@ -1,3 +1,5 @@
+import 'support/canonical_gateway_fixture.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/group_observations.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -422,7 +424,9 @@ void main() {
         final socketReady = Completer<WebSocket>();
         server.listen((request) async {
           if (WebSocketTransformer.isUpgradeRequest(request)) {
-            socketReady.complete(await WebSocketTransformer.upgrade(request));
+            final socket = await WebSocketTransformer.upgrade(request);
+            announceTestGatewayReady(socket);
+            socketReady.complete(socket);
           } else {
             request.response.write('healthy');
             await request.response.close();
@@ -431,6 +435,8 @@ void main() {
         final client = WsClient(
           'http://127.0.0.1:${server.port}',
           token: 'SECRET_NEVER_LOG',
+
+          clientIdentity: testWingClientIdentity,
         );
         final closed = Completer<void>();
         client.onConnectionChanged = (connected) {

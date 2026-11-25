@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 import 'package:wing/core/models/bots.dart';
+import 'package:wing/core/models/bot_group_peer.dart';
 import 'package:wing/core/models/transcript_message.dart';
 import 'package:wing/core/models/hermes_profile.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -199,7 +200,7 @@ void main() {
         'seq': 1,
         'event_id': 'terminal-1',
         'kind': 'turn.settled',
-        'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+        'actor': {'kind': 'gateway', 'id': 'install:install-1'},
         'created_at': 1700000001,
         'payload': {'passed': passed, 'member_id': member},
       };
@@ -209,13 +210,13 @@ void main() {
             'cursor': 1,
             'latest_seq': 1,
             'has_more': false,
-            'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+            'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
           }, since: 0).events.single;
       final pass = decode(settled(true, 'atlas'));
       expect(pass.isPass, isTrue);
       expect(pass.isMessage, isFalse);
       expect(pass.isTranscriptEntry, isTrue);
-      expect(pass.actorId, 'gateway-1');
+      expect(pass.actorId, 'install:install-1');
       expect(pass.memberId, 'atlas');
       expect(pass.text, isEmpty);
       expect(decode(settled(false, 'atlas')).isTranscriptEntry, isFalse);
@@ -254,7 +255,7 @@ void main() {
             'seq': passSeq,
             'kind': 'turn.settled',
             'created_at': 1700000000 + passSeq,
-            'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+            'actor': {'kind': 'gateway', 'id': 'install:install-1'},
             'payload': {
               'member_id': 'mira',
               'passed': true,
@@ -363,7 +364,7 @@ void main() {
           'cursor': 2,
           'latest_seq': 2,
           'has_more': false,
-          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+          'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
         };
       };
       now = now.add(const Duration(seconds: 31));
@@ -696,7 +697,7 @@ void main() {
           'cursor': 1,
           'latest_seq': 1,
           'has_more': false,
-          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+          'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
         };
       };
       fixture.repository.groupObservations.discover(room, 1);
@@ -1296,7 +1297,7 @@ void main() {
       expect(preview.name, 'Renamed room');
       expect(preview.runtimeAvailable, false);
       expect(preview.working, false);
-      expect(preview.activeMemberProfiles, isEmpty);
+      expect(preview.activeMemberIds, isEmpty);
       expect(preview.observationComplete, true);
       expect(preview.messageCoverageSequence, 1);
       expect(
@@ -1313,7 +1314,7 @@ void main() {
       expect(unavailable.preview, 'Confirmed answer');
       expect(unavailable.messageCoverageSequence, 1);
       expect(unavailable.runtimeAvailable, false);
-      expect(unavailable.activeMemberProfiles, isEmpty);
+      expect(unavailable.activeMemberIds, isEmpty);
     },
   );
 
@@ -1339,19 +1340,19 @@ void main() {
       final updated = state.applyTo(room);
       expect(updated.latestSequence, 20);
       expect(updated.messageCoverageSequence, 0);
-      expect(updated.activeMemberProfiles, {'atlas', 'mira'});
+      expect(updated.activeMemberIds, {'atlas', 'mira'});
       final merged = updated.withMessageObservation(room);
       expect(merged.latestSequence, 20);
       expect(merged.messageCoverageSequence, 0);
       expect(merged.working, true);
-      expect(merged.activeMemberProfiles, {'atlas', 'mira'});
+      expect(merged.activeMemberIds, {'atlas', 'mira'});
       final unavailable = BotGroupState(
         room: room,
         roomAvailable: false,
       ).applyTo(merged);
       expect(unavailable.working, false);
       expect(unavailable.blocked, false);
-      expect(unavailable.activeMemberProfiles, isEmpty);
+      expect(unavailable.activeMemberIds, isEmpty);
       expect(unavailable.messageCoverageSequence, 0);
     },
   );
@@ -1522,7 +1523,7 @@ void main() {
               'cursor': params['since_seq'],
               'latest_seq': 1,
               'has_more': true,
-              'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+              'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
             }
           : null;
       final group = (await readFixtureGroups(
@@ -1884,6 +1885,7 @@ void main() {
           ? {
               'room': {...fixture.room, 'latest_seq': 0},
               'driver_status': {
+          'peer_routes': <Object>[],
                 'working': true,
                 'blocked': false,
                 'counts': {'running': 1},
@@ -1908,9 +1910,9 @@ void main() {
         owner.state.bots.first.preview,
         contains('three useful approaches'),
       );
-      expect(owner.state.groups.single.activeMemberProfiles, {'atlas', 'mira'});
+      expect(owner.state.groups.single.activeMemberIds, {'atlas', 'mira'});
       expect(
-        () => owner.state.groups.single.activeMemberProfiles.add('forge'),
+        () => owner.state.groups.single.activeMemberIds.add('forge'),
         throwsUnsupportedError,
       );
       expect(fixture.commands, isEmpty);
@@ -1932,6 +1934,7 @@ void main() {
           return {
             'room': {...fixture.room, 'latest_seq': 1},
             'driver_status': {
+          'peer_routes': <Object>[],
               'working': true,
               'blocked': false,
               'counts': {'running': 1},
@@ -1980,6 +1983,7 @@ void main() {
       'groups.state' => {
         'room': {...fixture.room, 'latest_seq': 0},
         'driver_status': {
+          'peer_routes': <Object>[],
           'working': true,
           'blocked': false,
           'counts': {'running': 1},
@@ -2028,6 +2032,7 @@ void main() {
         'groups.state' => {
           'room': {...fixture.room, 'latest_seq': 0},
           'driver_status': {
+          'peer_routes': <Object>[],
             'working': true,
             'blocked': false,
             'counts': {'running': 1},
@@ -2042,7 +2047,7 @@ void main() {
       };
       owner.addListener(() {
         if (!published.isCompleted &&
-            owner.state.groups.single.activeMemberProfiles.isNotEmpty) {
+            owner.state.groups.single.activeMemberIds.isNotEmpty) {
           published.complete();
         }
       });
@@ -2065,6 +2070,7 @@ void main() {
       'groups.state' => {
         'room': {...active.room, 'latest_seq': 0},
         'driver_status': {
+          'peer_routes': <Object>[],
           'working': true,
           'blocked': false,
           'counts': {'running': 1},
@@ -3587,6 +3593,7 @@ void main() {
       final roster = await fixture.repository.bots();
       final bot = roster.first;
       final foreign = BotRecord(
+    installationId: 'install:install-1',
         scope: WorkspaceScope(
           connectionId: 'other-host',
           connectionIdentity: 'other-instance',
@@ -3668,6 +3675,8 @@ void main() {
       for (var index = 0; index < RecentGroupMessages.roomLimit; index++) {
         cache.record(
           BotGroup(
+    authorityGatewayId: 'install:install-1',
+    authorityEpoch: 1,
             scope: covered.scope,
             instance: covered.instance,
             id: 'other-$index',
@@ -3976,6 +3985,7 @@ void main() {
     members.add({
       'member_id': 'forge',
       'profile': 'forge',
+      'target': {'kind': 'local', 'profile': 'forge'},
       'handle': 'bot_forge',
       'display_name': 'Foo',
     });
@@ -4049,13 +4059,8 @@ void main() {
       expect(fixture.commands.where((c) => c.$2 == 'groups.send'), isEmpty);
       final everyone = choices.last.reference;
       session.editMentions('Hello @everyone', selected: everyone);
-      expect(await session.send('Hello @everyone'), isTrue);
-      expect(
-        fixture.commands
-            .lastWhere((c) => c.$2 == 'groups.send')
-            .$3['payload']['text'],
-        'Hello @everyone',
-      );
+      expect(await session.send('Hello @everyone'), isFalse);
+      expect(fixture.commands.where((c) => c.$2 == 'groups.send'), isEmpty);
     },
   );
   test('a member id named everyone is still a selected identity', () async {
@@ -4201,15 +4206,13 @@ void main() {
     );
     final local = (await fixture.repository.bots()).first;
     final remote = (await other.bots()).last;
+    final awaitFixtureCapabilities = await fixture.read('default', 'groups.capabilities', {});
     await expectLater(
-      fixture.repository.createGroup(
-        'new-room',
-        'Team',
-        [local, remote],
-        () => true,
-        () {},
-      ),
-      throwsStateError,
+      Future(() => BotGroupSelection(
+        BotGroupCapabilities.fromJson(awaitFixtureCapabilities, 'default'),
+        {local.id: BotGroupTarget.local(local.profile.name)}, const {},
+      ).intent('new-room', 'Team', [local, remote])),
+      throwsA(isA<BotGroupCreateRefused>()),
     );
     expect(fixture.commands, isEmpty);
   });

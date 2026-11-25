@@ -36,7 +36,10 @@ class _DeliverableAttachmentState extends State<DeliverableAttachment> {
   @override
   void didUpdateWidget(DeliverableAttachment oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.output.target != widget.output.target) {
+    if (oldWidget.output.target != widget.output.target ||
+        oldWidget.loadImage != widget.loadImage ||
+        oldWidget.onOpen != widget.onOpen ||
+        oldWidget.onDownload != widget.onDownload) {
       _generation++;
       _opening = false;
       _downloading = false;

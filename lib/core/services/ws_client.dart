@@ -1,3 +1,4 @@
+import '../models/wing_client_identity.dart';
 // WebSocket client for the Hermes gateway JSON-RPC API (/api/ws).
 // Supports both request-response calls AND server-pushed streaming events.
 //
@@ -107,6 +108,7 @@ typedef ConnectionCallback = void Function(bool connected);
 /// WebSocket client for the Hermes JSON-RPC gateway.
 class WsClient {
   final String baseUrl;
+  final WingClientIdentity _clientIdentity;
   final Map<String, Object?> _diagnosticContext;
   final String? _token;
   final String? _ticket;
@@ -134,6 +136,7 @@ class WsClient {
 
   factory WsClient(
     String baseUrl, {
+    required WingClientIdentity clientIdentity,
     String? token,
     String? ticket,
     Map<String, String> gatewayHeaders = const {},
@@ -141,6 +144,7 @@ class WsClient {
   }) {
     return WsClient._(
       baseUrl,
+      clientIdentity,
       token,
       ticket,
       validateGatewayHeaders(gatewayHeaders),
@@ -150,6 +154,7 @@ class WsClient {
 
   WsClient._(
     this.baseUrl,
+    this._clientIdentity,
     this._token,
     this._ticket,
     this._gatewayHeaders,
@@ -167,6 +172,7 @@ class WsClient {
       'ws.connect_started',
       details: {..._diagnosticContext, 'generation': generation},
     );
+    capabilitiesReady = null;
     _gatewayReadyFrame = null;
     _gatewayReadyCanonical = null;
     _gatewayReadyFailure = null;
@@ -210,6 +216,7 @@ class WsClient {
     );
     try {
       await channel.ready.timeout(const Duration(seconds: 15));
+      await waitForGatewayReady();
       if (generation != _connectionGeneration || _channel != channel) {
         throw JsonRpcError(
           'connect',
@@ -219,8 +226,11 @@ class WsClient {
       }
       _connected = true;
       canonicalClarifyBatch = false;
-      capabilitiesReady = send('client.capabilities', {'server_requests': true})
-          .then((capabilities) {
+      capabilitiesReady =
+          send('client.capabilities', {
+            'server_requests': true,
+            'client': _clientIdentity.wire,
+          }).then((capabilities) {
             final error = capabilities['error'];
             if (error is Map) {
               throw JsonRpcError.fromGateway(

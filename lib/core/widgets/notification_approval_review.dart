@@ -63,19 +63,14 @@ class _ReviewState extends State<NotificationApprovalReview> {
                 (offline
                     ? 'Offline—approval not sent. Reconnect to retry.'
                     : null);
-      final scope = switch (widget.choice) {
-        'always' =>
-          'Permanently allow matching commands, including in future chats.',
-        'session' => 'Allow matching commands for this session.',
-        'deny' => 'Reject this request. The command will not run.',
-        _ => 'Allow this request once.',
-      };
+      final choice = GatewayApprovalChoice.fromWireValue(widget.choice)!;
+      final scope = widget.request.choiceScope(choice);
       return PopScope(
         canPop: !sending,
         child: StudioDialog(
           titleTextStyle: Theme.of(context).textTheme.titleLarge,
           title: Text(
-            widget.choice == 'always' ? 'Always allow?' : 'Review command',
+            widget.choice == 'always' ? 'Always allow?' : widget.request.title,
           ),
           content: SizedBox(
             width: double.maxFinite,
@@ -92,7 +87,7 @@ class _ReviewState extends State<NotificationApprovalReview> {
                 const SizedBox(height: 12),
                 Flexible(
                   child: SingleChildScrollView(
-                    child: ApprovalCommandDetails(request: widget.request),
+                    child: ApprovalRequestDetails(request: widget.request),
                   ),
                 ),
               ],
@@ -102,13 +97,21 @@ class _ReviewState extends State<NotificationApprovalReview> {
             StudioFormActions(
               onCancel: sending ? null : () => Navigator.pop(context),
               cancelLabel: pending ? 'Cancel approval decision' : 'Close',
-              onConfirm: sending || offline || !pending ? null : send,
-              confirmLabel: switch (widget.choice) {
-                'always' => 'Always allow',
-                'session' => 'Allow for session',
-                'deny' => 'Deny request',
-                _ => 'Allow once',
-              },
+              onConfirm:
+                  sending ||
+                      offline ||
+                      !pending ||
+                      !widget.request.choices.contains(choice)
+                  ? null
+                  : send,
+              confirmLabel: widget.request.isSandbox
+                  ? widget.request.choiceLabel(choice)
+                  : switch (widget.choice) {
+                      'always' => 'Always allow',
+                      'session' => 'Allow for session',
+                      'deny' => 'Deny request',
+                      _ => 'Allow once',
+                    },
               confirmIcon: widget.choice == 'deny'
                   ? Icons.block
                   : Icons.verified_user_outlined,

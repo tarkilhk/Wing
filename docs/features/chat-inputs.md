@@ -12,9 +12,14 @@ Feature ID: `chat-inputs`.
 - Dismissing the Android keyboard restores the composer to the bottom, including interrupted keyboard animations and returning from another app. Drafts stay intact; a still-visible keyboard retains its space.
 - `chat-inputs.queue` — Hermes owns the accepted FIFO; edits retain authored text and selected references and replace a still-queued message at the tail, steering transfers that exact admission to the current turn, and cancellation names its admission. The queue starts as a compact expandable count. Unknown outcomes, unconfirmed delivery and steering failures remain visible while collapsed. Details retain complete selectable text and exact Copy. Unsupported actions are omitted; supported actions explain temporary restrictions when tapped. Notes and continuation requests from the remote screen are queued independently and preserve the main draft, references and attachments, even when the text matches.
 - `chat-inputs.revise` — Edit, restore or regenerate using revision-fenced saved row targets. Deep revision explains the number of later user turns removed; harmless last-turn regeneration remains immediate. Fork requires an idle source and a saved active answer. Tapping Branch while unavailable explains the restriction in an anchored toast and stays in the conversation. An answer archived by compression explains that a more recent answer is needed; waiting or reloading cannot make that archived answer branchable. After context compression a valid fork copies the active context, including the hidden summary, through the selected answer; archived turns remain in the original chat.
+- Folder and website approval requests retain their own lifetime after a turn ends. Review the target and access scope in the conversation; Reject reveals an optional reason without using the composer draft. See [supervising work](chat-activity.md).
 - `chat-inputs.clarify` — Use the explicit icon in a waiting question to answer with plain composer text. Slash commands, references and attachments retain their own submission semantics. A newer draft is never consumed by an earlier answer.
 
 Group message Reply selects an existing discussion thread and mentions its member author. Cancel reply clears that selection. The room draft retains reply context across reopening and uncertain-send retry; see [Bots](bots.md).
+
+A safety-refused turn retains its original text and explanation as passive
+history, without saved-message replay controls. It never consumes a newer draft
+or resends automatically; see the [refused-turn recipe](conversation.md#gotchas).
 
 ## How to get to it (user POV)
 
@@ -98,6 +103,13 @@ transport suite also drives the native roadmap fixture through the production
 controller, so the Android vault journey uses that same response boundary.
 
 ## Gotchas
+
+Opening the context ring, scrolling its prompt-cache details and retrying a failed
+read preserve the composer draft, focus and native keyboard. Its ring remains
+an occupancy indicator even when cache timing is available without occupancy.
+The exact `draft model slash find outputs and context use the production chat`
+Android case in [model selection](model-selection.md#driving-it-with-wing-harnesses)
+checks these controls and departure in both themes and standard/enlarged text.
 
 Tap and long-press share the queued-message detail/action sheet. Support,
 current eligibility and rejection wording come from the queue owner and update
@@ -199,3 +211,11 @@ A lost acknowledgment retains the original submission ID and exact prepared payl
 For authorized Android + production acceptance, use the `sessions` suite in the
 [existing-gateway journey](multi-surface-journeys.md#selected-hermes-features-on-an-existing-production-gateway).
 It verifies real batch answers and a distinct model reset in owned QA chats.
+
+Groups containing a bot from another instance accept text only. New file staging
+and new attachment sends remain unavailable; restored editable files can be
+removed without losing the text. Text-only Android shares still populate the
+draft. A previously dispatched message with unconfirmed files keeps its exact
+Retry action and cannot edit that payload. The group owner and rendered controls
+are covered by `test/bot_group_peer_test.dart` and
+`test/bot_group_peer_view_test.dart`.

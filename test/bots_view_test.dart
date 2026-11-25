@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/form_family_capture.dart';
 import 'package:wing/core/widgets/gateway_clarify_dialog.dart';
 import 'package:wing/core/widgets/chat_notice_activity_scope.dart';
@@ -67,6 +68,7 @@ class _BotConversationBrowser extends ProfileBrowserFixture {
   ProfileGateway gateway(WorkspaceScope scope) {
     final base = super.gateway(scope);
     return ProfileGateway(
+      loadClientIdentity: loadTestWingClientIdentity,
       scope: scope,
       discover: base.discover,
       get: base.read,
@@ -1171,6 +1173,7 @@ void main() {
           session,
           pictureIo: _RoomPicturePicker(),
         );
+        await draft.prepare();
         for (final bot in draft.bots.take(2)) {
           draft.select(bot, true);
         }
@@ -2926,6 +2929,7 @@ void main() {
             gatewayFactory: (scope) {
               final base = browser.gateway(scope);
               return ProfileGateway(
+                loadClientIdentity: loadTestWingClientIdentity,
                 scope: scope,
                 discover: base.discover,
                 get: base.read,
@@ -4298,6 +4302,7 @@ void main() {
               gatewayFactory: (scope) {
                 final base = browser.gateway(scope);
                 return ProfileGateway(
+                  loadClientIdentity: loadTestWingClientIdentity,
                   scope: scope,
                   discover: base.discover,
                   get: (path, query) => path == 'model/options'
@@ -4325,7 +4330,15 @@ void main() {
               'resolved_id': 'canonical-tip',
             };
             bots.room['members'][0]['profile'] = 'personal';
+            bots.room['members'][0]['target'] = {
+              'kind': 'local',
+              'profile': 'personal',
+            };
             bots.room['members'][1]['profile'] = 'work';
+            bots.room['members'][1]['target'] = {
+              'kind': 'local',
+              'profile': 'work',
+            };
             await tester.binding.setSurfaceSize(
               Size(scale == 1 ? 390 : 320, 844),
             );
@@ -4515,6 +4528,7 @@ void main() {
             gatewayFactory: (scope) {
               final base = browser.gateway(scope);
               return ProfileGateway(
+                loadClientIdentity: loadTestWingClientIdentity,
                 scope: scope,
                 discover: base.discover,
                 get: (path, query) => path == 'model/options'
@@ -4541,7 +4555,15 @@ void main() {
             'resolved_id': 'canonical-tip',
           };
           bots.room['members'][0]['profile'] = 'personal';
+          bots.room['members'][0]['target'] = {
+            'kind': 'local',
+            'profile': 'personal',
+          };
           bots.room['members'][1]['profile'] = 'work';
+          bots.room['members'][1]['target'] = {
+            'kind': 'local',
+            'profile': 'work',
+          };
           bots.events.add({
             'room_id': 'room-1',
             'seq': 1,

@@ -1,3 +1,4 @@
+import 'wing_client_identity_fixture.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,7 +11,10 @@ Stream<dynamic> gatewayApplicationRequests(WebSocket socket) =>
     socket.where((raw) {
       final frame = jsonDecode(raw as String) as Map<String, dynamic>;
       if (frame['method'] != 'client.capabilities') return true;
-      expect(frame['params'], {'server_requests': true});
+      expect(frame['params'], {
+        'server_requests': true,
+        'client': testWingClientIdentity.wire,
+      });
       expect(frame['id'], isA<int>());
       socket.add(
         jsonEncode({

@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/ws_client.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'dart:async';
@@ -69,11 +70,14 @@ void main() {
           connectionIdentity: 'test',
           profileName: 'work',
         ),
+
+        loadClientIdentity: loadTestWingClientIdentity,
       )..connectionStatus = status;
       final administration = AdministrationRepository.forConnection(
         ConnectionAccess(connection: connection, dashboardOAuth: null),
         'test',
         connectionStatus: status,
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       addTearDown(() async {
         administration.close();

@@ -85,7 +85,7 @@ final class RecentGroupMessages {
     final entry = _entries[previous.key];
     if (entry == null ||
         !identical(entry.group, previous) ||
-        previous.key != updated.key ||
+        !previous.sameRoster(updated) ||
         previous.messageCoverageSequence != updated.messageCoverageSequence ||
         previous.lastMessageSequence != updated.lastMessageSequence ||
         previous.lastAnswerSequence != updated.lastAnswerSequence) {

@@ -17,3 +17,10 @@ Monitoring stops when the work it is watching ends. If you restart the phone or 
 [Good to know](KNOWN_LIMITATIONS.md) · [Notification details](BACKGROUND_NOTIFICATIONS.md)
 
 Group approvals use the same attention notifications. The checkmark allows once; the cross denies. The request stays visible while its decision is sent. Group approvals offer only the scopes Hermes permits: once or deny. Tap the eye to review a long command in the discussion.
+
+Folder and website requests show their exact target, access mode and any supplied
+risk. Allow grants access until the sandbox is switched off. Save access rule
+keeps the rule for future use. In the conversation, Reject opens an optional reason
+field; leaving it empty still rejects the request. Notification Deny submits
+directly without a reason. Notification grants for these requests
+open in Wing for review. A changed target requires reviewing the current request.

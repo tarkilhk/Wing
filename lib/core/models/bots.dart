@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'hermes_profile.dart';
+import 'bot_group_peer.dart';
 import 'profile_session_key.dart';
 import 'profile_colors.dart';
 
@@ -24,6 +25,7 @@ class BotRecord {
   BotRecord({
     required this.scope,
     required this.instance,
+    required this.installationId,
     required this.profile,
     required this.title,
     required this.shape,
@@ -44,6 +46,7 @@ class BotRecord {
 
   final WorkspaceScope scope;
   final String instance, title, shape, color, preview;
+  final String installationId;
   final HermesProfile profile;
   final bool pinned, hidden, hasAvatar;
   final int revision;
@@ -90,6 +93,7 @@ class BotRecord {
   BotRecord withPresence(BotPresence value) => BotRecord(
     scope: scope,
     instance: instance,
+    installationId: installationId,
     profile: profile,
     title: title,
     shape: shape,
@@ -111,6 +115,7 @@ class BotRecord {
   BotRecord withAvatarHint(bool value) => BotRecord(
     scope: scope,
     instance: instance,
+    installationId: installationId,
     profile: profile,
     title: title,
     shape: shape,
@@ -140,6 +145,7 @@ class BotRecord {
   }) => BotRecord(
     scope: scope,
     instance: instance,
+    installationId: installationId,
     profile: profile,
     title: title ?? this.title,
     shape: shape ?? this.shape,
@@ -166,8 +172,17 @@ class BotGroupMember {
     required this.profile,
     required this.handle,
     required this.name,
+    required this.target,
   });
   final String id, profile, handle, name;
+  final BotGroupTarget target;
+  Map<String, dynamic> toJson() => {
+    'member_id': id,
+    'profile': profile,
+    'handle': handle,
+    'display_name': name,
+    'target': target.toJson(),
+  };
 }
 
 @immutable
@@ -183,13 +198,8 @@ final class BotGroupAppearance {
   ) {
     final appearances = <String, BotRecord>{};
     for (final member in group.members) {
-      final matches = bots.where(
-        (bot) =>
-            bot.scope.connectionId == group.scope.connectionId &&
-            bot.scope.connectionIdentity == group.scope.connectionIdentity &&
-            bot.profile.name == member.profile,
-      );
-      if (matches.length == 1) appearances[member.handle] = matches.single;
+      final match = matchBotGroupMember(group, member, bots);
+      if (match != null) appearances[member.handle] = match;
     }
     return BotGroupAppearance._(appearances);
   }
@@ -204,12 +214,35 @@ final class BotGroupAppearance {
   );
 }
 
+/// One exact routing/appearance policy for every group consumer.
+BotRecord? matchBotGroupMember(
+  BotGroup group,
+  BotGroupMember member,
+  Iterable<BotRecord> bots,
+) {
+  final matches = bots.where(
+    (bot) =>
+        bot.profile.name == member.target.profile &&
+        bot.installationId ==
+            (member.target.isPeer
+                ? member.target.installationId
+                : group.authorityGatewayId) &&
+        (member.target.isPeer ||
+            (bot.scope.connectionId == group.scope.connectionId &&
+                bot.scope.connectionIdentity ==
+                    group.scope.connectionIdentity)),
+  );
+  return matches.length == 1 ? matches.single : null;
+}
+
 class BotGroup {
   BotGroup({
     required this.scope,
     required this.instance,
     required this.id,
     required this.name,
+    required this.authorityGatewayId,
+    required this.authorityEpoch,
     required Iterable<BotGroupMember> members,
     required this.observationComplete,
     this.runtimeAvailable = false,
@@ -218,7 +251,7 @@ class BotGroup {
     this.preview = '',
     this.working = false,
     this.blocked = false,
-    Iterable<String> activeMemberProfiles = const [],
+    Iterable<String> activeMemberIds = const [],
     this.lastMessageAt,
     this.lastMessageSequence = 0,
     this.lastAnswerSequence = 0,
@@ -227,16 +260,35 @@ class BotGroup {
     this.iconRevision,
     Uint8List? picture,
   }) : members = List.unmodifiable(members),
-       activeMemberProfiles = Set.unmodifiable(activeMemberProfiles),
+       activeMemberIds = Set.unmodifiable(activeMemberIds),
        picture = picture?.asUnmodifiableView();
   final WorkspaceScope scope;
   final String instance, id, name, preview;
+  final String authorityGatewayId;
+  final int authorityEpoch;
+  bool get hasPeers => members.any((member) => member.target.isPeer);
+  bool sameAuthority(BotGroup other) =>
+      key == other.key &&
+      authorityGatewayId == other.authorityGatewayId &&
+      authorityEpoch == other.authorityEpoch;
+  bool sameRoster(BotGroup other) =>
+      sameAuthority(other) &&
+      members.length == other.members.length &&
+      members.every(
+        (member) => other.members.any(
+          (next) =>
+              member.id == next.id &&
+              member.profile == next.profile &&
+              member.handle == next.handle &&
+              member.target == next.target,
+        ),
+      );
   final List<BotGroupMember> members;
   final bool working, blocked;
 
-  /// Profiles with exact queued, running or stopping tasks in this observation.
+  /// Member IDs with exact queued, running or stopping tasks in this observation.
   /// Retained room details never carry this positive activity into a failed read.
-  final Set<String> activeMemberProfiles;
+  final Set<String> activeMemberIds;
 
   /// Runtime availability does not establish message coverage.
   final bool runtimeAvailable;
@@ -262,6 +314,8 @@ class BotGroup {
     scope: scope,
     instance: instance,
     id: id,
+    authorityGatewayId: authorityGatewayId,
+    authorityEpoch: authorityEpoch,
     name: name,
     members: members,
     observationComplete: observationComplete,
@@ -271,7 +325,7 @@ class BotGroup {
     preview: preview,
     working: working,
     blocked: blocked,
-    activeMemberProfiles: activeMemberProfiles,
+    activeMemberIds: activeMemberIds,
     lastMessageAt: lastMessageAt,
     lastMessageSequence: lastMessageSequence,
     lastAnswerSequence: lastAnswerSequence,
@@ -284,6 +338,8 @@ class BotGroup {
     scope: scope,
     instance: instance,
     id: id,
+    authorityGatewayId: authorityGatewayId,
+    authorityEpoch: authorityEpoch,
     name: name,
     members: members,
     observationComplete: observationComplete,
@@ -293,7 +349,7 @@ class BotGroup {
     preview: preview,
     working: working,
     blocked: blocked,
-    activeMemberProfiles: activeMemberProfiles,
+    activeMemberIds: activeMemberIds,
     lastMessageAt: lastMessageAt,
     lastMessageSequence: lastMessageSequence,
     lastAnswerSequence: lastAnswerSequence,
@@ -310,6 +366,8 @@ class BotGroup {
     scope: scope,
     instance: instance,
     id: id,
+    authorityGatewayId: authorityGatewayId,
+    authorityEpoch: authorityEpoch,
     name: name,
     members: members,
     observationComplete: observationComplete,
@@ -319,7 +377,7 @@ class BotGroup {
     preview: preview,
     working: working,
     blocked: blocked,
-    activeMemberProfiles: activeMemberProfiles,
+    activeMemberIds: activeMemberIds,
     lastMessageAt: lastMessageAt,
     lastMessageSequence: lastMessageSequence,
     lastAnswerSequence: lastAnswerSequence,
@@ -329,7 +387,7 @@ class BotGroup {
     iconRevision: revision,
   );
 
-  /// Catalog facts replace identity without invalidating runtime or messages.
+  /// Catalog facts retain observations only for the same immutable room roster.
   BotGroup withCatalogObservation(
     BotGroup observed, {
     bool retainIdentity = false,
@@ -337,10 +395,13 @@ class BotGroup {
     if (key != observed.key) {
       throw ArgumentError('Wrong group catalog owner');
     }
+    if (!sameRoster(observed)) return observed;
     return BotGroup(
       scope: scope,
       instance: instance,
       id: id,
+      authorityGatewayId: authorityGatewayId,
+      authorityEpoch: authorityEpoch,
       name: retainIdentity ? name : observed.name,
       members: retainIdentity ? members : observed.members,
       observationComplete: observationComplete,
@@ -350,9 +411,9 @@ class BotGroup {
       preview: preview,
       working: working,
       blocked: blocked,
-      activeMemberProfiles: activeMemberProfiles.where(
+      activeMemberIds: activeMemberIds.where(
         (profile) => (retainIdentity ? members : observed.members).any(
-          (member) => member.profile == profile,
+          (member) => member.id == profile,
         ),
       ),
       lastMessageAt: lastMessageAt,
@@ -370,6 +431,7 @@ class BotGroup {
     if (key != observed.key) {
       throw ArgumentError('Wrong group message owner');
     }
+    if (!sameRoster(observed)) return this;
     final latest = latestSequence;
     final incoming = observed.latestSequence;
     final newerMessage = observed.lastMessageSequence >= lastMessageSequence;
@@ -379,6 +441,8 @@ class BotGroup {
       scope: scope,
       instance: instance,
       id: id,
+      authorityGatewayId: authorityGatewayId,
+      authorityEpoch: authorityEpoch,
       name: name,
       members: members,
       observationComplete: observed.observationComplete,
@@ -396,7 +460,7 @@ class BotGroup {
       preview: newerMessage ? observed.preview : preview,
       working: working,
       blocked: blocked,
-      activeMemberProfiles: activeMemberProfiles,
+      activeMemberIds: activeMemberIds,
       lastMessageAt: newerMessage ? observed.lastMessageAt : lastMessageAt,
       lastMessageSequence: newerMessage
           ? observed.lastMessageSequence
@@ -418,10 +482,13 @@ class BotGroup {
         'Expected the same room with an unavailable observation',
       );
     }
+    if (!sameRoster(previous)) return this;
     return BotGroup(
       scope: scope,
       instance: instance,
       id: id,
+      authorityGatewayId: authorityGatewayId,
+      authorityEpoch: authorityEpoch,
       name: name,
       members: members,
       observationComplete: false,
@@ -431,7 +498,7 @@ class BotGroup {
       preview: previous.preview,
       working: working,
       blocked: blocked,
-      activeMemberProfiles: activeMemberProfiles,
+      activeMemberIds: activeMemberIds,
       lastMessageAt: previous.lastMessageAt,
       lastMessageSequence: previous.lastMessageSequence,
       lastAnswerSequence: previous.lastAnswerSequence,
@@ -458,7 +525,7 @@ final class BotGroupState {
   final BotGroup room;
   final bool roomAvailable, runtimeAvailable, working, blocked;
   final int? latestSequence;
-  Set<String> get activeMemberProfiles => runtimeAvailable
+  Set<String> get activeMemberIds => runtimeAvailable
       ? Set.unmodifiable(
           room.members
               .where(
@@ -466,7 +533,7 @@ final class BotGroupState {
                   (activity) => activity.memberId == member.id,
                 ),
               )
-              .map((member) => member.profile),
+              .map((member) => member.id),
         )
       : const {};
 
@@ -475,10 +542,19 @@ final class BotGroupState {
     if (room.key != previous.key) {
       throw ArgumentError('Wrong group state owner');
     }
+    if (roomAvailable && !room.sameRoster(previous)) {
+      return applyTo(room);
+    }
     return BotGroup(
       scope: previous.scope,
       instance: previous.instance,
       id: previous.id,
+      authorityGatewayId: roomAvailable
+          ? room.authorityGatewayId
+          : previous.authorityGatewayId,
+      authorityEpoch: roomAvailable
+          ? room.authorityEpoch
+          : previous.authorityEpoch,
       name: roomAvailable ? room.name : previous.name,
       members: roomAvailable ? room.members : previous.members,
       observationComplete: previous.observationComplete,
@@ -488,7 +564,7 @@ final class BotGroupState {
       preview: previous.preview,
       working: runtimeAvailable && working,
       blocked: runtimeAvailable && blocked,
-      activeMemberProfiles: activeMemberProfiles,
+      activeMemberIds: activeMemberIds,
       lastMessageAt: previous.lastMessageAt,
       lastMessageSequence: previous.lastMessageSequence,
       lastAnswerSequence: previous.lastAnswerSequence,
@@ -496,6 +572,101 @@ final class BotGroupState {
       picture: previous.picture,
       iconColor: previous.iconColor,
       iconRevision: previous.iconRevision,
+    );
+  }
+}
+
+/// Immutable first-dispatch payload; retries never reconstruct names or targets.
+final class BotGroupCreateIntent {
+  BotGroupCreateIntent({
+    required this.id,
+    required this.name,
+    required this.gateway,
+    required Iterable<BotGroupMember> members,
+  }) : members = List.unmodifiable(members);
+  final String id, name, gateway;
+  final List<BotGroupMember> members;
+  Map<String, dynamic> toJson() => {
+    'room_id': id,
+    'name': name,
+    'members': members.map((member) => member.toJson()).toList(),
+  };
+  bool matches(BotGroup room) =>
+      room.id == id &&
+      room.name == name &&
+      room.authorityGatewayId == gateway &&
+      room.members.length == members.length &&
+      members.every(
+        (member) => room.members.any(
+          (other) =>
+              member.id == other.id &&
+              member.profile == other.profile &&
+              member.handle == other.handle &&
+              member.name == other.name &&
+              member.target == other.target,
+        ),
+      );
+}
+
+/// One shared eligibility decision for form presentation and first-write preflight.
+final class BotGroupSelection {
+  BotGroupSelection(
+    this.owner,
+    Map<String, BotGroupTarget> targets,
+    Map<String, String> problems,
+  ) : targets = Map.unmodifiable(targets),
+      problems = Map.unmodifiable(problems);
+  final BotGroupCapabilities owner;
+  final Map<String, BotGroupTarget> targets;
+  final Map<String, String> problems;
+  BotGroupCreateIntent intent(String id, String name, List<BotRecord> bots) {
+    if (!owner.canCreate ||
+        bots.length < 2 ||
+        bots.length > 6 ||
+        name.trim().isEmpty) {
+      throw const BotGroupCreateRefused(
+        'Choose 2–6 available bots and name the group.',
+      );
+    }
+    final destinations = <String>{};
+    final handles = <String>{'all', 'everyone'};
+    final ids = <String>{};
+    final members = <BotGroupMember>[];
+    for (final (index, bot) in bots.indexed) {
+      final target = targets[bot.id];
+      if (target == null ||
+          !destinations.add(
+            '${target.installationId ?? owner.gateway}/${target.profile}'
+                .toLowerCase(),
+          )) {
+        throw const BotGroupCreateRefused(
+          'A selected bot cannot join. Review the group’s members.',
+        );
+      }
+      var handle = 'bot_${bot.profile.name}';
+      if (target.isPeer) handle = '${handle}_${index + 1}';
+      var memberId = target.isPeer ? 'peer_${index + 1}' : bot.profile.name;
+      while (!handles.add(handle.toLowerCase())) {
+        handle = '${handle}_${index + 1}';
+      }
+      while (!ids.add(memberId.toLowerCase())) {
+        memberId = '${memberId}_${index + 1}';
+      }
+      members.add(
+        BotGroupMember(
+          id: memberId,
+          profile: bot.profile.name,
+          handle: handle,
+          name: bot.title,
+          target: target,
+        ),
+      );
+    }
+    return BotGroupCreateIntent(
+      id: id,
+      name: name.trim(),
+      gateway: owner.gateway,
+      members: members,
     );
   }
 }
@@ -744,6 +915,7 @@ class BotGroupRuntime {
     required this.blocked,
     required Iterable<BotGroupAction> actions,
     Iterable<BotGroupMemberActivity> memberActivity = const [],
+    Map<String, String> peerRoutes = const {},
     this.context,
     Iterable<String> methods = const [],
     Iterable<String> routingModes = const [],
@@ -753,10 +925,12 @@ class BotGroupRuntime {
   }) : actions = List.unmodifiable(actions),
        methods = Set.unmodifiable(methods),
        routingModes = List.unmodifiable(routingModes),
-       memberActivity = List.unmodifiable(memberActivity);
+       memberActivity = List.unmodifiable(memberActivity),
+       peerRoutes = Map.unmodifiable(peerRoutes);
   final bool working, blocked;
   final List<BotGroupAction> actions;
   final List<BotGroupMemberActivity> memberActivity;
+  final Map<String, String> peerRoutes;
   final BotGroupContext? context;
   final Set<String> methods;
   final List<String> routingModes;
@@ -768,6 +942,7 @@ class BotGroupRuntime {
     blocked: blocked,
     actions: next,
     memberActivity: memberActivity,
+    peerRoutes: peerRoutes,
     context: context,
     methods: methods,
     routingModes: routingModes,

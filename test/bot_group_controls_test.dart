@@ -53,7 +53,7 @@ void main() {
     'seq': seq,
     'event_id': id,
     'kind': kind,
-    'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+    'actor': {'kind': 'gateway', 'id': 'install:install-1'},
     'payload': payload,
     'created_at': 1791756000.0 + seq,
   };
@@ -303,6 +303,9 @@ void main() {
               'driver': true,
               'seatable_profiles': ['atlas', 'mira'],
               'methods': ['groups.state'],
+              'authority_gateway_id': 'install:install-1',
+              'persistent_process': true,
+              'features': <String>[], 'room_link': <String, dynamic>{},
             }
           : null;
       await session.refresh();
@@ -877,6 +880,7 @@ void main() {
                     'latest_seq': fixture.events.last['seq'],
                   },
                   'driver_status': {
+          'peer_routes': <Object>[],
                     ...baseState['driver_status'] as Map<String, dynamic>,
                     'working': true,
                     'blocked': fixture.pending.isNotEmpty,
@@ -1066,6 +1070,7 @@ void main() {
               ? {
                   ...state,
                   'driver_status': {
+          'peer_routes': <Object>[],
                     ...state['driver_status'] as Map<String, dynamic>,
                     'working': true,
                     'member_activity': [

@@ -6,6 +6,113 @@ import 'package:wing/core/services/scheduled_tasks_repository.dart';
 import 'support/scheduled_tasks_fixture.dart';
 
 void main() {
+  for (final fields in <Map<String, dynamic>>[
+    {},
+    {'wrap_response': null},
+    {'wrap_response': true},
+    {'wrap_response': false},
+  ]) {
+    test('wrapping create and reopen preserve $fields', () async {
+      final f = ScheduledTasksFixture();
+      addTearDown(f.admin.server.close);
+      final repository = ScheduledTasksRepository(f.profile);
+      final created = await repository.create({
+        'prompt': 'Brief me',
+        'schedule': '0 9 * * *',
+        ...fields,
+      });
+      expect(created.data['wrap_response'], fields['wrap_response']);
+      expect(
+        created.data.containsKey('wrap_response'),
+        fields['wrap_response'] != null,
+      );
+      expect(
+        (await repository.get(created.id)).outputWrapping,
+        TaskOutputWrapping.fromWire(fields['wrap_response']),
+      );
+      final body = f.admin.requests.singleWhere((r) => r.$1 == 'POST').$4!;
+      expect(
+        body.containsKey('wrap_response'),
+        fields.containsKey('wrap_response'),
+      );
+      expect(body['wrap_response'], fields['wrap_response']);
+    });
+
+    test('wrapping unrelated update leaves exact $fields untouched', () async {
+      final f = ScheduledTasksFixture();
+      addTearDown(f.admin.server.close);
+      f.jobs['morning']!.addAll(fields);
+      final repository = ScheduledTasksRepository(f.profile);
+      final original = await repository.get('morning');
+      await repository.update(
+        TaskEditIntent(baseline: original, values: {'name': 'Renamed'}),
+      );
+      expect(
+        f.admin.requests.singleWhere((r) => r.$1 == 'PUT').$4!['updates'],
+        {'name': 'Renamed'},
+      );
+      expect(
+        f.jobs['morning']!.containsKey('wrap_response'),
+        fields.containsKey('wrap_response'),
+      );
+      expect(f.jobs['morning']!['wrap_response'], fields['wrap_response']);
+      expect(f.jobs['morning']!['schedule'], original.schedule);
+    });
+  }
+
+  for (final value in [true, false]) {
+    test(
+      'wrapping $value resets with explicit null and absent readback',
+      () async {
+        final f = ScheduledTasksFixture();
+        addTearDown(f.admin.server.close);
+        f.jobs['morning']!['wrap_response'] = value;
+        final repository = ScheduledTasksRepository(f.profile);
+        final original = await repository.get('morning');
+        f.admin.override = (method, path, query, body) async {
+          final result = await f.send(method, path, query, body);
+          if (method == 'PUT') result.remove('wrap_response');
+          return result;
+        };
+        final saved = await repository.update(
+          TaskEditIntent(baseline: original, values: {'wrap_response': null}),
+        );
+        expect(
+          f.admin.requests.singleWhere((r) => r.$1 == 'PUT').$4!['updates'],
+          {'wrap_response': null},
+        );
+        expect(saved.outputWrapping, TaskOutputWrapping.inherit);
+        expect(f.jobs['morning']!.containsKey('wrap_response'), isTrue);
+        expect(f.jobs['morning']!['wrap_response'], isNull);
+      },
+    );
+  }
+
+  test(
+    'wrapping intent rejects coerced booleans and redundant writes',
+    () async {
+      final f = ScheduledTasksFixture();
+      addTearDown(f.admin.server.close);
+      final repository = ScheduledTasksRepository(f.profile);
+      final original = await repository.get('morning');
+      for (final value in ['false', 0, 1]) {
+        expect(
+          () => TaskEditIntent(
+            baseline: original,
+            values: {'wrap_response': value},
+          ),
+          throwsArgumentError,
+        );
+      }
+      f.jobs['morning']!['wrap_response'] = false;
+      final saved = await repository.update(
+        TaskEditIntent(baseline: original, values: {'wrap_response': false}),
+      );
+      expect(saved.outputWrapping, TaskOutputWrapping.off);
+      expect(f.mutations, 0);
+    },
+  );
+
   test('live execution stays stoppable when a later trigger is rejected', () {
     final t = ScheduledTask.fromJson({
       ...taskJson(),
@@ -70,7 +177,13 @@ void main() {
     'room targets use room host profile independently of task profile',
     () async {
       final f = ScheduledTasksFixture();
-      f.rooms.add({'room_id': 'room-1', 'name': 'Release team', 'members': []});
+      f.rooms.add({
+        'room_id': 'room-1',
+        'name': 'Release team',
+        'authority_gateway_id': 'install:task-host',
+        'authority_epoch': 1,
+        'members': <Map<String, dynamic>>[],
+      });
       final rooms = await ScheduledTasksRepository(
         f.profile,
       ).roomDestinations();

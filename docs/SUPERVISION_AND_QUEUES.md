@@ -75,3 +75,13 @@ not available through these cards.
 
 [Session controls](SESSION_CONTROLS.md) covers goals, loops, and processes.
 [Notifications](BACKGROUND_NOTIFICATIONS.md) explains delivery and its limits.
+
+Folder and website requests show their exact target, access mode and any supplied
+risk. Allow grants access until the sandbox is switched off. Save access rule
+keeps the rule for future use. Reject opens an optional reason field in Wing;
+leaving it empty still rejects the request. Notification grants for these requests
+open in Wing for review. A changed target requires reviewing the current request.
+
+Canonical Bot Chats also place [teammate requests](BOTS.md#teammate-requests-in-background)
+in Background beside terminal processes. Open the exact recipient to answer its
+question or approval. Delivery status grants no resend or execution authority.

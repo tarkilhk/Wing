@@ -38,20 +38,22 @@ class BotsFixture {
   final room = <String, dynamic>{
     'room_id': 'room-1',
     'name': 'Research team',
-    'authority_gateway_id': 'gateway-1',
+    'authority_gateway_id': 'install:install-1',
     'authority_epoch': 1,
     'revision': 1,
     'latest_seq': 0,
-    'members': [
+    'members': <Map<String, dynamic>>[
       {
         'member_id': 'atlas',
         'profile': 'atlas',
+        'target': {'kind': 'local', 'profile': 'atlas'},
         'handle': 'bot_atlas',
         'display_name': 'Atlas',
       },
       {
         'member_id': 'mira',
         'profile': 'mira',
+        'target': {'kind': 'local', 'profile': 'mira'},
         'handle': 'bot_mira',
         'display_name': 'Mira',
       },
@@ -96,7 +98,7 @@ class BotsFixture {
       'cursor': latest,
       'latest_seq': latest,
       'has_more': false,
-      'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+      'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
     }, since: since);
     repository.groupObservations.record(
       BotsRepository.decodeGroup(repository.scope, repository.instance, room),
@@ -197,7 +199,7 @@ class BotsFixture {
           'cursor': cursor,
           'latest_seq': latest,
           'has_more': cursor < latest,
-          'authority': {'gateway_id': 'gateway-1', 'epoch': 1},
+          'authority': {'gateway_id': 'install:install-1', 'epoch': 1},
         };
       }
 
@@ -214,6 +216,7 @@ class BotsFixture {
       return stockLog(response());
     }
     return switch (method) {
+      'bot_delivery.list' => {'sender': profile, 'deliveries': <Object>[]},
       'session.resume' => passiveSnapshot(params),
       'session.list' => {'sessions': <Map<String, dynamic>>[]},
       'profiles.list' => {
@@ -238,6 +241,10 @@ class BotsFixture {
         ],
       },
       'groups.capabilities' => {
+        'authority_gateway_id': 'install:install-1',
+        'persistent_process': true,
+        'features': <String>[],
+        'room_link': {'enabled': false, 'reason': 'api_server_required'},
         'driver': true,
         'seatable_profiles': profiles.map((row) => row['name']).toList(),
         'methods': [
@@ -267,6 +274,7 @@ class BotsFixture {
           'latest_seq': events.isEmpty ? 0 : events.last['seq'] as int,
         },
         'driver_status': {
+          'peer_routes': <Object>[],
           'working': false,
           'blocked': pending.isNotEmpty,
           'pending_actions': pending,
@@ -395,9 +403,12 @@ class BotsFixture {
           'event': events.singleWhere((event) => event['event_id'] == wireId),
         };
       case 'groups.create':
-        return {
-          'room': {...room, 'room_id': params['room_id']},
-        };
+        room.addAll({
+          'room_id': params['room_id'],
+          'name': params['name'],
+          'members': params['members'],
+        });
+        return {'room': Map<String, dynamic>.from(room)};
       case 'groups.retry':
         pending.removeWhere(
           (action) =>
@@ -427,13 +438,15 @@ class BotsFixture {
           'seq': events.isEmpty ? 1 : (events.last['seq'] as int) + 1,
           'event_id': 'stop-${params['cancel_id']}',
           'kind': 'room.stop_requested',
-          'actor': {'kind': 'gateway', 'id': 'gateway-1'},
+          'actor': {'kind': 'gateway', 'id': 'install:install-1'},
           'payload': {'cancel_id': params['cancel_id']},
           'created_at': 1791756000.0,
         });
         return {'cancelled': cancelled};
       case 'groups.disband':
-        return {'ok': true};
+        return {
+          'tombstone': {'room_id': params['room_id'], 'disbanded_at': 1.0},
+        };
       case 'profiles.set_asset':
         return {'ok': true};
       default:

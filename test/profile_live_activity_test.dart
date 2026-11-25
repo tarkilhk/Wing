@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'support/canonical_gateway_fixture.dart';
 import 'support/composer_fixture.dart';
 import 'package:wing/core/models/profile_session_key.dart';
@@ -36,6 +37,7 @@ class ActivityHost {
   );
 
   ProfileGateway gateway(WorkspaceScope scope) => ProfileGateway(
+    loadClientIdentity: loadTestWingClientIdentity,
     scope: scope,
     discover: discover,
     get: (path, query) async {

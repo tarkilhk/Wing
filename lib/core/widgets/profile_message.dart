@@ -577,6 +577,39 @@ class ProfileMessage extends StatelessWidget {
 
     final theme = Theme.of(context);
     final role = message.role;
+    if (message.kind == TranscriptMessageKind.refused) {
+      return Padding(
+        key: const ValueKey('content-refused-message'),
+        padding: const EdgeInsetsDirectional.fromSTEB(20, 8, 0, 8),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (message.noticeResult?.isNotEmpty == true)
+                  Text(
+                    message.noticeResult!,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                if (message.noticeResult?.isNotEmpty == true)
+                  const SizedBox(height: 8),
+                Text(
+                  message.text,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     if (usesBotFrame(context, message)) {
       final bubble = _botBubble(context);
       return actions == null

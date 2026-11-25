@@ -1,3 +1,4 @@
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/connection_access.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wing/core/models/hermes_profile.dart';
@@ -25,6 +26,8 @@ void main() {
           connectionId: connection.id,
           profileName: 'android-qa-a',
         ),
+
+        loadClientIdentity: loadTestWingClientIdentity,
       );
       addTearDown(gateway.close);
       await gateway.requireProfile();

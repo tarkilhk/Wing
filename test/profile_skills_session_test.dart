@@ -88,6 +88,7 @@ void main() {
                 ],
               },
               'skills/hub/preview' => content.future,
+              'skills/hub/updates' => {'updates': []},
               _ => throw StateError('Unexpected request $path'),
             };
             late ProfileSkillsSession session;

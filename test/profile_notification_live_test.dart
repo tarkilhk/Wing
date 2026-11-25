@@ -1,3 +1,5 @@
+import 'package:wing/core/services/profile_gateway.dart';
+import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/models/chat_runtime.dart';
 import 'package:wing/core/models/profile_session_key.dart';
 import 'package:wing/core/services/app_preferences.dart';
@@ -32,8 +34,8 @@ void main() {
           final appPreferences = AppPreferences(preferences);
           addTearDown(appPreferences.dispose);
           ProfileWorkspaceController client(String id, {bool observe = false}) {
-            final result = ProfileWorkspaceController(
-              access: ConnectionAccess(
+            final identityGatewayOwner = ProfileGatewayConnection(
+              ConnectionAccess(
                 connection: SavedConnection(
                   id: id,
                   label: 'Notification coverage live QA',
@@ -44,6 +46,12 @@ void main() {
                 ),
                 dashboardOAuth: null,
               ),
+              loadClientIdentity: loadCandidateWingClientIdentity,
+            );
+            addTearDown(identityGatewayOwner.close);
+            final result = ProfileWorkspaceController(
+              access: identityGatewayOwner.access,
+              gatewayFactory: identityGatewayOwner.create,
               connectionIdentity: id,
               preferences: preferences,
               appPreferences: appPreferences,
@@ -142,8 +150,8 @@ void main() {
         final preferences = await SharedPreferences.getInstance();
         final appPreferences = AppPreferences(preferences);
         addTearDown(appPreferences.dispose);
-        final live = ProfileWorkspaceController(
-          access: ConnectionAccess(
+        final identityGatewayOwner = ProfileGatewayConnection(
+          ConnectionAccess(
             connection: SavedConnection(
               id: 'notification-event-live-qa',
               label: 'Notification event live QA',
@@ -154,6 +162,12 @@ void main() {
             ),
             dashboardOAuth: null,
           ),
+          loadClientIdentity: loadCandidateWingClientIdentity,
+        );
+        addTearDown(identityGatewayOwner.close);
+        final live = ProfileWorkspaceController(
+          access: identityGatewayOwner.access,
+          gatewayFactory: identityGatewayOwner.create,
           connectionIdentity: 'notification-event-live-qa',
           preferences: preferences,
           appPreferences: appPreferences,

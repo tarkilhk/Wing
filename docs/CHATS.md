@@ -93,6 +93,11 @@ or hunk reference. This view does not stage, revert, commit or push changes.
 
 ## Revisit the result
 
+If the model refuses a request, your original text remains beside its refusal
+explanation. Hermes keeps that record out of model context. It has no edit,
+restore or replay action, and Wing keeps any newer draft. The explanation remains
+available when you reopen the chat or read its saved copy offline.
+
 Inside a chat or bot group, pinch inward to open the same conversations shown in **Recents**,
 including bot groups. Cards follow message freshness: left is newer, right is
 older, with the oldest and newest linked in a circle.
@@ -157,3 +162,9 @@ appeared and move up as messages arrive. There is no dismiss control.
 Ordinary clarification questions retain their native Activity receipt, including
 choices and answers, without an additional history row. Secret response values
 are never saved in request-history entries.
+
+Folder and website requests show their exact target, access mode and any supplied
+risk. Allow grants access until the sandbox is switched off. Save access rule
+keeps the rule for future use. Reject opens an optional reason field in Wing;
+leaving it empty still rejects the request. Notification grants for these requests
+open in Wing for review. A changed target requires reviewing the current request.

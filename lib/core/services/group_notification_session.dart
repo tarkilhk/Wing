@@ -465,18 +465,23 @@ class GroupNotificationSession extends ChangeNotifier {
       await _removePending(id, Set.of(group.discarding));
       group.discarding.clear();
     }
+    final observationToken = observations.capture(id);
     final state = await read('groups.state', {
       'room_id': id,
       'include_disbanded': true,
     });
     if (_closed) return;
-    if (revision != group.revision) return;
+    if (revision != group.revision ||
+        !observations.isCurrent(id, observationToken)) {
+      return;
+    }
     final decoded = BotsRepository.decodeGroupState(scope, instance, id, state);
     final room = decoded.room;
     if (room == null) {
-      observations.forget(id);
       group.approvals = const [];
       await _publishInputs(id, group);
+      if (_closed || !observations.isCurrent(id, observationToken)) return;
+      observations.forget(id, ifCurrent: observationToken);
       group.working = false;
       group.pending = false;
       await _removePending(id, Set.of(group.awaiting));
@@ -502,7 +507,11 @@ class GroupNotificationSession extends ChangeNotifier {
       _changed();
     }
     await _publishInputs(id, group);
-    if (_closed || revision != group.revision) return;
+    if (_closed ||
+        revision != group.revision ||
+        !observations.isCurrent(id, observationToken)) {
+      return;
+    }
     final latest = decoded.latestSequence;
     if (latest < group.cursor) {
       throw const FormatException('Group sequence moved backwards');
@@ -516,9 +525,9 @@ class GroupNotificationSession extends ChangeNotifier {
     if (group.cursor < 0 && group.awaiting.isEmpty) {
       // First discovery is a quiet history baseline, including an active room.
       final saved = await _saveCursor(id, latest);
-      if (_closed) return;
+      if (_closed || !observations.isCurrent(id, observationToken)) return;
       if (saved > group.cursor) group.cursor = saved;
-      observations.discover(room, latest);
+      observations.discover(room, latest, ifCurrent: observationToken);
     } else if (latest > group.cursor || group.awaiting.isNotEmpty) {
       group.pending = true;
       _changed();
