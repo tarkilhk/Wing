@@ -4,6 +4,61 @@ User-facing changes for Wing. Download published APKs from [GitHub Releases](htt
 
 ## Unreleased
 
+## [1.4.2] - 2026-11-25
+
+**Wing 1.4.2 requires Android 10 or newer.**
+
+### Chats and recovery
+
+- Wing retries temporary disconnects and restores saved pending chats after a
+  restart. Failed background reads keep their own retry controls while a healthy
+  live chat stays connected. Review persistent issues in **Hermes health →
+  Alerts**, or open the warning triangle for a quick view. You can acknowledge,
+  snooze or restore attention to an issue.
+- Recents prepares its list after startup and stops polling when hidden. Pull
+  down to refresh or tap Retry after a failed load. Chats keeps your saved sort
+  and known project labels while data refreshes.
+- Chats mark the latest answer read once its body is visible, even when live
+  attachment is unavailable. Older history loads correctly from a restored
+  reading position, and automated Hermes updates display as assistant messages.
+- Fixed stale keyboard spacing when dismissing the keyboard or returning to
+  Wing. Reduced work while replies stream. Brief action errors appear beside the
+  control, and empty dictation keeps your draft intact.
+
+### Follow and steer work
+
+- See compact reasoning and tool groups while replies stream. Use **Background**
+  above the composer to read terminal output, stop a running command or retry
+  a failed read. Finished commands leave the drawer when the response ends,
+  with their updates preserved in Activity.
+- Tap a task row to expand it. Preview, save or share a subagent's files from
+  its own chat, including nested subagents.
+- Expand the queued count to read, copy, edit, steer or cancel eligible
+  messages. Unconfirmed delivery and steering failures remain visible even
+  when collapsed. Group discussions retain progress for pending actions
+  during refresh failures.
+- Branch from a saved answer after context compression. The new chat carries
+  the summary and active messages through that answer, while archived turns
+  stay in the original. Wing explains when branching is unavailable.
+- Secure input stays pending until Hermes resolves the original request.
+  Secret values stay out of drafts and history.
+
+### Links, connectors and updates
+
+- Hold or right-click a web link to select its label or choose where to open it.
+  Set the default in **App settings → Open links in**. Inline code paths stay
+  selectable as text, and explicit file links open their preview.
+- Sign in, enable an MCP server or install a supported connector from its chat
+  request. Check status, retry or skip a target, or close with the results so far.
+- **Versions & updates** keeps tracking an accepted Hermes update through
+  disconnects and restarts. Reopen the screen to check progress and retained logs.
+
+### Diagnostic export
+
+- Tap Share under **App settings → About → Diagnostic logs** to export a local
+  ZIP, including while offline. It contains connection events and device context.
+  Wing uploads nothing automatically. See the [privacy policy](https://github.com/tarkilhk/Wing/blob/main/PRIVACY.md#local-diagnostic-logs) for contents and retention.
+
 ## [1.4.1] - 2026-11-09
 
 ### New

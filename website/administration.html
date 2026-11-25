@@ -95,6 +95,7 @@
 </div>
 <p>Discover more skills through the official Hub, and check which skills and tools still need setup. In <strong>Agent plugins</strong>, manually update installed plugins and inspect each updated, skipped, failed or review-needed result.</p>
 <p>Manage model-provider access and MCP connectors for the selected profile. Connectors give the agent access to external tools and data. Cached runtime status shows reported connection or sign-in problems separately from <strong>Test connection</strong>. Supported hosted accounts appear in <strong>Connected apps</strong>, with separate names and authorization for each account.</p>
+<p>A chat can request sign-in, enablement of an MCP server or connector installation. Review the command or address in its card, then use the browser, power or download icon for the requested action. Enter credentials only when requested by Hermes. Check status, retry or skip a target, or close the request with the results so far.</p>
 </section>
 <section id="wing-plugin" aria-labelledby="wing-plugin-title">
 <h2 id="wing-plugin-title">Add live voice and email draft cards</h2>
@@ -107,7 +108,9 @@
 <h2 id="find-title">Find a setting and review changes</h2>
 <p>Search Administration to jump to a setting. Editors show the profile you are changing and keep unsaved edits if a save fails or its outcome is uncertain.</p>
 <p>Wing reads back settings to confirm changes. A definite refusal shows the server's explanation and keeps your edits available. After an uncertain response, refresh and review before saving again. Controls depend on what the connected Hermes server makes available.</p>
-<p>In connection details, <strong>Versions &amp; updates</strong> checks Hermes updates, lets you choose Stable releases or Main branch, and confirms the target before updating. Progress appears immediately; logs follow automatically with newest lines first and their own scroll area.</p>
+<p>Open <strong>Versions &amp; updates</strong> in connection details to check Hermes updates. Use the tune icon to choose Stable releases or Main branch, then review the target before updating. Main follows the latest commit on the approved branch. A changed release target or channel needs a new review. Cloud-managed instances show their installed version and refresh control.</p>
+<p>Wing retains update progress and logs through disconnects, navigation and app restarts. Reopen Versions to resume tracking. The sync icon checks progress while an update is outstanding and availability otherwise. Logs show newest lines first in their own scroll area.</p>
+<p>If the server has not confirmed the outcome, Wing keeps that status and waits for a matching final result before allowing another update. An uncertain request is never submitted again automatically.</p>
 </section>
 </div>
 </div>
@@ -120,7 +123,7 @@
 <a class="text-link" href="usage.html">Review activity and usage</a>
 </nav>
 <a class="button button-navy" href="https://github.com/tarkilhk/Wing/releases/latest">Download Wing</a>
-<p>Android 7.0+ · Requires a reachable Hermes server</p>
+<p>Android 10+ · Requires a reachable Hermes server</p>
 </div>
 </main>
 <footer class="site-footer">

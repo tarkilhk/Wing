@@ -63,13 +63,14 @@
 <a href="#connect">2. Connect Hermes</a>
 <a href="#navigator">3. Start a chat</a>
 <a href="#wing-plugin">Optional: live voice and email drafts</a>
+<a href="#diagnostics">Share diagnostic logs</a>
 <a href="#connection-help">Need a hand?</a>
 </nav>
 </aside>
 <div class="guide-copy">
 <section id="need" aria-labelledby="need-title">
 <h2 id="need-title">1. Install Wing</h2>
-<p>You need an Android 7.0+ phone and a working Hermes Cloud instance or your own Hermes server.</p>
+<p>You need an Android 10+ phone and a working Hermes Cloud instance or your own Hermes server.</p>
 <p><a href="https://github.com/tarkilhk/Wing/releases/latest">Download the latest APK</a> and open it on your phone. Choose <strong>arm64-v8a</strong> for most phones. Allow installation when Android asks.</p>
 <p>Need a Hermes server first? Start with the <a href="https://github.com/tarkilhk/Wing/blob/main/docs/SELF_HOSTING.md">self-hosting guide</a>.</p>
 </section>
@@ -120,6 +121,11 @@
 <p>Once connected, open <strong>App settings → Hermes → Wing plugin</strong> to install and enable the <a href="wing-plugin.html">Wing plugin for Hermes</a> on your server in the profiles you use. It adds <a href="voice.html">live voice conversations</a> and <a href="results.html#email">email draft cards</a>. The Android update alone does not install it, and ordinary text chats do not require it.</p>
 <p>For voice, choose ChatGPT subscription or separately billed OpenAI API access in App settings. Email drafts need neither a voice subscription nor an email account connection to Hermes. <a href="https://github.com/tarkilhk/Wing/blob/main/docs/WING_PLUGIN.md">Follow the plugin setup guide</a>.</p>
 </section>
+<section id="diagnostics" aria-labelledby="diagnostics-title">
+<h2 id="diagnostics-title">Share diagnostic logs</h2>
+<p>For recurring connection or recovery problems, open <strong>App settings → About → Diagnostic logs</strong> and tap Share. Wing prepares a ZIP on your phone, including while offline, then opens Android sharing so you can choose where to save or send it. The Share icon shows progress and remains available to retry a failed export.</p>
+<p>The ZIP includes recent connection and recovery events, app lifecycle and network changes, sanitized error traces, app and Android versions, network/VPN details, power restrictions, memory/storage state and recent process-exit summaries. Its manifest identifies unavailable sections and known capture gaps. Review the <a href="#privacy">privacy details</a> before sharing.</p>
+</section>
 <section id="connection-help" aria-labelledby="connection-help-title">
 <h2 id="connection-help-title">Need a hand?</h2>
 <details>
@@ -130,12 +136,14 @@
 <details id="good-to-know">
 <summary>Notifications, offline use and backups</summary>
 <p>Allow background battery use for screen-off notifications, and reopen Wing after restarting your phone. Android restrictions or network loss can interrupt delivery.</p>
-<p>Hermes can continue accepted work while you’re offline. New messages need a connection; some recently loaded chats remain readable.</p>
+<p>Hermes can continue accepted work while you are offline. Wing retries temporary disconnects and restores saved pending chats after restart. Some recently loaded conversations remain readable. New messages need a connection.</p>
 <p>Configuration backups include connections and preferences, with optional encryption. Chats stay on Hermes; drafts and queues are excluded. Read the <a href="https://github.com/tarkilhk/Wing/blob/main/CHANGELOG.md">upgrade notes</a> before updating.</p>
 </details>
 <details id="privacy">
 <summary>Where does my data go?</summary>
 <p>Your chosen Hermes server and model providers process your content. Live voice sends audio directly to OpenAI, along with relevant chat context and task results. The Wing maintainer does not relay your conversations. Connection details and preferences stay on your device.</p>
+<p>Wing keeps a rotating diagnostic journal of up to 2 MiB in private app storage across restarts. It excludes chat and tool content, credentials, request payloads and arbitrary exception messages. Exports can contain local IP and DNS addresses and connection/profile identifiers. They include no raw logcat, screenshots, audio, user files or backend logs. Nothing is uploaded automatically. The app you choose in Android sharing receives the ZIP.</p>
+<p>Old diagnostic events are overwritten as the journal fills. Clearing app storage or uninstalling Wing removes the journal. Export staging is removed after sharing, or after 24 hours on a later export following an interruption. Android sharing keeps a separate cache copy, and copies saved or sent elsewhere remain until deleted there.</p>
 <a class="text-link" href="https://github.com/tarkilhk/Wing/blob/main/PRIVACY.md">Privacy policy</a>
 </details>
 </section>
@@ -148,7 +156,7 @@
 <a class="text-link" href="recents.html">Multitask with Recents</a>
 </nav>
 <a class="button button-navy" href="https://github.com/tarkilhk/Wing/releases/latest">Download Wing</a>
-<p>Android 7.0+ · Requires a reachable Hermes server</p>
+<p>Android 10+ · Requires a reachable Hermes server</p>
 </div>
 </main>
 <footer class="site-footer">
