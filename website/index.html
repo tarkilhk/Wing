@@ -51,7 +51,7 @@
 <div class="hero-actions">
 <a class="button button-mint" href="https://github.com/tarkilhk/Wing/releases/latest" aria-label="Download Wing for Android">Download Wing</a>
 </div>
-<p class="hero-requirement">Android 7.0+ · Requires your own Hermes server</p>
+<p class="hero-requirement">Android 10+ · Requires your own Hermes server</p>
 </div>
 <div class="hero-visual">
 <figure class="hero-phone app-frame">
@@ -145,7 +145,7 @@
 <div class="work-panel" id="panel-follow" role="tabpanel" aria-labelledby="tab-follow" tabindex="0">
 <div class="panel-copy">
 <h3>Tool calls and<br> delegated agents</h3>
-<p>Follow reasoning and timed tool runs as an answer streams. Open Tasks or Subagents above your draft to inspect progress, or revisit an earlier answer's saved Activity.</p>
+<p>Follow reasoning and tools as an answer streams. Open Tasks or Subagents to inspect progress, or use Background to read terminal output and stop a running command. Earlier results stay in the answer's Activity.</p>
 </div>
 <figure class="panel-image">
 <a class="screenshot-link" data-screenshot href="assets/screenshots/activity-dark.png" aria-label="Enlarge screenshot: Wing Activity with Timeline, Tasks and Agents tabs, showing tool calls in Timeline"><img data-app-image="activity" src="assets/screenshots/activity-dark.png" width="780" height="1688" alt="Wing Activity with Timeline, Tasks and Agents tabs, showing tool calls in Timeline" loading="lazy"></a>
@@ -155,7 +155,7 @@
 <div class="work-panel" id="panel-steer" role="tabpanel" aria-labelledby="tab-steer" tabindex="0" hidden>
 <div class="panel-copy">
 <h3>Steer, queue<br> or stop a run</h3>
-<p>Change direction during a run, queue a follow-up for later or stop the work. Hold the send control to choose an action; queued messages stay editable until they send.</p>
+<p>Change direction during a run, queue a follow-up or stop the work. Hold the send control to choose an action. Expand the queued count to review messages and their available edit, steer or cancel actions.</p>
 </div>
 <figure class="panel-image">
 <a class="screenshot-link" data-screenshot href="assets/screenshots/steer-dark.png" aria-label="Enlarge screenshot: Wing composer with a drafted follow-up and the held action menu with Steer selected"><img data-app-image="steer" src="assets/screenshots/steer-dark.png" width="780" height="1688" alt="Wing composer with a drafted follow-up and the held action menu with Steer selected" loading="lazy"></a>
@@ -261,7 +261,7 @@
 <article class="feature-story">
 <div class="feature-copy">
 <h3>Get live health alerts</h3>
-<p>Keep working and receive alerts about host resources or profile problems. Choose memory, disk and CPU thresholds, then open the header alert icon to see what needs attention.</p>
+<p>Review connection, resource and profile issues under <strong>Hermes health → Alerts</strong>. Use the header warning triangle for a quick view. Acknowledge or snooze an issue, undo either choice, or open its recovery screen.</p>
 </div>
 <figure class="guide-shot">
 <div class="app-frame">
@@ -318,17 +318,17 @@
 </div>
 <div class="setup-note">
 <h3>What you need</h3>
-<p>Android 7.0 or newer and a Hermes server with its dashboard, Desktop Gateway and a configured model provider, reachable from your phone.</p>
+<p>Android 10 or newer and a reachable Hermes server with its gateway Webapp and a configured model provider.</p>
 <p>Use HTTPS or an encrypted private network for remote access. Your server and model providers may have their own costs.</p>
 </div>
 </div>
 <div class="questions" aria-label="Common questions">
             <details><summary>Does work continue when my phone disconnects?<svg aria-hidden="true"><use href="#plus"/></svg></summary>
-<p>Work accepted by Hermes can continue when your phone disconnects. Reconnect to follow it; new messages and live controls need a connection.</p></details>
+<p>Hermes can keep working while your phone is disconnected. Wing retries temporary connection failures and restores pending chats after restart. Recently loaded messages remain readable. New messages need a connection.</p></details>
             <details><summary>Will I get notifications when I leave the app?<svg aria-hidden="true"><use href="#plus"/></svg></summary>
 <p>Wing can notify you about replies and input requests through live connections. Android background restrictions, force-stop and network loss can interrupt delivery. The <a href="get-started.html#good-to-know">notification guide</a> explains setup and limits.</p></details>
             <details><summary>Can I connect with just a model-provider API key?<svg aria-hidden="true"><use href="#plus"/></svg></summary>
-<p>No. Wing needs a Hermes setup with its dashboard, Desktop Gateway and a configured model provider.</p></details>
+<p>Wing connects to a Hermes server with its gateway Webapp and a configured model provider. See the <a href="get-started.html">setup guide</a> to connect your instance.</p></details>
 </div>
 <div class="section-more">
 <a class="text-link" href="get-started.html">Read the connection guide</a>
