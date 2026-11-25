@@ -276,12 +276,14 @@ Future<void> _incomingJourney(
     {
       'member_id': 'atlas',
       'profile': 'personal',
+      'target': {'kind': 'local', 'profile': 'personal'},
       'handle': 'bot_personal',
       'display_name': 'Personal',
     },
     {
       'member_id': 'mira',
       'profile': 'work',
+      'target': {'kind': 'local', 'profile': 'work'},
       'handle': 'bot_work',
       'display_name': 'Event bot',
     },

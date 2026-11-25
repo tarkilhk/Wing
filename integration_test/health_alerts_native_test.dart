@@ -96,6 +96,10 @@ class _Observations extends ProfileBrowserFixture {
         // This fixture has no discussions and a healthy stock group driver.
         if (method == 'groups.capabilities') {
           return {
+            'authority_gateway_id': 'install:fixture',
+            'persistent_process': true,
+            'features': <String>[],
+            'room_link': {'enabled': false, 'reason': 'api_server_required'},
             'driver': true,
             'seatable_profiles': ['personal', 'work'],
             'methods': <String>[],
