@@ -4176,7 +4176,10 @@ Future<void> _revealApprovalDecisionWithKeyboard(
     );
     await tester.tap(inputNavigation);
   }
-  await _pumpUntil(tester, fullyVisible);
+  await _pumpUntil(
+    tester,
+    () => tester.view.viewInsets.bottom > 0 && fullyVisible(),
+  );
   expect(tester.view.viewInsets.bottom, greaterThan(0));
   final screen = tester.view.physicalSize / tester.view.devicePixelRatio;
   final usable = Rect.fromLTWH(
