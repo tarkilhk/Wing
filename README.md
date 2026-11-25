@@ -26,7 +26,7 @@ Tap a profile to focus its chats, or combine profiles in one view. Choose projec
 
 ## Multitask with Recents
 
-Find running chats and conversations waiting for your input across profiles. From any chat or group discussion, swipe sideways with two fingers to switch, or pinch into a card stack and tap another conversation. Unread cues help you spot new replies while working elsewhere.
+Find running chats and conversations waiting for your input across profiles. From any chat or group discussion, swipe sideways with two fingers to switch, or pinch into a card stack and tap another conversation. Unread cues help you spot new replies while working elsewhere. Pull down to refresh Recents, or tap Retry when a read fails.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/recents.html">
@@ -56,7 +56,7 @@ Open a bot's screen, take control and use your phone's keyboard, touch gestures 
 
 ## Live work
 
-Follow reasoning and timed tool runs as an answer streams. Open Tasks or Subagents to inspect progress, read a child's conversation and use its supported controls. Steer or stop a run, queue a follow-up, or fork from a saved answer once the chat is idle. Add server files with @ and choose skills with / while composing.
+Follow reasoning and timed tool runs as an answer streams. Open Tasks or Subagents to inspect progress, or use Background to read terminal output and stop a running command. Open a subagent to read its work and preview or share its files. Steer or stop a run, expand the queued count to manage follow-ups, or branch from a saved answer once the chat is idle. Add server files with @ and choose skills with / while composing.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/live-work.html">
@@ -121,7 +121,7 @@ account connection to Hermes or voice subscription is required.
 
 ## Answers and files
 
-Read wide tables as grids, with horizontal scrolling when needed, or switch to stacked rows. Open reading mode or turn the phone sideways for more room. Copy highlighted code or whole replies, listen to answers, and preview, save or share files. Edit an earlier message, or restore its checkpoint after confirming removal of later history.
+Read wide tables as grids, with horizontal scrolling when needed, or switch to stacked rows. Open reading mode or turn the phone sideways for more room. Copy highlighted code or whole replies, listen to answers, and preview, save or share files. Hold a web link to select its label or choose where to open it. Edit an earlier message, or restore its checkpoint after confirming removal of later history.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/results.html">
@@ -133,7 +133,7 @@ Read wide tables as grids, with horizontal scrolling when needed, or switch to s
 
 ## Administration
 
-Manage models, instructions, skills, connectors and scheduled tasks for each profile.
+Manage models, instructions, skills, connectors and scheduled tasks for each profile. Complete supported connector requests from a chat, and use Versions & updates to follow an accepted Hermes update through reconnects and restarts.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/administration.html">
@@ -151,7 +151,7 @@ Schedule recurring or one-off work on Hermes, set its timezone and missed-run po
 
 ## Health
 
-Check host resources, backend diagnostics and profiles. Set alerts for resource pressure or profile problems, then inspect notifications from any screen. Checks run while Wing is open or monitoring ongoing work.
+Check host resources, backend diagnostics and profiles. Review connection, resource and profile issues in **Hermes health → Alerts**, or tap the header warning triangle for a quick view. Acknowledge or snooze an issue and undo either choice from its details.
 
 <p align="center">
   <a href="https://tarkilhk.github.io/Wing/health.html">
@@ -176,11 +176,13 @@ Compare activity, token usage and estimated cost across all profiles on an insta
 ## Install and connect
 
 1. Download the signed APK from the [latest release](https://github.com/tarkilhk/Wing/releases/latest). Choose **arm64-v8a** for most current phones.
-2. Follow the [connection guide](https://tarkilhk.github.io/Wing/get-started.html) to connect your Hermes dashboard and Desktop Gateway, choose a profile and send your first message.
+2. Follow the [connection guide](https://tarkilhk.github.io/Wing/get-started.html) to connect to the Hermes gateway Webapp, choose a profile and send your first message.
 
 For server and proxy configuration, see [self-hosting](docs/SELF_HOSTING.md). Your Hermes setup needs a configured model provider; your server and providers may have their own costs.
 
 ## Help and contribute
+
+For recurring connection or recovery problems, open **App settings → About → Diagnostic logs** and tap Share. Wing prepares the ZIP on your phone, even offline. See the [diagnostics guide](https://tarkilhk.github.io/Wing/get-started.html#diagnostics) and [privacy policy](PRIVACY.md#local-diagnostic-logs) before sharing.
 
 [Report an issue](https://github.com/tarkilhk/Wing/issues) · [Contributing](CONTRIBUTING.md) · [User guides](docs/README.md) · [Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [Privacy](PRIVACY.md)
 
