@@ -21,7 +21,7 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
 - **Host boundary:** run the focused suites below; their supplied transport/platform responses limit the proof.
 
   ```sh
-  flutter test --no-pub test/usage_analytics_session_test.dart test/analytics_content_test.dart test/models_dev_pricing_test.dart
+  flutter test --no-pub test/usage_analytics_session_test.dart test/analytics_content_test.dart test/models_dev_pricing_test.dart test/administration_usage_test.dart
   ```
 
 - **Android `journeys`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
@@ -43,6 +43,10 @@ For the account report belonging to an open chat, use **Chat actions → Account
 usage**, documented under [model selection](model-selection.md). That report
 comes from the chat's current route and keeps a separate Nous account distinct;
 it does not change analytics totals or their selected profile/time window.
+
+The **Usage by day** grid animates while its first calendar read is pending,
+even when the totals are ready. With reduced motion, the grid stays static.
+Refreshing a calendar that already has a result keeps it readable.
 
 A failed chart or activity-calendar read shows recovery at that section. Other
 sections and retained chart data stay usable; retained data keeps its freshness

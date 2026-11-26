@@ -222,6 +222,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
             daily: observation.year,
             pending: observation.yearLoading,
             error: observation.yearError,
+            explicitRefresh: _refreshing,
             periodDates: daily?.reportedDates ?? const {},
             selected: _selected,
             onSelected: (day) =>
@@ -882,6 +883,7 @@ class _UsageCalendarSlot extends StatelessWidget {
     required this.daily,
     required this.pending,
     required this.error,
+    required this.explicitRefresh,
     required this.periodDates,
     required this.selected,
     required this.onSelected,
@@ -889,6 +891,7 @@ class _UsageCalendarSlot extends StatelessWidget {
   final UsageDaily? daily;
   final bool pending;
   final String? error;
+  final bool explicitRefresh;
   final Set<String> periodDates;
   final String? selected;
   final ValueChanged<UsageDay> onSelected;
@@ -899,6 +902,7 @@ class _UsageCalendarSlot extends StatelessWidget {
       final columns = usageCalendarColumns(width);
       final pitch = (width - 3) / columns;
       final textHeight = usageCalendarDateHeight(context, width);
+      final needsPlaceholder = daily == null && pending;
       // The calendar footer can wrap at enlarged text; use its real legend
       // layout to reserve the same space in every state.
       return Column(
@@ -917,50 +921,18 @@ class _UsageCalendarSlot extends StatelessWidget {
           else ...[
             SizedBox(
               height: textHeight,
-              child: pending
+              child: needsPlaceholder
                   ? _UsageSkeleton(height: textHeight * .65, fraction: .7)
                   : const SizedBox.shrink(),
             ),
             const SizedBox(height: 8),
             SizedBox(
               height: 7 * pitch + 3,
-              child: pending
-                  ? ExcludeSemantics(
-                      child: Padding(
-                        padding: const EdgeInsets.all(3),
-                        child: Column(
-                          children: [
-                            for (var row = 0; row < 7; row++)
-                              SizedBox(
-                                height: row == 6 ? pitch - 3 : pitch,
-                                child: Row(
-                                  children: [
-                                    for (var col = 0; col < columns; col++)
-                                      SizedBox(
-                                        width: col == columns - 1
-                                            ? pitch - 3
-                                            : pitch,
-                                        child: Align(
-                                          alignment: Alignment.topLeft,
-                                          child: Container(
-                                            width: pitch - 3,
-                                            height: pitch - 3,
-                                            decoration: BoxDecoration(
-                                              color: WingTokens.of(
-                                                context,
-                                              ).border.withValues(alpha: .45),
-                                              borderRadius:
-                                                  BorderRadius.circular(2),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
+              child: needsPlaceholder
+                  ? _UsageCalendarLoading(
+                      columns: columns,
+                      pitch: pitch,
+                      showProgress: explicitRefresh || error == null,
                     )
                   : SingleChildScrollView(
                       primary: false,
@@ -978,6 +950,136 @@ class _UsageCalendarSlot extends StatelessWidget {
       );
     },
   );
+}
+
+class _UsageCalendarLoading extends StatefulWidget {
+  const _UsageCalendarLoading({
+    required this.columns,
+    required this.pitch,
+    required this.showProgress,
+  });
+
+  final int columns;
+  final double pitch;
+  final bool showProgress;
+
+  @override
+  State<_UsageCalendarLoading> createState() => _UsageCalendarLoadingState();
+}
+
+class _UsageCalendarLoadingState extends State<_UsageCalendarLoading>
+    with SingleTickerProviderStateMixin {
+  late final _sweep = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _updateMotion();
+  }
+
+  @override
+  void didUpdateWidget(_UsageCalendarLoading oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.showProgress != widget.showProgress) _updateMotion();
+  }
+
+  void _updateMotion() {
+    final animate =
+        widget.showProgress &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        (ModalRoute.isCurrentOf(context) ?? true) &&
+        TickerMode.valuesOf(context).enabled;
+    if (animate) {
+      if (!_sweep.isAnimating) _sweep.repeat();
+    } else {
+      _sweep.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _sweep.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = WingTokens.of(context);
+    final base = tokens.border.withValues(alpha: .45);
+    return Semantics(
+      label: widget.showProgress ? 'Loading usage by day' : null,
+      liveRegion: widget.showProgress,
+      child: RepaintBoundary(
+        key: const ValueKey('usage-calendar-loading'),
+        child: CustomPaint(
+          painter: _UsageCalendarPlaceholderPainter(
+            columns: widget.columns,
+            pitch: widget.pitch,
+            base: base,
+            highlight: Color.lerp(base, tokens.muted, .42)!,
+            sweep: _sweep.isAnimating ? _sweep : null,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UsageCalendarPlaceholderPainter extends CustomPainter {
+  _UsageCalendarPlaceholderPainter({
+    required this.columns,
+    required this.pitch,
+    required this.base,
+    required this.highlight,
+    required this.sweep,
+  }) : super(repaint: sweep);
+
+  final int columns;
+  final double pitch;
+  final Color base, highlight;
+  final Animation<double>? sweep;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const gap = 3.0;
+    final side = pitch - gap;
+    if (side <= 0) return;
+    final paint = Paint();
+    if (sweep case final progress?) {
+      final radius = size.width * .25;
+      final center = (size.width + 2 * radius) * progress.value - radius;
+      paint.shader = LinearGradient(
+        colors: [base, highlight, base],
+      ).createShader(Rect.fromLTRB(center - radius, 0, center + radius, 1));
+    } else {
+      paint.color = base;
+    }
+    for (var column = 0; column < columns; column++) {
+      for (var row = 0; row < 7; row++) {
+        final cell = Rect.fromLTWH(
+          gap + column * pitch,
+          gap + row * pitch,
+          side,
+          side,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(cell, const Radius.circular(2)),
+          paint,
+        );
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_UsageCalendarPlaceholderPainter oldDelegate) =>
+      columns != oldDelegate.columns ||
+      pitch != oldDelegate.pitch ||
+      base != oldDelegate.base ||
+      highlight != oldDelegate.highlight ||
+      sweep != oldDelegate.sweep;
 }
 
 class _Unavailable extends StatelessWidget {

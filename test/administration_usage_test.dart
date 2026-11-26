@@ -154,6 +154,22 @@ void main() {
     });
   }
 
+  final calendarLoading = find.byKey(const ValueKey('usage-calendar-loading'));
+
+  Future<ByteData> calendarFrame(WidgetTester tester) async {
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      calendarLoading,
+    );
+    return (await tester.runAsync(() async {
+      final image = await boundary.toImage();
+      try {
+        return (await image.toByteData())!;
+      } finally {
+        image.dispose();
+      }
+    }))!;
+  }
+
   Future<void> reveal(WidgetTester tester, Finder target) async {
     final scrollable = find
         .descendant(
@@ -276,6 +292,7 @@ void main() {
             expect(find.text('Tokens'), findsWidgets);
             expect(find.byType(StudioLoading), findsOneWidget);
             expect(find.textContaining('Loading activity year'), findsNothing);
+            expect(calendarLoading, findsOneWidget);
             final header = tester.getRect(
               find.byKey(const ValueKey('studio-loading-slot')),
             );
@@ -304,6 +321,21 @@ void main() {
             await tester.pump();
             expectSameGeometry(await sectionGeometry(tester), original);
             expect(find.byType(StudioLoading), findsOneWidget);
+            if (yearFirst) {
+              expect(calendarLoading, findsNothing);
+            } else {
+              final first = await calendarFrame(tester);
+              await tester.pump(const Duration(milliseconds: 700));
+              final later = await calendarFrame(tester);
+              expect(
+                later.buffer.asUint8List(),
+                isNot(first.buffer.asUint8List()),
+              );
+              await snapshot(
+                tester,
+                'calendar-sweep-${brightness.name}-$scale',
+              );
+            }
             expect(
               tester.getRect(find.byKey(const ValueKey('studio-loading-slot'))),
               header,
@@ -326,6 +358,7 @@ void main() {
             await tester.pumpAndSettle();
             expectSameGeometry(await sectionGeometry(tester), original);
             expect(find.byType(StudioLoading), findsNothing);
+            expect(calendarLoading, findsNothing);
             expect(
               tester.getRect(find.byKey(const ValueKey('studio-loading-slot'))),
               header,
@@ -360,6 +393,7 @@ void main() {
           await tester.pump();
           expect(find.byType(StudioLoading), findsOneWidget);
           expectSameGeometry(await sectionGeometry(tester), original);
+          expect(calendarLoading, findsNothing);
           expect(find.text('USD 5.44'), findsOneWidget);
           await snapshot(tester, 'refresh-${brightness.name}-$scale');
           // Only repeated refresh is disabled; chart choices remain operable.
@@ -446,7 +480,12 @@ void main() {
     fixture.override = (_, _, _, _) => pending.future;
     await show(tester, reducedMotion: true, settle: false);
     expect(find.byType(StudioLoading), findsOneWidget);
+    expect(calendarLoading, findsOneWidget);
     expect(tester.hasRunningAnimations, isFalse);
+    final first = await calendarFrame(tester);
+    await tester.pump(const Duration(milliseconds: 700));
+    final later = await calendarFrame(tester);
+    expect(later.buffer.asUint8List(), first.buffer.asUint8List());
     final original = await sectionGeometry(tester);
     await tester.tap(find.text('30D'));
     await tester.pump();
@@ -457,6 +496,7 @@ void main() {
     pending.completeError(StateError('Retired read'));
     await tester.pumpAndSettle();
     expect(find.byType(StudioLoading), findsNothing);
+    expect(calendarLoading, findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -823,6 +863,7 @@ void main() {
           expect(find.byType(StudioLoading), findsOneWidget);
           pending.completeError(StateError('Offline'));
           await tester.pumpAndSettle(const Duration(milliseconds: 250));
+          expect(calendarLoading, findsNothing);
           for (final (section, message) in [
             (
               'calendar',
@@ -846,9 +887,26 @@ void main() {
             find.text('No recorded model usage in this period.'),
             findsNothing,
           );
-          fixture.override = (_, path, _, _) async =>
-              path == 'analytics/models' ? {'models': []} : {'daily': []};
-          await tap(tester, find.byTooltip('Refresh usage'));
+          final retryYear = Completer<Map<String, dynamic>>();
+          fixture.override = (_, path, query, _) async =>
+              path == 'analytics/models'
+              ? {'models': []}
+              : query['days'] == '365'
+              ? retryYear.future
+              : {'daily': []};
+          final refresh = find.byTooltip('Refresh usage');
+          await reveal(tester, refresh);
+          await tester.tap(refresh);
+          await tester.pump();
+          await sectionGeometry(tester);
+          expect(calendarLoading, findsOneWidget);
+          retryYear.complete({'daily': []});
+          await tester.pumpAndSettle();
+          expect(calendarLoading, findsNothing);
+          expect(
+            find.text('No recorded daily usage in the past year.'),
+            findsOneWidget,
+          );
           await reveal(
             tester,
             find.text('No recorded model usage in this period.'),
