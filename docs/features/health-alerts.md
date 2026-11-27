@@ -16,7 +16,7 @@ Feature ID: `health-alerts`.
   updates. A fresh success for the same operation clears its issue.
 - `health-alerts.configure` — Save valid local threshold rules.
 - `health-alerts.respond` — Acknowledge or snooze the intended occurrence, or undo either choice.
-- `health-alerts.recover` — Clear or recur only on the qualifying observation.
+- `health-alerts.recover` — Clear an issue on confirmed recovery or when its instance is removed. Removing the last instance clears the header badge.
 
 ## How to get to it (user POV)
 
@@ -44,6 +44,11 @@ Preconditions: use the [shared baseline](../FEATURE_MAP.md#baseline-precondition
   saves and recovery while the selected issue is open. They also cover
   profile, connection and operational alerts with host monitoring off and
   independent host-read recovery after the shared refresh settles.
+
+  Run `flutter test --no-pub test/app_notification_routing_test.dart --plain-name 'removing the last instance'`
+  to remove the last instance through its menu. The welcome screen has no alert
+  badge, its saved incidents are cleared, and a late read from the removed
+  instance cannot raise an alert.
 
 - **Android `health-normal`:** the owned-emulator driver exercises its named production-control scenarios. Require the strict receipt and [shared proof rules](../FEATURE_MAP.md#driving-and-proof); read the completed names to establish which paths ran.
 

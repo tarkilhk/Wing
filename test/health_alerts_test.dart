@@ -100,6 +100,40 @@ void main() {
   }
 
   test(
+    'instance cleanup preserves saved alerts and follows queued writes',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      final store = HealthAlertIncidentStore(prefs);
+      Future<void> save(String identity) => store.write(identity, [
+        HealthAlert(
+          id: 'read',
+          connectionIdentity: identity,
+          connectionLabel: 'Home',
+          scope: HealthAlertScope.operational,
+          title: 'Read failed',
+          detail: '',
+          severity: HealthAlertSeverity.warning,
+          observedAt: start,
+          occurrence: 1,
+          acknowledged: true,
+          destination: null,
+        ),
+      ]);
+      await save('still saved');
+      await save('previously deleted');
+      final pending = save('just deleted');
+      final cleanup = store.retainConnections({'still saved'});
+      expect(store.read('previously deleted'), isEmpty);
+      await Future.wait([pending, cleanup]);
+      final reopened = HealthAlertIncidentStore(prefs);
+      expect(reopened.read('still saved').single.acknowledged, isTrue);
+      expect(reopened.read('previously deleted'), isEmpty);
+      expect(reopened.read('just deleted'), isEmpty);
+    },
+  );
+
+  test(
     'connection snooze survives restart and only confirmed recovery clears it',
     () async {
       SharedPreferences.setMockInitialValues({});

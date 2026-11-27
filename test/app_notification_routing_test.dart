@@ -1,5 +1,6 @@
 import 'support/wing_client_identity_fixture.dart';
 import 'package:wing/core/services/notification_delivery_ledger.dart';
+import 'package:wing/core/services/health_alert_incident_store.dart';
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
@@ -234,6 +235,46 @@ Future<void> _pumpNavigation(WidgetTester tester) async {
 const _nativeNotifications = MethodChannel(NativeNotificationSink.channelName);
 
 void main() {
+  testWidgets(
+    'removing the last instance clears its alerts on the welcome screen',
+    (tester) async {
+      final harness = await _harness();
+      // Outstanding work may keep the old workspace alive after removal.
+      harness.controller.setRouteMounted(Object(), true);
+      await _pumpApp(tester, harness);
+      final alerts = HealthAlertsScope.maybeOf(
+        tester.element(find.byType(HomeScreen)),
+      )!.alerts;
+      void report(String scope) => alerts.observeOperationalError(
+        harness.controller,
+        scope: scope,
+        title: 'Read failed',
+        detail: 'Refresh to try again.',
+        failed: true,
+      );
+      await alerts.settings.update(
+        (value) => value.copyWith(showNotice: false),
+      );
+      report('test-read');
+      await _pumpNavigation(tester);
+      final bell = find.byKey(const ValueKey('health-alert-bell'));
+      expect(bell, findsOneWidget);
+      final incidents = HealthAlertIncidentStore(harness.manager.prefs);
+      expect(incidents.read(harness.identity), isNotEmpty);
+      await tester.tap(find.byType(PopupMenuButton<String>));
+      await _pumpNavigation(tester);
+      await tester.tap(find.text('Remove instance'));
+      await _pumpNavigation(tester);
+      expect(find.text('Connect your agent'), findsOneWidget);
+      expect(bell, findsNothing);
+      report('late-read');
+      await tester.pump();
+      expect(alerts.alerts, isEmpty);
+      expect(incidents.read(harness.identity), isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
   for (final brightness in Brightness.values) {
     for (final scale in [1.0, 2.0]) {
       testWidgets(

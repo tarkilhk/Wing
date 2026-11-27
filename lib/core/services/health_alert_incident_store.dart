@@ -8,12 +8,16 @@ import '../models/health_alert.dart';
 class HealthAlertIncidentStore {
   HealthAlertIncidentStore(this.preferences);
   final SharedPreferences preferences;
+  static const _prefix = 'wing-health-alert-incidents:';
   final _writes = <String, Future<void>>{};
+  final _removals = <String, Future<void>>{};
   String _key(String connection) =>
-      'wing-health-alert-incidents:${Uri.encodeComponent(connection)}';
+      '$_prefix${Uri.encodeComponent(connection)}';
 
   List<HealthAlert> read(String connection) {
-    final raw = preferences.getString(_key(connection));
+    final key = _key(connection);
+    if (_removals.containsKey(key)) return const [];
+    final raw = preferences.getString(key);
     if (raw == null) return const [];
     final alerts = (jsonDecode(raw) as List)
         .map((value) => _decode(value as Map))
@@ -27,14 +31,43 @@ class HealthAlertIncidentStore {
   Future<void> write(String connection, List<HealthAlert> alerts) {
     // Capture before queuing, so later evaluator changes cannot alter this write.
     final raw = jsonEncode(alerts.map(_encode).toList());
-    final previous = _writes[connection] ?? Future<void>.value();
-    final write = previous.then((_) async {
-      if (!await preferences.setString(_key(connection), raw)) {
-        throw StateError('Health alert incidents were not saved');
-      }
-    });
-    // A failed write must not poison subsequent recovery or acknowledgement.
-    _writes[connection] = write.then<void>((_) {}, onError: (Object _) {});
+    final key = _key(connection);
+    return _enqueue(key, () => preferences.setString(key, raw));
+  }
+
+  /// Include queued writes even when the first incident has not reached disk.
+  Future<void> retainConnections(Set<String> connections) {
+    final keep = connections.map(_key).toSet();
+    final obsolete = {
+      ...preferences.getKeys().where((key) => key.startsWith(_prefix)),
+      ..._writes.keys,
+    }.difference(keep);
+    return Future.wait([
+      for (final key in obsolete)
+        _enqueue(key, () => preferences.remove(key), removing: true),
+    ]);
+  }
+
+  Future<void> _enqueue(
+    String key,
+    Future<bool> Function() persist, {
+    bool removing = false,
+  }) {
+    final previous = _writes[key] ?? Future<void>.value();
+    late final Future<void> write;
+    write = previous
+        .catchError((Object _) {})
+        .then((_) async {
+          if (!await persist()) {
+            throw StateError('Health alert incidents were not saved');
+          }
+        })
+        .whenComplete(() {
+          if (identical(_writes[key], write)) _writes.remove(key);
+          if (identical(_removals[key], write)) _removals.remove(key);
+        });
+    _writes[key] = write;
+    if (removing) _removals[key] = write;
     return write;
   }
 

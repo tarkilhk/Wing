@@ -34,6 +34,9 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
   bool _hasActiveChats = false;
   String _monitoringFingerprint = '';
   Set<String>? _configuredIdentities;
+
+  /// The last confirmed saved configuration, independent of workspace leases.
+  Set<String>? get configuredIdentities => _configuredIdentities;
   int _configurationGeneration = 0;
   Timer? _retirement;
   bool _foreground = true;
@@ -116,7 +119,11 @@ class ProfileWorkspaceRegistry extends ChangeNotifier {
     final saved = connections.toList();
     final identities = await Future.wait(saved.map(this.identities.resolve));
     if (_closed || generation != _configurationGeneration) return;
-    _configuredIdentities = identities.toSet();
+    final configured = Set<String>.unmodifiable(identities);
+    if (!setEquals(_configuredIdentities, configured)) {
+      _configuredIdentities = configured;
+      notifyListeners();
+    }
     for (var index = 0; index < saved.length; index++) {
       _controllers[identities[index]]?.observeConnectionLabel(
         saved[index].label,

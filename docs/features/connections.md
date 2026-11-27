@@ -8,6 +8,7 @@ Feature ID: `connections`.
 
 - `connections.verify` — Check credentials, the gateway Webapp address and canonical chat authority in place. Check connection updates a permanent compact status area without scrolling or moving the fields and actions. The full-width Check connection action sits above compact result LEDs, with status descriptions for accessibility. The fixed header shows checking progress even while the keyboard closes; Next opens name/save only after success. Edits invalidate the previous check.
 - `connections.save` — Persist and reopen the selected connection.
+- **Remove instance** clears that instance’s alerts. Other saved instances keep their alerts.
 - Saved instance aliases appear in workspace and conversation headers as well as
   the instance picker. Renaming an instance updates a retained workspace without
   replacing its open chat, draft or connection.

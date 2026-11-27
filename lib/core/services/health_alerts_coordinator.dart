@@ -34,6 +34,13 @@ class HealthAlertsCoordinator extends ChangeNotifier {
   final _listeners = <ProfileWorkspaceController, VoidCallback>{};
   final _activeOwners = <ProfileWorkspaceController>{};
   bool _foreground = true, _closed = false;
+  Set<String>? _lastConfiguration;
+  Iterable<ProfileWorkspaceController> get _savedOwners =>
+      registry.controllers.where(
+        (owner) =>
+            registry.configuredIdentities?.contains(owner.connectionIdentity) ==
+            true,
+      );
   List<HealthAlert> get alerts {
     final result = _sessions.values.expand((s) => s.alerts).toList();
     result.sort((a, b) {
@@ -58,7 +65,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
 
   void _reconcile() {
     if (_closed) return;
-    final owners = registry.controllers.toSet();
+    final owners = _savedOwners.toSet();
     for (final owner in _sessions.keys.toList()) {
       if (owners.contains(owner)) continue;
       owner.removeListener(_listeners.remove(owner)!);
@@ -66,6 +73,24 @@ class HealthAlertsCoordinator extends ChangeNotifier {
       _activeOwners.remove(owner);
       session.removeListener(_changed);
       session.dispose();
+    }
+    final configured = registry.configuredIdentities;
+    if (configured != null && !identical(configured, _lastConfiguration)) {
+      _lastConfiguration = configured;
+      unawaited(
+        incidents.retainConnections(configured).catchError((
+          Object error,
+          StackTrace stack,
+        ) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stack,
+              library: 'Wing health alerts',
+            ),
+          );
+        }),
+      );
     }
     for (final owner in owners) {
       if (!owner.initialized && !_sessions.containsKey(owner)) continue;
@@ -168,7 +193,7 @@ class HealthAlertsCoordinator extends ChangeNotifier {
     String? destination,
     String? profileName,
   }) {
-    if (_closed || !registry.controllers.contains(owner)) return;
+    if (_closed || !_savedOwners.contains(owner)) return;
     final restored = !_sessions.containsKey(owner);
     // Bots and other readers can observe the saved connection before its Chats
     // workspace has initialized. They may report incidents without starting

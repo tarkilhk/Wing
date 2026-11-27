@@ -52,6 +52,8 @@ class AlertRegistryFixture extends ProfileWorkspaceRegistry {
       );
   final AlertWorkspaceFixture workspace;
   @override
+  late final Set<String> configuredIdentities = {workspace.connectionIdentity};
+  @override
   Iterable<ProfileWorkspaceController> get controllers => [workspace];
 }
 
