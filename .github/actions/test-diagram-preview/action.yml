@@ -20,10 +20,13 @@ runs:
       working-directory: ${{ inputs.source-directory }}
       run: npm ci --prefix scripts/diagram-preview --ignore-scripts --no-audit --no-fund
 
-    - name: Install pinned Chromium and system dependencies
+    - name: Install pinned Chromium
       shell: bash
       working-directory: ${{ inputs.source-directory }}
-      run: node scripts/diagram-preview/node_modules/playwright-core/cli.js install --with-deps chromium
+      run: |
+        # Ubuntu 24.04 runners already include Chromium's runtime libraries.
+        # The actual browser test verifies them without provisioning extra fonts.
+        node scripts/diagram-preview/node_modules/playwright-core/cli.js install chromium
 
     - name: Test actual renderer isolation
       shell: bash
